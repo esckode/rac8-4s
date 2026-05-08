@@ -580,10 +580,6 @@ Queries:
 - RDS: Single instance (free tier); scales vertically if needed in v2
 - Redis: Single instance; scales to larger tier if needed in v2
 
-**Connection Management:**
-- **v1**: No connection pooling for database (acceptable for <200 concurrent users)
-- **v2**: Add AWS RDS Proxy when scaling beyond closed beta
-
 **Cold Starts:**
 - Lambda functions have ~1-5 second cold start (acceptable for v1)
 - Not a major concern for background jobs (BullMQ workers)
@@ -593,6 +589,149 @@ Queries:
 - RDS free tier: burstable performance, adequate for v1
 - No special indexes needed for small data volume
 - As data grows, add indexes on frequently queried columns (match_id, player_id, tournament_id)
+
+### Database Connection Pooling Strategy
+
+#### Why Connection Pooling Matters for Lambda
+
+**The Problem Without Pooling:**
+- Each Lambda invocation creates a new PostgreSQL connection
+- Connection setup overhead: 100-500ms (TCP handshake + authentication + initialization)
+- At scale (10K+ concurrent requests), connection overhead becomes the bottleneck, not query performance
+- RDS has max connection limits (~100 by default); without pooling, connection exhaustion happens quickly
+
+**Example: Score Submission During Active Tournament**
+```
+Scenario: 500 players submit scores simultaneously (group stage finale)
+└─ 500 Lambda invocations created
+   └─ Without pooling: 500 new connections requested
+      └─ RDS connection limit exceeded (default ~100)
+      └─ Cascading failures, timeouts
+
+With pooling: 500 invocations reuse pool of 20-50 connections
+└─ All requests succeed, response time <100ms
+```
+
+#### v1 Strategy: No Connection Pooling (Closed Beta)
+
+**Configuration:**
+- Direct Lambda → RDS connections (no intermediary)
+- Accept connection churn during beta
+- RDS max connections: 100-200 (free tier can handle this)
+
+**Rationale:**
+- Closed beta: 3-5 organizers, limited concurrent users
+- Peak concurrent users: ~50-200 during active tournaments
+- Peak concurrent Lambda invocations: ~100-200 (acceptable for RDS)
+- Cost savings: No RDS Proxy charges during beta
+- Simplicity: One fewer component to configure/monitor
+- Risk: Acceptable in closed beta; if connection limits hit, it's a signal to upgrade to v2 strategy
+
+**When v1 Hits Connection Limits:**
+- RDS will log "too many connections" errors
+- Lambda functions will receive "unable to acquire connection" errors
+- Automatic retry logic in BullMQ jobs will kick in, but user experience degrades
+- **Action:** This is the signal to add connection pooling (upgrade to v2 strategy)
+
+**v1 Architecture:**
+```
+Lambda Functions (stateless)
+    ├─ Creates new connection per invocation
+    └─ Closes connection after completion
+            ↓
+        RDS PostgreSQL
+            └─ Max ~100-200 concurrent connections
+            └─ Connection churn during active tournaments (acceptable for beta scale)
+```
+
+#### v2 Strategy: Add AWS RDS Proxy (Public Launch)
+
+**When to Implement:** Before scaling beyond closed beta (before public launch)
+
+**Configuration:**
+```
+AWS RDS Proxy:
+├─ Pool mode: transaction (stateless Lambda functions)
+├─ max_client_conn: 300-500 (Lambda-side limit)
+├─ default_pool_size: 20-50 (RDS-side connection pool)
+├─ min_pool_size: 10
+├─ reserve_pool_size: 5 (overflow)
+└─ connection_borrow_timeout: 120s
+```
+
+**v2 Architecture:**
+```
+Lambda Functions (stateless)
+    ├─ Requests connections from RDS Proxy
+    └─ Returns connections to pool after completion
+            ↓
+        AWS RDS Proxy (managed connection pooler)
+            └─ Reuses small pool of connections
+            └─ Scales from 0 to 10K+ concurrent Lambda invocations
+            ↓
+        RDS PostgreSQL
+            └─ Always has 20-50 active connections (stable)
+            └─ Zero connection exhaustion risk
+```
+
+**Benefits of RDS Proxy:**
+- ✅ AWS-managed (no infrastructure to maintain)
+- ✅ Built for Lambda (understands stateless connections)
+- ✅ Automatic failover & HA
+- ✅ IAM authentication support
+- ✅ Minimal code changes (connection string only)
+- ✅ Scales 10K+ concurrent users with 20-50 actual database connections
+
+**Implementation: Change Only Connection String**
+
+v1 connection string:
+```
+postgresql://user:pass@tournament-db.rds.amazonaws.com:5432/tournament
+```
+
+v2 connection string (after RDS Proxy deployed):
+```
+postgresql://user:pass@tournament-proxy.region.rds.amazonaws.com:6432/tournament
+```
+
+No application code changes required.
+
+#### Connection Pooling Decision Tree
+
+```
+Current state: Closed beta, <200 concurrent users
+    └─ Use: v1 strategy (no pooling)
+    └─ Cost: $0
+    └─ Complexity: Low
+    └─ Risk: Low (acceptable for beta)
+
+Current state: Preparing for public launch, >500 concurrent users expected
+    └─ Use: v2 strategy (add RDS Proxy)
+    └─ Cost: ~$10-20/month (RDS Proxy charges)
+    └─ Complexity: Medium (one-time setup, then transparent)
+    └─ Risk: Zero (RDS Proxy is production-grade)
+
+Current state: Hit connection limit errors in v1
+    └─ Action: Immediately implement v2 strategy (upgrade)
+    └─ Time to fix: ~30 minutes (update connection string, redeploy)
+    └─ Severity: High (indicates scalability problem)
+```
+
+#### Monitoring Connection Health
+
+**v1 Monitoring (Beta):**
+- CloudWatch RDS metrics: `DatabaseConnections` (alert if >80)
+- Lambda error logs: search for "too many connections" errors
+- Manual check: If concurrent user load >300, consider early upgrade to v2
+
+**v2 Monitoring (RDS Proxy):**
+- RDS Proxy metrics:
+  - `AvailableConnections`: target >10 (alert if <5)
+  - `ClientConnections`: scale with traffic
+  - `ClientConnectionsClosed`: watch for abnormal disconnections
+  - `QueryDuration`: alert if >5s (indicates blocked connections)
+- Set up CloudWatch alarms for connection pool exhaustion
+- Dashboard: Track pool utilization over time
 
 ### Async Job Queue (BullMQ)
 
