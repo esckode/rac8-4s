@@ -774,6 +774,259 @@ async function editTournament(tournamentId, data) {
 - WebSocket infrastructure
 - All infrastructure scaling
 
+## Database Queries & Indexing Strategy
+
+This section identifies strategic queries that require indexing to meet performance and scalability requirements. Indexes are prioritized by frequency of access, computational cost, and impact on user experience.
+
+### Query Access Patterns & Suggested Indexes
+
+#### P0 — Critical Path (Accessed on every interaction)
+
+**Query 1: Player's Match List**
+```sql
+SELECT * FROM matches 
+WHERE (player1_id = ? OR player2_id = ?) 
+  AND tournament_id = ?
+  AND status IN ('pending', 'completed')
+ORDER BY scheduled_at DESC;
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | Every player login, constant refresh |
+| **Justification** | Players frequently check upcoming matches and past results; without indexes requires full table scan or expensive OR condition |
+| **Suggested Indexes** | `(player1_id, tournament_id, status)` and `(player2_id, tournament_id, status)` |
+
+---
+
+**Query 2: Group Standings Calculation**
+```sql
+SELECT p.id, p.name,
+  COUNT(CASE WHEN winner_id = p.id THEN 1 END) as wins,
+  SUM(sets_won) as total_sets
+FROM matches m
+JOIN players p ON (m.player1_id = p.id OR m.player2_id = p.id)
+WHERE m.group_id = ? 
+  AND m.status = 'completed'
+GROUP BY p.id
+ORDER BY wins DESC, total_sets DESC;
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | After every score submission (BullMQ async job); accessed on every player page refresh |
+| **Justification** | Expensive aggregation across potentially 50+ matches; executed frequently (every score triggers recalculation) and accessed constantly by all players in group |
+| **Suggested Indexes** | `(group_id, status)` on matches; `(tournament_id, group_id)` on players_in_group |
+| **Additional Note** | Candidate for materialized view refresh (see caching strategy section), but Redis caching with TTL is preferred to maintain real-time updates via WebSocket |
+
+---
+
+**Query 3: All Matches in a Group (Group Schedule)**
+```sql
+SELECT * FROM matches 
+WHERE group_id = ? 
+  AND round = ?
+ORDER BY scheduled_at;
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | All players in group view schedule repeatedly; organizer displays on dashboard |
+| **Justification** | Accessed constantly during group stage; without index requires filtering across potentially large matches table |
+| **Suggested Indexes** | `(group_id, round, status)` |
+
+---
+
+#### P1 — High Frequency (Accessed regularly, moderate computation)
+
+**Query 4: Organizer's Tournaments**
+```sql
+SELECT t.* FROM tournaments t
+WHERE t.creator_id = ? 
+UNION
+SELECT t.* FROM tournaments t
+JOIN co_organizers co ON t.id = co.tournament_id
+WHERE co.organizer_id = ?
+ORDER BY t.created_at DESC;
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | Accessed on organizer login; displayed in organizer dashboard |
+| **Justification** | Organizer needs to quickly find active tournaments to manage |
+| **Suggested Indexes** | `(creator_id, status)` on tournaments; `(organizer_id, tournament_id)` on co_organizers |
+
+---
+
+**Query 5: Players in a Group (for Standings & Scheduling)**
+```sql
+SELECT p.* FROM players_in_group pig
+JOIN players p ON pig.player_id = p.id
+WHERE pig.group_id = ?
+  AND pig.status = 'confirmed';
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | Used during standings calculation, match scheduling, and group display |
+| **Justification** | Needed to filter confirmed players only; executed for every standings recalculation |
+| **Suggested Indexes** | `(group_id, status)` on players_in_group; `(tournament_id, group_id)` on players_in_group for bulk group queries |
+
+---
+
+**Query 6: Registered Players for a Tournament (for Group Distribution & Bracket Seeding)**
+```sql
+SELECT p.* FROM registrations r
+JOIN players p ON r.player_id = p.id
+WHERE r.tournament_id = ? 
+  AND r.status = 'confirmed'
+ORDER BY r.created_at;
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | Executed when organizer creates groups or generates knockout bracket |
+| **Justification** | Needed to fetch all confirmed players for distribution algorithm and seeding; used once per phase but filters across potentially 100+ registrations |
+| **Suggested Indexes** | `(tournament_id, status)` on registrations; compound index to enable index-only scan |
+
+---
+
+#### P2 — Medium Frequency (Accessed regularly, used during specific workflows)
+
+**Query 7: Knockout Bracket by Tournament**
+```sql
+SELECT * FROM matches 
+WHERE tournament_id = ? 
+  AND stage = 'knockout'
+ORDER BY round, position;
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | All players view bracket repeatedly during knockout stage; organizer updates seeding before publishing |
+| **Justification** | High traffic during knockout phase; organizer may iterate on seeding multiple times |
+| **Suggested Indexes** | `(tournament_id, stage, round)` |
+
+---
+
+**Query 8: Head-to-Head Match Lookup (for Tiebreaker Calculation)**
+```sql
+SELECT * FROM matches 
+WHERE group_id = ? 
+  AND ((player1_id = ? AND player2_id = ?) 
+       OR (player1_id = ? AND player2_id = ?))
+  AND status = 'completed';
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | Executed during standings calculation when tiebreaker logic is applied |
+| **Justification** | Tight filter on multiple columns; executed potentially dozens of times per group standings recalculation (once per tied pair) |
+| **Suggested Indexes** | `(group_id, player1_id, player2_id, status)` composite index for tight filtering and index-only scans |
+
+---
+
+**Query 9: Active Tournaments (Public Listing)**
+```sql
+SELECT * FROM tournaments 
+WHERE status IN ('registration_open', 'group_stage_active', 'knockout_active')
+ORDER BY created_at DESC;
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | Public landing page; accessed by potential players browsing tournaments |
+| **Justification** | High-traffic public page; filters on status and orders by creation date |
+| **Suggested Indexes** | `(status, created_at DESC)` |
+
+---
+
+#### P3 — Lower Frequency (Accessed during specific workflows, lower impact on UX)
+
+**Query 10: Unreported/Unconfirmed Matches (Organizer Dashboard)**
+```sql
+SELECT * FROM matches 
+WHERE tournament_id = ? 
+  AND status IN ('unconfirmed', 'unreported')
+  AND deadline < now();
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | Organizer reviews pending matches; accessed periodically on dashboard |
+| **Justification** | Organizer needs to identify matches that require intervention; filters on status and deadline |
+| **Suggested Indexes** | `(tournament_id, status, deadline)` |
+
+---
+
+**Query 11: Score History for a Match**
+```sql
+SELECT * FROM scores 
+WHERE match_id = ? 
+ORDER BY created_at DESC;
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | Accessed when reviewing score submission history; relatively low frequency |
+| **Justification** | Prevents duplicate submissions; players/organizers review who submitted score and when |
+| **Suggested Indexes** | Index already exists via foreign key (`match_id`); may benefit from `(match_id, created_at DESC)` for sorting efficiency |
+
+---
+
+**Query 12: Pending Team Confirmations (Doubles Tournaments)**
+```sql
+SELECT * FROM teams 
+WHERE tournament_id = ? 
+  AND status = 'pending_confirmation'
+  AND confirmation_deadline > now();
+```
+| Property | Value |
+|----------|-------|
+| **Frequency** | System check before advancing from registration phase; accessed by organizer |
+| **Justification** | Must find all unconfirmed teams before closing registration; deadline-driven logic |
+| **Suggested Indexes** | `(tournament_id, status, confirmation_deadline)` |
+
+---
+
+### Index Priority & Implementation Order
+
+| Priority | Index | Table | Reason | Implementation Timing |
+|----------|-------|-------|--------|----------------------|
+| **P0** | `(player1_id, tournament_id, status)` | matches | Player match list query | v1 launch |
+| **P0** | `(player2_id, tournament_id, status)` | matches | Player match list query | v1 launch |
+| **P0** | `(group_id, status)` | matches | Standings calculation | v1 launch |
+| **P0** | `(tournament_id, group_id)` | players_in_group | Standings calculation | v1 launch |
+| **P1** | `(creator_id, status)` | tournaments | Organizer dashboard | v1 launch |
+| **P1** | `(organizer_id, tournament_id)` | co_organizers | Co-organizer lookup | v1 launch |
+| **P1** | `(group_id, status)` | players_in_group | Group players lookup | v1 launch |
+| **P1** | `(group_id, round, status)` | matches | Group schedule display | v1 launch |
+| **P2** | `(tournament_id, stage, round)` | matches | Knockout bracket | Before knockout stage |
+| **P2** | `(tournament_id, status)` | registrations | Group distribution & bracket seeding | Before group/knockout phases |
+| **P2** | `(group_id, player1_id, player2_id, status)` | matches | Head-to-head tiebreaker | v1 launch (or post-launch if storage is concern) |
+| **P3** | `(status, created_at DESC)` | tournaments | Public listing | v1 launch or post-launch |
+| **P3** | `(tournament_id, status, deadline)` | matches | Unreported matches | Before/during group stage |
+| **P3** | `(match_id, created_at DESC)` | scores | Score history sorting | Post-launch optimization |
+| **P3** | `(tournament_id, status, confirmation_deadline)` | teams | Pending confirmations | v1 launch for doubles |
+
+### Indexing Best Practices
+
+**Composite Index Strategy:**
+- Use composite indexes (multi-column) for common filter+join patterns to enable **index-only scans** where possible
+- Example: `(group_id, status)` is better than separate `(group_id)` and `(status)` indexes because it can satisfy filtering on both columns in a single index lookup
+
+**Avoid:**
+- Indexes on low-cardinality columns alone (e.g., just `status` without grouping column)
+- Redundant indexes (e.g., both `(player_id, tournament_id)` and `(player_id)`)
+- Overly wide indexes that consume memory without proportional query benefit
+
+**Maintenance Considerations:**
+- Indexes improve read performance but add write overhead (INSERT/UPDATE/DELETE on indexed tables)
+- Trade-off is favorable for this application: reads far exceed writes during active tournaments
+- Monitor index fragmentation in v2; periodic REINDEX may be needed
+
+### Query Performance Monitoring
+
+**Metrics to track (v2):**
+- Query execution time for P0 queries (target: <100ms)
+- Index hit ratio (target: >95% for indexed queries)
+- Slow query log alerts (queries >500ms)
+- Index usage statistics (drop unused indexes)
+
+**Tools:**
+- PostgreSQL `EXPLAIN ANALYZE` for query plans
+- CloudWatch Performance Insights (if using AWS RDS Enhanced Monitoring)
+- Custom application metrics via Lambda logs
+
 ## Future Considerations (Not in v1)
 - Double-elimination brackets
 - Swiss system
