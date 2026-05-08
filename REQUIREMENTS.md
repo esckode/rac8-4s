@@ -1166,6 +1166,1057 @@ WHERE tournament_id = ?
 - CloudWatch Performance Insights (if using AWS RDS Enhanced Monitoring)
 - Custom application metrics via Lambda logs
 
+## API Design
+
+### API Conventions
+
+**Base URL:**
+```
+Production: https://api.tournament.app/v1
+Beta: https://beta-api.tournament.app/v1
+```
+
+**HTTP Methods:**
+- `GET` — Retrieve data (idempotent)
+- `POST` — Create resource or perform action
+- `PATCH` — Update resource (partial)
+- `DELETE` — Delete resource
+
+**Response Format:**
+All responses are JSON:
+```json
+{
+  "success": true,
+  "data": { /* response data */ },
+  "error": null
+}
+```
+
+Error response:
+```json
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid score format",
+    "details": { "field": "score", "reason": "Expected pattern X-Y, X-Y" }
+  }
+}
+```
+
+**Status Codes:**
+| Code | Meaning | Use Case |
+|------|---------|----------|
+| 200 | OK | Successful GET, synchronous responses |
+| 201 | Created | Resource created (POST) |
+| 202 | Accepted | Async job queued, will process in background |
+| 400 | Bad Request | Invalid input, validation failed |
+| 401 | Unauthorized | Missing or invalid authentication |
+| 403 | Forbidden | Authenticated but not authorized (e.g., not tournament creator) |
+| 404 | Not Found | Resource doesn't exist |
+| 409 | Conflict | Resource state conflict (e.g., tournament already started) |
+| 422 | Unprocessable | Request understood but contains logic errors (e.g., trying to advance phase with pending matches) |
+| 429 | Too Many Requests | Rate limit exceeded |
+| 500 | Server Error | Unexpected server error |
+| 503 | Service Unavailable | Database/cache down, temporary outage |
+
+**Async Pattern:**
+For operations that trigger background jobs (score submissions, standings recalculations), endpoints return 202 Accepted with a job ID:
+
+```json
+{
+  "success": true,
+  "data": {
+    "jobId": "recalc-standings:tourn:123:grp:5",
+    "status": "processing",
+    "message": "Calculating standings, should complete in <5s"
+  }
+}
+```
+
+Client can poll job status via WebSocket or optional polling endpoint.
+
+**Pagination:**
+For list endpoints, use offset/limit:
+```
+GET /tournaments?offset=0&limit=20
+```
+
+Response includes pagination metadata:
+```json
+{
+  "success": true,
+  "data": [ /* items */ ],
+  "pagination": {
+    "offset": 0,
+    "limit": 20,
+    "total": 150,
+    "hasMore": true
+  }
+}
+```
+
+---
+
+### Authentication & Authorization
+
+**Organizer Authentication (Email + Password + 2FA)**
+
+1. **Register/Create Account:**
+```
+POST /auth/register
+Content-Type: application/json
+
+{
+  "email": "organizer@example.com",
+  "password": "SecurePassword123!",
+  "name": "John Organizer"
+}
+
+Response (201 Created):
+{
+  "success": true,
+  "data": {
+    "organizerId": "org_abc123",
+    "email": "organizer@example.com",
+    "name": "John Organizer",
+    "requiresTwoFA": true,
+    "message": "2FA setup required. Check your email for setup code."
+  }
+}
+```
+
+2. **Login:**
+```
+POST /auth/login
+Content-Type: application/json
+
+{
+  "email": "organizer@example.com",
+  "password": "SecurePassword123!"
+}
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "organizerId": "org_abc123",
+    "email": "organizer@example.com",
+    "requiresTwoFAVerification": true,
+    "message": "2FA code sent to email"
+  }
+}
+```
+
+3. **Verify 2FA Code:**
+```
+POST /auth/2fa/verify
+Content-Type: application/json
+
+{
+  "email": "organizer@example.com",
+  "code": "123456"
+}
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "sessionToken": "sess_xyz789",
+    "expiresIn": 2592000, /* 30 days in seconds */
+    "organizerId": "org_abc123"
+  }
+}
+```
+
+**Organizer Session:** 
+- Stored in Redis with 30-day TTL
+- Header: `Authorization: Bearer sess_xyz789`
+- Renewed on each request (sliding window)
+
+**Player Authentication (Magic Link - Passwordless)**
+
+1. **Request Magic Link:**
+```
+POST /tournaments/:tournamentId/auth/magic-link
+Content-Type: application/json
+
+{
+  "email": "player@example.com",
+  "name": "Jane Player"
+}
+
+Response (202 Accepted):
+{
+  "success": true,
+  "data": {
+    "message": "Magic link sent to player@example.com",
+    "expiresIn": 86400 /* 24 hours */
+  }
+}
+```
+
+2. **Verify Magic Link:**
+```
+GET /tournaments/:tournamentId/auth/verify?token=magic_abc123def456
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "playerToken": "player_xyz789",
+    "expiresIn": 86400,
+    "playerId": "player_123",
+    "tournamentId": "tourn_456"
+  }
+}
+```
+
+**Player Session:**
+- Stored in Redis with 24-hour TTL
+- Header: `Authorization: Bearer player_xyz789`
+- Single-use token per tournament registration
+- Not renewable (security boundary)
+
+---
+
+### Organizer Endpoints
+
+#### Tournament Management
+
+**Create Tournament:**
+```
+POST /tournaments
+Authorization: Bearer sess_xyz789
+Content-Type: application/json
+
+{
+  "name": "Spring Tennis Championship 2026",
+  "sport": "tennis",
+  "format": "singles", /* or "doubles" */
+  "maxPlayers": 64,
+  "description": "Open tournament for intermediate players",
+  "registrationDeadline": "2026-05-20T23:59:59Z",
+  "groupStageDeadline": "2026-06-15T23:59:59Z",
+  "knockoutStageDeadline": "2026-06-30T23:59:59Z"
+}
+
+Response (201 Created):
+{
+  "success": true,
+  "data": {
+    "tournamentId": "tourn_abc123",
+    "name": "Spring Tennis Championship 2026",
+    "status": "draft",
+    "createdBy": "org_abc123",
+    "publicUrl": "https://tournament.app/tournaments/tourn_abc123",
+    "shareUrl": "https://tournament.app/register/tourn_abc123"
+  }
+}
+```
+
+**Publish Tournament (Open Registration):**
+```
+POST /tournaments/:tournamentId/publish
+Authorization: Bearer sess_xyz789
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "tournamentId": "tourn_abc123",
+    "status": "registration_open",
+    "message": "Tournament is now live and accepting registrations"
+  }
+}
+```
+
+**Update Tournament:**
+```
+PATCH /tournaments/:tournamentId
+Authorization: Bearer sess_xyz789
+Content-Type: application/json
+
+{
+  "registrationDeadline": "2026-05-25T23:59:59Z",
+  "groupStageDeadline": "2026-06-20T23:59:59Z"
+}
+
+Response (200 OK):
+{
+  "success": true,
+  "data": { /* updated tournament */ }
+}
+```
+
+**Get My Tournaments:**
+```
+GET /organizer/tournaments?status=active&offset=0&limit=10
+Authorization: Bearer sess_xyz789
+
+Response (200 OK):
+{
+  "success": true,
+  "data": [ /* array of tournaments */ ],
+  "pagination": { /* pagination metadata */ }
+}
+```
+
+---
+
+#### Group Management
+
+**Create Groups (Distribute Players):**
+```
+POST /tournaments/:tournamentId/groups
+Authorization: Bearer sess_xyz789
+Content-Type: application/json
+
+{
+  "numGroups": 4,
+  "advancingPerGroup": 2
+}
+
+Response (202 Accepted):
+{
+  "success": true,
+  "data": {
+    "jobId": "group-distribution:tourn:abc123",
+    "status": "processing",
+    "message": "Distributing 32 players into 4 groups..."
+  }
+}
+```
+
+**Get Groups for Tournament:**
+```
+GET /tournaments/:tournamentId/groups
+Authorization: Bearer sess_xyz789
+
+Response (200 OK):
+{
+  "success": true,
+  "data": [
+    {
+      "groupId": "grp_1",
+      "name": "Group A",
+      "players": [
+        { "playerId": "p1", "name": "Alice", "status": "active" },
+        { "playerId": "p2", "name": "Bob", "status": "active" }
+      ],
+      "matchesTotal": 1,
+      "matchesCompleted": 0,
+      "standings": [ /* standings data */ ]
+    }
+  ]
+}
+```
+
+**Get Group Standings:**
+```
+GET /tournaments/:tournamentId/groups/:groupId/standings
+Authorization: Bearer sess_xyz789
+
+Response (200 OK):
+{
+  "success": true,
+  "data": [
+    {
+      "rank": 1,
+      "playerId": "p1",
+      "name": "Alice",
+      "wins": 3,
+      "losses": 0,
+      "setWon": 6,
+      "setLost": 1
+    },
+    {
+      "rank": 2,
+      "playerId": "p2",
+      "name": "Bob",
+      "wins": 2,
+      "losses": 1,
+      "setWon": 5,
+      "setLost": 2
+    }
+  ]
+}
+```
+
+---
+
+#### Match Management
+
+**Get Unreported Matches (Organizer Dashboard):**
+```
+GET /tournaments/:tournamentId/matches?status=unreported&stage=group
+Authorization: Bearer sess_xyz789
+
+Response (200 OK):
+{
+  "success": true,
+  "data": [
+    {
+      "matchId": "match_123",
+      "groupId": "grp_1",
+      "player1": { "playerId": "p1", "name": "Alice" },
+      "player2": { "playerId": "p2", "name": "Bob" },
+      "scheduledAt": "2026-05-15T18:00:00Z",
+      "status": "unreported",
+      "deadline": "2026-05-16T23:59:59Z",
+      "deadlineExceeded": true
+    }
+  ]
+}
+```
+
+**Override Score (Organizer):**
+```
+POST /tournaments/:tournamentId/matches/:matchId/override-score
+Authorization: Bearer sess_xyz789
+Content-Type: application/json
+
+{
+  "score": "6-4, 6-3",
+  "reason": "Corrected data entry error; verified with both players"
+}
+
+Response (202 Accepted):
+{
+  "success": true,
+  "data": {
+    "jobId": "override-score:match:123",
+    "status": "processing",
+    "message": "Score override queued, standings will update"
+  }
+}
+```
+
+---
+
+#### Knockout Bracket Management
+
+**Generate Knockout Bracket:**
+```
+POST /tournaments/:tournamentId/bracket/generate
+Authorization: Bearer sess_xyz789
+Content-Type: application/json
+
+{
+  "advancingPlayers": [
+    { "playerId": "p1", "rank": 1, "groupId": "grp_1" },
+    { "playerId": "p2", "rank": 2, "groupId": "grp_1" },
+    /* ... more advancing players ... */
+  ]
+}
+
+Response (202 Accepted):
+{
+  "success": true,
+  "data": {
+    "jobId": "generate-bracket:tourn:abc123",
+    "status": "processing"
+  }
+}
+```
+
+**Get Bracket (Organizer - For Review & Seeding):**
+```
+GET /tournaments/:tournamentId/bracket?view=organizer
+Authorization: Bearer sess_xyz789
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "bracketId": "bracket_1",
+    "tournamentId": "tourn_abc123",
+    "status": "draft", /* draft, published */
+    "rounds": [
+      {
+        "roundNumber": 1,
+        "matches": [
+          {
+            "matchId": "match_1",
+            "position": 1,
+            "player1": { "playerId": "p1", "name": "Alice", "seeding": 1, "bye": false },
+            "player2": { "playerId": "p2", "name": "Bob", "seeding": 4, "bye": false },
+            "status": "pending"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Update Bracket Seeding (Organizer):**
+```
+PATCH /tournaments/:tournamentId/bracket
+Authorization: Bearer sess_xyz789
+Content-Type: application/json
+
+{
+  "adjustments": [
+    {
+      "matchId": "match_5",
+      "newPlayer1Id": "p10",
+      "newPlayer2Id": "p7"
+    }
+  ]
+}
+
+Response (200 OK):
+{
+  "success": true,
+  "data": { /* updated bracket */ }
+}
+```
+
+**Publish Bracket (Make Visible to Players):**
+```
+POST /tournaments/:tournamentId/bracket/publish
+Authorization: Bearer sess_xyz789
+
+Response (202 Accepted):
+{
+  "success": true,
+  "data": {
+    "jobId": "publish-bracket:tourn:abc123",
+    "status": "processing",
+    "message": "Publishing bracket and notifying players..."
+  }
+}
+```
+
+---
+
+#### Tournament Phase Control
+
+**Advance Tournament Phase:**
+```
+POST /tournaments/:tournamentId/phases/advance
+Authorization: Bearer sess_xyz789
+Content-Type: application/json
+
+{
+  "to": "knockout_active"
+}
+
+Response (202 Accepted):
+{
+  "success": true,
+  "data": {
+    "jobId": "advance-phase:tourn:abc123",
+    "newPhase": "knockout_active",
+    "message": "Advancing to knockout stage, notifying players..."
+  }
+}
+```
+
+---
+
+### Player Endpoints
+
+#### Tournament Discovery & Registration
+
+**Get Public Tournaments:**
+```
+GET /tournaments/public?sport=tennis&offset=0&limit=10
+
+Response (200 OK):
+{
+  "success": true,
+  "data": [
+    {
+      "tournamentId": "tourn_abc123",
+      "name": "Spring Tennis Championship 2026",
+      "sport": "tennis",
+      "format": "singles",
+      "registeredPlayers": 32,
+      "maxPlayers": 64,
+      "registrationDeadline": "2026-05-20T23:59:59Z",
+      "status": "registration_open"
+    }
+  ],
+  "pagination": { /* pagination metadata */ }
+}
+```
+
+**Register for Tournament:**
+```
+POST /tournaments/:tournamentId/register
+Content-Type: application/json
+
+{
+  "email": "player@example.com",
+  "name": "Jane Player",
+  "phone": "+1-555-0123",
+  "preferredContact": "email"
+}
+
+Response (202 Accepted):
+{
+  "success": true,
+  "data": {
+    "message": "Registration email sent to player@example.com",
+    "magicLinkExpires": 86400
+  }
+}
+```
+
+---
+
+#### Player Dashboard
+
+**Get My Tournaments (Player):**
+```
+GET /player/tournaments
+Authorization: Bearer player_xyz789
+
+Response (200 OK):
+{
+  "success": true,
+  "data": [
+    {
+      "tournamentId": "tourn_abc123",
+      "name": "Spring Tennis Championship 2026",
+      "status": "group_stage_active",
+      "myMatches": 5,
+      "myMatcesCompleted": 3,
+      "groupId": "grp_1",
+      "groupRank": 1
+    }
+  ]
+}
+```
+
+**Get My Upcoming Matches:**
+```
+GET /tournaments/:tournamentId/my-matches
+Authorization: Bearer player_xyz789
+
+Response (200 OK):
+{
+  "success": true,
+  "data": [
+    {
+      "matchId": "match_123",
+      "opponent": { "playerId": "p2", "name": "Bob" },
+      "stage": "group",
+      "groupId": "grp_1",
+      "status": "pending",
+      "scheduledAt": null,
+      "deadline": "2026-05-16T23:59:59Z",
+      "actions": ["schedule", "report_score"]
+    }
+  ]
+}
+```
+
+**Get Tournament Standings (Player):**
+```
+GET /tournaments/:tournamentId/standings
+Authorization: Bearer player_xyz789
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "groupId": "grp_1",
+    "standings": [
+      {
+        "rank": 1,
+        "playerId": "p1",
+        "name": "Alice",
+        "wins": 3,
+        "losses": 0,
+        "setWon": 6,
+        "setLost": 1,
+        "isMe": true
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### Match Coordination & Scoring
+
+**Confirm Match Time:**
+```
+POST /tournaments/:tournamentId/matches/:matchId/confirm-time
+Authorization: Bearer player_xyz789
+Content-Type: application/json
+
+{
+  "confirmedAt": "2026-05-15T18:00:00Z"
+}
+
+Response (202 Accepted):
+{
+  "success": true,
+  "data": {
+    "matchId": "match_123",
+    "status": "confirmed",
+    "message": "Match time confirmed. Opponent will be notified."
+  }
+}
+```
+
+**Submit Score:**
+```
+POST /tournaments/:tournamentId/matches/:matchId/submit-score
+Authorization: Bearer player_xyz789
+Content-Type: application/json
+
+{
+  "score": "6-4, 6-3"
+}
+
+Response (202 Accepted):
+{
+  "success": true,
+  "data": {
+    "jobId": "submit-score:match:123:player:p1",
+    "status": "processing",
+    "message": "Score submitted and will be verified",
+    "confirmationRequired": true,
+    "parsedScore": {
+      "player1": { "set1": 6, "set2": 6 },
+      "player2": { "set1": 4, "set2": 3 }
+    }
+  }
+}
+```
+
+**Confirm Score Submission:**
+```
+POST /tournaments/:tournamentId/matches/:matchId/confirm-score
+Authorization: Bearer player_xyz789
+Content-Type: application/json
+
+{
+  "submissionId": "score_submit_123"
+}
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "matchId": "match_123",
+    "score": "6-4, 6-3",
+    "submittedBy": "p1",
+    "submittedAt": "2026-05-15T20:30:00Z"
+  }
+}
+```
+
+**Claim Walkover (No-Show):**
+```
+POST /tournaments/:tournamentId/matches/:matchId/claim-walkover
+Authorization: Bearer player_xyz789
+Content-Type: application/json
+
+{
+  "reason": "Opponent did not show up at scheduled time"
+}
+
+Response (202 Accepted):
+{
+  "success": true,
+  "data": {
+    "jobId": "walkover-claim:match:123",
+    "status": "processing",
+    "message": "Walkover claim submitted for organizer review"
+  }
+}
+```
+
+**Get Score History:**
+```
+GET /tournaments/:tournamentId/matches/:matchId/scores
+Authorization: Bearer player_xyz789
+
+Response (200 OK):
+{
+  "success": true,
+  "data": [
+    {
+      "scoreId": "score_1",
+      "submittedBy": { "playerId": "p1", "name": "Alice" },
+      "score": "6-4, 6-3",
+      "submittedAt": "2026-05-15T20:30:00Z",
+      "status": "accepted"
+    }
+  ]
+}
+```
+
+---
+
+### Public Endpoints
+
+**Get Public Tournament View:**
+```
+GET /tournaments/:tournamentId/public
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "tournamentId": "tourn_abc123",
+    "name": "Spring Tennis Championship 2026",
+    "sport": "tennis",
+    "format": "singles",
+    "status": "group_stage_active",
+    "registeredPlayers": 32,
+    "results": {
+      "groupStage": { /* visible only if completed */ },
+      "bracket": { /* visible only if published */ }
+    }
+  }
+}
+```
+
+**Get Public Bracket:**
+```
+GET /tournaments/:tournamentId/bracket/public
+
+Response (200 OK):
+{
+  "success": true,
+  "data": {
+    "bracketId": "bracket_1",
+    "status": "published",
+    "rounds": [
+      {
+        "roundNumber": 1,
+        "matches": [
+          {
+            "matchId": "match_1",
+            "player1": { "name": "Alice" },
+            "player2": { "name": "Bob" },
+            "score": "6-4, 6-3",
+            "winner": "Alice"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+### WebSocket Real-Time Updates
+
+**Connection:**
+```
+WS /tournaments/:tournamentId/ws
+Authorization: Bearer [organizer_token|player_token]
+```
+
+**Messages Sent to Organizer:**
+```json
+{
+  "type": "score_submitted",
+  "data": {
+    "matchId": "match_123",
+    "groupId": "grp_1",
+    "player1": { "playerId": "p1", "name": "Alice" },
+    "player2": { "playerId": "p2", "name": "Bob" },
+    "score": "6-4, 6-3",
+    "submittedBy": "p1",
+    "submittedAt": "2026-05-15T20:30:00Z"
+  }
+}
+```
+
+```json
+{
+  "type": "standings_updated",
+  "data": {
+    "groupId": "grp_1",
+    "standings": [ /* updated standings */ ],
+    "reason": "score_submitted"
+  }
+}
+```
+
+```json
+{
+  "type": "player_withdrew",
+  "data": {
+    "playerId": "p3",
+    "name": "Charlie",
+    "groupId": "grp_1",
+    "timestamp": "2026-05-16T10:00:00Z"
+  }
+}
+```
+
+```json
+{
+  "type": "phase_advanced",
+  "data": {
+    "tournamentId": "tourn_abc123",
+    "from": "group_stage_active",
+    "to": "knockout_active",
+    "timestamp": "2026-05-20T00:00:00Z",
+    "message": "Group stage complete, knockout bracket now live"
+  }
+}
+```
+
+**Messages Sent to Players:**
+```json
+{
+  "type": "match_scheduled",
+  "data": {
+    "matchId": "match_123",
+    "opponent": { "playerId": "p2", "name": "Bob" },
+    "confirmedAt": "2026-05-15T18:00:00Z"
+  }
+}
+```
+
+```json
+{
+  "type": "score_submitted_to_match",
+  "data": {
+    "matchId": "match_123",
+    "submittedBy": { "playerId": "p2", "name": "Bob" },
+    "score": "6-4, 6-3",
+    "submittedAt": "2026-05-15T20:30:00Z"
+  }
+}
+```
+
+```json
+{
+  "type": "standings_updated",
+  "data": {
+    "standings": [ /* current standings */ ],
+    "changedPositions": [1, 2, 3]
+  }
+}
+```
+
+---
+
+### Error Response Examples
+
+**Validation Error:**
+```json
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid score format",
+    "details": {
+      "field": "score",
+      "value": "6-4 6-3",
+      "reason": "Expected format: 'X-Y, X-Y' (comma-separated sets)"
+    }
+  }
+}
+```
+
+**State Conflict:**
+```json
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "STATE_CONFLICT",
+    "message": "Cannot submit score: tournament phase has advanced",
+    "details": {
+      "tournamentId": "tourn_abc123",
+      "currentPhase": "knockout_active",
+      "reason": "Group stage is complete, scores are locked"
+    }
+  }
+}
+```
+
+**Authorization Error:**
+```json
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "You are not authorized to override this score",
+    "details": {
+      "tournamentId": "tourn_abc123",
+      "requiredRole": "tournament_creator_or_co_organizer"
+    }
+  }
+}
+```
+
+---
+
+### Rate Limiting
+
+**Headers:**
+```
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1715500000
+```
+
+**Limits:**
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| Authentication endpoints | 5 requests | Per IP, per minute |
+| Player registration | 10 requests | Per IP, per hour |
+| Score submission | 100 requests | Per organizer, per minute |
+| General API | 1000 requests | Per user, per minute |
+| Public endpoints | 5000 requests | Per IP, per minute |
+
+**When rate limit exceeded:**
+```json
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Too many requests",
+    "retryAfter": 60
+  }
+}
+```
+
+---
+
+### API Summary Table
+
+| Endpoint | Method | Auth | Purpose |
+|----------|--------|------|---------|
+| `/auth/register` | POST | None | Organizer signup |
+| `/auth/login` | POST | None | Organizer login |
+| `/auth/2fa/verify` | POST | None | Verify 2FA code |
+| `/tournaments` | POST | Org | Create tournament |
+| `/tournaments/:id` | GET | Any | Get tournament details |
+| `/tournaments/:id` | PATCH | Org | Update tournament |
+| `/tournaments/:id/publish` | POST | Org | Publish tournament |
+| `/tournaments/:id/groups` | POST | Org | Create groups |
+| `/tournaments/:id/groups/:gid/standings` | GET | Any | Get standings |
+| `/tournaments/:id/matches/:mid/submit-score` | POST | Player | Submit score |
+| `/tournaments/:id/matches/:mid/override-score` | POST | Org | Override score |
+| `/tournaments/:id/bracket/generate` | POST | Org | Generate bracket |
+| `/tournaments/:id/bracket/publish` | POST | Org | Publish bracket |
+| `/tournaments/:id/phases/advance` | POST | Org | Advance phase |
+| `/tournaments/public` | GET | None | List public tournaments |
+| `/tournaments/:id/public` | GET | None | Public tournament view |
+| `/player/tournaments` | GET | Player | My tournaments |
+| `/tournaments/:id/my-matches` | GET | Player | My matches |
+
 ## Future Considerations (Not in v1)
 - Double-elimination brackets
 - Swiss system
