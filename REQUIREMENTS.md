@@ -102,7 +102,20 @@ A tournament management webapp for racket sports (tennis, pickleball, badminton,
 ### Group Stage Match Visibility
 - **Match schedule visibility**: All players in a group can see the full round-robin match schedule
 - **Results visibility**: All players in a group can see all match results and standings in real-time
-- **Match timing**: No predefined match times; players self-organize to schedule their matches within the group stage deadline
+
+### Group Stage Match Scheduling
+- **Organizer-set timeframes**: Organizer defines a date range for each round of group matches (e.g., "May 10-15")
+- **Player coordination**: Within the organizer's timeframe, both players in a match must coordinate and confirm a specific match time
+- **Confirmation required**: One player confirms the agreed match time in the app; both players see the confirmed time
+- **Contact info visibility**: Player contact info (email, phone) is revealed to opponent only when coordinating a match
+- **No confirmation by deadline**: If players don't confirm a match time by the organizer's deadline:
+  - Neither player wins or loses that match
+  - Match is marked as unconfirmed/unplayed
+  - Organizer manually handles (reschedule, cancel, or other resolution)
+- **No-show handling**: If a match is confirmed but one player doesn't show up:
+  - Present player can initiate a "claim walkover" in the app
+  - Opponent is awarded a loss; claimant gets a win
+  - System records this for organizer review and audit
 
 ### Score Deadline — Group Stage
 - **Single deadline**: Organizer sets one date/time deadline for all group stage scores
@@ -163,6 +176,14 @@ A tournament management webapp for racket sports (tennis, pickleball, badminton,
   - Organizer decides per match: cancel (opponent unaffected), grant opponent a bye, or override with a default result
   - No automatic handling; each case handled individually
 
+## Player Contact Preferences
+
+- **Multiple contact methods**: Players can set multiple contact mechanisms (email, phone number)
+- **Preferred contact method**: Player designates which contact method is preferred for match coordination
+- **Privacy by default**: Contact info is hidden from other players by default
+- **Visibility on demand**: Contact info is revealed only when needed (e.g., during match scheduling coordination)
+- **Contact during registration**: Players provide contact info when registering for a tournament
+
 ## Tournament Visibility & Public Access
 
 ### Public Views
@@ -209,17 +230,72 @@ Additional player notifications:
 | Email Queue | BullMQ + Redis | Async email delivery, automatic retry logic, prevents request blocking |
 | Monorepo | pnpm workspaces | Shared types package between frontend and backend |
 
+## Security & Compliance
+
+### Data Protection
+- **Sensitive data types**: Player emails, organizer passwords, player IP addresses / device info
+- **GDPR compliance**: Support right to erasure; players can request deletion anytime
+- **CCPA compliance**: Respect California privacy rights; transparent data handling
+- **Data deletion process**:
+  - Players can request data deletion anytime
+  - Active tournament data: Player name/email anonymized as "Deleted Player"; match results preserved
+  - Completed/archived tournament data: All player data deleted upon request
+- **Encryption in transit**: HTTPS/TLS 1.2+ required for all client-server communication
+- **Encryption at rest**: PostgreSQL data encrypted on disk; Redis data encrypted on disk
+- **Password security**: Organizer passwords hashed with bcrypt + salt
+- **Rate limiting & DDoS**: Rate limit per IP/user (e.g., 100 requests/min); DDoS protection via CDN/WAF
+
+### Authentication & Sessions
+- **Organizer 2FA**: Required; email codes sent to organizer's email
+  - 2FA setup at account creation
+  - Organizer receives code via email; enters to verify login
+  - No additional vendor licensing (uses existing Resend email service)
+- **Session timeout**: Organizer sessions valid for 30 days before re-authentication required
+- **Account recovery**: If organizer loses access to 2FA email, support ticket required for recovery
+  - Support team verifies identity and resets 2FA
+
+### Audit Logging
+- **Login/logout events**: Track organizer login/logout with timestamp and IP
+- **Score overrides**: Log when organizer changes a score (who, what, when, reason note)
+- **Tournament lifecycle**: Log tournament creation/deletion events
+- **2FA changes**: Log when 2FA settings are modified
+- **Sensitive data access**: Log when player emails or other sensitive data is accessed
+
+### Admin & Governance
+- **Admin team**: Multiple admins with shared oversight capability
+  - Admins can override organizers if disputes arise
+  - Admins have access to all tournaments and audit logs
+
+### Monitoring & Alerting
+- **Security alerts**: Alert admin team on:
+  - Multiple failed 2FA attempts (3+ in short period → possible account compromise)
+  - Unusual API usage (rate limit violations, API call spikes, anomalous patterns)
+  - Admin/organizer actions (score overrides, tournament deletions, role changes)
+
+### Backup & Disaster Recovery
+- **v1 approach**: Basic backups provided by hosting provider (Railway/Fly.io)
+- **Future (v2)**: Implement formal backup strategy with daily automated backups and 30-day retention
+
+### Incident Response
+- **v1 approach**: Basic incident response process; notify affected users if required by law
+- **Future (v2)**: Implement comprehensive incident response plan with 72-hour notification requirement
+
 ## Organizer Features & Workflows
 
 ### Account Management
 - **Signup**: Open signup — anyone can create an organizer account with email + password
 - **Password reset**: Email reset link sent to organizer; link has time limit and resets password via one-time link
+- **2FA setup**: Required at account creation; organizer receives email codes for login
 - **Co-organizer access**: Tournament creator can invite other organizers via email; invitee must accept and have/create an organizer account
+- **Co-organizer permissions**: Co-organizers have full access (same as creator) — can override scores, advance phases, manage players
 
 ### Tournament Management
 - **Draft mode**: Organizer can create tournaments in draft state before publishing
 - **Publication**: Once published, tournament appears in public tournament listing and registration opens
 - **Tournament sharing**: Organizer gets a unique shareable URL; they manually copy and share it (via email, Slack, website, etc.)
+- **Tournament size constraints**: Min 4 players, max 200 players per tournament
+- **Group stage scheduling**: Organizer defines date range for each round of group matches (e.g., "May 10-15"); players coordinate specific match times within range
+- **Default group count**: System suggests number of groups based on player count; organizer can adjust before groups are created
 
 ### Tournament Admin Features
 - **Bracket approval**: Organizer reviews generated bracket before revealing to players; can adjust seeding/byes
@@ -228,12 +304,27 @@ Additional player notifications:
 - **Real-time dashboard**: Live activity feed showing all scores, withdrawals, and match completions via WebSocket updates
 - **Phase control**: Organizer can manually advance phases before scheduled dates if conditions are met
 
+### Dashboard & UI
+- **Primary dashboard view**: When organizer logs in, they see active tournament (if one exists) or list of tournaments if multiple are active
+- **Active tournament view**: Primary section shows current phase detail (standings, match status, pending actions)
+- **Live activity feed**: Real-time dashboard updates with scores, withdrawals, match confirmations via WebSocket
+
+### Player UI
+- **Player primary view**: When player logs in, they see tournament standings first
+- **Match reporting**: Players see upcoming matches in a list; click to view opponent and propose/confirm match time
+- **Score submission**: Players enter score as text (e.g., "6-4, 6-3"); system parses and shows parsed result for confirmation before final submission
+- **Who reported visibility**: Both players can see who reported the score and when
+
 ### Analytics & Reporting
 Organizers can access the following reports:
 - **Participation stats**: Number of registered players, registration rate, withdrawals, concurrent tournament participation
 - **Match completion rate**: Number of submitted scores vs. pending scores by phase
 - **Performance breakdown**: Player rankings, win rates, average set differential
 - **Email delivery logs**: Which notifications were sent, delivery failures, bounces
+
+### Features Not in v1
+- **Data export** (CSV/Excel/PDF) planned for v2
+- **In-app messaging** (match coordination happens outside app) planned for v2
 
 ## Real-Time Updates
 
@@ -259,6 +350,40 @@ Organizers can access the following reports:
 - **WCAG 2.1 AA compliance**: All user-facing pages and components meet WCAG 2.1 Level AA accessibility standards
 - **Requirements**: Keyboard navigation, screen reader support, sufficient color contrast, form labels, error messages
 
+## Operations & Support
+
+### Timezone Handling
+- **UTC storage + local conversion**: All times stored in UTC; displayed in user's local timezone
+- **Organizer timezone**: Can view in organizer's timezone; players view in their own timezone
+
+### Support
+- **Email support**: Support email address; team responds within 24 hours
+- **Support scope**: Handle account recovery, tournament disputes, technical issues
+
+### SLA & Uptime
+- **v1 target**: Best effort; no formal SLA
+- **Expected uptime**: Best effort, no guaranteed uptime percentage
+- **Performance target**: <2s page load time (no formal SLA)
+- **v2 plan**: Implement formal SLA (99.5%+ uptime) and performance targets
+
+## Testing Strategy
+
+- **Unit tests**: Test core logic (bracket generation, standings calculation, score parsing)
+- **End-to-end tests**: Full tournament flow from registration through results
+- **Beta testing**: Real organizers run test tournaments with actual players before public launch
+
+## Launch & Rollout
+
+- **Beta launch**: Closed beta with 3-5 selected tournament organizers running real tournaments
+- **Public launch**: After beta feedback and bug fixes, launch to public
+- **Marketing**: Organic discovery via racket sports communities; no major marketing spend for v1
+
+## Pricing & Monetization
+
+- **v1**: Completely free for organizers and players
+- **v2+**: Consider monetization options (freemium, commission on entry fees, etc.)
+  - If commission model added: Payment processing via Stripe/PayPal with full PCI-DSS compliance
+
 ## Scale & Performance Targets
 
 - **Designed for**: 10,000+ concurrent requests
@@ -268,6 +393,386 @@ Organizers can access the following reports:
   - Short HTTP cache-control headers (30–60s) on public tournament/bracket endpoints
   - Redis for session tokens (no DB lookup per request)
   - Database connection pooling via PgBouncer
+
+## System Architecture
+
+### High-Level Design
+
+**FaaS-based (Serverless) Architecture:**
+- No servers or containers to maintain
+- Auto-scaling: services scale from zero to thousands of concurrent instances
+- Pay-per-use: only pay for compute time and API calls
+
+```
+┌──────────────┐
+│   Frontend   │ React + Vite → Cloudflare Pages
+│   (Static)   │ (CDN-served, cached)
+└──────┬───────┘
+       │
+       ├─── REST API calls ────→ AWS Lambda (business logic)
+       │                         ├─ POST /tournaments
+       │                         ├─ POST /scores
+       │                         ├─ GET /standings
+       │                         └─ etc. (sync validation + async processing)
+       │
+       └─── WebSocket ─────────→ AWS API Gateway WebSocket
+                                ├─ Maintains persistent connections
+                                └─ Routes real-time updates (standings, brackets, etc.)
+
+        Database:     AWS RDS PostgreSQL (free tier, no connection pooling for v1)
+        Cache:        AWS ElastiCache Redis or Upstash
+        Email queue:  BullMQ (runs in Lambda)
+        Email API:    Resend
+```
+
+### Core Components
+
+| Component | Technology | Purpose | Cost (v1) |
+|-----------|-----------|---------|-----------|
+| **REST API** | AWS Lambda + Fastify | Handle HTTP requests, business logic | $0 (free tier) |
+| **WebSocket** | AWS API Gateway WebSocket | Real-time connection management, message routing | ~$1-5/month |
+| **Database** | AWS RDS PostgreSQL | Store all tournament, player, match data | $0 (free tier for 12 months) |
+| **Cache/Sessions** | Redis (ElastiCache or Upstash) | Store organizer sessions, player tokens, hot data | $0-5/month |
+| **Email Queue** | BullMQ (Redis-backed) | Async email job queueing, retry logic | Included in Redis |
+| **Email Delivery** | Resend API | Send all notifications and transactional emails | $0 (included in existing budget) |
+| **Frontend Hosting** | Cloudflare Pages | Serve React app globally | $0 |
+
+### Request/Response Pattern
+
+**Pattern: Sync Validation + Async Processing**
+
+All write operations follow this pattern:
+
+```
+1. SYNC Validation (in Lambda, <100ms)
+   ├─ Validate format (e.g., score "6-4, 6-3")
+   ├─ Check resource exists (e.g., match, player)
+   ├─ Check permissions/state
+   └─ If validation fails → return HTTP 400 immediately
+
+2. If validation succeeds → Queue async processing
+   └─ Return HTTP 202 "Accepted" (job ID included)
+
+3. ASYNC Processing (BullMQ background job)
+   ├─ Expensive operations (standings calculation, bracket generation)
+   ├─ External calls (email, WebSocket broadcast)
+   └─ Retry logic built-in (if fails, retry with backoff)
+```
+
+**Example: Score Submission**
+```
+POST /matches/123/submit-score
+Body: { score: "6-4, 6-3" }
+
+SYNC (Lambda):
+├─ Validate format matches "X-Y, X-Y" regex
+├─ Check match exists
+├─ Check player is in match
+└─ If any fail → HTTP 400 error
+
+✓ If validation passes:
+├─ Parse score into sets
+├─ Store in database
+└─ Return HTTP 202 { jobId: "abc123", status: "processing" }
+
+ASYNC (BullMQ job):
+├─ Recalculate group standings
+├─ Check if standings changed (WebSocket)
+├─ Queue opponent notification email
+└─ Broadcast standings update via WebSocket
+```
+
+### Operation Categories
+
+**Read Operations (SYNC only)**
+- Return immediately with current data
+- No queuing, no async processing
+- Examples: GET standings, GET brackets, GET match list, GET tournaments
+
+**Write Operations (SYNC validation + ASYNC processing)**
+- SYNC: Validate input, check permissions, store minimal state
+- Return HTTP 202 "Accepted" immediately
+- ASYNC: Heavy processing (calculations, emails, WebSocket broadcasts)
+- Examples: POST score, POST confirm-match-time, POST create-tournament
+
+**Async-Only Operations (no SYNC validation)**
+- Queue immediately, no validation step
+- Examples: Send magic link email, send notification emails
+
+### Error Handling & Resilience
+
+**Validation Failures (SYNC):**
+- Caught immediately, return HTTP 400 with error message
+- Examples: Invalid score format, match doesn't exist, player not authorized
+- User gets instant feedback
+
+**Processing Failures (ASYNC):**
+- BullMQ job fails
+- Automatic retry with exponential backoff (3-5 retries)
+- Failed jobs moved to dead-letter queue after max retries
+- Organizer notified of persistent failures via dashboard alert
+- No user action required; system self-heals
+
+**External Service Failures:**
+- **Database unavailable**: Lambda returns HTTP 503; client sees "Service temporarily unavailable"
+- **Email service down**: Job queued in BullMQ; will retry when service recovers
+- **WebSocket API down**: Affects real-time updates only; data is still persisted
+- **Redis down**: Session/cache lost; users need to re-login (acceptable for v1)
+
+**Graceful Degradation:**
+- Organizer dashboard shows even if WebSocket is down (polling fallback)
+- Score submission works even if notification email fails (data still stored, retry happens)
+- Bracket generation continues even if some notifications fail
+
+### Caching Strategy
+
+**Cache-Aside Pattern with Explicit Invalidation:**
+
+All cached data follows a pattern: explicit invalidation on data change + TTL safety net
+
+```
+Data changes:
+├─ DELETE cache key (immediate invalidation)
+├─ Update database
+└─ SET cache with TTL (fresh data with safety net)
+
+Queries:
+├─ Try cache first → cache hit (fast)
+└─ Cache miss → query DB, populate cache
+```
+
+**Cache Timeout Values:**
+
+| Data | TTL | Invalidation Trigger | Reasoning |
+|------|-----|----------------------|-----------|
+| **Group standings** | 1 hour | Score submitted | Expensive calculation, frequently changes; 1h balances freshness vs recomputation |
+| **Knockout bracket** | 24 hours | Phase advanced | Expensive calculation, rarely changes; cached until phase advances |
+| **Match schedule** | 24 hours | Timeframe changed | Rarely changes; invalidated when organizer updates timeframe |
+| **Tournament config** | 24 hours | Organizer edits | Infrequently changed; reduces DB queries between edits |
+| **Organizer session** | 30 days | Manual logout | Sliding window: renewed on each request; inactive timeout after 30 days |
+| **Player magic link** | 24-48 hours | One-time use | Consumed on login; single-use security token |
+| **Frontend: app bundles** | 1 year | Content hash | Immutable files (content-hashed); safe indefinite cache |
+| **Frontend: index.html** | 1 day or no-cache | Never | Entry point; short TTL forces users to check for app updates |
+
+**Cache Invalidation Safety:**
+
+- **Explicit invalidation**: DELETE cache key when data changes (prevents stale data)
+- **TTL safety net**: If invalidation fails or is delayed, cache automatically expires
+- **Example**: Group standings changes via score submission
+  - Async job calculates new standings first (old cache serves queries during this window)
+  - Deletes old cache
+  - Stores with 1-hour TTL
+  - If delete/set fails, old cache serves data until next recalculation
+  - If new score arrives within 1 hour, consolidates into one calculation (jobId prevents duplicates)
+
+**What's NOT cached:**
+
+- Tournament config queries (cheap, infrequent enough)
+- Player-specific data (per-user, hard to invalidate)
+- Real-time data (WebSocket updates provide freshness)
+- Auth tokens beyond session storage (validation needed)
+
+### Scaling & Performance
+
+**Auto-Scaling:**
+- Lambda: Automatically scales from 0 to 1000s of concurrent instances
+- API Gateway WebSocket: Automatically scales to handle connection load
+- RDS: Single instance (free tier); scales vertically if needed in v2
+- Redis: Single instance; scales to larger tier if needed in v2
+
+**Connection Management:**
+- **v1**: No connection pooling for database (acceptable for <200 concurrent users)
+- **v2**: Add AWS RDS Proxy when scaling beyond closed beta
+
+**Cold Starts:**
+- Lambda functions have ~1-5 second cold start (acceptable for v1)
+- Not a major concern for background jobs (BullMQ workers)
+- Can optimize in v2 if needed (provisioned concurrency, code optimization)
+
+**Database Performance:**
+- RDS free tier: burstable performance, adequate for v1
+- No special indexes needed for small data volume
+- As data grows, add indexes on frequently queried columns (match_id, player_id, tournament_id)
+
+### Async Job Queue (BullMQ)
+
+**Queue Architecture:**
+- **Single unified queue**: "async-jobs"
+- **Multiple job types** in one queue (reduces operational overhead)
+- **Backed by Redis**: Uses same Redis instance as cache/sessions
+- **Job consolidation**: Prevents duplicate jobs for the same resource
+
+**Job Types:**
+
+| Job Type | Triggered By | Purpose | Example jobId |
+|----------|--------------|---------|--------------|
+| `recalculate-standings` | Score submitted | Recalculate group standings | `recalc-standings:tourn:123:grp:1` |
+| `generate-bracket` | Phase advanced | Generate knockout bracket | `generate-bracket:tourn:123` |
+| `send-email` | Various events | Send transactional email | `send-email:magic-link:user:456` |
+| `delete-player-data` | Deletion requested | Anonymize/delete player data | `delete-player-data:player:789` |
+
+**Job Consolidation Strategy:**
+
+All jobs use a unique jobId that includes the job type and resource identifiers. This allows checking if a job is already queued even in a unified queue with multiple job types.
+
+**Pattern: `{jobType}:{context}:{resourceId}:{additionalId}`**
+
+Before queueing any job, check if a job with that jobId already exists. If it does (and isn't completed), skip queueing:
+
+```javascript
+// Example 1: Recalculate group standings
+const jobId = `recalc-standings:tourn:${tournamentId}:grp:${groupId}`;
+const existingJob = await asyncQueue.getJob(jobId);
+if (!existingJob || existingJob.state === 'completed') {
+  await asyncQueue.add('recalculate-standings', 
+    { tournamentId, groupId }, 
+    { jobId }
+  );
+}
+
+// Example 2: Generate knockout bracket
+const jobId = `generate-bracket:tourn:${tournamentId}`;
+const existingJob = await asyncQueue.getJob(jobId);
+if (!existingJob || existingJob.state === 'completed') {
+  await asyncQueue.add('generate-bracket', 
+    { tournamentId }, 
+    { jobId }
+  );
+}
+
+// Example 3: Delete player data
+const jobId = `delete-player-data:player:${playerId}`;
+const existingJob = await asyncQueue.getJob(jobId);
+if (!existingJob || existingJob.state === 'completed') {
+  await asyncQueue.add('delete-player-data', 
+    { playerId }, 
+    { jobId }
+  );
+}
+
+// Example 4: Publish bracket to players
+const jobId = `publish-bracket:tourn:${tournamentId}`;
+const existingJob = await asyncQueue.getJob(jobId);
+if (!existingJob || existingJob.state === 'completed') {
+  await asyncQueue.add('publish-bracket', 
+    { tournamentId }, 
+    { jobId }
+  );
+}
+
+// Example 5: Send batch phase-change notifications
+const jobId = `notify-phase-change:tourn:${tournamentId}:phase:${phaseName}`;
+const existingJob = await asyncQueue.getJob(jobId);
+if (!existingJob || existingJob.state === 'completed') {
+  await asyncQueue.add('send-phase-notification', 
+    { tournamentId, phaseName }, 
+    { jobId }
+  );
+}
+```
+
+**Job Types & Consolidation Strategy:**
+
+| Job Type | jobId Pattern | Consolidate? | Rationale |
+|----------|--------------|--------------|-----------|
+| `recalculate-standings` | `recalc-standings:tourn:X:grp:Y` | ✅ Yes | Multiple score submissions → 1 recalc (includes all scores) |
+| `generate-bracket` | `generate-bracket:tourn:X` | ✅ Yes | Phase advance might trigger multiple times; consolidate into 1 generation |
+| `publish-bracket` | `publish-bracket:tourn:X` | ✅ Yes | After generation, publishing should consolidate if triggered multiple times |
+| `delete-player-data` | `delete-player-data:player:X` | ✅ Yes | Deletion is idempotent; consolidate if requested multiple times |
+| `notify-phase-change` | `notify-phase-change:tourn:X:phase:Y` | ✅ Yes | Multiple phase triggers → consolidate all notifications into 1 broadcast |
+| `send-email` | `send-email:TYPE:recipient:X` | ❌ No | Transactional (magic link, score confirmation); user may request multiple times if not received |
+| `update-schedule` | `update-schedule:tourn:X:grp:Y` | ✅ Yes | If organizer changes timeframe multiple times rapidly, consolidate schedule updates |
+
+**Benefits of consolidation:**
+- ✅ Prevents duplicate expensive calculations (standings, brackets)
+- ✅ Consolidation happens automatically (job includes all accumulated data/state)
+- ✅ Single queue reduces operational complexity
+- ✅ Fast lookup (O(1)) even with multiple job types
+- ✅ Reduces database load and API calls (one operation instead of many)
+
+**Job Retry Logic:**
+- Max attempts: 3
+- Backoff strategy: Exponential (2s, 4s, 8s)
+- Failed jobs after max retries: Moved to dead-letter queue
+- Monitoring: CloudWatch alert on dead-letter queue growth
+
+**Cache Invalidation (NOT queued):**
+
+Cache invalidation is done **inline** in Lambda functions and async jobs, not queued.
+
+**Pattern: RECALCULATE → DELETE → SET**
+
+This ordering avoids "cache stampede" (multiple requests all recalculating when cache is empty):
+
+```javascript
+// Inline invalidation in async job (recalculation)
+async function recalculateStandings(tournamentId, groupId) {
+  // 1. RECALCULATE FIRST (expensive operation)
+  // Old cache still serves queries during this window (safe)
+  const standings = await calculateStandings(tournamentId, groupId);
+  
+  // 2. DELETE old cache (fast, Redis only)
+  await redis.del(`standings:${tournamentId}:${groupId}`);
+  
+  // 3. SET new cache (fast, Redis only)
+  await redis.setex(`standings:${tournamentId}:${groupId}`, 3600, JSON.stringify(standings));
+}
+
+// Inline invalidation in sync Lambda (lightweight updates)
+async function editTournament(tournamentId, data) {
+  // For lightweight operations, DELETE + SET are close enough
+  // to be considered atomic from a user perspective
+  
+  // Delete tournament config cache
+  await redis.del(`tournament:${tournamentId}`);
+  
+  // Update database
+  await db.updateTournament(tournamentId, data);
+  
+  return { status: 'accepted' };
+}
+```
+
+**Why this pattern:**
+- **Avoids cache stampede**: Old cache serves queries while new data is computed (no thundering herd)
+- **Minimal cache gap**: DELETE and SET are Redis-only ops (milliseconds), not database queries
+- **Safe staleness**: Queries get old data while new is being computed; doesn't cause duplicate work
+- **Simple to debug**: Cache operations are inline, not hidden in queues
+
+### Deployment & Operations
+
+**Version Control & CI/CD:**
+- Single Lambda function deployed per endpoint (or monolithic handler)
+- Infrastructure as Code: AWS SAM or Terraform for Lambda, API Gateway, RDS setup
+- Automated deployment on git push (GitHub Actions or similar)
+
+**Monitoring & Logging:**
+- CloudWatch Logs: All Lambda errors and debug logs
+- CloudWatch Alarms: Alert on Lambda errors, high latency, BullMQ dead-letter queue growth
+- BullMQ Monitoring: Track queue depth, job success/failure rates
+- No persistent application logs needed (CloudWatch is sufficient for v1)
+
+**Backup & Disaster Recovery:**
+- RDS automated backups (included with free tier)
+- Redis data: ephemeral (okay for sessions and queue), not critical
+- v2: Implement formal backup strategy if needed
+
+### No-Server Maintenance Benefits
+
+✅ **What you don't maintain:**
+- Server patches and updates
+- Container orchestration
+- Database server administration
+- Load balancers
+- Auto-scaling configuration
+- SSL certificates
+
+✅ **What AWS maintains:**
+- Lambda runtime and security
+- RDS backup and failover
+- API Gateway uptime
+- WebSocket infrastructure
+- All infrastructure scaling
 
 ## Future Considerations (Not in v1)
 - Double-elimination brackets
