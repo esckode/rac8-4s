@@ -885,6 +885,94 @@ async function editTournament(tournamentId, data) {
 - Infrastructure as Code: AWS SAM or Terraform for Lambda, API Gateway, RDS setup
 - Automated deployment on git push (GitHub Actions or similar)
 
+**Deployment Units & Monorepo Structure:**
+
+For v1, the application is organized as a **monorepo** with independently deployable units. Each unit has its own CI/CD pipeline and can be deployed separately.
+
+*Deployable Units:*
+
+1. **API Backend (Lambda + API Gateway)**
+   - Contains: All HTTP endpoints (organizer, player, public), WebSocket message handlers, authentication middleware, business logic (standings calculation, bracket generation, score parsing)
+   - Development phases: Phase 1 (core business logic) + Phase 2 (API endpoints)
+   - Deployment frequency: High (feature iterations)
+   - Dependencies: PostgreSQL schema, Redis instance
+
+2. **Async Worker (Lambda + Job Queue)**
+   - Contains: Background job handlers (standings recalculation, email sending, tournament phase transitions), job consolidation logic, Redis cache invalidation
+   - Development phases: Phase 3 (async jobs & infrastructure)
+   - Deployment frequency: As needed (typically after API endpoints stabilize)
+   - Dependencies: PostgreSQL, Redis, BullMQ queue
+
+3. **Frontend (S3 + CloudFront)**
+   - Contains: React/Vue application bundle, static assets, UI components
+   - Development phases: Phase 4 (frontend & E2E)
+   - Deployment frequency: High (UX iterations during beta)
+   - Dependencies: API Backend (for API calls)
+
+4. **Database Schema (RDS Migrations)**
+   - Contains: PostgreSQL schema definitions, index creation, data migrations
+   - Deployment: Separate from code deployments; coordinated with API Backend updates
+   - Dependencies: None (but other units depend on this)
+
+*Monorepo Directory Structure:*
+
+```
+tournament-app/
+├── packages/
+│   ├── core-logic/          # Phase 1: Business logic (standings, brackets, scoring)
+│   │   ├── __tests__/       # 100% coverage on these modules
+│   │   ├── standings.ts
+│   │   ├── bracket-generator.ts
+│   │   └── score-parser.ts
+│   │
+│   ├── api/                 # Phase 2: Lambda API endpoints
+│   │   ├── __tests__/       # Integration tests with real DB
+│   │   ├── handlers/
+│   │   │   ├── organizer.ts
+│   │   │   ├── player.ts
+│   │   │   └── public.ts
+│   │   └── middleware/
+│   │       └── auth.ts
+│   │
+│   ├── worker/              # Phase 3: Async job handlers
+│   │   ├── __tests__/
+│   │   ├── jobs/
+│   │   │   ├── recalculate-standings.ts
+│   │   │   ├── send-email.ts
+│   │   │   └── advance-phase.ts
+│   │   └── consolidation.ts
+│   │
+│   └── frontend/            # Phase 4: Web application
+│       ├── src/
+│       ├── __tests__/
+│       └── public/
+│
+├── db/                      # Database migrations and schema
+│   ├── migrations/
+│   └── schema.sql
+│
+├── shared/                  # Shared types, constants, utilities
+│   ├── types/
+│   ├── constants/
+│   └── utils/
+│
+├── package.json             # Monorepo root with workspaces
+└── pnpm-workspace.yaml      # (or yarn workspaces, npm workspaces)
+```
+
+*Why Monorepo for v1:*
+- Shared business logic lives in one place (core-logic package), reducing duplication
+- Atomic commits for coordinated changes (e.g., API schema change + frontend update together)
+- Simpler initial setup and CI/CD configuration
+- Each package can be deployed independently; frontend can ship without waiting for API, and vice versa
+- Future extraction to separate repos is possible in v2+ if needed (team growth, diverging needs)
+
+*Deployment Coordination:*
+- Database schema migrations run before API Backend deployment
+- Frontend can be deployed independently at any time
+- Async Worker can be deployed independently once stable
+- Cross-unit testing (integration tests) ensure API/frontend contracts are maintained
+
 **Monitoring & Logging:**
 - CloudWatch Logs: All Lambda errors and debug logs
 - CloudWatch Alarms: Alert on Lambda errors, high latency, BullMQ dead-letter queue growth
@@ -2216,6 +2304,1076 @@ X-RateLimit-Reset: 1715500000
 | `/tournaments/:id/public` | GET | None | Public tournament view |
 | `/player/tournaments` | GET | Player | My tournaments |
 | `/tournaments/:id/my-matches` | GET | Player | My matches |
+
+## Success Criteria
+
+Success for v1 is defined by two phases: **Closed Beta Launch** and **Public Launch**. Each phase has distinct acceptance criteria.
+
+### V1 Closed Beta Launch Success Criteria
+
+**Goal:** 3-5 selected tournament organizers successfully run real tournaments with actual players from start to finish.
+
+#### Functional Completeness
+
+| Feature | Acceptance Criteria | Verification |
+|---------|-------------------|--------------|
+| **Player Registration** | Players can register via magic link; email delivery succeeds; tokens work across browser sessions | Test with 20+ players; verify email logs in Resend dashboard |
+| **Tournament Lifecycle** | Organizer can create, publish, and advance all tournament phases (registration → group → knockout → complete) | Run one full tournament through all phases |
+| **Group Stage** | System auto-distributes players into groups; round-robin matches are generated correctly; standings calculate accurately | Verify group size distribution is even; validate match count = N×(N-1)/2 per group |
+| **Score Submission** | Players can submit scores; both players see submitted scores; scores can be edited until deadline | Submit conflicting scores; verify last submission wins; check deadline enforcement |
+| **Standings Accuracy** | Standings rank by: (1) wins, (2) sets won, (3) head-to-head result | Calculate standings manually for sample group; compare to system output |
+| **Knockout Bracket** | System generates valid bracket with correct seeding and bye assignments | Generate bracket for 13, 17, 25 advancing players; verify bye count = next power of 2 − actual count |
+| **Organizer Overrides** | Organizer can override scores and manually advance phases | Override one score mid-tournament; verify standings update and audit log records change |
+| **Notifications** | Players receive: registration magic link, match schedule, score submission alerts, phase change notifications | Check email logs; verify all 4 notification types triggered correctly |
+| **Real-Time Updates** | Organizer dashboard updates in real-time as scores are submitted; players see standings update live | Open organizer dashboard and player standings side-by-side; submit score and verify both update <2s apart |
+
+#### Performance
+
+| Metric | Target | Verification Method |
+|--------|--------|-------------------|
+| **Page Load Time** | <2 seconds (first meaningful paint) | Use Lighthouse; measure on 4G network; test homepage, dashboard, standings pages |
+| **API Response Time (P95)** | <200ms for read operations (GET standings, match list) | Use CloudWatch metrics; check Lambda duration logs |
+| **API Response Time (P95)** | <500ms for write operations (score submission, phase advance) | Use CloudWatch metrics; check Lambda duration logs |
+| **WebSocket Message Latency** | <500ms from organizer action to dashboard update | Use browser DevTools; measure time from score submission click to standings refresh |
+| **Concurrent Players** | System handles 50+ concurrent players without degradation | Load test during beta; simulate all players in a tournament refreshing simultaneously |
+| **Database Query Time** | P95 <100ms for standings calculation query | Use EXPLAIN ANALYZE on group standings query |
+
+#### Reliability
+
+| Metric | Target | Verification Method |
+|--------|--------|-------------------|
+| **Uptime** | ≥95% during active tournaments (closed beta only; no formal SLA) | Monitor CloudWatch; log any downtime incidents |
+| **Error Rate** | <1% of API requests return 5xx errors | Monitor CloudWatch; set alarm if error rate >1% |
+| **Data Consistency** | All user-initiated actions persist correctly; no lost scores or standings | Verify database after each tournament; spot-check match records |
+| **Score Submission Success** | 100% of score submissions are recorded and visible to both players | Test 20+ score submissions across different matches |
+| **Email Delivery Success** | ≥99% of transactional emails delivered (magic links, notifications) | Check Resend delivery logs; verify <1% bounce/failure rate |
+| **Magic Link Token** | Tokens never expire before expiration window; tokens are single-use | Test token after 12 hours (within window); verify token cannot be reused |
+| **Authentication** | Organizer 2FA works; sessions timeout correctly at 30 days | Test 2FA login flow; verify failed 2FA doesn't create session |
+
+#### Security
+
+| Feature | Acceptance Criteria | Verification |
+|---------|-------------------|--------------|
+| **Organizer Authentication** | 2FA is required; email codes are 6 digits; codes expire after 10 minutes | Test 2FA setup; attempt expired code (should fail) |
+| **Password Security** | Passwords hashed with bcrypt; no plaintext passwords in logs | Inspect database; search logs for password strings |
+| **Player Session** | Magic link token is single-use, expires after 24-48 hours | Token works once; second use fails; token doesn't work after 48 hours |
+| **Authorization** | Organizer can only access tournaments they created or are co-organizer on | Try accessing another organizer's tournament (should return 403) |
+| **Data Encryption** | All data transmitted over HTTPS; no unencrypted API endpoints | Use browser DevTools Network tab; verify all requests are https:// |
+| **GDPR Compliance** | System supports right-to-delete; player data can be anonymized on request | Execute data deletion request; verify player name is anonymized in results |
+| **Audit Logging** | Score overrides, organizer actions logged with timestamp and actor | Override a score; check audit log contains: who, what, when, reason |
+
+#### Data Integrity
+
+| Check | Acceptance Criteria | Verification Method |
+|-------|-------------------|-------------------|
+| **Standings Calculation** | Manual calculation matches system calculation for all groups | Sample 3 groups across 2 tournaments; hand-calculate standings |
+| **Head-to-Head Tiebreaker** | When two players tie on wins+sets, head-to-head result determines rank | Create tied scenario; verify head-to-head winner ranks higher |
+| **Match Count** | Group: N players = N×(N-1)/2 matches. Bracket: correct number per round | Verify match count formula for groups with 4, 8, 16 players |
+| **Score Parsing** | Score format validated strictly; invalid formats rejected with clear error | Try invalid formats: "6-4 6-3", "6-4,6-3", "6-4,6"; verify error messages |
+| **Bye Assignment** | Bracket byes assigned only to top seeds; bye count = 2^k − advancing players | Generate bracket for 13 players (needs 3 byes); verify top 3 seeds get byes |
+| **Unique Matches** | No duplicate matches in group or bracket; each pair plays exactly once | Query database; verify no match with same player_ids and group_id appears twice |
+| **Phase Transitions** | Cannot transition to knockout without completing group stage; cannot edit scores after phase locked | Try submitting score after knockout started (should fail) |
+
+#### User Experience (Organizer)
+
+| Workflow | Acceptance Criteria | Verification |
+|----------|-------------------|--------------|
+| **Create & Publish Tournament** | Organizer can create tournament in <3 minutes; publishing immediately opens registration | Time the workflow from blank form to published state |
+| **Manage Groups** | Organizer specifies group count, sees auto-distribution, can review and accept | Create tournament with 32 players; generate 4 groups; verify even distribution |
+| **Track Progress** | Organizer sees live activity feed (scores, withdrawals, completions) on dashboard | Open dashboard; submit a score from player account; verify appears in feed <2s |
+| **Handle Exceptions** | Organizer can mark unconfirmed matches, override scores, manually advance phases | Mark match as unconfirmed; override one score; verify audit trail |
+| **Generate Bracket** | Organizer generates bracket, reviews seeding, adjusts if needed, publishes | Generate bracket with 13 advancing players; adjust top 2 seeds; publish |
+
+#### User Experience (Player)
+
+| Workflow | Acceptance Criteria | Verification |
+|---------|-------------------|--------------|
+| **Register & Access** | Player registers in <2 minutes; receives magic link; logs in and sees tournament dashboard | Register new player; log in; verify dashboard loads |
+| **View Schedule** | Player sees upcoming matches in clean list; opponent contact info visible when needed | Open match list; click a match; verify opponent name and scheduled time visible |
+| **Report Score** | Player enters score as text; system parses and shows confirmation before final submission | Submit "6-4, 6-3"; verify system shows parsed result before confirming |
+| **See Results** | Player sees all group standings in real-time; sees knockout bracket once published | Submit score; verify standings update <2s; check bracket visibility after publish |
+| **Understand Status** | Player always knows: current tournament phase, their group rank, their upcoming matches | Open dashboard; verify phase, rank, and upcoming matches are visible and up-to-date |
+
+#### Beta Validation
+
+| Milestone | Criteria | Evidence |
+|-----------|----------|----------|
+| **Beta Tournament 1** | One organizer runs 1 complete tournament (registration → group → knockout → results) with 20+ players | Screenshots of final standings; participant feedback form |
+| **Beta Tournament 2-3** | Two more organizers each run 1 tournament with different formats (one singles, one doubles if applicable) | Evidence of all phases completed; no critical bugs |
+| **Score Accuracy** | Final standings and brackets match manual verification | Hand-calculated standings = system standings for all groups |
+| **Player Satisfaction** | Organizers report players were able to complete tournament without confusion | Post-tournament feedback: >80% of players rate experience as "good" or "excellent" |
+| **Zero Critical Bugs** | No bugs that prevent tournament completion or lose player data | Bug tracker shows 0 critical/blocker issues at beta end |
+| **Data Retention** | All tournament data (scores, standings, results) retained correctly after completion | Verify database 1 week post-tournament; all data intact |
+
+---
+
+### V1 Public Launch Success Criteria
+
+**Goal:** System is stable, secure, and ready for public use by organizers and players worldwide.
+
+#### Pre-Launch Checklist
+
+Before public launch, the following must be true:
+
+**Infrastructure & Deployment:**
+- [ ] All environments (beta, staging, production) are isolated and secure
+- [ ] Database backups are configured and tested (restore verification)
+- [ ] Monitoring and alerting are in place (CloudWatch alarms for errors, latency, downtime)
+- [ ] CI/CD pipeline is automated; deployments require no manual steps
+- [ ] Rollback procedure is tested and documented
+
+**Security & Compliance:**
+- [ ] HTTPS is enforced on all endpoints; no plaintext connections
+- [ ] 2FA is mandatory for all organizer accounts
+- [ ] GDPR data deletion is tested end-to-end
+- [ ] Password reset flow works and tokens expire correctly
+- [ ] Security headers are configured (CSP, X-Frame-Options, etc.)
+- [ ] No sensitive data (passwords, tokens) in logs
+- [ ] Rate limiting is active on all public endpoints
+
+**Performance & Scaling:**
+- [ ] Page load time <2s on 4G network
+- [ ] API P95 response time <200ms for reads, <500ms for writes
+- [ ] System handles 100+ concurrent users without degradation
+- [ ] Database connection pooling (RDS Proxy) is configured
+- [ ] CDN is caching static assets (Cloudflare Pages)
+
+**Testing & QA:**
+- [ ] All critical workflows tested on production environment (read-only tests only)
+- [ ] 100% of API endpoints have response time metrics
+- [ ] Automated tests pass in CI/CD (unit + integration tests)
+- [ ] No high-severity bugs in backlog
+- [ ] Organizers can run tournament from start to finish without errors
+
+**Documentation & Support:**
+- [ ] API documentation is complete and accurate
+- [ ] Help/FAQ page covers common issues
+- [ ] Support contact and response SLA are documented
+- [ ] Known limitations are documented (e.g., no data export in v1)
+
+#### Launch Success Metrics (Post-Launch Monitoring)
+
+**Stability (Target: Maintain for 30 days before declaring "stable")**
+
+| Metric | Target | Alert Threshold |
+|--------|--------|-----------------|
+| Uptime | ≥99% | Alert if <99.5% in any 1-hour window |
+| Error Rate (5xx) | <0.5% | Alert if >1% |
+| API Latency (P95) | <500ms | Alert if >1s |
+| Page Load Time | <2s | Alert if >3s |
+| Email Delivery | ≥99% | Alert if <95% in any hour |
+
+**Feature Correctness**
+
+| Feature | Success Criterion |
+|---------|-------------------|
+| Score Submissions | 100% of scores recorded correctly; no data loss |
+| Standings | User-verified standings match system standings |
+| Bracket Generation | All brackets generate without errors; seeding is correct |
+| Notifications | 100% transactional emails delivered (registration, scores, phase changes) |
+| Player Withdrawals | Withdrawals are processed correctly; standings recalculated properly |
+
+**User Adoption**
+
+| Metric | Target |
+|--------|--------|
+| Organizer Sign-ups | ≥10 organizers in first month |
+| Tournaments Created | ≥5 tournaments in first month |
+| Player Registrations | ≥100 player registrations in first month |
+| Tournament Completion Rate | ≥80% of started tournaments are completed |
+| Support Tickets | <5 high-priority issues in first month |
+
+**Data Integrity Audits**
+
+- Perform weekly data audits: spot-check 5 random completed tournaments
+- Verify all scores, standings, and bracket results match records
+- Confirm no data corruption or lost records
+- Document audit results
+
+#### Launch Readiness Gates
+
+**Go/No-Go Decision Criteria (48 hours before public launch):**
+
+```
+GO if:
+✅ All pre-launch checklist items complete
+✅ Zero critical bugs in backlog
+✅ All 3-5 beta tournaments completed successfully
+✅ Uptime ≥99.5% for past 7 days
+✅ Error rate <0.5% for past 7 days
+✅ Security audit passed
+✅ Load testing shows system handles 100+ concurrent users
+✅ Database backup/restore tested and successful
+
+NO-GO if:
+❌ Any critical bugs remain unfixed
+❌ Security issues found in audit
+❌ Uptime <99% in past 7 days
+❌ Any beta tournament failed to complete
+❌ Data integrity issues found
+❌ Performance targets not met (page load >2s, API latency >500ms)
+❌ Support/runbooks incomplete
+```
+
+---
+
+### Success Metrics Dashboard (Post-Launch Tracking)
+
+Monitor these metrics continuously after public launch:
+
+**Real-Time Metrics (CloudWatch)**
+- Active tournaments
+- Concurrent players
+- Score submissions per hour
+- API error rate
+- Database connection count
+- Redis memory usage
+- BullMQ queue depth
+- WebSocket connections
+
+**Weekly Metrics**
+- New organizers
+- New tournaments
+- Player registrations
+- Tournament completion rate
+- Average players per tournament
+- Support ticket volume and resolution time
+- Data audit results
+
+**Monthly Metrics**
+- Total tournaments completed
+- Total players who competed
+- Feature adoption (how many tournaments use doubles, co-organizers, etc.)
+- User satisfaction (via post-tournament feedback)
+- Infrastructure costs (Lambda, RDS, Resend, CloudFlare)
+
+## Testing Strategy
+
+### Testing Pyramid & Approach
+
+```
+                    ▲
+                   /  \
+                  / E2E \           10% (Manual + Real Beta)
+                 /________\
+                /          \
+               / Integration \     30% (API + Database)
+              /________________\
+             /                  \
+            / Unit Tests         \  60% (Business Logic)
+           /________________________\
+```
+
+### 1. Unit Tests (60% — Core Business Logic)
+
+**Focus:** Algorithmic correctness, parsing, validation logic. These are the most critical and should have highest coverage.
+
+#### Standings Calculation
+```javascript
+describe('Standings Calculation', () => {
+  it('ranks players by wins (primary criteria)', () => {
+    const matches = [
+      { player1: 'A', player2: 'B', winner: 'A', setsWon: [6, 6], setsLost: [4, 3] },
+      { player1: 'A', player2: 'C', winner: 'C', setsWon: [4, 4], setsLost: [6, 6] },
+      { player1: 'B', player2: 'C', winner: 'B', setsWon: [6, 6], setsLost: [3, 4] },
+    ]
+    const standings = calculateStandings(matches)
+    expect(standings[0].playerId).toBe('A') // 1 win
+    expect(standings[0].wins).toBe(1)
+    expect(standings[1].playerId).toBe('B') // 1 win, fewer sets won
+    expect(standings[2].playerId).toBe('C') // 0 wins
+  })
+
+  it('uses sets won as tiebreaker for same win count', () => {
+    // Two players with 2 wins each, A has more sets won
+    // A should rank higher
+  })
+
+  it('uses head-to-head as tiebreaker 2', () => {
+    // Three tied players on wins/sets, use head-to-head result
+  })
+
+  it('handles missing matches (unplayed)', () => {
+    // If a player has an unplayed match, shouldn't count toward standings
+  })
+
+  it('handles player withdrawal', () => {
+    // Withdrawn player excluded; opponents' matches unaffected
+  })
+})
+```
+
+#### Bracket Generation & Seeding
+```javascript
+describe('Bracket Generation', () => {
+  it('generates correct number of matches for N advancing players', () => {
+    // 13 advancing → 16 bracket slots → 15 matches total (8+4+2+1)
+    const bracket = generateBracket(13)
+    expect(bracket.totalMatches).toBe(15)
+  })
+
+  it('assigns byes correctly', () => {
+    // 13 advancing → 3 byes (next power of 2 is 16, 16-13=3)
+    const bracket = generateBracket(13)
+    expect(bracket.byeCount).toBe(3)
+    expect(bracket.byeRecipients).toEqual(['seed_1', 'seed_2', 'seed_3'])
+  })
+
+  it('seeds correctly (top seed plays lowest ranked advancing player)', () => {
+    const bracket = generateBracket(13)
+    // Seed 1 should play seed 16 (if no bye)
+    // Or in this case, seed 1 has bye, plays winner of seed 8 vs seed 9
+  })
+
+  it('creates valid bracket structure (no orphaned matches)', () => {
+    const bracket = generateBracket(13)
+    // Every match in round N feeds into exactly one match in round N+1
+    // Final match produces a winner
+  })
+})
+```
+
+#### Score Parsing & Validation
+```javascript
+describe('Score Parsing', () => {
+  it('parses valid tennis score format', () => {
+    const parsed = parseScore('6-4, 6-3')
+    expect(parsed.sets).toEqual([
+      { player1: 6, player2: 4 },
+      { player1: 6, player2: 3 }
+    ])
+  })
+
+  it('rejects invalid formats', () => {
+    expect(() => parseScore('6-4 6-3')).toThrow() // missing comma
+    expect(() => parseScore('6-4, 6')).toThrow() // incomplete second set
+    expect(() => parseScore('6-4, 10-3')).toThrow() // invalid score (>9)
+  })
+
+  it('validates winner determination (best of 3)', () => {
+    // Player needs 2 sets to win
+    const parsed = parseScore('6-4, 6-3')
+    expect(parsed.winner).toBe('player1')
+    
+    expect(() => parseScore('6-4, 3-6, 2-3')).toThrow() // match not finished
+  })
+
+  it('handles sport-specific formats (pickleball: 11+)', () => {
+    const parsed = parseScore('11-9, 11-7')
+    expect(parsed.valid).toBe(true)
+  })
+})
+```
+
+#### Magic Link Token Generation & Expiry
+```javascript
+describe('Magic Link Tokens', () => {
+  it('generates unique tokens per registration', () => {
+    const token1 = generateMagicLink('player1@example.com')
+    const token2 = generateMagicLink('player1@example.com')
+    expect(token1).not.toBe(token2) // different tokens each time
+  })
+
+  it('tokens expire after TTL', () => {
+    const token = generateMagicLink('player@example.com', { expiresIn: 86400 })
+    expect(token.expiresAt).toBe(now + 86400000)
+  })
+
+  it('tokens are single-use', () => {
+    const token = generateMagicLink('player@example.com')
+    verifyToken(token) // first use: success
+    expect(() => verifyToken(token)).toThrow() // second use: token consumed
+  })
+})
+```
+
+#### Match Scheduling Conflict Detection
+```javascript
+describe('Match Scheduling', () => {
+  it('detects overlapping match times', () => {
+    const matches = [
+      { player: 'A', time: '2026-05-15T18:00:00Z', duration: 60 },
+      { player: 'A', time: '2026-05-15T18:30:00Z', duration: 60 }, // overlaps
+    ]
+    expect(detectConflicts(matches)).toContainEqual(
+      expect.objectContaining({ type: 'OVERLAP' })
+    )
+  })
+
+  it('prevents player from playing two matches simultaneously', () => {
+    // Business logic: player cannot schedule two matches at same time
+  })
+})
+```
+
+**Unit Test Coverage Target:** ≥95% for all business logic (standings, bracket, parsing)
+
+---
+
+### 2. Integration Tests (30% — API + Database)
+
+**Focus:** API endpoints interacting with database and cache. Verify state changes, job queueing, async processing.
+
+#### Tournament Lifecycle
+```javascript
+describe('Tournament Lifecycle Integration', () => {
+  let db, redis, queue
+
+  beforeAll(async () => {
+    db = await createTestDatabase()
+    redis = await createTestRedis()
+    queue = new BullMQ.Queue('test-queue', { redis })
+  })
+
+  it('full tournament flow: create → publish → register → group → knockout → complete', async () => {
+    // 1. Organizer creates tournament
+    const tournament = await POST('/tournaments', {
+      name: 'Test Tournament',
+      maxPlayers: 16,
+    }, { auth: orgToken })
+    expect(tournament.status).toBe('draft')
+
+    // 2. Publish tournament (opens registration)
+    await POST(`/tournaments/${tournament.id}/publish`, {}, { auth: orgToken })
+    const published = await GET(`/tournaments/${tournament.id}`, { auth: orgToken })
+    expect(published.status).toBe('registration_open')
+
+    // 3. Players register (8 players)
+    const players = []
+    for (let i = 0; i < 8; i++) {
+      const magicLink = await POST(`/tournaments/${tournament.id}/register`, {
+        email: `player${i}@example.com`,
+        name: `Player ${i}`
+      })
+      players.push(magicLink)
+    }
+
+    // 4. Organizer closes registration, creates groups
+    await POST(`/tournaments/${tournament.id}/groups`, {
+      numGroups: 2,
+      advancingPerGroup: 1
+    }, { auth: orgToken })
+
+    // Wait for async job
+    await waitForJob('group-distribution')
+    
+    const groups = await GET(`/tournaments/${tournament.id}/groups`, { auth: orgToken })
+    expect(groups).toHaveLength(2)
+    expect(groups[0].players).toHaveLength(4)
+
+    // 5. Players submit scores (group stage)
+    // [matches happen, players report scores]
+    // Standings auto-calculate and cache
+
+    // 6. Organizer advances to knockout
+    await POST(`/tournaments/${tournament.id}/phases/advance`, {
+      to: 'knockout_active'
+    }, { auth: orgToken })
+
+    // 7. Check bracket was generated
+    const bracket = await GET(`/tournaments/${tournament.id}/bracket`, { auth: orgToken })
+    expect(bracket.status).toBe('draft')
+
+    // 8. Organizer publishes bracket
+    await POST(`/tournaments/${tournament.id}/bracket/publish`, {}, { auth: orgToken })
+    const publishedBracket = await GET(`/tournaments/${tournament.id}/bracket`, { auth: orgToken })
+    expect(publishedBracket.status).toBe('published')
+
+    // 9. Players see bracket and submit knockout scores
+    // 10. Tournament completes
+  })
+})
+```
+
+#### Score Submission & Real-Time Updates
+```javascript
+describe('Score Submission & Real-Time Updates', () => {
+  it('score submission triggers async job, updates cache, broadcasts WebSocket', async () => {
+    // 1. Player submits score
+    const submitResponse = await POST(
+      `/tournaments/${tourn.id}/matches/${match.id}/submit-score`,
+      { score: '6-4, 6-3' },
+      { auth: playerToken }
+    )
+    expect(submitResponse.status).toBe(202) // Accepted
+    expect(submitResponse.jobId).toBeDefined()
+
+    // 2. Verify score is stored
+    const scoreRecord = await db.query('SELECT * FROM scores WHERE match_id = ?', [match.id])
+    expect(scoreRecord).toHaveLength(1)
+
+    // 3. Wait for async job to complete
+    await waitForJob(submitResponse.jobId)
+
+    // 4. Verify cache was invalidated and standings recalculated
+    const cachedStandings = await redis.get(`standings:${tourn.id}:${group.id}`)
+    expect(cachedStandings).toBeDefined() // cache populated
+
+    // 5. Verify WebSocket broadcast (organizer received update)
+    const wsMessage = await wsConnection.waitForMessage('standings_updated')
+    expect(wsMessage.data.groupId).toBe(group.id)
+  })
+
+  it('prevents score submission after deadline', async () => {
+    const pastDeadline = moment().add(1, 'day').toISOString()
+    await db.query('UPDATE matches SET deadline = ? WHERE id = ?', 
+      [pastDeadline, match.id])
+
+    const response = await POST(
+      `/tournaments/${tourn.id}/matches/${match.id}/submit-score`,
+      { score: '6-4, 6-3' },
+      { auth: playerToken }
+    )
+    expect(response.status).toBe(409) // Conflict
+    expect(response.error.code).toBe('DEADLINE_EXCEEDED')
+  })
+
+  it('last score submission wins on conflict', async () => {
+    // Player 1 submits "6-4, 6-3"
+    await POST(`/matches/${match.id}/submit-score`, 
+      { score: '6-4, 6-3' }, 
+      { auth: player1Token })
+    
+    // Player 2 submits conflicting "6-3, 6-4"
+    await POST(`/matches/${match.id}/submit-score`, 
+      { score: '6-3, 6-4' }, 
+      { auth: player2Token })
+
+    // Verify player 2's score won (last submission)
+    const finalScore = await db.query('SELECT score FROM scores WHERE match_id = ? ORDER BY created_at DESC LIMIT 1', [match.id])
+    expect(finalScore[0].score).toBe('6-3, 6-4')
+  })
+})
+```
+
+#### Authentication & Authorization
+```javascript
+describe('Authentication & Authorization', () => {
+  it('organizer cannot access another organizer\'s tournament', async () => {
+    const org1Tournament = await POST('/tournaments', { /* ... */ }, { auth: org1Token })
+    
+    const response = await GET(`/tournaments/${org1Tournament.id}`, { auth: org2Token })
+    expect(response.status).toBe(403) // Forbidden
+  })
+
+  it('player magic link is single-use', async () => {
+    // First use: success
+    const response1 = await GET(`/auth/verify?token=${magicToken}`)
+    expect(response1.playerToken).toBeDefined()
+
+    // Second use: fails (token consumed)
+    const response2 = await GET(`/auth/verify?token=${magicToken}`)
+    expect(response2.status).toBe(401) // Unauthorized
+  })
+
+  it('expired magic link cannot be used', async () => {
+    // Create token with short TTL
+    const token = await generateMagicLink('player@example.com', { expiresIn: 1 })
+    
+    // Wait for expiry
+    await new Promise(r => setTimeout(r, 2000))
+
+    const response = await GET(`/auth/verify?token=${token}`)
+    expect(response.status).toBe(401)
+    expect(response.error.code).toBe('TOKEN_EXPIRED')
+  })
+
+  it('2FA is enforced for organizers', async () => {
+    // Login without 2FA
+    const loginResponse = await POST('/auth/login', {
+      email: 'org@example.com',
+      password: 'SecurePass123!'
+    })
+    expect(loginResponse.requiresTwoFAVerification).toBe(true)
+    expect(loginResponse.sessionToken).toBeUndefined() // no session yet
+
+    // Verify 2FA code
+    const verifyResponse = await POST('/auth/2fa/verify', {
+      email: 'org@example.com',
+      code: '123456'
+    })
+    expect(verifyResponse.sessionToken).toBeDefined()
+  })
+})
+```
+
+#### Async Job Queue & Job Consolidation
+```javascript
+describe('Async Job Queue', () => {
+  it('consolidates duplicate standings calculation jobs', async () => {
+    // Player 1 submits score
+    const job1 = await POST(`/matches/${match.id}/submit-score`, 
+      { score: '6-4, 6-3' }, 
+      { auth: player1Token }).jobId
+
+    // Player 2 submits score quickly after (before job1 completes)
+    const job2 = await POST(`/matches/${match.id}/submit-score`, 
+      { score: '3-6, 4-6' }, 
+      { auth: player2Token }).jobId
+
+    // Both jobs reference same tournament/group
+    // Queue should consolidate into 1 job (job2 skipped, job1 includes both scores)
+    const queueJobs = await queue.getJobs(['active'])
+    expect(queueJobs).toHaveLength(1) // only 1 standings job
+  })
+
+  it('retries failed jobs with exponential backoff', async () => {
+    // Simulate database failure
+    await db.disconnect()
+
+    const job = await queue.add('recalculate-standings', {
+      tournamentId: tourn.id,
+      groupId: group.id
+    })
+
+    // Should retry: 2s, 4s, 8s
+    await waitForJobAttempt(job.id, 1)
+    expect(job.attempts).toBe(1)
+    
+    await new Promise(r => setTimeout(r, 2000))
+    // DB still down, retries
+    expect(job.attempts).toBe(2)
+
+    // Restore DB
+    await db.reconnect()
+    
+    // Job succeeds on next attempt
+    await waitForJobCompletion(job.id, { maxWait: 15000 })
+    expect(job.state).toBe('completed')
+  })
+})
+```
+
+**Integration Test Coverage Target:** ≥80% of API endpoints with real database interactions
+
+---
+
+### 3. End-to-End Tests (10% — Full Workflows)
+
+**Focus:** Real user journeys. Automated browser testing for critical paths.
+
+#### Full Tournament Flow (Organizer + Players)
+```javascript
+describe('E2E: Full Tournament (Registration → Results)', () => {
+  it('organizer runs tournament with 16 players through all phases', async () => {
+    // 1. Organizer creates tournament
+    const { tournamentId } = await organizerBrowser.createTournament({
+      name: 'E2E Test Tournament',
+      maxPlayers: 16,
+      registrationDeadline: moment().add(1, 'hour').toISOString()
+    })
+
+    // 2. Organizer publishes
+    await organizerBrowser.publishTournament(tournamentId)
+
+    // 3. 16 Players register
+    const players = await Promise.all(
+      Array(16).fill().map((_, i) => 
+        playerBrowser[i].registerForTournament(tournamentId, {
+          email: `player${i}@example.com`,
+          name: `Player ${i}`
+        })
+      )
+    )
+
+    // 4. Organizer creates groups
+    await organizerBrowser.createGroups(tournamentId, { 
+      numGroups: 4, 
+      advancingPerGroup: 1 
+    })
+
+    // 5. Groups created; organizer reviews
+    const groups = await organizerBrowser.viewGroups(tournamentId)
+    expect(groups).toHaveLength(4)
+
+    // 6. Players see their matches and confirm times, submit scores
+    for (let matchIndex = 0; matchIndex < 10; matchIndex++) { // 4 groups × 3 matches each = 12 total
+      const [player1, player2] = getPlayersForMatch(matchIndex)
+      
+      // Players coordinate match time
+      await player1.confirmMatchTime(matchIndex, '2026-05-15T18:00:00Z')
+      await player2.confirmMatchTime(matchIndex, '2026-05-15T18:00:00Z')
+      
+      // Player 1 reports score
+      await player1.submitScore(matchIndex, getRandomScore())
+    }
+
+    // 7. Organizer advances to knockout
+    await organizerBrowser.advancePhase(tournamentId, 'knockout_active')
+
+    // 8. Bracket generated and published
+    const bracket = await organizerBrowser.viewBracket(tournamentId)
+    expect(bracket.rounds[0].matches).toHaveLength(4) // 4 advancing players → 4 first-round matches
+
+    // 9. Players see bracket
+    const playerBracketView = await playerBrowser[0].viewBracket(tournamentId)
+    expect(playerBracketView).toBeDefined()
+
+    // 10. Players submit knockout scores
+    for (let roundIndex = 0; roundIndex < 2; roundIndex++) { // 2 rounds (4→2→1)
+      const matches = bracket.rounds[roundIndex].matches
+      for (const match of matches) {
+        const player = getPlayerForMatch(match)
+        await player.submitScore(match.id, getRandomScore())
+      }
+    }
+
+    // 11. Tournament complete
+    const finalTournament = await organizerBrowser.viewTournament(tournamentId)
+    expect(finalTournament.status).toBe('complete')
+
+    // 12. Final standings visible to all
+    const standings = await playerBrowser[0].viewFinalStandings(tournamentId)
+    expect(standings[0].rank).toBe(1) // champion
+  })
+})
+```
+
+#### Real-Time Collaborator Updates
+```javascript
+describe('E2E: Real-Time Updates', () => {
+  it('organizer and player see updates in real-time', async () => {
+    // Organizer dashboard open, player browser open
+    const [orgBrowser, playerBrowser] = await Promise.all([
+      openOrganizerDashboard(tournamentId),
+      openPlayerDashboard(tournamentId)
+    ])
+
+    // Player submits score
+    await playerBrowser.submitScore(matchId, '6-4, 6-3')
+
+    // Organizer sees update <2 seconds later
+    const orgUpdate = await orgBrowser.waitForUpdate('standings_updated', 2000)
+    expect(orgUpdate).toBeDefined()
+
+    // Player sees standings update
+    const playerUpdate = await playerBrowser.waitForUpdate('standings_updated', 2000)
+    expect(playerUpdate).toBeDefined()
+  })
+})
+```
+
+**E2E Test Coverage Target:** Cover 5-7 critical user journeys (register, group stage, knockout, withdrawals, overrides, etc.)
+
+---
+
+### 4. Performance & Load Tests (Continuous)
+
+**Focus:** Verify system handles expected load without degradation.
+
+#### Load Testing Scenarios
+```javascript
+describe('Load Testing', () => {
+  // Simulate realistic tournament scenarios
+
+  it('handles 50 concurrent players in one tournament', async () => {
+    const rampUp = async () => {
+      for (let i = 0; i < 50; i++) {
+        // Stagger registrations over 10 seconds
+        await sleep(200)
+        await registerPlayer(tournamentId, `player${i}@example.com`)
+      }
+    }
+
+    const metrics = await loadTest.run(rampUp, {
+      duration: 60000, // 1 minute
+      vpuCount: 50 // 50 virtual players
+    })
+
+    expect(metrics.p95ResponseTime).toBeLessThan(500) // P95 < 500ms
+    expect(metrics.errorRate).toBeLessThan(0.01) // <1% errors
+    expect(metrics.uptime).toBeGreaterThan(0.99) // >99% uptime
+  })
+
+  it('handles 100 concurrent score submissions', async () => {
+    // Tournament with 100 matches happening simultaneously
+    // All players submit scores at same time
+    
+    const metrics = await loadTest.scoreSubmissions({
+      playerCount: 100,
+      submissionsPerSecond: 50
+    })
+
+    expect(metrics.p95ResponseTime).toBeLessThan(500)
+    expect(metrics.standingsRecalcTime).toBeLessThan(5000) // <5s to recalculate
+  })
+
+  it('page load time remains <2s under load', async () => {
+    const metrics = await loadTest.pageLoad({
+      concurrentUsers: 100,
+      pages: ['/tournaments', '/standings', '/brackets']
+    })
+
+    expect(metrics.p95PageLoadTime).toBeLessThan(2000)
+  })
+})
+```
+
+**Load Test Targets:**
+- Page load time (P95): <2 seconds
+- API response time (P95): <500ms
+- Concurrent players: ≥50 without degradation
+- Concurrent score submissions: ≥100
+- Error rate: <1%
+
+---
+
+### 5. Data Integrity Tests (Continuous)
+
+**Focus:** Verify critical data is never lost or corrupted.
+
+#### Standings Accuracy Verification
+```javascript
+describe('Data Integrity: Standings', () => {
+  it('system standings exactly match hand-calculated standings', async () => {
+    // Tournament with 8 players in one group (12 matches, round-robin)
+    const group = await createTestGroup(8)
+
+    // Submit all matches with known results
+    const results = [
+      { p1: 0, p2: 1, winner: 0, sets: '6-4, 6-3' },
+      { p1: 0, p2: 2, winner: 0, sets: '6-4, 6-3' },
+      // ... 10 more matches
+    ]
+
+    for (const result of results) {
+      await submitScore(group.matchIds[result.index], result.sets, result.winner)
+    }
+
+    // Calculate standings manually
+    const manualStandings = calculateStandingsManually(results)
+
+    // Get system standings
+    const systemStandings = await getStandings(group.id)
+
+    // Verify they match exactly
+    expect(systemStandings).toEqual(manualStandings)
+  })
+})
+```
+
+#### Bracket Generation Validation
+```javascript
+describe('Data Integrity: Bracket', () => {
+  it('generated bracket has no invalid matches', async () => {
+    const bracket = await generateBracket(13) // 13 advancing players
+
+    // Validate structure
+    expect(bracket.totalMatches).toBe(15)
+    expect(bracket.rounds).toHaveLength(4) // 8→4→2→1 = 4 rounds
+    expect(bracket.byeCount).toBe(3)
+
+    // Validate no player appears in multiple matches in same round
+    for (const round of bracket.rounds) {
+      const playerIds = new Set()
+      for (const match of round.matches) {
+        expect(playerIds.has(match.player1)).toBe(false)
+        expect(playerIds.has(match.player2)).toBe(false)
+        playerIds.add(match.player1)
+        playerIds.add(match.player2)
+      }
+    }
+
+    // Validate every match feeds into next round
+    for (let r = 0; r < bracket.rounds.length - 1; r++) {
+      const thisRound = bracket.rounds[r]
+      const nextRound = bracket.rounds[r + 1]
+      
+      for (const match of thisRound.matches) {
+        const feedsIntoNextRound = nextRound.matches.some(
+          m => m.input1MatchId === match.id || m.input2MatchId === match.id
+        )
+        expect(feedsIntoNextRound).toBe(true)
+      }
+    }
+  })
+})
+```
+
+#### Transaction Consistency
+```javascript
+describe('Data Integrity: Concurrency', () => {
+  it('concurrent score submissions do not cause standings inconsistency', async () => {
+    // Two players submit scores simultaneously
+    const score1Promise = submitScore(match1, '6-4, 6-3', player1Token)
+    const score2Promise = submitScore(match2, '6-2, 6-1', player2Token)
+
+    await Promise.all([score1Promise, score2Promise])
+
+    // Standings should be calculated exactly once with both scores
+    const standings = await getStandings(groupId)
+    
+    // Verify counts are correct
+    expect(standings[0].wins + standings[1].wins + ...).toBe(totalMatches)
+  })
+
+  it('withdrawing player does not corrupt standings', async () => {
+    const standings = await getStandings(groupId)
+    const recordedWins = standings.reduce((sum, p) => sum + p.wins, 0)
+
+    // Player withdraws
+    await withdrawPlayer(playerId)
+
+    const newStandings = await getStandings(groupId)
+    const newRecordedWins = newStandings.reduce((sum, p) => sum + p.wins, 0)
+
+    // Remaining matches still count; withdrawn player gone
+    expect(newStandings.find(s => s.playerId === playerId)).toBeUndefined()
+  })
+})
+```
+
+**Data Integrity Check Frequency:** After every tournament completion and weekly spot-checks during beta
+
+---
+
+### 6. Security Tests
+
+**Focus:** Authentication, authorization, injection attacks, rate limiting.
+
+```javascript
+describe('Security Tests', () => {
+  it('SQL injection in tournament search is prevented', async () => {
+    const response = await GET(`/tournaments?name=' OR 1=1 --`)
+    expect(response.status).toBe(400)
+  })
+
+  it('organizer cannot edit another organizer\'s tournament', async () => {
+    const response = await PATCH(`/tournaments/${org1Tournament.id}`, 
+      { name: 'Hacked' }, 
+      { auth: org2Token })
+    expect(response.status).toBe(403)
+  })
+
+  it('rate limiting prevents brute force attacks', async () => {
+    for (let i = 0; i < 10; i++) {
+      await POST('/auth/login', { email, password })
+    }
+    
+    const response = await POST('/auth/login', { email, password })
+    expect(response.status).toBe(429) // Too Many Requests
+  })
+
+  it('magic link tokens cannot be predicted/brute forced', () => {
+    // Generate 1000 tokens; all unique
+    const tokens = Array(1000).fill().map(() => generateMagicLink('player@example.com'))
+    expect(new Set(tokens).size).toBe(1000) // all unique
+  })
+})
+```
+
+---
+
+### 7. Manual & Beta Testing
+
+**Focus:** Real user workflows, UX issues, edge cases.
+
+#### Closed Beta Testing Plan
+```
+Phase 1: Organizer Onboarding (Week 1)
+- Organizer creates tournament
+- Sets up tournament details
+- Publishes and shares link
+- Checks player registration email
+
+Phase 2: Group Stage (Weeks 2-3)
+- 20+ players register
+- Organizer distributes into groups
+- Players see their matches
+- Players coordinate match times
+- Players submit scores
+- Organizer reviews standings
+- Check for edge cases:
+  - What if players don't confirm match time?
+  - What if score deadline is midnight in different timezones?
+  - What if player withdraws mid-group-stage?
+
+Phase 3: Knockout Stage (Weeks 4-5)
+- Organizer generates bracket
+- Reviews seeding, adjusts if needed
+- Publishes bracket
+- Players see tournament progress
+- Players submit knockout scores
+- Tournament completes
+
+Phase 4: Post-Tournament (Week 6)
+- Final standings visible
+- Results are permanent and correct
+- Player data is clean
+```
+
+#### Manual Test Cases
+- **Happy path:** Complete tournament with no issues
+- **No-shows:** Player doesn't confirm match time; organizer manually resolves
+- **Withdrawals:** Player withdraws after group stage starts; verify standings recalculate
+- **Conflicts:** Two players submit different scores; verify last submission wins
+- **Timezone issues:** Tournament deadline is midnight UTC; players in different timezones see correct local times
+- **Data export:** (Not in v1, but verify data can be accessed)
+- **Mobile experience:** Run organizer/player workflows on mobile browsers
+
+---
+
+### Testing Execution Plan
+
+| Test Type | Frequency | Owner | Tools |
+|-----------|-----------|-------|-------|
+| Unit Tests | Every commit | Developers | Jest, Vitest |
+| Integration Tests | Every commit | Developers | Jest + test database |
+| E2E Tests | Daily (nightly CI) | QA | Playwright, Cypress |
+| Load Tests | Weekly | DevOps | k6, Apache JMeter |
+| Data Integrity | After each tournament | QA | Custom scripts |
+| Security Tests | Weekly | Security team | OWASP ZAP, Burp Suite |
+| Manual Testing | Throughout beta | Organizers + QA | Browser testing |
+
+---
+
+### Continuous Testing Infrastructure
+
+**Automated Test Run on Every Commit:**
+```yaml
+# CI/CD Pipeline
+- Unit tests: 2 minutes
+- Integration tests: 5 minutes
+- Linting: 1 minute
+- Code coverage: Must be >90% for business logic
+- Deploy to staging: 3 minutes
+
+If any test fails: BLOCK MERGE to main
+```
+
+**Nightly Test Suite:**
+```yaml
+- Full E2E tests: 20 minutes
+- Load tests: 15 minutes
+- Security tests: 10 minutes
+- Data integrity audit: 5 minutes
+```
+
+**Weekly Beta Validation:**
+```yaml
+- Run 1 complete tournament with real players
+- Manual verification of final standings
+- Spot-check 10 random matches for data accuracy
+- Survey organizer/player experience
+```
+
+---
+
+### Success Metrics for Testing
+
+| Metric | Target |
+|--------|--------|
+| Code coverage (business logic) | ≥95% |
+| Code coverage (overall) | ≥80% |
+| Unit test pass rate | 100% |
+| Integration test pass rate | 100% |
+| E2E test pass rate | 100% before release |
+| Performance (page load P95) | <2s |
+| Performance (API P95) | <500ms |
+| Load test error rate | <1% |
+| Security vulnerabilities found | 0 high-severity before launch |
+| Data integrity issues found | 0 after beta tournaments |
+| Manual test blockers | 0 before public launch |
 
 ## Future Considerations (Not in v1)
 - Double-elimination brackets
