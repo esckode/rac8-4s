@@ -3,3 +3,4 @@
 
 export { calculateStandings, Standing } from './standings'
 export { generateBracket, Bracket, BracketMatch, BracketRound } from './bracket'
+export { parseScore, ParsedScore, ParsedSet, SportFormat } from './score-parser'
