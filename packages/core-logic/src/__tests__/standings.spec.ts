@@ -1,4 +1,4 @@
-import { calculateStandings, Standing } from '../standings'
+import { calculateStandings, Standing } from '../index'
 
 describe('Standings Calculation', () => {
   describe('Primary Ranking - Wins', () => {
