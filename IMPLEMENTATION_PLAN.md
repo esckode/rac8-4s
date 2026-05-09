@@ -495,11 +495,44 @@ Use `TaskUpdate` to change status and track progress through the implementation.
 
 ---
 
+## Security Audit Checklist
+
+**REQUIRED before committing any code:**
+
+Every task must complete these checks before marking as done:
+
+```bash
+# 1. Run ESLint security scanner
+npm run lint              # Check for security issues
+npm run lint:fix          # Auto-fix where possible
+
+# 2. Check dependencies
+npm audit --production    # Find vulnerable packages
+
+# 3. Run all tests
+npm test                  # Ensure no regressions
+
+# 4. Code review
+# ✅ No hardcoded secrets/credentials
+# ✅ No eval() or Function() calls
+# ✅ Input validation is comprehensive
+# ✅ Authorization checks are present
+# ✅ No sensitive data in logs
+# ✅ SQL/queries are parameterized
+# ✅ No XSS vulnerabilities (frontend)
+# ✅ No CSRF vulnerabilities
+```
+
+**Reference:** See `SECURITY.md` for detailed guidelines and `ESLINT_SETUP.md` for ESLint usage.
+
 ## Notes
 
 - This plan prioritizes **business logic correctness** first (Phase 1), ensuring the foundation is solid before building APIs
 - **Integration testing** is emphasized in Phase 2, verifying that API calls correctly use Phase 1 logic
 - **Async job isolation** (Phase 3) ensures real-time updates don't block API responses
 - **Frontend testing** (Phase 4) relies on all backend systems being stable and tested
+- **Security-first approach** — all tasks include security audits before commit
 - **No timelines assumed** — adjust based on your actual development velocity
 - Refer to TDD_STRATEGY.md for implementation guidance, testing patterns, and best practices
+- Refer to SECURITY.md for security guidelines and best practices
+- Refer to ESLINT_SETUP.md for ESLint setup and usage
