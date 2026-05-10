@@ -1,2 +1,3 @@
-// API endpoints
-// Populated by Phase 2 implementation tasks
+export { createApp } from './app'
+export { openDatabase, TournamentRepository } from './db'
+export type { AppDependencies } from './app'

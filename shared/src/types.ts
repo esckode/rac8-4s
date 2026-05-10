@@ -12,7 +12,12 @@ export interface Tournament {
   sport: string
   matchFormat: 'singles' | 'doubles'
   creatorId: string
-  status: 'registration_open' | 'registration_closed' | 'group_stage' | 'knockout' | 'complete'
+  maxPlayers: number
+  description?: string
+  registrationDeadline: Date
+  groupStageDeadline: Date
+  knockoutStageDeadline: Date
+  status: 'draft' | 'registration_open' | 'registration_closed' | 'group_stage' | 'knockout' | 'complete'
   createdAt: Date
   updatedAt: Date
 }
