@@ -77,6 +77,14 @@ export function openDatabase(filename?: string): Database.Database {
   const migration4 = fs.readFileSync(migration4Path, 'utf-8')
   db.exec(migration4)
 
+  const migration5Path = path.join(__dirname, '../../..', 'db', 'migrations', '005_create_locations.sql')
+  const migration5 = fs.readFileSync(migration5Path, 'utf-8')
+  db.exec(migration5)
+
+  const migration6Path = path.join(__dirname, '../../..', 'db', 'migrations', '006_create_courts.sql')
+  const migration6 = fs.readFileSync(migration6Path, 'utf-8')
+  db.exec(migration6)
+
   return db
 }
 
@@ -450,6 +458,28 @@ export interface KnockoutMatchRow {
   updated_at: string
 }
 
+export interface LocationRow {
+  id: string
+  name: string
+  sport: string
+  latitude: number
+  longitude: number
+  total_courts: number
+  restricted: boolean
+  entry_conditions?: string
+  created_at: string
+  updated_at: string
+  deleted_at?: string
+}
+
+export interface CourtRow {
+  id: string
+  location_id: string
+  status: 'available' | 'unavailable' | 'maintenance'
+  created_at: string
+  updated_at: string
+}
+
 export class KnockoutRepository {
   constructor(private db: Database.Database) {}
 
@@ -510,5 +540,215 @@ export class KnockoutRepository {
       matchId
     )
     return this.findKnockoutMatchById(matchId)!
+  }
+}
+
+export interface CreateLocationInput {
+  name: string
+  sport: string
+  latitude: number
+  longitude: number
+  totalCourts: number
+  restricted?: boolean
+  entryConditions?: string
+}
+
+export interface UpdateLocationInput {
+  name?: string
+  totalCourts?: number
+  restricted?: boolean
+  entryConditions?: string
+}
+
+export class LocationRepository {
+  constructor(private db: Database.Database) {}
+
+  create(input: CreateLocationInput): LocationRow {
+    const id = `location_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const now = new Date().toISOString()
+
+    const stmt = this.db.prepare(`
+      INSERT INTO locations (
+        id, name, sport, latitude, longitude, total_courts,
+        restricted, entry_conditions, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+
+    stmt.run(
+      id,
+      input.name,
+      input.sport,
+      input.latitude,
+      input.longitude,
+      input.totalCourts,
+      (input.restricted ?? false) ? 1 : 0,
+      input.entryConditions || null,
+      now,
+      now
+    )
+
+    return this.findById(id)!
+  }
+
+  findById(id: string): LocationRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM locations WHERE id = ? AND deleted_at IS NULL')
+    const row = stmt.get(id) as any
+    if (!row) return undefined
+    const result = { ...row, restricted: !!row.restricted } as LocationRow
+    delete (result as any).deleted_at
+    return result
+  }
+
+  findBySport(sport: string, opts: ListOptions = {}): { rows: LocationRow[]; total: number } {
+    const offset = opts.offset || 0
+    const limit = opts.limit || 10
+
+    const countStmt = this.db.prepare('SELECT COUNT(*) as count FROM locations WHERE sport = ? AND deleted_at IS NULL')
+    const countResult = countStmt.get(sport) as { count: number }
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM locations WHERE sport = ? AND deleted_at IS NULL
+      ORDER BY created_at DESC LIMIT ? OFFSET ?
+    `)
+    const rows = (stmt.all(sport, limit, offset) as any[]).map(r => ({ ...r, restricted: !!r.restricted })) as LocationRow[]
+
+    return { rows, total: countResult.count }
+  }
+
+  listAll(opts: ListOptions = {}): { rows: LocationRow[]; total: number } {
+    const offset = opts.offset || 0
+    const limit = opts.limit || 10
+
+    const countStmt = this.db.prepare('SELECT COUNT(*) as count FROM locations WHERE deleted_at IS NULL')
+    const countResult = countStmt.get() as { count: number }
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM locations WHERE deleted_at IS NULL
+      ORDER BY created_at DESC LIMIT ? OFFSET ?
+    `)
+    const rows = (stmt.all(limit, offset) as any[]).map(r => ({ ...r, restricted: !!r.restricted })) as LocationRow[]
+
+    return { rows, total: countResult.count }
+  }
+
+  update(id: string, input: UpdateLocationInput): LocationRow {
+    const updates: string[] = []
+    const values: unknown[] = []
+
+    if (input.name !== undefined) {
+      updates.push('name = ?')
+      values.push(input.name)
+    }
+    if (input.totalCourts !== undefined) {
+      updates.push('total_courts = ?')
+      values.push(input.totalCourts)
+    }
+    if (input.restricted !== undefined) {
+      updates.push('restricted = ?')
+      values.push(input.restricted ? 1 : 0)
+    }
+    if (input.entryConditions !== undefined) {
+      updates.push('entry_conditions = ?')
+      values.push(input.entryConditions || null)
+    }
+
+    updates.push('updated_at = ?')
+    values.push(new Date().toISOString())
+    values.push(id)
+
+    const stmt = this.db.prepare(`UPDATE locations SET ${updates.join(', ')} WHERE id = ?`)
+    stmt.run(...values)
+
+    return this.findById(id)!
+  }
+
+  calculateCapacity(locationId: string): number {
+    const location = this.findById(locationId)
+    if (!location) return 0
+
+    const stmt = this.db.prepare(`
+      SELECT COUNT(*) as unavailable_count FROM courts
+      WHERE location_id = ? AND status != 'available'
+    `)
+    const result = stmt.get(locationId) as { unavailable_count: number }
+
+    return location.total_courts - result.unavailable_count
+  }
+
+  findNearby(latitude: number, longitude: number, radiusKm: number = 0.025): LocationRow[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM locations
+      WHERE deleted_at IS NULL
+        AND (latitude BETWEEN ? AND ?)
+        AND (longitude BETWEEN ? AND ?)
+      ORDER BY created_at DESC
+    `)
+
+    const rows = stmt.all(
+      latitude - radiusKm,
+      latitude + radiusKm,
+      longitude - radiusKm,
+      longitude + radiusKm
+    ) as any[]
+
+    return rows.map(r => ({ ...r, restricted: !!r.restricted })) as LocationRow[]
+  }
+
+  softDelete(id: string): void {
+    const stmt = this.db.prepare('UPDATE locations SET deleted_at = ? WHERE id = ?')
+    stmt.run(new Date().toISOString(), id)
+  }
+}
+
+export interface CreateCourtInput {
+  locationId: string
+  status?: 'available' | 'unavailable' | 'maintenance'
+}
+
+export class CourtRepository {
+  constructor(private db: Database.Database) {}
+
+  create(input: CreateCourtInput): CourtRow {
+    const id = `court_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const now = new Date().toISOString()
+
+    const stmt = this.db.prepare(`
+      INSERT INTO courts (id, location_id, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+
+    stmt.run(id, input.locationId, input.status || 'available', now, now)
+
+    return this.findById(id)!
+  }
+
+  findById(id: string): CourtRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM courts WHERE id = ?')
+    return stmt.get(id) as CourtRow | undefined
+  }
+
+  findByLocation(locationId: string): CourtRow[] {
+    const stmt = this.db.prepare('SELECT * FROM courts WHERE location_id = ? ORDER BY created_at')
+    return stmt.all(locationId) as CourtRow[]
+  }
+
+  updateStatus(id: string, status: 'available' | 'unavailable' | 'maintenance'): CourtRow {
+    const now = new Date().toISOString()
+    const stmt = this.db.prepare('UPDATE courts SET status = ?, updated_at = ? WHERE id = ?')
+    stmt.run(status, now, id)
+
+    return this.findById(id)!
+  }
+
+  countByLocation(locationId: string): number {
+    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM courts WHERE location_id = ?')
+    const result = stmt.get(locationId) as { count: number }
+    return result.count
+  }
+
+  countByLocationAndStatus(locationId: string, status: string): number {
+    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM courts WHERE location_id = ? AND status = ?')
+    const result = stmt.get(locationId, status) as { count: number }
+    return result.count
   }
 }

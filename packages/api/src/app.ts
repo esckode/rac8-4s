@@ -13,6 +13,8 @@ export interface AppDependencies {
   db: Database.Database
   jwtConfig: JwtConfig
   tokenStore: TokenStore
+  locationRepository?: any
+  courtRepository?: any
 }
 
 export function createApp(deps: AppDependencies): Express {
