@@ -1109,24 +1109,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 20
     const sport = req.query.sport as string | undefined
 
-    let query = `SELECT * FROM tournaments WHERE status = 'registration_open' AND deleted_at IS NULL`
-    const params: unknown[] = []
+    const result = repo.listAvailable({ offset, limit, sport })
 
-    if (sport) {
-      query += ' AND sport = ?'
-      params.push(sport)
-    }
-
-    const countStmt = repo['db'].prepare(query.replace('SELECT *', 'SELECT COUNT(*) as count'))
-    const countResult = countStmt.get(...params) as { count: number }
-
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
-    params.push(limit, offset)
-
-    const stmt = repo['db'].prepare(query)
-    const rows = stmt.all(...params) as any[]
-
-    const tournaments = rows.map(t => {
+    const tournaments = result.rows.map(t => {
       const registered = playerRepo.countRegistrationsForTournament(t.id)
       return {
         id: t.id,
@@ -1146,7 +1131,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
     res.json({
       tournaments,
-      total: countResult.count,
+      total: result.total,
       page: Math.floor(offset / limit) + 1,
       limit,
     })

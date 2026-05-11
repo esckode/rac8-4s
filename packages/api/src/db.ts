@@ -214,6 +214,30 @@ export class TournamentRepository {
     return { rows, total: countResult.count }
   }
 
+  listAvailable(opts: ListOptions & { sport?: string } = {}): { rows: TournamentRow[]; total: number } {
+    const offset = opts.offset || 0
+    const limit = opts.limit || 20
+
+    let query = `SELECT * FROM tournaments WHERE status = 'registration_open' AND deleted_at IS NULL`
+    const params: unknown[] = []
+
+    if (opts.sport) {
+      query += ' AND sport = ?'
+      params.push(opts.sport)
+    }
+
+    const countStmt = this.db.prepare(query.replace('SELECT *', 'SELECT COUNT(*) as count'))
+    const countResult = countStmt.get(...params) as { count: number }
+
+    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    params.push(limit, offset)
+
+    const stmt = this.db.prepare(query)
+    const rows = stmt.all(...params) as TournamentRow[]
+
+    return { rows, total: countResult.count }
+  }
+
   update(id: string, input: UpdateTournamentInput): TournamentRow {
     const updates: string[] = []
     const values: unknown[] = []
