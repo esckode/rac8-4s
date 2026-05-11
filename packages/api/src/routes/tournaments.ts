@@ -1,7 +1,15 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
-import { TournamentRepository } from '../db'
-import { requireOrganizerAuth, assertOrganizerOwnsTournament } from '../auth'
+import { TournamentRepository, PlayerRepository } from '../db'
+import {
+  requireOrganizerAuth,
+  assertOrganizerOwnsTournament,
+  generateMagicLinkToken,
+  validateMagicLinkToken,
+  generatePlayerSession,
+  assertPlayerInTournament,
+  TokenInvalidError,
+} from '../auth'
 import { ForbiddenError } from '../auth/errors'
 
 function validateTournamentInput(data: any): string | null {
@@ -41,6 +49,7 @@ function validateTournamentInput(data: any): string | null {
 export default function tournamentsRouter(deps: AppDependencies) {
   const router = Router()
   const repo = new TournamentRepository(deps.db)
+  const playerRepo = new PlayerRepository(deps.db)
 
   // POST /tournaments - create tournament
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -136,6 +145,125 @@ export default function tournamentsRouter(deps: AppDependencies) {
         hasMore: offset + limit < result.total,
       },
     })
+  })
+
+  // POST /:tournamentId/register - player registration
+  router.post('/:tournamentId/register', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.tournamentId as string
+
+      if (!req.body.email || typeof req.body.email !== 'string' || !req.body.email.trim()) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'email must be a non-empty string' })
+      }
+      if (!req.body.name || typeof req.body.name !== 'string' || !req.body.name.trim()) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'name must be a non-empty string' })
+      }
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      if (tournament.status !== 'registration_open') {
+        return res.status(409).json({ code: 'REGISTRATION_CLOSED', message: 'Registration is not open for this tournament' })
+      }
+
+      const registrationCount = playerRepo.countRegistrationsForTournament(tournamentId)
+      if (registrationCount >= tournament.max_players) {
+        return res.status(409).json({ code: 'TOURNAMENT_FULL', message: 'Tournament has reached maximum capacity' })
+      }
+
+      const player = playerRepo.findOrCreatePlayerByEmail(
+        req.body.email.trim(),
+        req.body.name.trim(),
+        req.body.phone,
+        req.body.preferredContact
+      )
+
+      const existingReg = playerRepo.findRegistration(player.id, tournamentId)
+      if (!existingReg) {
+        playerRepo.createRegistration(player.id, tournamentId)
+      }
+
+      const magicLink = await generateMagicLinkToken(
+        { playerId: player.id, tournamentId, email: player.email, createdAt: Date.now() },
+        86400,
+        deps.tokenStore
+      )
+
+      res.status(202).json({
+        message: `Registration email sent to ${player.email}`,
+        magicLinkExpires: 86400,
+        magicLinkToken: magicLink.token,
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /:tournamentId/auth/verify - verify magic link and issue session token
+  router.get('/:tournamentId/auth/verify', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.tournamentId as string
+      const token = req.query.token as string | undefined
+
+      if (!token) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'token query parameter is required' })
+      }
+
+      let magicPayload
+      try {
+        magicPayload = await validateMagicLinkToken(token, deps.tokenStore)
+      } catch (err) {
+        if (err instanceof TokenInvalidError) {
+          return res.status(401).json({ code: 'INVALID_TOKEN', message: 'Token is invalid or has expired' })
+        }
+        throw err
+      }
+
+      assertPlayerInTournament(magicPayload, tournamentId)
+
+      const sessionToken = await generatePlayerSession(magicPayload, 86400, deps.tokenStore)
+
+      res.status(200).json({
+        playerToken: sessionToken.token,
+        expiresIn: 86400,
+        playerId: magicPayload.playerId,
+        tournamentId: magicPayload.tournamentId,
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /:tournamentId/auth/magic-link - re-issue magic link for existing players
+  router.post('/:tournamentId/auth/magic-link', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.tournamentId as string
+
+      if (!req.body.email || typeof req.body.email !== 'string' || !req.body.email.trim()) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'email must be a non-empty string' })
+      }
+
+      const player = playerRepo.findByEmail(req.body.email.trim())
+      if (player) {
+        const reg = playerRepo.findRegistration(player.id, tournamentId)
+        if (reg) {
+          await generateMagicLinkToken(
+            { playerId: player.id, tournamentId, email: player.email, createdAt: Date.now() },
+            86400,
+            deps.tokenStore
+          )
+        }
+      }
+
+      res.status(202).json({
+        message: `If an account with this email is registered, a magic link has been sent.`,
+        magicLinkExpires: 86400,
+      })
+    } catch (err) {
+      next(err)
+    }
   })
 
   // PATCH /tournaments/:id - update tournament

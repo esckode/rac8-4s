@@ -1,3 +1,3 @@
 export { createApp } from './app'
-export { openDatabase, TournamentRepository } from './db'
+export { openDatabase, TournamentRepository, PlayerRepository } from './db'
 export type { AppDependencies } from './app'

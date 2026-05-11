@@ -3,6 +3,7 @@ import Database from 'better-sqlite3'
 import { JwtConfig, TokenStore } from './auth'
 import { AuthError, ForbiddenError, MissingTokenError } from './auth/errors'
 import tournamentsRouter from './routes/tournaments'
+import playerRouter from './routes/player'
 
 export interface AppDependencies {
   db: Database.Database
@@ -16,6 +17,7 @@ export function createApp(deps: AppDependencies): Express {
   app.use(express.json())
 
   app.use('/tournaments', tournamentsRouter(deps))
+  app.use('/player', playerRouter(deps))
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ForbiddenError) {

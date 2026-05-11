@@ -4,7 +4,7 @@ import {
   isTokenInvalidated,
   JwtConfig,
 } from './tokens'
-import { MagicLinkPayload, validateMagicLinkToken } from './magic-link'
+import { MagicLinkPayload, validateMagicLinkToken, validatePlayerSession } from './magic-link'
 import { TokenStore } from './token-store'
 import { MissingTokenError, TokenInvalidError, ForbiddenError } from './errors'
 
@@ -53,6 +53,14 @@ export async function requirePlayerAuth(
 ): Promise<MagicLinkPayload> {
   const token = extractBearerToken(authHeader)
   return validateMagicLinkToken(token, store)
+}
+
+export async function requirePlayerSessionAuth(
+  authHeader: string | undefined,
+  store: TokenStore
+): Promise<MagicLinkPayload> {
+  const token = extractBearerToken(authHeader)
+  return validatePlayerSession(token, store)
 }
 
 export function assertOrganizerOwnsTournament(
