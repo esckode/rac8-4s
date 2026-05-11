@@ -14,6 +14,7 @@ import {
 import { ForbiddenError } from '../auth/errors'
 import { TournamentStateMachine, type TournamentState, type TransitionAction } from '@core/state-machine'
 import { calculateStandings } from '@core/standings'
+import { parseScore, type SportFormat } from '@core/score-parser'
 
 function validateTournamentInput(data: any): string | null {
   if (!data.name || typeof data.name !== 'string' || !data.name.trim()) {
@@ -310,6 +311,106 @@ export default function tournamentsRouter(deps: AppDependencies) {
             setsLost: s.setsLost,
           }
         }),
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /:id/matches/:matchId/score - player submits match score
+  router.post('/:id/matches/:matchId/score', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const tournamentId = req.params.id as string
+      const matchId = req.params.matchId as string
+
+      assertPlayerInTournament(payload, tournamentId)
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      const match = groupRepo.findMatchById(matchId)
+      if (!match || match.tournament_id !== tournamentId) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
+      }
+
+      if (match.player1_id !== payload.playerId && match.player2_id !== payload.playerId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
+      }
+
+      if (new Date() > new Date(tournament.group_stage_deadline)) {
+        return res.status(409).json({ code: 'DEADLINE_PASSED', message: 'Group stage scoring deadline has passed' })
+      }
+
+      if (typeof req.body.score !== 'string') {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'score must be a non-empty string' })
+      }
+
+      let parsed
+      try {
+        parsed = parseScore(req.body.score, tournament.sport as SportFormat)
+      } catch (err) {
+        return res.status(400).json({ code: 'SCORE_INVALID', message: `Invalid score format: ${(err as Error).message}` })
+      }
+
+      const winnerId = parsed.winner === 'player1' ? match.player1_id : match.player2_id
+      const updated = groupRepo.updateMatch(matchId, winnerId, req.body.score)
+
+      res.json({
+        match: {
+          id: updated.id,
+          score: updated.score,
+          winnerId: updated.winner_id,
+          status: updated.status,
+        },
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // PATCH /:id/matches/:matchId/score - organizer overrides match score
+  router.patch('/:id/matches/:matchId/score', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const tournamentId = req.params.id as string
+      const matchId = req.params.matchId as string
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      const match = groupRepo.findMatchById(matchId)
+      if (!match || match.tournament_id !== tournamentId) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
+      }
+
+      if (typeof req.body.score !== 'string') {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'score must be a non-empty string' })
+      }
+
+      let parsed
+      try {
+        parsed = parseScore(req.body.score, tournament.sport as SportFormat)
+      } catch (err) {
+        return res.status(400).json({ code: 'SCORE_INVALID', message: `Invalid score format: ${(err as Error).message}` })
+      }
+
+      const winnerId = parsed.winner === 'player1' ? match.player1_id : match.player2_id
+      const updated = groupRepo.updateMatch(matchId, winnerId, req.body.score)
+
+      res.json({
+        match: {
+          id: updated.id,
+          score: updated.score,
+          winnerId: updated.winner_id,
+          status: updated.status,
+        },
       })
     } catch (err) {
       next(err)

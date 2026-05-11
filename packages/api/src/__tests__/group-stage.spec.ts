@@ -340,7 +340,21 @@ describe('Group Stage Management', () => {
         .set('Authorization', `Bearer ${organizerToken}`)
         .send({ numGroups: 2, advancingPerGroup: 1 })
 
-      groupId = createRes.body.groups[0].id
+      // Find which group contains player 1 (standingsPlayerIds[0])
+      const allGroups = groupRepo.findGroupsByTournament(standingsTournamentId)
+      const player1Id = standingsPlayerIds[0]
+      for (const g of allGroups) {
+        const members = groupRepo.findMembersByGroup(g.id)
+        if (members.find(m => m.id === player1Id)) {
+          groupId = g.id
+          break
+        }
+      }
+
+      // If player1 is not in any group (shouldn't happen), default to first group
+      if (!groupId && allGroups.length > 0) {
+        groupId = allGroups[0].id
+      }
     })
 
     it('should return standings with all players', async () => {

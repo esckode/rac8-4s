@@ -416,4 +416,18 @@ export class GroupRepository {
     `)
     return stmt.all(groupId) as PlayerRow[]
   }
+
+  findMatchById(matchId: string): GroupMatchRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM group_matches WHERE id = ?')
+    return stmt.get(matchId) as GroupMatchRow | undefined
+  }
+
+  updateMatch(matchId: string, winnerId: string, score: string): GroupMatchRow {
+    const now = new Date().toISOString()
+    const stmt = this.db.prepare(`
+      UPDATE group_matches SET winner_id = ?, score = ?, status = 'completed', updated_at = ? WHERE id = ?
+    `)
+    stmt.run(winnerId, score, now, matchId)
+    return this.findMatchById(matchId)!
+  }
 }
