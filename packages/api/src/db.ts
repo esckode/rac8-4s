@@ -34,6 +34,11 @@ export interface RegistrationRow {
   player_id: string
   tournament_id: string
   registered_at: string
+  partner_id?: string
+  partner_confirmed: boolean
+  status: 'registered' | 'pending_partner_confirm' | 'withdrawn' | 'withdrawal_pending'
+  withdrawal_requested_at?: string
+  confirmed_at?: string
 }
 
 export interface GroupRow {
@@ -84,6 +89,10 @@ export function openDatabase(filename?: string): Database.Database {
   const migration6Path = path.join(__dirname, '../../..', 'db', 'migrations', '006_create_courts.sql')
   const migration6 = fs.readFileSync(migration6Path, 'utf-8')
   db.exec(migration6)
+
+  const migration7Path = path.join(__dirname, '../../..', 'db', 'migrations', '007_extend_registrations.sql')
+  const migration7 = fs.readFileSync(migration7Path, 'utf-8')
+  db.exec(migration7)
 
   return db
 }
@@ -337,6 +346,73 @@ export class PlayerRepository {
     const rows = stmt.all(playerId, limit, offset) as TournamentRow[]
 
     return { rows, total: countResult.count }
+  }
+
+  findRegistrationById(registrationId: string): RegistrationRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM player_registrations WHERE id = ?')
+    const row = stmt.get(registrationId) as any
+    if (!row) return undefined
+    return { ...row, partner_confirmed: !!row.partner_confirmed } as RegistrationRow
+  }
+
+  findRegistrationsByTournament(tournamentId: string, opts: ListOptions = {}): { rows: RegistrationRow[]; total: number } {
+    const offset = opts.offset || 0
+    const limit = opts.limit || 50
+
+    const countStmt = this.db.prepare('SELECT COUNT(*) as count FROM player_registrations WHERE tournament_id = ?')
+    const countResult = countStmt.get(tournamentId) as { count: number }
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM player_registrations
+      WHERE tournament_id = ?
+      ORDER BY registered_at DESC
+      LIMIT ? OFFSET ?
+    `)
+    const rows = (stmt.all(tournamentId, limit, offset) as any[]).map(r => ({ ...r, partner_confirmed: !!r.partner_confirmed })) as RegistrationRow[]
+
+    return { rows, total: countResult.count }
+  }
+
+  updateRegistrationWithPartner(registrationId: string, partnerId: string): RegistrationRow {
+    const stmt = this.db.prepare(`
+      UPDATE player_registrations
+      SET partner_id = ?, status = ?, registered_at = ?
+      WHERE id = ?
+    `)
+    const now = new Date().toISOString()
+    stmt.run(partnerId, 'pending_partner_confirm', now, registrationId)
+    return this.findRegistrationById(registrationId)!
+  }
+
+  confirmPartner(registrationId: string): RegistrationRow {
+    const stmt = this.db.prepare(`
+      UPDATE player_registrations
+      SET partner_confirmed = ?, status = ?, confirmed_at = ?
+      WHERE id = ?
+    `)
+    const now = new Date().toISOString()
+    stmt.run(1, 'registered', now, registrationId)
+    return this.findRegistrationById(registrationId)!
+  }
+
+  updateRegistrationStatus(registrationId: string, status: string): RegistrationRow {
+    const stmt = this.db.prepare(`
+      UPDATE player_registrations SET status = ? WHERE id = ?
+    `)
+    stmt.run(status, registrationId)
+    return this.findRegistrationById(registrationId)!
+  }
+
+  withdrawRegistration(registrationId: string, isBeforeDeadline: boolean): RegistrationRow {
+    const now = new Date().toISOString()
+    const status = isBeforeDeadline ? 'withdrawn' : 'withdrawal_pending'
+    const stmt = this.db.prepare(`
+      UPDATE player_registrations
+      SET status = ?, withdrawal_requested_at = ?
+      WHERE id = ?
+    `)
+    stmt.run(status, now, registrationId)
+    return this.findRegistrationById(registrationId)!
   }
 }
 

@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
-import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository, RegistrationRow } from '../db'
 import {
   requireOrganizerAuth,
   assertOrganizerOwnsTournament,
@@ -1098,6 +1098,216 @@ export default function tournamentsRouter(deps: AppDependencies) {
       log.info('tournament.deleted', { tournamentId: id, organizerId: payload.sub })
 
       res.status(204).send()
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /tournaments/available - list available tournaments for registration
+  router.get('/available', (req: Request, res: Response) => {
+    const offset = req.query.offset ? parseInt(req.query.offset as string) : 0
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 20
+    const sport = req.query.sport as string | undefined
+
+    let query = `SELECT * FROM tournaments WHERE status = 'registration_open' AND deleted_at IS NULL`
+    const params: unknown[] = []
+
+    if (sport) {
+      query += ' AND sport = ?'
+      params.push(sport)
+    }
+
+    const countStmt = repo['db'].prepare(query.replace('SELECT *', 'SELECT COUNT(*) as count'))
+    const countResult = countStmt.get(...params) as { count: number }
+
+    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    params.push(limit, offset)
+
+    const stmt = repo['db'].prepare(query)
+    const rows = stmt.all(...params) as any[]
+
+    const tournaments = rows.map(t => {
+      const registered = playerRepo.countRegistrationsForTournament(t.id)
+      return {
+        id: t.id,
+        name: t.name,
+        sport: t.sport,
+        format: t.match_format === 'doubles' ? 'doubles' : 'singles',
+        status: 'open',
+        registrationDeadline: t.registration_deadline,
+        startDate: t.group_stage_deadline,
+        minParticipants: 2,
+        maxParticipants: t.max_players,
+        currentParticipants: registered,
+        doubles: t.match_format === 'doubles',
+        entryFee: null,
+      }
+    })
+
+    res.json({
+      tournaments,
+      total: countResult.count,
+      page: Math.floor(offset / limit) + 1,
+      limit,
+    })
+  })
+
+  // GET /:tournamentId/players - list players registered for tournament
+  router.get('/:tournamentId/players', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.tournamentId as string
+      const authHeader = req.headers.authorization
+
+      let isOrganizer = false
+      let currentPlayerId: string | undefined
+
+      try {
+        if (authHeader?.startsWith('Bearer ')) {
+          const token = authHeader.slice(7)
+          try {
+            const payload = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
+            isOrganizer = true
+          } catch {
+            try {
+              const payload = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
+              currentPlayerId = payload.playerId
+            } catch {
+              // No valid auth
+            }
+          }
+        }
+      } catch {
+        // No valid auth
+      }
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : 0
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50
+
+      const result = playerRepo.findRegistrationsByTournament(tournamentId, { offset, limit })
+
+      const players = result.rows.map(reg => {
+        const player = playerRepo.findById(reg.player_id)!
+        let partnerName: string | null = null
+        let partnerEmail: string | null = null
+
+        if (reg.partner_id) {
+          const partner = playerRepo.findById(reg.partner_id)
+          if (partner) {
+            partnerName = partner.name
+            partnerEmail = isOrganizer || currentPlayerId === reg.partner_id ? partner.email : null
+          }
+        }
+
+        return {
+          registrationId: reg.id,
+          playerId: reg.player_id,
+          playerName: player.name,
+          playerEmail: isOrganizer || currentPlayerId === reg.player_id ? player.email : null,
+          playerPhone: isOrganizer ? player.phone || null : null,
+          doubles: !!reg.partner_id,
+          partnerId: reg.partner_id || null,
+          partnerName,
+          partnerEmail,
+          partnerConfirmed: reg.partner_confirmed,
+          status: reg.status,
+          registeredAt: reg.registered_at,
+        }
+      })
+
+      res.json({
+        players,
+        total: result.total,
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // PATCH /registrations/:registrationId/confirm - partner confirms doubles registration
+  router.patch('/registrations/:registrationId/confirm', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const registrationId = req.params.registrationId as string
+
+      const registration = playerRepo.findRegistrationById(registrationId)
+      if (!registration) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Registration not found' })
+      }
+
+      if (!registration.partner_id) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'This registration does not have a pending partner confirmation' })
+      }
+
+      if (registration.partner_id !== payload.playerId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the partner can confirm this registration' })
+      }
+
+      if (registration.status !== 'pending_partner_confirm') {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'This registration is not pending partner confirmation' })
+      }
+
+      const tournament = repo.findById(registration.tournament_id)
+      if (!tournament || tournament.status !== 'registration_open') {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'Tournament is no longer in registration phase' })
+      }
+
+      const updated = playerRepo.confirmPartner(registrationId)
+
+      log.info('registration.partner_confirmed', { tournamentId: registration.tournament_id, registrationId, partnerId: payload.playerId })
+
+      res.json({
+        registrationId: updated.id,
+        playerId: updated.player_id,
+        partnerId: updated.partner_id,
+        partnerConfirmed: updated.partner_confirmed,
+        status: updated.status,
+        confirmedAt: updated.confirmed_at,
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // DELETE /registrations/:registrationId - withdraw from tournament
+  router.delete('/registrations/:registrationId', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const registrationId = req.params.registrationId as string
+
+      const registration = playerRepo.findRegistrationById(registrationId)
+      if (!registration) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Registration not found' })
+      }
+
+      if (registration.player_id !== payload.playerId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'You can only withdraw your own registration' })
+      }
+
+      if (registration.status === 'withdrawn' || registration.status === 'withdrawal_pending') {
+        return res.status(409).json({ code: 'ALREADY_WITHDRAWN', message: 'This registration has already been withdrawn' })
+      }
+
+      const tournament = repo.findById(registration.tournament_id)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      const isBeforeDeadline = new Date() < new Date(tournament.registration_deadline)
+      const updated = playerRepo.withdrawRegistration(registrationId, isBeforeDeadline)
+
+      const eventName = isBeforeDeadline ? 'registration.withdrawn' : 'registration.withdrawal_requested'
+      log.info(eventName, { tournamentId: registration.tournament_id, registrationId, playerId: payload.playerId, beforeDeadline: isBeforeDeadline })
+
+      res.json({
+        registrationId: updated.id,
+        status: updated.status,
+        withdrawnAt: updated.withdrawal_requested_at,
+      })
     } catch (err) {
       next(err)
     }
