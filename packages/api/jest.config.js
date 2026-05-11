@@ -21,6 +21,7 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@core/(.*)$': '<rootDir>/../core-logic/src/$1',
+    '^@worker/(.*)$': '<rootDir>/../worker/src/$1',
     '^@shared/(.*)$': '<rootDir>/../../shared/src/$1',
   },
 };

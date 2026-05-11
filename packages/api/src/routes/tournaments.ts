@@ -369,6 +369,16 @@ export default function tournamentsRouter(deps: AppDependencies) {
       const winnerId = parsed.winner === 'player1' ? match.player1_id : match.player2_id
       const updated = groupRepo.updateMatch(matchId, winnerId, req.body.score)
 
+      // Enqueue standings recalculation job if job queue is available
+      if (deps.jobQueue) {
+        const jobId = `standings.recalculate:${match.group_id}`
+        await deps.jobQueue.add('standings.recalculate', { tournamentId, groupId: match.group_id }, {
+          jobId,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+        })
+      }
+
       log.info('score.submitted', { tournamentId, matchId, score: req.body.score, winnerId, playerId: payload.playerId })
 
       res.json({

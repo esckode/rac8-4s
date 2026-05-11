@@ -6,6 +6,7 @@ import { AuthError, ForbiddenError, MissingTokenError } from './auth/errors'
 import { getLogger, runWithRequestId } from './logger'
 import tournamentsRouter from './routes/tournaments'
 import playerRouter from './routes/player'
+import type { JobQueue } from '@worker/job-queue'
 
 const httpLog = getLogger('http')
 
@@ -13,6 +14,7 @@ export interface AppDependencies {
   db: Database.Database
   jwtConfig: JwtConfig
   tokenStore: TokenStore
+  jobQueue?: JobQueue
   locationRepository?: any
   courtRepository?: any
 }
