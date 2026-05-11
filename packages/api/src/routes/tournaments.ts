@@ -1298,5 +1298,179 @@ export default function tournamentsRouter(deps: AppDependencies) {
     }
   })
 
+  // Helper: find match in group or knockout tables
+  const findMatchInBothTables = (matchId: string, tournamentId: string) => {
+    const groupMatch = groupRepo.findMatchByIdWithPlayers(matchId)
+    if (groupMatch && groupMatch.tournament_id === tournamentId) {
+      return { match: groupMatch, type: 'group' as const }
+    }
+    const knockoutMatch = knockoutRepo.findKnockoutMatchByIdWithPlayers(matchId)
+    if (knockoutMatch && knockoutMatch.tournament_id === tournamentId) {
+      return { match: knockoutMatch, type: 'knockout' as const }
+    }
+    return null
+  }
+
+  // Helper: filter match opponent contact info based on visibility rules
+  const filterMatchWithContact = (match: any, viewingPlayerId: string | null, isOrganizer: boolean) => {
+    const opponent1IsPlayer = match.player1_id === viewingPlayerId
+    const opponent2IsPlayer = match.player2_id === viewingPlayerId
+
+    const result = {
+      ...match,
+      player1Confirmed: match.player1_confirmed,
+      player2Confirmed: match.player2_confirmed,
+      opponent: opponent1IsPlayer
+        ? {
+            playerId: match.player2_id,
+            name: match.player2_name,
+            email: isOrganizer || match.player2_share_contact ? match.player2_email : null,
+            confirmed: match.player2_confirmed,
+          }
+        : {
+            playerId: match.player1_id,
+            name: match.player1_name,
+            email: isOrganizer || match.player1_share_contact ? match.player1_email : null,
+            confirmed: match.player1_confirmed,
+          },
+    }
+    return result
+  }
+
+  // GET /:id/matches - list player's matches in tournament
+  router.get('/:id/matches', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const tournamentId = req.params.id as string
+
+      assertPlayerInTournament(payload, tournamentId)
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      const groupMatches = groupRepo.findMatchesByPlayer(tournamentId, payload.playerId)
+      const knockoutMatches = knockoutRepo.findKnockoutMatchesByPlayer(tournamentId, payload.playerId)
+
+      const matches = [
+        ...groupMatches.map(m => ({ ...m, type: 'group' as const })),
+        ...knockoutMatches.map(m => ({ ...m, type: 'knockout' as const })),
+      ]
+
+      const filtered = matches.map(match => filterMatchWithContact(match, payload.playerId, false))
+
+      res.json({ matches: filtered })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /:id/matches/:matchId - match details
+  router.get('/:id/matches/:matchId', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.id as string
+      const matchId = req.params.matchId as string
+
+      let isOrganizer = false
+      let currentPlayerId: string | null = null
+
+      // Dual auth: try organizer first, fall back to player
+      const authHeader = req.headers.authorization
+      if (authHeader?.startsWith('Bearer ')) {
+        try {
+          const orgPayload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+          isOrganizer = true
+          const tournament = repo.findById(tournamentId)
+          if (!tournament || tournament.creator_id !== orgPayload.sub) {
+            return res.status(403).json({ code: 'FORBIDDEN', message: 'You do not own this tournament' })
+          }
+        } catch {
+          try {
+            const playerPayload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+            assertPlayerInTournament(playerPayload, tournamentId)
+            currentPlayerId = playerPayload.playerId
+          } catch {
+            return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Invalid or missing authentication' })
+          }
+        }
+      } else {
+        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Missing authentication' })
+      }
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      const foundMatch = findMatchInBothTables(matchId, tournamentId)
+      if (!foundMatch) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
+      }
+
+      const { match } = foundMatch
+
+      // Check player access
+      if (!isOrganizer) {
+        const isInMatch = match.player1_id === currentPlayerId || match.player2_id === currentPlayerId
+        if (!isInMatch) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
+        }
+      }
+
+      const filtered = filterMatchWithContact(match, isOrganizer ? null : currentPlayerId, isOrganizer)
+
+      res.json({ match: filtered })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // PATCH /:id/matches/:matchId/confirm - confirm match attendance
+  router.patch('/:id/matches/:matchId/confirm', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const tournamentId = req.params.id as string
+      const matchId = req.params.matchId as string
+
+      assertPlayerInTournament(payload, tournamentId)
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      const foundMatch = findMatchInBothTables(matchId, tournamentId)
+      if (!foundMatch) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
+      }
+
+      const { match, type } = foundMatch
+
+      // Verify player is in match
+      const position =
+        match.player1_id === payload.playerId ? ('player1' as const) : match.player2_id === payload.playerId ? ('player2' as const) : null
+
+      if (!position) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
+      }
+
+      const updated = type === 'group' ? groupRepo.confirmMatch(matchId, position) : knockoutRepo.confirmKnockoutMatch(matchId, position)
+
+      log.info('match.confirmed', { tournamentId, matchId, playerId: payload.playerId, position })
+
+      res.json({
+        match: {
+          id: updated.id,
+          player1Confirmed: updated.player1_confirmed,
+          player2Confirmed: updated.player2_confirmed,
+          status: updated.status,
+        },
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   return router
 }

@@ -25,6 +25,7 @@ export interface PlayerRow {
   name: string
   phone?: string
   preferred_contact?: string
+  share_contact: boolean
   created_at: string
   updated_at: string
 }
@@ -58,8 +59,21 @@ export interface GroupMatchRow {
   winner_id?: string
   score?: string
   status: string
+  player1_confirmed: boolean
+  player2_confirmed: boolean
+  player1_confirmed_at?: string
+  player2_confirmed_at?: string
   created_at: string
   updated_at: string
+}
+
+export interface GroupMatchWithPlayers extends GroupMatchRow {
+  player1_name: string
+  player1_email: string
+  player1_share_contact: boolean
+  player2_name: string
+  player2_email: string
+  player2_share_contact: boolean
 }
 
 export function openDatabase(filename?: string): Database.Database {
@@ -93,6 +107,10 @@ export function openDatabase(filename?: string): Database.Database {
   const migration7Path = path.join(__dirname, '../../..', 'db', 'migrations', '007_extend_registrations.sql')
   const migration7 = fs.readFileSync(migration7Path, 'utf-8')
   db.exec(migration7)
+
+  const migration8Path = path.join(__dirname, '../../..', 'db', 'migrations', '008_match_coordination.sql')
+  const migration8 = fs.readFileSync(migration8Path, 'utf-8')
+  db.exec(migration8)
 
   return db
 }
@@ -286,7 +304,7 @@ export class PlayerRepository {
     phone?: string,
     preferredContact?: string
   ): PlayerRow {
-    const existing = this.db.prepare('SELECT * FROM players WHERE email = ?').get(email) as PlayerRow | undefined
+    const existing = this.findByEmail(email)
     if (existing) {
       return existing
     }
@@ -306,14 +324,11 @@ export class PlayerRepository {
     return this.findById(id)!
   }
 
-  findById(id: string): PlayerRow | undefined {
-    const stmt = this.db.prepare('SELECT * FROM players WHERE id = ?')
-    return stmt.get(id) as PlayerRow | undefined
-  }
-
   findByEmail(email: string): PlayerRow | undefined {
     const stmt = this.db.prepare('SELECT * FROM players WHERE email = ?')
-    return stmt.get(email) as PlayerRow | undefined
+    const row = stmt.get(email) as any
+    if (!row) return undefined
+    return { ...row, share_contact: !!row.share_contact }
   }
 
   createRegistration(playerId: string, tournamentId: string): RegistrationRow {
@@ -438,6 +453,22 @@ export class PlayerRepository {
     stmt.run(status, now, registrationId)
     return this.findRegistrationById(registrationId)!
   }
+
+  findById(playerId: string): PlayerRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM players WHERE id = ?')
+    const row = stmt.get(playerId) as any
+    if (!row) return undefined
+    return { ...row, share_contact: !!row.share_contact }
+  }
+
+  updateShareContact(playerId: string, shareContact: boolean): PlayerRow {
+    const now = new Date().toISOString()
+    const stmt = this.db.prepare(`
+      UPDATE players SET share_contact = ?, updated_at = ? WHERE id = ?
+    `)
+    stmt.run(shareContact ? 1 : 0, now, playerId)
+    return this.findById(playerId)!
+  }
 }
 
 export class GroupRepository {
@@ -531,7 +562,13 @@ export class GroupRepository {
 
   findMatchById(matchId: string): GroupMatchRow | undefined {
     const stmt = this.db.prepare('SELECT * FROM group_matches WHERE id = ?')
-    return stmt.get(matchId) as GroupMatchRow | undefined
+    const row = stmt.get(matchId) as any
+    if (!row) return undefined
+    return {
+      ...row,
+      player1_confirmed: row.player1_confirmed === 1 || row.player1_confirmed === true,
+      player2_confirmed: row.player2_confirmed === 1 || row.player2_confirmed === true,
+    }
   }
 
   updateMatch(matchId: string, winnerId: string, score: string): GroupMatchRow {
@@ -540,6 +577,58 @@ export class GroupRepository {
       UPDATE group_matches SET winner_id = ?, score = ?, status = 'completed', updated_at = ? WHERE id = ?
     `)
     stmt.run(winnerId, score, now, matchId)
+    return this.findMatchById(matchId)!
+  }
+
+  findMatchByIdWithPlayers(matchId: string): GroupMatchWithPlayers | undefined {
+    const stmt = this.db.prepare(`
+      SELECT gm.*,
+             p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
+             p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
+      FROM group_matches gm
+      JOIN players p1 ON gm.player1_id = p1.id
+      JOIN players p2 ON gm.player2_id = p2.id
+      WHERE gm.id = ?
+    `)
+    const row = stmt.get(matchId) as any
+    if (!row) return undefined
+    return {
+      ...row,
+      player1_confirmed: !!row.player1_confirmed,
+      player2_confirmed: !!row.player2_confirmed,
+    }
+  }
+
+  findMatchesByPlayer(tournamentId: string, playerId: string): GroupMatchWithPlayers[] {
+    const stmt = this.db.prepare(`
+      SELECT gm.*,
+             p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
+             p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
+      FROM group_matches gm
+      JOIN players p1 ON gm.player1_id = p1.id
+      JOIN players p2 ON gm.player2_id = p2.id
+      WHERE gm.tournament_id = ? AND (gm.player1_id = ? OR gm.player2_id = ?)
+      ORDER BY gm.created_at
+    `)
+    const rows = stmt.all(tournamentId, playerId, playerId) as any[]
+    return rows.map(row => ({
+      ...row,
+      player1_confirmed: !!row.player1_confirmed,
+      player2_confirmed: !!row.player2_confirmed,
+    }))
+  }
+
+  confirmMatch(matchId: string, position: 'player1' | 'player2'): GroupMatchRow {
+    const now = new Date().toISOString()
+    if (position === 'player1') {
+      this.db
+        .prepare('UPDATE group_matches SET player1_confirmed = 1, player1_confirmed_at = ?, updated_at = ? WHERE id = ?')
+        .run(now, now, matchId)
+    } else {
+      this.db
+        .prepare('UPDATE group_matches SET player2_confirmed = 1, player2_confirmed_at = ?, updated_at = ? WHERE id = ?')
+        .run(now, now, matchId)
+    }
     return this.findMatchById(matchId)!
   }
 }
@@ -554,8 +643,21 @@ export interface KnockoutMatchRow {
   winner_id: string | null
   score: string | null
   status: string
+  player1_confirmed: boolean
+  player2_confirmed: boolean
+  player1_confirmed_at?: string
+  player2_confirmed_at?: string
   created_at: string
   updated_at: string
+}
+
+export interface KnockoutMatchWithPlayers extends KnockoutMatchRow {
+  player1_name: string | null
+  player1_email: string | null
+  player1_share_contact: boolean
+  player2_name: string | null
+  player2_email: string | null
+  player2_share_contact: boolean
 }
 
 export interface LocationRow {
@@ -628,7 +730,9 @@ export class KnockoutRepository {
   }
 
   findKnockoutMatchById(matchId: string): KnockoutMatchRow | undefined {
-    return this.db.prepare('SELECT * FROM knockout_matches WHERE id = ?').get(matchId) as KnockoutMatchRow | undefined
+    const row = this.db.prepare('SELECT * FROM knockout_matches WHERE id = ?').get(matchId) as any
+    if (!row) return undefined
+    return { ...row, player1_confirmed: !!row.player1_confirmed, player2_confirmed: !!row.player2_confirmed }
   }
 
   updateKnockoutMatch(matchId: string, winnerId: string, score: string): KnockoutMatchRow {
@@ -639,6 +743,58 @@ export class KnockoutRepository {
       now,
       matchId
     )
+    return this.findKnockoutMatchById(matchId)!
+  }
+
+  findKnockoutMatchByIdWithPlayers(matchId: string): KnockoutMatchWithPlayers | undefined {
+    const stmt = this.db.prepare(`
+      SELECT km.*,
+             p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
+             p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
+      FROM knockout_matches km
+      LEFT JOIN players p1 ON km.player1_id = p1.id
+      LEFT JOIN players p2 ON km.player2_id = p2.id
+      WHERE km.id = ?
+    `)
+    const row = stmt.get(matchId) as any
+    if (!row) return undefined
+    return {
+      ...row,
+      player1_confirmed: !!row.player1_confirmed,
+      player2_confirmed: !!row.player2_confirmed,
+    }
+  }
+
+  findKnockoutMatchesByPlayer(tournamentId: string, playerId: string): KnockoutMatchWithPlayers[] {
+    const stmt = this.db.prepare(`
+      SELECT km.*,
+             p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
+             p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
+      FROM knockout_matches km
+      LEFT JOIN players p1 ON km.player1_id = p1.id
+      LEFT JOIN players p2 ON km.player2_id = p2.id
+      WHERE km.tournament_id = ? AND (km.player1_id = ? OR km.player2_id = ?)
+      ORDER BY km.round, km.position
+    `)
+    const rows = stmt.all(tournamentId, playerId, playerId) as any[]
+    return rows.map(row => ({
+      ...row,
+      player1_confirmed: !!row.player1_confirmed,
+      player2_confirmed: !!row.player2_confirmed,
+    }))
+  }
+
+  confirmKnockoutMatch(matchId: string, position: 'player1' | 'player2'): KnockoutMatchRow {
+    const now = new Date().toISOString()
+    if (position === 'player1') {
+      this.db
+        .prepare('UPDATE knockout_matches SET player1_confirmed = 1, player1_confirmed_at = ?, updated_at = ? WHERE id = ?')
+        .run(now, now, matchId)
+    } else {
+      this.db
+        .prepare('UPDATE knockout_matches SET player2_confirmed = 1, player2_confirmed_at = ?, updated_at = ? WHERE id = ?')
+        .run(now, now, matchId)
+    }
     return this.findKnockoutMatchById(matchId)!
   }
 }
