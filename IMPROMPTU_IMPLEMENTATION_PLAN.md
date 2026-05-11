@@ -12,6 +12,119 @@ This document outlines the prioritized implementation roadmap for impromptu tour
 
 ---
 
+## Asynchronous Processing Strategy
+
+This plan uses asynchronous processing extensively to keep endpoints responsive while complex operations run in the background. **Key principle:** Request → Immediate Response (fast) + Async Side Effects (complete later).
+
+### Async Processing Patterns
+
+**1. Background Job Queue (BullMQ)**
+
+Two critical jobs run on schedule:
+
+- **Impromptu Closer Job** (Task #13, every 1-5 minutes):
+  - Find OPEN impromptu tournaments with `scheduled_start_time <= NOW`
+  - Mark them CLOSED atomically
+  - Trigger no-show removal job
+  - Idempotent: safe to run multiple times without side effects
+
+- **No-Show Removal Job** (triggered by impromptu closer):
+  - Remove players who didn't check in 30+ mins past expected arrival
+  - Clean up active waitlist and location queue
+  - Notify remaining players of freed capacity
+  - Referenced in Tasks #3, #5, #13
+
+**Mocking:** All tests mock BullMQ — no real queue infrastructure in tests (100% coverage via mocks).
+
+---
+
+**2. Match Formation and Court Assignment (Tasks #14-15)**
+
+When player checks in (POST /locations/:id/check-in):
+
+- **Synchronous response (immediate):**
+  - Validate player has RSVP'd
+  - Add to active waitlist
+  - Return position + wait estimate
+  
+- **Asynchronous background work:**
+  - Run pairing algorithm (Task #4) to form matches
+  - Assign courts from available pool
+  - Update queue positions
+  - Broadcast changes to all connected clients
+  - Send match-formed notifications
+
+Prevents complex pairing logic from blocking player check-in latency.
+
+---
+
+**3. WebSocket Broadcasts (Task #25)**
+
+Real-time updates broadcast asynchronously to all location listeners:
+
+- **Queue position changed** — when new RSVP or check-in
+- **Match assigned** — "Your match is ready at Court 3!"
+- **No-show removed** — player kicked from queue
+- **Court status changed** — availability impacts capacity
+- **Check-in confirmation** — others see you're checked in
+
+Non-blocking pattern: Event happens → Async broadcast spawned → Response returns immediately. Consolidate duplicate events (e.g., 5 RSVPs at once → 1 batch update).
+
+---
+
+**4. Push Notifications (Task #25)**
+
+Send asynchronously for critical events only:
+
+- Match assigned
+- Player removed (no-show)
+- Tournament closing soon
+- Custom alerts from organizers
+
+Never block endpoint response waiting for notification delivery.
+
+---
+
+**5. Analytics and Reporting (Task #18)**
+
+Heavy computation happens asynchronously:
+
+- Queue composition analysis (% yes vs tentative RSVPs)
+- No-show rate calculations (per location, sport, time window)
+- Court utilization metrics
+- Match timing analytics (check-in to match formation duration)
+- Broadcast consolidation success rate
+
+Calculate async and cache results for dashboard queries.
+
+---
+
+### Endpoints: Which Stay Synchronous vs. Async Side Effects
+
+| Endpoint | Response Time | Async Work |
+|----------|---------------|------------|
+| **POST /locations/:id/check-in** | Fast (validate + queue) | Pairing, court assignment, broadcasts |
+| **POST /impromptu/:id/confirm-attendance** | Fast (mark confirmed) | Broadcast queue update, check if match ready |
+| **POST /impromptu/:id/rsvp** | Fast (create RSVP) | Queue recomputation, broadcast |
+| **GET /locations/:id/queue** | Fast (read-only) | — |
+| **GET /impromptu/:id/details** | Fast (read-only) | — |
+| **PATCH /player/contact-preferences** | Fast (simple update) | — |
+| **Impromptu Closer Job** | Runs every 1-5 min | Close tournaments, trigger no-show removal |
+
+---
+
+### Concurrency and Idempotency
+
+All async operations must be idempotent:
+
+- **Job re-runs:** Running impromptu closer twice doesn't double-close tournaments
+- **Broadcasting:** Resending same broadcast event doesn't cause duplicate UI updates
+- **Court assignment:** Pairing algorithm produces same matches for same input
+
+Use database transactions and locks to prevent race conditions when multiple async operations touch the same queue or court.
+
+---
+
 ## Task Template: Project Requirements Integration
 
 **Every task MUST include a "Project Requirements Integration" section with four subsections:**
