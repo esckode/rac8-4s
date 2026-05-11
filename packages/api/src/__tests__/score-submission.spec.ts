@@ -34,6 +34,7 @@ describe('Score Submission Endpoints', () => {
   let matchPlayer2Id: string
   let matchPlayer1Token: string
   let matchPlayer2Token: string
+  let playerNotInMatchToken: string
   let organizerToken: string
 
   beforeEach(async () => {
@@ -174,6 +175,24 @@ describe('Score Submission Endpoints', () => {
     } else {
       matchPlayer2Token = player6Token
     }
+
+    // Find a player who is NOT in the match
+    const matchPlayerIds = new Set([matchPlayer1Id, matchPlayer2Id])
+    const notInMatchId = allPlayerIds.find(id => !matchPlayerIds.has(id))
+
+    if (notInMatchId === player1Id) {
+      playerNotInMatchToken = player1Token
+    } else if (notInMatchId === player2Id) {
+      playerNotInMatchToken = player2Token
+    } else if (notInMatchId === player3Id) {
+      playerNotInMatchToken = player3Token
+    } else if (notInMatchId === player4Id) {
+      playerNotInMatchToken = player4Token
+    } else if (notInMatchId === player5Id) {
+      playerNotInMatchToken = player5Token
+    } else {
+      playerNotInMatchToken = player6Token
+    }
   })
 
   describe('POST /tournaments/:id/matches/:matchId/score (player submission)', () => {
@@ -277,7 +296,7 @@ describe('Score Submission Endpoints', () => {
     test('should reject player not in this match', async () => {
       const res = await request(app)
         .post(`/tournaments/${tournamentId}/matches/${matchId}/score`)
-        .set('Authorization', `Bearer ${player3Token}`)
+        .set('Authorization', `Bearer ${playerNotInMatchToken}`)
         .send({ score: '6-3, 6-2' })
 
       expect(res.status).toBe(403)

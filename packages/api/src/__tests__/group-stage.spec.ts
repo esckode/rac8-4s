@@ -375,11 +375,8 @@ describe('Group Stage Management', () => {
     })
 
     it('should compute standings correctly after match results', async () => {
-      const groups = groupRepo.findGroupsByTournament(standingsTournamentId)
-      const targetGroup = groups[0]
-
       const res = await request(app)
-        .get(`/tournaments/${standingsTournamentId}/groups/${targetGroup.id}/standings`)
+        .get(`/tournaments/${standingsTournamentId}/groups/${groupId}/standings`)
         .set('Authorization', `Bearer ${playerSessionToken}`)
 
       expect(res.status).toBe(200)
