@@ -15,6 +15,9 @@ import { ForbiddenError } from '../auth/errors'
 import { TournamentStateMachine, type TournamentState, type TransitionAction } from '@core/state-machine'
 import { calculateStandings, generateBracket } from '@core/index'
 import { parseScore, type SportFormat } from '@core/score-parser'
+import { getLogger } from '../logger'
+
+const log = getLogger('tournaments')
 
 function validateTournamentInput(data: any): string | null {
   if (!data.name || typeof data.name !== 'string' || !data.name.trim()) {
@@ -102,6 +105,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
         creatorId: payload.sub,
       })
 
+      log.info('tournament.created', { tournamentId: tournament.id, name: tournament.name, organizerId: payload.sub })
+
       res.status(201).json({
         id: tournament.id,
         name: tournament.name,
@@ -156,9 +161,12 @@ export default function tournamentsRouter(deps: AppDependencies) {
       const newStatus = STATE_TO_STATUS[transitionResult.state!]
       repo.updateStatus(id, newStatus)
 
+      const previousStatus = STATE_TO_STATUS[transitionResult.previousState!]
+      log.info('tournament.advanced', { tournamentId: id, from: previousStatus, to: newStatus, organizerId: payload.sub })
+
       res.status(200).json({
         status: newStatus,
-        previousStatus: STATE_TO_STATUS[transitionResult.previousState!],
+        previousStatus,
         message: `Tournament transitioned from ${transitionResult.previousState} to ${transitionResult.state}`,
       })
     } catch (err) {
@@ -218,6 +226,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       const groups = groupRepo.createGroups(id, numGroups, advancingPerGroup, playerIds)
       repo.updateStatus(id, 'group_stage_active')
+
+      log.info('groups.created', { tournamentId: id, numGroups: groups.length, playerCount: playerIds.length, organizerId: payload.sub })
 
       res.status(201).json({
         groups: groups.map(g => ({
@@ -359,6 +369,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
       const winnerId = parsed.winner === 'player1' ? match.player1_id : match.player2_id
       const updated = groupRepo.updateMatch(matchId, winnerId, req.body.score)
 
+      log.info('score.submitted', { tournamentId, matchId, score: req.body.score, winnerId, playerId: payload.playerId })
+
       res.json({
         match: {
           id: updated.id,
@@ -404,6 +416,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       const winnerId = parsed.winner === 'player1' ? match.player1_id : match.player2_id
       const updated = groupRepo.updateMatch(matchId, winnerId, req.body.score)
+
+      log.info('score.overridden', { tournamentId, matchId, score: req.body.score, winnerId, organizerId: payload.sub })
 
       res.json({
         match: {
@@ -543,6 +557,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       knockoutRepo.setSeeds(tournamentId, seeds)
 
+      log.info('bracket.generated', { tournamentId, seedCount: seeds.length, organizerId: payload.sub })
+
       // Generate and return bracket
       const seedMap = new Map(seeds.map((s) => [s.seedPosition, s.playerId]))
       const bracket = generateBracket(seeds.length)
@@ -614,6 +630,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       knockoutRepo.setSeeds(tournamentId, req.body.seeds)
 
+      log.info('bracket.reseeded', { tournamentId, seedCount: req.body.seeds.length, organizerId: payload.sub })
+
       // Return updated bracket
       const seedMap = new Map(req.body.seeds.map((s: any) => [s.seedPosition, s.playerId]))
       const bracket = generateBracket(req.body.seeds.length)
@@ -675,11 +693,11 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       const seedMap = new Map(seeds.map((s) => [s.seedPosition, s.playerId]))
       const bracket = generateBracket(seeds.length)
-      knockoutRepo.createKnockoutMatches(tournamentId, bracket, seedMap)
+      const knockoutMatches = knockoutRepo.createKnockoutMatches(tournamentId, bracket, seedMap)
 
       repo.updateStatus(tournamentId, 'knockout_active')
 
-      const knockoutMatches = knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
+      log.info('bracket.published', { tournamentId, matchCount: knockoutMatches.length, organizerId: payload.sub })
 
       res.json({
         matches: knockoutMatches.map((m) => ({
@@ -750,6 +768,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
       const updated = knockoutRepo.updateKnockoutMatch(matchId, winnerId, req.body.score)
 
+      log.info('score.submitted', { tournamentId, matchId, round: updated.round, score: req.body.score, winnerId, playerId: payload.playerId })
+
       res.json({
         match: {
           id: updated.id,
@@ -804,6 +824,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'Cannot determine winner' })
       }
       const updated = knockoutRepo.updateKnockoutMatch(matchId, winnerId, req.body.score)
+
+      log.info('score.overridden', { tournamentId, matchId, round: updated.round, score: req.body.score, winnerId, organizerId: payload.sub })
 
       res.json({
         match: {
@@ -922,6 +944,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
         deps.tokenStore
       )
 
+      log.info('player.registered', { tournamentId, playerId: player.id })
+
       res.status(202).json({
         message: `Registration email sent to ${player.email}`,
         magicLinkExpires: 86400,
@@ -956,6 +980,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       const sessionToken = await generatePlayerSession(magicPayload, 86400, deps.tokenStore)
 
+      log.info('session.issued', { tournamentId, playerId: magicPayload.playerId })
+
       res.status(200).json({
         playerToken: sessionToken.token,
         expiresIn: 86400,
@@ -987,6 +1013,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
           )
         }
       }
+
+      log.info('magic-link.reissued', { tournamentId })
 
       res.status(202).json({
         message: `If an account with this email is registered, a magic link has been sent.`,
@@ -1035,6 +1063,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       const updated = repo.update(id, validationFields)
 
+      log.info('tournament.updated', { tournamentId: id, fields: Object.keys(validationFields), organizerId: payload.sub })
+
       res.json({
         id: updated.id,
         name: updated.name,
@@ -1064,6 +1094,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
       assertOrganizerOwnsTournament(payload, tournament.creator_id)
 
       repo.softDelete(id)
+
+      log.info('tournament.deleted', { tournamentId: id, organizerId: payload.sub })
 
       res.status(204).send()
     } catch (err) {

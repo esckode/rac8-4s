@@ -82,3 +82,32 @@ Each bucket folder has a `README.md` that lists every skill in the bucket with a
 
 ## 5. Skills organization
 
+## 6. Logging Standards
+
+All API route handlers and services must follow the structured logging pattern established in `packages/api/src/logger.ts`.
+
+**Logger setup** — import and create a module-level logger at the top of each file:
+```typescript
+import { getLogger } from '../logger'
+const log = getLogger('module-name')
+```
+
+**Log levels:**
+- `debug` — routine operations, read-only routes (already covered by HTTP request/response middleware)
+- `info` — state changes: anything that writes to the database or transitions status
+- `warn` — expected failures: auth errors, validation errors, client mistakes
+- `error` — unexpected failures: unhandled exceptions, 5xx server errors
+
+**What to log at `info` for every state-changing route:**
+- Call `log.info('event.name', ctx)` immediately before the success `res.status(...).json(...)` response
+- Always include: `tournamentId` (when in scope), actor identity (`organizerId: payload.sub` or `playerId: payload.playerId`)
+- Never include: tokens, passwords, full request bodies, or PII beyond IDs
+
+**Event naming convention:** `noun.verb` in past tense — e.g. `tournament.created`, `score.submitted`, `bracket.published`
+
+**Correlation IDs are automatic** — `requestId` is injected into every log entry via `AsyncLocalStorage`. No need to pass it explicitly. All logs from a single request automatically share the same `requestId`, enabling easy trace filtering.
+
+**Read-only routes:** no additional logging needed — HTTP request/response middleware logs them at `debug` level automatically.
+
+**Verification:** `LOG_LEVEL=debug npm start | grep '"requestId":"<id>"'` to trace a single request through all modules.
+
