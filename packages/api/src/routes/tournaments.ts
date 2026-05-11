@@ -264,7 +264,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
     }
   })
 
-  // GET /:id/groups/:groupId/standings - get group standings (player auth)
+  // GET /:id/groups/:groupId/standings - get group standings (player auth, group members only)
   router.get('/:id/groups/:groupId/standings', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
@@ -279,6 +279,12 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       const members = groupRepo.findMembersByGroup(groupId)
+
+      // Verify player is actually in this group
+      const playerInGroup = members.find(m => m.id === payload.playerId)
+      if (!playerInGroup) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a member of this group' })
+      }
       const matches = groupRepo.findMatchesByGroup(groupId)
 
       const standings = calculateStandings(

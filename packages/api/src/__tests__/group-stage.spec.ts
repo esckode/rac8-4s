@@ -291,28 +291,32 @@ describe('Group Stage Management', () => {
       // Set status to registration_open
       tournamentsRepo.updateStatus(standingsTournamentId, 'registration_open')
 
-      // Create 6 players for this tournament
+      // Create 6 players for this tournament (use timestamp to ensure uniqueness across tests)
       standingsPlayerIds = []
+      let player1Email = ''
+      const testTimestamp = Date.now()
       for (let i = 1; i <= 6; i++) {
-        const player = playerRepo.findOrCreatePlayerByEmail(
-          `standings_player${i}_${Date.now()}@test.com`,
-          `Standings Player ${i}`
-        )
+        const email = `standings_player${i}_${testTimestamp}@test.com` // Include timestamp to ensure uniqueness across tests
+        const player = playerRepo.findOrCreatePlayerByEmail(email, `Standings Player ${i}`)
         standingsPlayerIds.push(player.id)
         playerRepo.createRegistration(player.id, standingsTournamentId)
+        if (i === 1) {
+          player1Email = email
+        }
       }
 
-      // Set status to registration_closed, but we need to register one more player,
-      // so temporarily set back to registration_open
+      // Set status to registration_closed
       tournamentsRepo.updateStatus(standingsTournamentId, 'registration_closed')
+
+      // Temporarily set back to registration_open to get a session token for player 1
       tournamentsRepo.updateStatus(standingsTournamentId, 'registration_open')
 
-      // Get player session token
+      // Re-register player 1 to get their session token (idempotent)
       const registerRes = await request(app)
         .post(`/tournaments/${standingsTournamentId}/register`)
         .send({
-          email: `session_player_${Date.now()}@test.com`,
-          name: 'Session Player',
+          email: player1Email,
+          name: 'Standings Player 1',
         })
 
       // Now set it back to registration_closed for group creation
@@ -430,6 +434,34 @@ describe('Group Stage Management', () => {
         .set('Authorization', `Bearer ${otherPlayerToken}`)
 
       expect(res.status).toBe(403)
+    })
+
+    it('should return 403 if player is not in the group', async () => {
+      // Register a 7th player for the same tournament AFTER groups are created
+      // This player is registered but not in any group
+      tournamentsRepo.updateStatus(standingsTournamentId, 'registration_open')
+
+      const otherPlayerRegisterRes = await request(app)
+        .post(`/tournaments/${standingsTournamentId}/register`)
+        .send({
+          email: 'non_member@test.com',
+          name: 'Non-Member Player',
+        })
+
+      const otherPlayerVerifyRes = await request(app).get(
+        `/tournaments/${standingsTournamentId}/auth/verify?token=${otherPlayerRegisterRes.body.magicLinkToken}`
+      )
+
+      tournamentsRepo.updateStatus(standingsTournamentId, 'registration_closed')
+      const otherPlayerToken = otherPlayerVerifyRes.body.playerToken
+
+      // This player is registered for the tournament but not in any group
+      const res = await request(app)
+        .get(`/tournaments/${standingsTournamentId}/groups/${groupId}/standings`)
+        .set('Authorization', `Bearer ${otherPlayerToken}`)
+
+      expect(res.status).toBe(403)
+      expect(res.body.code).toBe('FORBIDDEN')
     })
   })
 })
