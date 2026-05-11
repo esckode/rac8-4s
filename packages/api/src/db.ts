@@ -73,6 +73,10 @@ export function openDatabase(filename?: string): Database.Database {
   const migration3 = fs.readFileSync(migration3Path, 'utf-8')
   db.exec(migration3)
 
+  const migration4Path = path.join(__dirname, '../../..', 'db', 'migrations', '004_create_knockout.sql')
+  const migration4 = fs.readFileSync(migration4Path, 'utf-8')
+  db.exec(migration4)
+
   return db
 }
 
@@ -429,5 +433,82 @@ export class GroupRepository {
     `)
     stmt.run(winnerId, score, now, matchId)
     return this.findMatchById(matchId)!
+  }
+}
+
+export interface KnockoutMatchRow {
+  id: string
+  tournament_id: string
+  round: number
+  position: number
+  player1_id: string | null
+  player2_id: string | null
+  winner_id: string | null
+  score: string | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export class KnockoutRepository {
+  constructor(private db: Database.Database) {}
+
+  setSeeds(tournamentId: string, seeds: Array<{ playerId: string; seedPosition: number }>): void {
+    const deleteStmt = this.db.prepare('DELETE FROM bracket_seeds WHERE tournament_id = ?')
+    deleteStmt.run(tournamentId)
+
+    const insertStmt = this.db.prepare('INSERT INTO bracket_seeds (tournament_id, seed_position, player_id) VALUES (?, ?, ?)')
+    for (const seed of seeds) {
+      insertStmt.run(tournamentId, seed.seedPosition, seed.playerId)
+    }
+  }
+
+  getSeeds(tournamentId: string): Array<{ playerId: string; seedPosition: number }> {
+    const rows = this.db.prepare('SELECT * FROM bracket_seeds WHERE tournament_id = ? ORDER BY seed_position').all(tournamentId) as Array<{
+      tournament_id: string
+      seed_position: number
+      player_id: string
+    }>
+    return rows.map((r) => ({ playerId: r.player_id, seedPosition: r.seed_position }))
+  }
+
+  createKnockoutMatches(tournamentId: string, bracket: any, seedMap: Map<number, string>): KnockoutMatchRow[] {
+    const now = new Date().toISOString()
+    const insertStmt = this.db.prepare(`
+      INSERT INTO knockout_matches (id, tournament_id, round, position, player1_id, player2_id, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const round of bracket.rounds) {
+      for (const match of round.matches) {
+        const id = `km_${Date.now()}_${Math.random().toString(36).slice(2)}`
+        const player1Id = match.player1 ? seedMap.get(parseInt(match.player1.replace('seed_', ''))) ?? null : null
+        const player2Id = match.player2 ? seedMap.get(parseInt(match.player2.replace('seed_', ''))) ?? null : null
+        const status = player2Id === null && player1Id !== null ? 'bye' : 'pending'
+        insertStmt.run(id, tournamentId, match.round, match.position, player1Id, player2Id, status, now, now)
+      }
+    }
+
+    return this.findKnockoutMatchesByTournament(tournamentId)
+  }
+
+  findKnockoutMatchesByTournament(tournamentId: string): KnockoutMatchRow[] {
+    const rows = this.db.prepare('SELECT * FROM knockout_matches WHERE tournament_id = ? ORDER BY round, position').all(tournamentId)
+    return rows as KnockoutMatchRow[]
+  }
+
+  findKnockoutMatchById(matchId: string): KnockoutMatchRow | undefined {
+    return this.db.prepare('SELECT * FROM knockout_matches WHERE id = ?').get(matchId) as KnockoutMatchRow | undefined
+  }
+
+  updateKnockoutMatch(matchId: string, winnerId: string, score: string): KnockoutMatchRow {
+    const now = new Date().toISOString()
+    this.db.prepare(`UPDATE knockout_matches SET winner_id = ?, score = ?, status = 'completed', updated_at = ? WHERE id = ?`).run(
+      winnerId,
+      score,
+      now,
+      matchId
+    )
+    return this.findKnockoutMatchById(matchId)!
   }
 }

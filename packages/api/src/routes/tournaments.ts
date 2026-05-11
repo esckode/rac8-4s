@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
-import { TournamentRepository, PlayerRepository, GroupRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
 import {
   requireOrganizerAuth,
   assertOrganizerOwnsTournament,
@@ -13,7 +13,7 @@ import {
 } from '../auth'
 import { ForbiddenError } from '../auth/errors'
 import { TournamentStateMachine, type TournamentState, type TransitionAction } from '@core/state-machine'
-import { calculateStandings } from '@core/standings'
+import { calculateStandings, generateBracket } from '@core/index'
 import { parseScore, type SportFormat } from '@core/score-parser'
 
 function validateTournamentInput(data: any): string | null {
@@ -73,6 +73,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
   const repo = new TournamentRepository(deps.db)
   const playerRepo = new PlayerRepository(deps.db)
   const groupRepo = new GroupRepository(deps.db)
+  const knockoutRepo = new KnockoutRepository(deps.db)
 
   // POST /tournaments - create tournament
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -407,6 +408,408 @@ export default function tournamentsRouter(deps: AppDependencies) {
       res.json({
         match: {
           id: updated.id,
+          score: updated.score,
+          winnerId: updated.winner_id,
+          status: updated.status,
+        },
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /:id/bracket - get bracket (no auth required)
+  router.get('/:id/bracket', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.id as string
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      const seeds = knockoutRepo.getSeeds(tournamentId)
+      if (seeds.length === 0) {
+        return res.status(404).json({ code: 'BRACKET_NOT_GENERATED', message: 'Bracket not generated yet' })
+      }
+
+      const seedMap = new Map(seeds.map((s) => [s.seedPosition, s.playerId]))
+      const bracket = generateBracket(seeds.length)
+
+      const knockoutMatches = knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
+      const matchById = new Map(knockoutMatches.map((m) => [`${m.round}-${m.position}`, m]))
+
+      const rounds = bracket.rounds.map((r) => ({
+        round: r.round,
+        matches: r.matches.map((m) => {
+          const dbMatch = matchById.get(`${m.round}-${m.position}`)
+          if (dbMatch) {
+            return {
+              id: dbMatch.id,
+              round: dbMatch.round,
+              position: dbMatch.position,
+              player1Id: dbMatch.player1_id,
+              player2Id: dbMatch.player2_id,
+              winnerId: dbMatch.winner_id,
+              score: dbMatch.score,
+              status: dbMatch.status,
+            }
+          }
+          const player1Id = m.player1 ? seedMap.get(parseInt(m.player1.replace('seed_', ''))) ?? null : null
+          const player2Id = m.player2 ? seedMap.get(parseInt(m.player2.replace('seed_', ''))) ?? null : null
+          return {
+            id: m.id,
+            round: m.round,
+            position: m.position,
+            player1Id,
+            player2Id,
+            winnerId: null,
+            score: null,
+            status: 'pending',
+          }
+        }),
+      }))
+
+      res.json({
+        bracket: {
+          rounds,
+          totalPlayers: seeds.length,
+          byeCount: bracket.byeCount,
+        },
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /:id/bracket/generate - organizer generates bracket from standings
+  router.post('/:id/bracket/generate', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const tournamentId = req.params.id as string
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      if (tournament.status !== 'group_stage_complete') {
+        return res.status(409).json({
+          code: 'INVALID_STATE',
+          message: `Cannot generate bracket in ${tournament.status} status; tournament must be in group_stage_complete status`,
+        })
+      }
+
+      const groups = groupRepo.findGroupsByTournament(tournamentId)
+      if (groups.length === 0) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'No groups exist for this tournament' })
+      }
+
+      // Calculate standings for each group and collect advancing players
+      const advancingByGroup: string[][] = []
+      for (const group of groups) {
+        const members = groupRepo.findMembersByGroup(group.id)
+        const matches = groupRepo.findMatchesByGroup(group.id)
+
+        const standings = calculateStandings(
+          members.map((m) => ({ id: m.id, name: m.name })),
+          matches.map((m) => ({
+            player1Id: m.player1_id,
+            player2Id: m.player2_id,
+            winnerId: m.winner_id ?? null,
+            score: m.score ?? null,
+          }))
+        )
+
+        const advancing = standings.slice(0, group.advancing_count).map((s) => s.playerId)
+        advancingByGroup.push(advancing)
+      }
+
+      // Interleave seeds by rank across groups
+      const seeds: Array<{ playerId: string; seedPosition: number }> = []
+      const maxRank = Math.max(...advancingByGroup.map((g) => g.length))
+      for (let rank = 0; rank < maxRank; rank++) {
+        for (let groupIdx = 0; groupIdx < advancingByGroup.length; groupIdx++) {
+          if (rank < advancingByGroup[groupIdx].length) {
+            seeds.push({
+              playerId: advancingByGroup[groupIdx][rank],
+              seedPosition: seeds.length + 1,
+            })
+          }
+        }
+      }
+
+      knockoutRepo.setSeeds(tournamentId, seeds)
+
+      // Generate and return bracket
+      const seedMap = new Map(seeds.map((s) => [s.seedPosition, s.playerId]))
+      const bracket = generateBracket(seeds.length)
+
+      const rounds = bracket.rounds.map((r) => ({
+        round: r.round,
+        matches: r.matches.map((m) => {
+          const player1Id = m.player1 ? seedMap.get(parseInt(m.player1.replace('seed_', ''))) ?? null : null
+          const player2Id = m.player2 ? seedMap.get(parseInt(m.player2.replace('seed_', ''))) ?? null : null
+          return {
+            id: m.id,
+            round: m.round,
+            position: m.position,
+            player1Id,
+            player2Id,
+            winnerId: null,
+            score: null,
+            status: 'pending',
+          }
+        }),
+      }))
+
+      res.json({
+        bracket: {
+          rounds,
+          totalPlayers: seeds.length,
+          byeCount: bracket.byeCount,
+        },
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // PATCH /:id/bracket - organizer overrides seeding
+  router.patch('/:id/bracket', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const tournamentId = req.params.id as string
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      if (tournament.status !== 'group_stage_complete') {
+        return res.status(409).json({
+          code: 'INVALID_STATE',
+          message: `Cannot update bracket in ${tournament.status} status; tournament must be in group_stage_complete status`,
+        })
+      }
+
+      const existingSeeds = knockoutRepo.getSeeds(tournamentId)
+      if (existingSeeds.length === 0) {
+        return res.status(404).json({ code: 'BRACKET_NOT_GENERATED', message: 'Bracket not generated yet' })
+      }
+
+      if (!Array.isArray(req.body.seeds)) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'seeds must be an array' })
+      }
+
+      for (const seed of req.body.seeds) {
+        if (typeof seed.playerId !== 'string' || typeof seed.seedPosition !== 'number') {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'each seed must have playerId (string) and seedPosition (number)' })
+        }
+      }
+
+      knockoutRepo.setSeeds(tournamentId, req.body.seeds)
+
+      // Return updated bracket
+      const seedMap = new Map(req.body.seeds.map((s: any) => [s.seedPosition, s.playerId]))
+      const bracket = generateBracket(req.body.seeds.length)
+
+      const rounds = bracket.rounds.map((r) => ({
+        round: r.round,
+        matches: r.matches.map((m) => {
+          const player1Id = m.player1 ? seedMap.get(parseInt(m.player1.replace('seed_', ''))) ?? null : null
+          const player2Id = m.player2 ? seedMap.get(parseInt(m.player2.replace('seed_', ''))) ?? null : null
+          return {
+            id: m.id,
+            round: m.round,
+            position: m.position,
+            player1Id,
+            player2Id,
+            winnerId: null,
+            score: null,
+            status: 'pending',
+          }
+        }),
+      }))
+
+      res.json({
+        bracket: {
+          rounds,
+          totalPlayers: req.body.seeds.length,
+          byeCount: bracket.byeCount,
+        },
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /:id/bracket/publish - organizer publishes bracket and transitions to knockout_active
+  router.post('/:id/bracket/publish', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const tournamentId = req.params.id as string
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      if (tournament.status !== 'group_stage_complete') {
+        return res.status(409).json({
+          code: 'INVALID_STATE',
+          message: `Cannot publish bracket in ${tournament.status} status; tournament must be in group_stage_complete status`,
+        })
+      }
+
+      const seeds = knockoutRepo.getSeeds(tournamentId)
+      if (seeds.length === 0) {
+        return res.status(409).json({ code: 'BRACKET_NOT_GENERATED', message: 'Bracket not generated yet' })
+      }
+
+      const seedMap = new Map(seeds.map((s) => [s.seedPosition, s.playerId]))
+      const bracket = generateBracket(seeds.length)
+      knockoutRepo.createKnockoutMatches(tournamentId, bracket, seedMap)
+
+      repo.updateStatus(tournamentId, 'knockout_active')
+
+      const knockoutMatches = knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
+
+      res.json({
+        matches: knockoutMatches.map((m) => ({
+          id: m.id,
+          round: m.round,
+          position: m.position,
+          player1Id: m.player1_id,
+          player2Id: m.player2_id,
+          winnerId: m.winner_id,
+          score: m.score,
+          status: m.status,
+        })),
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /:id/knockout/:matchId/score - player submits knockout match score
+  router.post('/:id/knockout/:matchId/score', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const tournamentId = req.params.id as string
+      const matchId = req.params.matchId as string
+
+      assertPlayerInTournament(payload, tournamentId)
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      if (tournament.status !== 'knockout_active') {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'Tournament is not in knockout phase' })
+      }
+
+      const match = knockoutRepo.findKnockoutMatchById(matchId)
+      if (!match || match.tournament_id !== tournamentId) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
+      }
+
+      if (match.player1_id !== payload.playerId && match.player2_id !== payload.playerId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
+      }
+
+      if (!match.player1_id || !match.player2_id) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'This match is not ready for scoring' })
+      }
+
+      if (new Date() > new Date(tournament.knockout_stage_deadline)) {
+        return res.status(409).json({ code: 'DEADLINE_PASSED', message: 'Knockout stage scoring deadline has passed' })
+      }
+
+      if (typeof req.body.score !== 'string') {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'score must be a non-empty string' })
+      }
+
+      let parsed
+      try {
+        parsed = parseScore(req.body.score, tournament.sport as SportFormat)
+      } catch (err) {
+        return res.status(400).json({ code: 'SCORE_INVALID', message: `Invalid score format: ${(err as Error).message}` })
+      }
+
+      const winnerId = parsed.winner === 'player1' ? match.player1_id : match.player2_id
+      if (!winnerId) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'Cannot determine winner' })
+      }
+      const updated = knockoutRepo.updateKnockoutMatch(matchId, winnerId, req.body.score)
+
+      res.json({
+        match: {
+          id: updated.id,
+          round: updated.round,
+          position: updated.position,
+          score: updated.score,
+          winnerId: updated.winner_id,
+          status: updated.status,
+        },
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // PATCH /:id/knockout/:matchId/score - organizer overrides knockout match score
+  router.patch('/:id/knockout/:matchId/score', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const tournamentId = req.params.id as string
+      const matchId = req.params.matchId as string
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      const match = knockoutRepo.findKnockoutMatchById(matchId)
+      if (!match || match.tournament_id !== tournamentId) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
+      }
+
+      if (!match.player1_id || !match.player2_id) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'This match is not ready for scoring' })
+      }
+
+      if (typeof req.body.score !== 'string') {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'score must be a non-empty string' })
+      }
+
+      let parsed
+      try {
+        parsed = parseScore(req.body.score, tournament.sport as SportFormat)
+      } catch (err) {
+        return res.status(400).json({ code: 'SCORE_INVALID', message: `Invalid score format: ${(err as Error).message}` })
+      }
+
+      const winnerId = parsed.winner === 'player1' ? match.player1_id : match.player2_id
+      if (!winnerId) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'Cannot determine winner' })
+      }
+      const updated = knockoutRepo.updateKnockoutMatch(matchId, winnerId, req.body.score)
+
+      res.json({
+        match: {
+          id: updated.id,
+          round: updated.round,
+          position: updated.position,
           score: updated.score,
           winnerId: updated.winner_id,
           status: updated.status,
