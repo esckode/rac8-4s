@@ -857,5 +857,126 @@ describe('Bracket Management', () => {
 
       expect(res.status).toBe(403)
     })
+
+    it('should reject empty tournament name update', async () => {
+      const res = await request(app)
+        .patch(`/tournaments/${tournamentId}`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          name: '',
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('should handle malformed authorization header', async () => {
+      const res = await request(app)
+        .post(`/tournaments/${tournamentId}/bracket/generate`)
+        .set('Authorization', 'InvalidFormat')
+
+      expect(res.status).toBe(401)
+    })
+
+    it('should handle missing bearer token', async () => {
+      const res = await request(app)
+        .post(`/tournaments/${tournamentId}/bracket/generate`)
+        .set('Authorization', 'Bearer ')
+
+      expect(res.status).toBe(401)
+    })
+  })
+
+  describe('Error handling and edge cases', () => {
+    it('should handle tournament with empty name', async () => {
+      const res = await request(app)
+        .post('/tournaments')
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          name: '   ',
+          sport: 'tennis',
+          matchFormat: 'singles',
+          maxPlayers: 10,
+          registrationDeadline: new Date().toISOString(),
+          groupStageDeadline: new Date(Date.now() + 86400000).toISOString(),
+          knockoutStageDeadline: new Date(Date.now() + 2 * 86400000).toISOString(),
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('should handle tournament with invalid sport type', async () => {
+      const res = await request(app)
+        .post('/tournaments')
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          name: `Valid Name ${Date.now()}`,
+          sport: 123,
+          matchFormat: 'singles',
+          maxPlayers: 10,
+          registrationDeadline: new Date().toISOString(),
+          groupStageDeadline: new Date(Date.now() + 86400000).toISOString(),
+          knockoutStageDeadline: new Date(Date.now() + 2 * 86400000).toISOString(),
+        })
+
+      expect(res.status).toBe(400)
+    })
+
+    it('should handle non-integer maxPlayers', async () => {
+      const res = await request(app)
+        .post('/tournaments')
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          name: `Valid Name ${Date.now()}`,
+          sport: 'tennis',
+          matchFormat: 'singles',
+          maxPlayers: 10.5,
+          registrationDeadline: new Date().toISOString(),
+          groupStageDeadline: new Date(Date.now() + 86400000).toISOString(),
+          knockoutStageDeadline: new Date(Date.now() + 2 * 86400000).toISOString(),
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('should handle invalid deadline (knockout before group)', async () => {
+      const now = new Date()
+      const res = await request(app)
+        .post('/tournaments')
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          name: `Valid Name ${Date.now()}`,
+          sport: 'tennis',
+          matchFormat: 'singles',
+          maxPlayers: 10,
+          registrationDeadline: now.toISOString(),
+          groupStageDeadline: new Date(now.getTime() + 86400000).toISOString(),
+          knockoutStageDeadline: new Date(now.getTime() + 1000).toISOString(),
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('should handle invalid deadline (group before registration)', async () => {
+      const now = new Date()
+      const res = await request(app)
+        .post('/tournaments')
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          name: `Valid Name ${Date.now()}`,
+          sport: 'tennis',
+          matchFormat: 'singles',
+          maxPlayers: 10,
+          registrationDeadline: now.toISOString(),
+          groupStageDeadline: new Date(now.getTime() - 1000).toISOString(),
+          knockoutStageDeadline: new Date(now.getTime() + 2 * 86400000).toISOString(),
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('VALIDATION_ERROR')
+    })
   })
 })
