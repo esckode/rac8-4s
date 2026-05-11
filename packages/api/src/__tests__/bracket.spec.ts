@@ -444,6 +444,99 @@ describe('Bracket Management', () => {
     })
   })
 
+  describe('Authorization edge cases', () => {
+    it('should reject bracket generate from different organizer', async () => {
+      const otherOrganizerToken = issueOrganizerToken(
+        { sub: 'other_organizer', email: 'other@test.com' },
+        STANDARD_CONFIG
+      ).accessToken
+
+      const res = await request(app)
+        .post(`/tournaments/${tournamentId}/bracket/generate`)
+        .set('Authorization', `Bearer ${otherOrganizerToken}`)
+
+      expect(res.status).toBe(403)
+    })
+
+    it('should reject bracket override from different organizer', async () => {
+      await request(app)
+        .post(`/tournaments/${tournamentId}/bracket/generate`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+
+      const otherOrganizerToken = issueOrganizerToken(
+        { sub: 'other_organizer', email: 'other@test.com' },
+        STANDARD_CONFIG
+      ).accessToken
+
+      const res = await request(app)
+        .patch(`/tournaments/${tournamentId}/bracket`)
+        .set('Authorization', `Bearer ${otherOrganizerToken}`)
+        .send({
+          seeds: [
+            { playerId: players[0].id, seedPosition: 1 },
+            { playerId: players[1].id, seedPosition: 2 },
+          ],
+        })
+
+      expect(res.status).toBe(403)
+    })
+
+    it('should reject bracket publish from different organizer', async () => {
+      await request(app)
+        .post(`/tournaments/${tournamentId}/bracket/generate`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+
+      const otherOrganizerToken = issueOrganizerToken(
+        { sub: 'other_organizer', email: 'other@test.com' },
+        STANDARD_CONFIG
+      ).accessToken
+
+      const res = await request(app)
+        .post(`/tournaments/${tournamentId}/bracket/publish`)
+        .set('Authorization', `Bearer ${otherOrganizerToken}`)
+
+      expect(res.status).toBe(403)
+    })
+
+    it('should reject knockout score override from different organizer', async () => {
+      await request(app)
+        .post(`/tournaments/${tournamentId}/bracket/generate`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+
+      const publishRes = await request(app)
+        .post(`/tournaments/${tournamentId}/bracket/publish`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+
+      const matchId = publishRes.body.matches[0].id
+
+      const otherOrganizerToken = issueOrganizerToken(
+        { sub: 'other_organizer', email: 'other@test.com' },
+        STANDARD_CONFIG
+      ).accessToken
+
+      const res = await request(app)
+        .patch(`/tournaments/${tournamentId}/knockout/${matchId}/score`)
+        .set('Authorization', `Bearer ${otherOrganizerToken}`)
+        .send({ score: '6-4, 6-3' })
+
+      expect(res.status).toBe(403)
+    })
+  })
+
+  describe('Tournament update tests', () => {
+    it('should update tournament with description', async () => {
+      const res = await request(app)
+        .patch(`/tournaments/${tournamentId}`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          description: 'Updated tournament description',
+        })
+
+      expect(res.status).toBe(200)
+      expect(res.body.description).toBe('Updated tournament description')
+    })
+  })
+
   describe('Additional edge cases', () => {
     it('should reject invalid score type (not string) in PATCH', async () => {
       await request(app)
