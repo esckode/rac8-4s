@@ -393,7 +393,7 @@ describe('Tournament CRUD Endpoints', () => {
     it('should include group_stage and knockout statuses', async () => {
       const repo = new TournamentRepository(db)
 
-      const statuses = ['registration_open', 'group_stage', 'knockout']
+      const statuses = ['registration_open', 'group_stage_active', 'knockout_active']
       for (const status of statuses) {
         const t = repo.create({
           name: `Tournament ${status}`,

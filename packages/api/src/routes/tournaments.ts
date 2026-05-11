@@ -1,16 +1,19 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
-import { TournamentRepository, PlayerRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import {
   requireOrganizerAuth,
   assertOrganizerOwnsTournament,
   generateMagicLinkToken,
   validateMagicLinkToken,
   generatePlayerSession,
+  requirePlayerSessionAuth,
   assertPlayerInTournament,
   TokenInvalidError,
 } from '../auth'
 import { ForbiddenError } from '../auth/errors'
+import { TournamentStateMachine, type TournamentState, type TransitionAction } from '@core/state-machine'
+import { calculateStandings } from '@core/standings'
 
 function validateTournamentInput(data: any): string | null {
   if (!data.name || typeof data.name !== 'string' || !data.name.trim()) {
@@ -46,10 +49,29 @@ function validateTournamentInput(data: any): string | null {
   return null
 }
 
+const STATUS_TO_STATE: Record<string, TournamentState> = {
+  registration_open: 'REGISTRATION_OPEN',
+  registration_closed: 'REGISTRATION_CLOSED',
+  group_stage_active: 'GROUP_STAGE_ACTIVE',
+  group_stage_complete: 'GROUP_STAGE_COMPLETE',
+  knockout_active: 'KNOCKOUT_ACTIVE',
+  tournament_complete: 'TOURNAMENT_COMPLETE',
+}
+
+const STATE_TO_STATUS: Record<TournamentState, string> = {
+  REGISTRATION_OPEN: 'registration_open',
+  REGISTRATION_CLOSED: 'registration_closed',
+  GROUP_STAGE_ACTIVE: 'group_stage_active',
+  GROUP_STAGE_COMPLETE: 'group_stage_complete',
+  KNOCKOUT_ACTIVE: 'knockout_active',
+  TOURNAMENT_COMPLETE: 'tournament_complete',
+}
+
 export default function tournamentsRouter(deps: AppDependencies) {
   const router = Router()
   const repo = new TournamentRepository(deps.db)
   const playerRepo = new PlayerRepository(deps.db)
+  const groupRepo = new GroupRepository(deps.db)
 
   // POST /tournaments - create tournament
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -83,6 +105,205 @@ export default function tournamentsRouter(deps: AppDependencies) {
         name: tournament.name,
         status: tournament.status,
         createdBy: tournament.creator_id,
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /:id/advance - advance tournament state (organizer)
+  router.post('/:id/advance', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const id = req.params.id as string
+
+      const tournament = repo.findById(id)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      const action = req.body.action as TransitionAction
+      if (!action || typeof action !== 'string') {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'action must be a valid string' })
+      }
+
+      const currentState = STATUS_TO_STATE[tournament.status]
+      if (!currentState) {
+        return res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Invalid tournament status in database' })
+      }
+
+      const machine = new TournamentStateMachine(currentState)
+      const playerCount = playerRepo.countRegistrationsForTournament(id)
+      const pendingMatches = groupRepo.countPendingMatchesByTournament(id)
+
+      const transitionResult = machine.transition(action, {
+        playersRegistered: playerCount > 0,
+        allScoresSubmitted: pendingMatches === 0,
+        forceAdvance: req.body.forceAdvance === true,
+      })
+
+      if (!transitionResult.success) {
+        return res.status(409).json({
+          code: transitionResult.error,
+          message: transitionResult.message,
+        })
+      }
+
+      const newStatus = STATE_TO_STATUS[transitionResult.state!]
+      repo.updateStatus(id, newStatus)
+
+      res.status(200).json({
+        status: newStatus,
+        previousStatus: STATE_TO_STATUS[transitionResult.previousState!],
+        message: `Tournament transitioned from ${transitionResult.previousState} to ${transitionResult.state}`,
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /:id/groups - create and distribute groups (organizer)
+  router.post('/:id/groups', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const id = req.params.id as string
+
+      const tournament = repo.findById(id)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      if (tournament.status !== 'registration_closed') {
+        return res.status(409).json({
+          code: 'INVALID_STATE',
+          message: 'Groups can only be created when tournament is in registration_closed status',
+        })
+      }
+
+      const numGroups = req.body.numGroups
+      const advancingPerGroup = req.body.advancingPerGroup
+
+      if (!Number.isInteger(numGroups) || numGroups < 1) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'numGroups must be an integer >= 1' })
+      }
+
+      if (!Number.isInteger(advancingPerGroup) || advancingPerGroup < 1) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'advancingPerGroup must be an integer >= 1' })
+      }
+
+      const registrations = playerRepo.listTournamentsByPlayer(payload.sub, { offset: 0, limit: 10000 })
+      const playerIds: string[] = []
+
+      // Fetch all registered players for this tournament
+      const allPlayers = deps.db
+        .prepare('SELECT DISTINCT pr.player_id FROM player_registrations pr WHERE pr.tournament_id = ?')
+        .all(id) as { player_id: string }[]
+
+      for (const p of allPlayers) {
+        playerIds.push(p.player_id)
+      }
+
+      if (playerIds.length < numGroups * 2) {
+        return res.status(400).json({
+          code: 'VALIDATION_ERROR',
+          message: `Not enough players: need at least ${numGroups * 2} for ${numGroups} groups (min 2 per group)`,
+        })
+      }
+
+      const groups = groupRepo.createGroups(id, numGroups, advancingPerGroup, playerIds)
+      repo.updateStatus(id, 'group_stage_active')
+
+      res.status(201).json({
+        groups: groups.map(g => ({
+          id: g.id,
+          name: g.name,
+          playerCount: deps.db
+            .prepare('SELECT COUNT(*) as count FROM group_memberships WHERE group_id = ?')
+            .get(g.id) as { count: number },
+          advancingCount: g.advancing_count,
+        })),
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /:id/groups - list groups with members (organizer)
+  router.get('/:id/groups', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const id = req.params.id as string
+
+      const tournament = repo.findById(id)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      const groups = groupRepo.findGroupsByTournament(id)
+
+      res.json({
+        groups: groups.map(g => {
+          const members = groupRepo.findMembersByGroup(g.id)
+          const matches = groupRepo.findMatchesByGroup(g.id)
+          return {
+            id: g.id,
+            name: g.name,
+            players: members.map(p => ({ id: p.id, name: p.name })),
+            matchCount: matches.length,
+          }
+        }),
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /:id/groups/:groupId/standings - get group standings (player auth)
+  router.get('/:id/groups/:groupId/standings', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const tournamentId = req.params.id as string
+      const groupId = req.params.groupId as string
+
+      assertPlayerInTournament(payload, tournamentId)
+
+      const group = groupRepo.findGroupById(groupId)
+      if (!group || group.tournament_id !== tournamentId) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Group not found' })
+      }
+
+      const members = groupRepo.findMembersByGroup(groupId)
+      const matches = groupRepo.findMatchesByGroup(groupId)
+
+      const standings = calculateStandings(
+        members.map(m => ({ id: m.id, name: m.name })),
+        matches.map(m => ({
+          player1Id: m.player1_id,
+          player2Id: m.player2_id,
+          winnerId: m.winner_id || null,
+          score: m.score || null,
+        }))
+      )
+
+      res.json({
+        standings: standings.map((s: any) => {
+          const player = members.find(m => m.id === s.playerId)
+          return {
+            rank: s.rank,
+            playerId: s.playerId,
+            name: player?.name || 'Unknown',
+            wins: s.wins,
+            losses: s.losses,
+            setsWon: s.setsWon,
+            setsLost: s.setsLost,
+          }
+        }),
       })
     } catch (err) {
       next(err)

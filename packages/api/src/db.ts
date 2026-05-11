@@ -36,6 +36,27 @@ export interface RegistrationRow {
   registered_at: string
 }
 
+export interface GroupRow {
+  id: string
+  tournament_id: string
+  name: string
+  advancing_count: number
+  created_at: string
+}
+
+export interface GroupMatchRow {
+  id: string
+  group_id: string
+  tournament_id: string
+  player1_id: string
+  player2_id: string
+  winner_id?: string
+  score?: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
 export function openDatabase(filename?: string): Database.Database {
   const db = new Database(filename)
 
@@ -47,6 +68,10 @@ export function openDatabase(filename?: string): Database.Database {
   const migration2Path = path.join(__dirname, '../../..', 'db', 'migrations', '002_create_players.sql')
   const migration2 = fs.readFileSync(migration2Path, 'utf-8')
   db.exec(migration2)
+
+  const migration3Path = path.join(__dirname, '../../..', 'db', 'migrations', '003_create_groups.sql')
+  const migration3 = fs.readFileSync(migration3Path, 'utf-8')
+  db.exec(migration3)
 
   return db
 }
@@ -146,7 +171,7 @@ export class TournamentRepository {
   listPublic(opts: ListOptions & { sport?: string } = {}): { rows: TournamentRow[]; total: number } {
     const offset = opts.offset || 0
     const limit = opts.limit || 10
-    const publishedStatuses = ['registration_open', 'group_stage', 'knockout']
+    const publishedStatuses = ['registration_open', 'group_stage_active', 'group_stage_complete', 'knockout_active']
 
     let query = `SELECT * FROM tournaments WHERE status IN (${publishedStatuses.map(() => '?').join(',')}) AND deleted_at IS NULL`
     const params: unknown[] = publishedStatuses
@@ -192,6 +217,12 @@ export class TournamentRepository {
     const stmt = this.db.prepare(`UPDATE tournaments SET ${updates.join(', ')} WHERE id = ?`)
     stmt.run(...values)
 
+    return this.findById(id)!
+  }
+
+  updateStatus(id: string, status: string): TournamentRow {
+    const stmt = this.db.prepare('UPDATE tournaments SET status = ?, updated_at = ? WHERE id = ?')
+    stmt.run(status, new Date().toISOString(), id)
     return this.findById(id)!
   }
 
@@ -294,5 +325,95 @@ export class PlayerRepository {
     const rows = stmt.all(playerId, limit, offset) as TournamentRow[]
 
     return { rows, total: countResult.count }
+  }
+}
+
+export class GroupRepository {
+  constructor(private db: Database.Database) {}
+
+  createGroups(tournamentId: string, numGroups: number, advancingCount: number, playerIds: string[]): GroupRow[] {
+    const groupIds: string[] = []
+    const now = new Date().toISOString()
+
+    // Create groups
+    for (let i = 1; i <= numGroups; i++) {
+      const groupId = `group_${Date.now()}_${Math.random().toString(36).slice(2)}`
+      groupIds.push(groupId)
+
+      const stmt = this.db.prepare(`
+        INSERT INTO groups (id, tournament_id, name, advancing_count, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+      stmt.run(groupId, tournamentId, `Group ${String.fromCharCode(64 + i)}`, advancingCount, now)
+    }
+
+    // Shuffle and distribute players evenly
+    const shuffled = [...playerIds].sort(() => Math.random() - 0.5)
+    const playersPerGroup = Math.ceil(shuffled.length / numGroups)
+
+    for (let i = 0; i < numGroups; i++) {
+      const groupId = groupIds[i]
+      const start = i * playersPerGroup
+      const end = Math.min(start + playersPerGroup, shuffled.length)
+      const groupPlayers = shuffled.slice(start, end)
+
+      // Add players to group
+      const memberStmt = this.db.prepare(`
+        INSERT INTO group_memberships (group_id, player_id)
+        VALUES (?, ?)
+      `)
+
+      // Generate round-robin matches for this group
+      const matchStmt = this.db.prepare(`
+        INSERT INTO group_matches (id, group_id, tournament_id, player1_id, player2_id, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+
+      // Add members and generate matches
+      for (const playerId of groupPlayers) {
+        memberStmt.run(groupId, playerId)
+      }
+
+      // Generate round-robin: each player plays every other player once
+      for (let j = 0; j < groupPlayers.length; j++) {
+        for (let k = j + 1; k < groupPlayers.length; k++) {
+          const matchId = `match_${Date.now()}_${Math.random().toString(36).slice(2)}`
+          matchStmt.run(matchId, groupId, tournamentId, groupPlayers[j], groupPlayers[k], 'pending', now, now)
+        }
+      }
+    }
+
+    return this.findGroupsByTournament(tournamentId)
+  }
+
+  findGroupsByTournament(tournamentId: string): GroupRow[] {
+    const stmt = this.db.prepare('SELECT * FROM groups WHERE tournament_id = ? ORDER BY name')
+    return stmt.all(tournamentId) as GroupRow[]
+  }
+
+  findGroupById(groupId: string): GroupRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM groups WHERE id = ?')
+    return stmt.get(groupId) as GroupRow | undefined
+  }
+
+  findMatchesByGroup(groupId: string): GroupMatchRow[] {
+    const stmt = this.db.prepare('SELECT * FROM group_matches WHERE group_id = ? ORDER BY created_at')
+    return stmt.all(groupId) as GroupMatchRow[]
+  }
+
+  countPendingMatchesByTournament(tournamentId: string): number {
+    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM group_matches WHERE tournament_id = ? AND status = ?')
+    const result = stmt.get(tournamentId, 'pending') as { count: number }
+    return result.count
+  }
+
+  findMembersByGroup(groupId: string): PlayerRow[] {
+    const stmt = this.db.prepare(`
+      SELECT p.* FROM players p
+      JOIN group_memberships gm ON gm.player_id = p.id
+      WHERE gm.group_id = ?
+      ORDER BY p.name
+    `)
+    return stmt.all(groupId) as PlayerRow[]
   }
 }
