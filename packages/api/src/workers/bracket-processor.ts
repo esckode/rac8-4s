@@ -30,9 +30,17 @@ export async function processBracketGenerate(
     }
 
     const groups = deps.groupRepo.findGroupsByTournament(tournamentId)
+    if (groups.length === 0) {
+      throw new Error('no groups found for tournament')
+    }
+
     const seeds: Array<{ playerId: string; seedPosition: number }> = []
     let seedPos = 1
     const maxAdvancing = Math.max(...groups.map(g => g.advancing_count))
+
+    if (maxAdvancing === 0) {
+      throw new Error('no players advancing from groups')
+    }
 
     for (let rank = 0; rank < maxAdvancing; rank++) {
       for (const group of groups) {

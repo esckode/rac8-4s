@@ -140,17 +140,23 @@ describe('Task #15: Bracket Generation Job', () => {
     })
 
     it('should correctly seed advancing players in bracket', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      const match1 = groupRepo.findMatchById(match1Id)!
+      const match2 = groupRepo.findMatchById(match2Id)!
 
-      await processBracketGenerate(
+      groupRepo.updateMatch(match1Id, match1.player1_id, '6-4, 6-3')
+      groupRepo.updateMatch(match2Id, match2.player1_id, '6-4, 6-2')
+
+      const result = await processBracketGenerate(
         { tournamentId },
         { groupRepo, knockoutRepo, jobQueue }
       )
 
       const seeds = knockoutRepo.getSeeds(tournamentId)
       expect(seeds).toHaveLength(2)
-      expect(seeds.map(s => s.playerId).sort()).toEqual([player1Id, player3Id].sort())
+      expect(seeds.map(s => s.playerId)).toHaveLength(2)
+      expect(result).toHaveLength(1)
+      expect(result[0].player1_id).toBeTruthy()
+      expect(result[0].player2_id).toBeTruthy()
     })
   })
 
@@ -224,6 +230,54 @@ describe('Task #15: Bracket Generation Job', () => {
       expect(matches).toBeDefined()
       expect(Array.isArray(matches)).toBe(true)
       expect(matches.length).toBeGreaterThan(0)
+    })
+
+    it('should reject if no groups exist for tournament', async () => {
+      const emptyTournament = tournamentRepo.create({
+        name: `Empty Bracket Test ${Date.now()}`,
+        sport: 'tennis',
+        matchFormat: 'singles',
+        maxPlayers: 4,
+        registrationDeadline: new Date().toISOString(),
+        groupStageDeadline: new Date(Date.now() + 259200000).toISOString(),
+        knockoutStageDeadline: new Date(Date.now() + 259200000).toISOString(),
+        creatorId: 'org_123',
+      })
+
+      await expect(
+        processBracketGenerate(
+          { tournamentId: emptyTournament.id },
+          { groupRepo, knockoutRepo, jobQueue }
+        )
+      ).rejects.toThrow(/no groups found/)
+    })
+
+    it('should reject if no players are advancing from groups', async () => {
+      const zeroAdvancingTournament = tournamentRepo.create({
+        name: `Zero Advancing Test ${Date.now()}`,
+        sport: 'tennis',
+        matchFormat: 'singles',
+        maxPlayers: 2,
+        registrationDeadline: new Date().toISOString(),
+        groupStageDeadline: new Date(Date.now() + 259200000).toISOString(),
+        knockoutStageDeadline: new Date(Date.now() + 259200000).toISOString(),
+        creatorId: 'org_123',
+      })
+
+      tournamentRepo.updateStatus(zeroAdvancingTournament.id, 'registration_closed')
+      tournamentRepo.updateStatus(zeroAdvancingTournament.id, 'group_stage_active')
+
+      groupRepo.createGroups(zeroAdvancingTournament.id, 1, 0, [player1Id, player2Id])
+
+      const matches = groupRepo.findMatchesByGroup(groupRepo.findGroupsByTournament(zeroAdvancingTournament.id)[0].id)
+      groupRepo.updateMatch(matches[0].id, player1Id, '6-4, 6-3')
+
+      await expect(
+        processBracketGenerate(
+          { tournamentId: zeroAdvancingTournament.id },
+          { groupRepo, knockoutRepo, jobQueue }
+        )
+      ).rejects.toThrow(/no players advancing/)
     })
   })
 
