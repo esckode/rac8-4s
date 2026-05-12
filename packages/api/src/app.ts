@@ -7,6 +7,7 @@ import { getLogger, runWithRequestId } from './logger'
 import tournamentsRouter from './routes/tournaments'
 import playerRouter from './routes/player'
 import type { JobQueue } from '@worker/job-queue'
+import type { StandingsCache } from './standings-cache'
 
 const httpLog = getLogger('http')
 
@@ -15,6 +16,7 @@ export interface AppDependencies {
   jwtConfig: JwtConfig
   tokenStore: TokenStore
   jobQueue?: JobQueue
+  standingsCache?: StandingsCache
   locationRepository?: any
   courtRepository?: any
 }

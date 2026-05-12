@@ -1,0 +1,256 @@
+import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository } from '../db'
+import { InMemoryJobQueue } from '@worker/job-queue'
+import { InMemoryStandingsCache } from '../standings-cache'
+import { processStandingsRecalculate } from '../workers/standings-processor'
+
+describe('Task #14: Standings Recalculation Job', () => {
+  let db: any
+  let tournamentRepo: TournamentRepository
+  let playerRepo: PlayerRepository
+  let groupRepo: GroupRepository
+  let jobQueue: InMemoryJobQueue
+  let standingsCache: InMemoryStandingsCache
+
+  let tournamentId: string
+  let groupId: string
+  let player1Id: string
+  let player2Id: string
+  let player3Id: string
+  let player4Id: string
+
+  beforeEach(() => {
+    db = openDatabase(':memory:')
+    tournamentRepo = new TournamentRepository(db)
+    playerRepo = new PlayerRepository(db)
+    groupRepo = new GroupRepository(db)
+    jobQueue = new InMemoryJobQueue()
+    standingsCache = new InMemoryStandingsCache()
+
+    const now = new Date()
+    const pastDeadline = new Date(now.getTime() - 86400000).toISOString()
+    const futureDeadline = new Date(now.getTime() + 259200000).toISOString()
+
+    const tournament = tournamentRepo.create({
+      name: `Standings Test ${Date.now()}`,
+      sport: 'tennis',
+      matchFormat: 'singles',
+      maxPlayers: 8,
+      registrationDeadline: pastDeadline,
+      groupStageDeadline: futureDeadline,
+      knockoutStageDeadline: futureDeadline,
+      creatorId: 'org_123',
+    })
+    tournamentId = tournament.id
+
+    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+
+    const testTimestamp = Date.now()
+    const emails = [
+      `standing_test_1_${testTimestamp}@test.com`,
+      `standing_test_2_${testTimestamp}@test.com`,
+      `standing_test_3_${testTimestamp}@test.com`,
+      `standing_test_4_${testTimestamp}@test.com`,
+    ]
+
+    for (const email of emails) {
+      playerRepo.findOrCreatePlayerByEmail(email, email.split('@')[0])
+    }
+
+    const p1 = playerRepo.findByEmail(emails[0])!
+    const p2 = playerRepo.findByEmail(emails[1])!
+    const p3 = playerRepo.findByEmail(emails[2])!
+    const p4 = playerRepo.findByEmail(emails[3])!
+
+    player1Id = p1.id
+    player2Id = p2.id
+    player3Id = p3.id
+    player4Id = p4.id
+
+    tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+    tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
+
+    const groups = groupRepo.createGroups(tournamentId, 1, 2, [p1.id, p2.id, p3.id, p4.id])
+    groupId = groups[0].id
+  })
+
+  afterEach(() => {
+    db.close()
+  })
+
+  describe('Job execution', () => {
+    it('should call processor and return non-empty standings', async () => {
+      const standings = await processStandingsRecalculate(
+        { tournamentId, groupId },
+        { groupRepo, jobQueue, standingsCache }
+      )
+
+      expect(standings).toHaveLength(4)
+      expect(standings.map(s => s.playerId).sort()).toEqual(
+        [player1Id, player2Id, player3Id, player4Id].sort()
+      )
+    })
+  })
+
+  describe('Result consistency', () => {
+    it('should have same players as direct calculateStandings call', async () => {
+      const { calculateStandings } = await import('@core/index')
+      const members = groupRepo.findMembersByGroup(groupId)
+      const matches = groupRepo.findMatchesByGroup(groupId)
+
+      const players = members.map(m => ({ id: m.id, name: m.name }))
+      const matchData = matches.map(m => ({
+        player1Id: m.player1_id,
+        player2Id: m.player2_id,
+        winnerId: m.winner_id ?? null,
+        score: m.score ?? null,
+      }))
+
+      const directResult = calculateStandings(players, matchData)
+
+      const processorResult = await processStandingsRecalculate(
+        { tournamentId, groupId },
+        { groupRepo, jobQueue, standingsCache }
+      )
+
+      const directPlayers = directResult.map(s => s.playerId).sort()
+      const processorPlayers = processorResult.map(s => s.playerId).sort()
+
+      expect(processorPlayers).toEqual(directPlayers)
+      expect(processorResult).toHaveLength(directResult.length)
+    })
+  })
+
+  describe('Cache invalidation', () => {
+    it('should clear stale cache before computing and repopulate with fresh', async () => {
+      const fakeStaleData = [
+        { playerId: 'fake_1', rank: 1, wins: 99, losses: 0, setsWon: 99, setsLost: 0 },
+      ]
+
+      standingsCache.set(groupId, fakeStaleData)
+      expect(standingsCache.get(groupId)).toEqual(fakeStaleData)
+
+      const freshStandings = await processStandingsRecalculate(
+        { tournamentId, groupId },
+        { groupRepo, jobQueue, standingsCache }
+      )
+
+      const cached = standingsCache.get(groupId)
+      expect(cached).toEqual(freshStandings)
+      expect(cached).not.toEqual(fakeStaleData)
+      expect(cached).toHaveLength(4)
+    })
+  })
+
+  describe('Idempotent execution', () => {
+    it('should return same standings when run twice', async () => {
+      const first = await processStandingsRecalculate(
+        { tournamentId, groupId },
+        { groupRepo, jobQueue, standingsCache }
+      )
+
+      jobQueue.clear()
+      standingsCache.clear(groupId)
+
+      const second = await processStandingsRecalculate(
+        { tournamentId, groupId },
+        { groupRepo, jobQueue, standingsCache }
+      )
+
+      const firstPlayers = first.map(s => s.playerId).sort()
+      const secondPlayers = second.map(s => s.playerId).sort()
+      expect(secondPlayers).toEqual(firstPlayers)
+      expect(first).toHaveLength(second.length)
+
+      const broadcasts = jobQueue.getByName('websocket.broadcast')
+      expect(broadcasts).toHaveLength(1)
+    })
+  })
+
+  describe('Consolidation', () => {
+    it('should process correctly when job is deduplicated', async () => {
+      const jobId = `standings.recalculate:${groupId}`
+
+      await jobQueue.add('standings.recalculate', { tournamentId, groupId }, { jobId })
+      await jobQueue.add('standings.recalculate', { tournamentId, groupId }, { jobId })
+
+      expect(jobQueue.getAll()).toHaveLength(1)
+
+      const standings = await processStandingsRecalculate(
+        { tournamentId, groupId },
+        { groupRepo, jobQueue, standingsCache }
+      )
+
+      expect(standings).toHaveLength(4)
+      expect(standingsCache.get(groupId)).toEqual(standings)
+    })
+  })
+
+  describe('Error handling', () => {
+    it('should handle processor calls gracefully', async () => {
+      const standings = await processStandingsRecalculate(
+        { tournamentId, groupId },
+        { groupRepo, jobQueue, standingsCache }
+      )
+
+      expect(standings).toBeDefined()
+      expect(Array.isArray(standings)).toBe(true)
+    })
+
+    it('should retry and eventually move to DLQ after max attempts', async () => {
+      const jobId = 'standings_error_test'
+      const job = await jobQueue.add('standings.recalculate', { tournamentId, groupId }, { jobId })
+
+      expect(job.attemptsMade).toBe(0)
+      expect(jobQueue.getFailedJobs()).toHaveLength(0)
+
+      await jobQueue.fail(jobId, 'Attempt 1', 3)
+      const after1 = await jobQueue.getJob(jobId)
+      expect(after1?.attemptsMade).toBe(1)
+      expect(jobQueue.getFailedJobs()).toHaveLength(0)
+
+      await jobQueue.fail(jobId, 'Attempt 2', 3)
+      const after2 = await jobQueue.getJob(jobId)
+      expect(after2?.attemptsMade).toBe(2)
+
+      await jobQueue.fail(jobId, 'Attempt 3', 3)
+      const inQueue = await jobQueue.getJob(jobId)
+      expect(inQueue).toBeNull()
+
+      const dlq = jobQueue.getFailedJobs()
+      expect(dlq).toHaveLength(1)
+      expect(dlq[0].id).toBe(jobId)
+      expect(dlq[0].failedReason).toBe('Attempt 3')
+    })
+  })
+
+  describe('WebSocket broadcast trigger', () => {
+    it('should enqueue websocket.broadcast job with correct payload', async () => {
+      expect(jobQueue.getByName('websocket.broadcast')).toHaveLength(0)
+
+      await processStandingsRecalculate(
+        { tournamentId, groupId },
+        { groupRepo, jobQueue, standingsCache }
+      )
+
+      const broadcasts = jobQueue.getByName('websocket.broadcast')
+      expect(broadcasts).toHaveLength(1)
+
+      const job = broadcasts[0]
+      const data = job.data as any
+      expect(data.tournamentId).toBe(tournamentId)
+      expect(data.event).toBe('standings.updated')
+      expect(data.data.groupId).toBe(groupId)
+      expect(data.data.standings).toBeDefined()
+      expect(Array.isArray(data.data.standings)).toBe(true)
+    })
+
+    it('should not throw when jobQueue is not provided', async () => {
+      await expect(
+        processStandingsRecalculate(
+          { tournamentId, groupId },
+          { groupRepo }
+        )
+      ).resolves.toBeDefined()
+    })
+  })
+})
