@@ -2,6 +2,7 @@ import { calculateStandings } from '@core/index'
 import { GroupRepository } from '../db'
 import type { JobQueue } from '@worker/job-queue'
 import type { StandingsCache } from '../standings-cache'
+import type { BroadcastBus } from '../broadcast-bus'
 import { getLogger } from '../logger'
 
 const log = getLogger('standings-processor')
@@ -10,6 +11,7 @@ interface StandsProcessorDeps {
   groupRepo: GroupRepository
   jobQueue?: JobQueue
   standingsCache?: StandingsCache
+  broadcastBus?: BroadcastBus
 }
 
 export async function processStandingsRecalculate(
@@ -36,13 +38,7 @@ export async function processStandingsRecalculate(
 
     deps.standingsCache?.set(groupId, standings)
 
-    if (deps.jobQueue) {
-      await deps.jobQueue.add('websocket.broadcast', {
-        tournamentId,
-        event: 'standings.updated',
-        data: { groupId, standings },
-      })
-    }
+    deps.broadcastBus?.emit(tournamentId, 'standings.updated', { groupId, standings })
 
     log.info('standings.recalculated', { tournamentId, groupId })
 

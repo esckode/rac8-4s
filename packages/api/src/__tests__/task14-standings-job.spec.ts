@@ -1,6 +1,7 @@
 import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { InMemoryStandingsCache } from '../standings-cache'
+import { BroadcastBus } from '../broadcast-bus'
 import { processStandingsRecalculate } from '../workers/standings-processor'
 
 describe('Task #14: Standings Recalculation Job', () => {
@@ -161,8 +162,6 @@ describe('Task #14: Standings Recalculation Job', () => {
       expect(secondPlayers).toEqual(firstPlayers)
       expect(first).toHaveLength(second.length)
 
-      const broadcasts = jobQueue.getByName('websocket.broadcast')
-      expect(broadcasts).toHaveLength(1)
     })
   })
 
@@ -223,28 +222,25 @@ describe('Task #14: Standings Recalculation Job', () => {
     })
   })
 
-  describe('WebSocket broadcast trigger', () => {
-    it('should enqueue websocket.broadcast job with correct payload', async () => {
-      expect(jobQueue.getByName('websocket.broadcast')).toHaveLength(0)
+  describe('SSE broadcast trigger', () => {
+    it('should emit standings.updated to BroadcastBus with correct payload', async () => {
+      const broadcastBus = new BroadcastBus()
+      const received: Array<{ event: string; data: unknown }> = []
+      broadcastBus.subscribe(tournamentId, (event, data) => received.push({ event, data }))
 
       await processStandingsRecalculate(
         { tournamentId, groupId },
-        { groupRepo, jobQueue, standingsCache }
+        { groupRepo, jobQueue, standingsCache, broadcastBus }
       )
 
-      const broadcasts = jobQueue.getByName('websocket.broadcast')
-      expect(broadcasts).toHaveLength(1)
-
-      const job = broadcasts[0]
-      const data = job.data as any
-      expect(data.tournamentId).toBe(tournamentId)
-      expect(data.event).toBe('standings.updated')
-      expect(data.data.groupId).toBe(groupId)
-      expect(data.data.standings).toBeDefined()
-      expect(Array.isArray(data.data.standings)).toBe(true)
+      expect(received).toHaveLength(1)
+      expect(received[0].event).toBe('standings.updated')
+      const data = received[0].data as any
+      expect(data.groupId).toBe(groupId)
+      expect(Array.isArray(data.standings)).toBe(true)
     })
 
-    it('should not throw when jobQueue is not provided', async () => {
+    it('should not throw when broadcastBus is not provided', async () => {
       await expect(
         processStandingsRecalculate(
           { tournamentId, groupId },

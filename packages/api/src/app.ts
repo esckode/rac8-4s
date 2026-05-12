@@ -8,6 +8,7 @@ import tournamentsRouter from './routes/tournaments'
 import playerRouter from './routes/player'
 import type { JobQueue } from '@worker/job-queue'
 import type { StandingsCache } from './standings-cache'
+import type { BroadcastBus } from './broadcast-bus'
 import { QueueMonitor } from './queue-monitor'
 
 const httpLog = getLogger('http')
@@ -18,6 +19,7 @@ export interface AppDependencies {
   tokenStore: TokenStore
   jobQueue?: JobQueue
   standingsCache?: StandingsCache
+  broadcastBus?: BroadcastBus
   locationRepository?: any
   courtRepository?: any
 }

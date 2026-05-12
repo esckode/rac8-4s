@@ -1,5 +1,6 @@
 import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
 import { InMemoryJobQueue } from '@worker/job-queue'
+import { BroadcastBus } from '../broadcast-bus'
 import { processBracketGenerate } from '../workers/bracket-processor'
 
 describe('Task #15: Bracket Generation Job', () => {
@@ -184,7 +185,7 @@ describe('Task #15: Bracket Generation Job', () => {
       expect(allMatches).toHaveLength(1)
     })
 
-    it('should only broadcast on first run, not on idempotent re-run', async () => {
+    it('should not enqueue any broadcast job on either run', async () => {
       groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
       groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
@@ -193,8 +194,7 @@ describe('Task #15: Bracket Generation Job', () => {
         { groupRepo, knockoutRepo, jobQueue }
       )
 
-      const broadcasts1 = jobQueue.getByName('websocket.broadcast')
-      expect(broadcasts1).toHaveLength(1)
+      expect(jobQueue.getAll().filter(j => j.name !== 'bracket.generate')).toHaveLength(0)
 
       jobQueue.clear()
 
@@ -203,8 +203,7 @@ describe('Task #15: Bracket Generation Job', () => {
         { groupRepo, knockoutRepo, jobQueue }
       )
 
-      const broadcasts2 = jobQueue.getByName('websocket.broadcast')
-      expect(broadcasts2).toHaveLength(0)
+      expect(jobQueue.getAll().filter(j => j.name !== 'bracket.generate')).toHaveLength(0)
     })
   })
 
@@ -312,33 +311,28 @@ describe('Task #15: Bracket Generation Job', () => {
     })
   })
 
-  describe('WebSocket broadcast trigger', () => {
-    it('should enqueue websocket.broadcast job with correct payload', async () => {
+  describe('SSE broadcast trigger', () => {
+    it('should emit bracket.published to BroadcastBus with correct payload', async () => {
       groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
       groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
-      expect(jobQueue.getByName('websocket.broadcast')).toHaveLength(0)
+      const broadcastBus = new BroadcastBus()
+      const received: Array<{ event: string; data: unknown }> = []
+      broadcastBus.subscribe(tournamentId, (event, data) => received.push({ event, data }))
 
       await processBracketGenerate(
         { tournamentId },
-        { groupRepo, knockoutRepo, jobQueue }
+        { groupRepo, knockoutRepo, jobQueue, broadcastBus }
       )
 
-      const broadcasts = jobQueue.getByName('websocket.broadcast')
-      expect(broadcasts).toHaveLength(1)
-
-      const job = broadcasts[0]
-      const data = job.data as any
-
-      expect(data.tournamentId).toBe(tournamentId)
-      expect(data.event).toBe('bracket.published')
-      expect(data.data.matchCount).toBeDefined()
-      expect(typeof data.data.matchCount).toBe('number')
-      expect(data.data.byeCount).toBeDefined()
-      expect(typeof data.data.byeCount).toBe('number')
+      expect(received).toHaveLength(1)
+      expect(received[0].event).toBe('bracket.published')
+      const data = received[0].data as any
+      expect(typeof data.matchCount).toBe('number')
+      expect(typeof data.byeCount).toBe('number')
     })
 
-    it('should not throw when jobQueue is not provided', async () => {
+    it('should not throw when broadcastBus is not provided', async () => {
       groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
       groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 

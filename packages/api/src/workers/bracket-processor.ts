@@ -1,6 +1,7 @@
 import { calculateStandings, generateBracket } from '@core/index'
 import { GroupRepository, KnockoutRepository } from '../db'
 import type { JobQueue } from '@worker/job-queue'
+import type { BroadcastBus } from '../broadcast-bus'
 import { getLogger } from '../logger'
 
 const log = getLogger('bracket-processor')
@@ -9,6 +10,7 @@ interface BracketProcessorDeps {
   groupRepo: GroupRepository
   knockoutRepo: KnockoutRepository
   jobQueue?: JobQueue
+  broadcastBus?: BroadcastBus
 }
 
 export async function processBracketGenerate(
@@ -68,13 +70,7 @@ export async function processBracketGenerate(
     const seedMap = new Map(seeds.map(s => [s.seedPosition, s.playerId]))
     const matches = deps.knockoutRepo.createKnockoutMatches(tournamentId, bracket, seedMap)
 
-    if (deps.jobQueue) {
-      await deps.jobQueue.add('websocket.broadcast', {
-        tournamentId,
-        event: 'bracket.published',
-        data: { matchCount: matches.length, byeCount: bracket.byeCount },
-      })
-    }
+    deps.broadcastBus?.emit(tournamentId, 'bracket.published', { matchCount: matches.length, byeCount: bracket.byeCount })
 
     log.info('bracket.generated', { tournamentId, matchCount: matches.length, byeCount: bracket.byeCount })
 

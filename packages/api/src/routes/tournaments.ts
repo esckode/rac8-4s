@@ -77,6 +77,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
   const playerRepo = new PlayerRepository(deps.db)
   const groupRepo = new GroupRepository(deps.db)
   const knockoutRepo = new KnockoutRepository(deps.db)
+  const sseConnectionCount = new Map<string, number>()
+  const MAX_SSE_CONNECTIONS_PER_USER = 5
 
   // POST /tournaments - create tournament
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -1480,6 +1482,77 @@ export default function tournamentsRouter(deps: AppDependencies) {
     } catch (err) {
       next(err)
     }
+  })
+
+  router.get('/:id/events', async (req: Request, res: Response) => {
+    const tournamentId = req.params.id as string
+
+    // Check tournament exists before doing any auth work
+    const tournament = repo.findById(tournamentId)
+    if (!tournament) {
+      return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+    }
+
+    if (!deps.broadcastBus) {
+      return res.status(503).json({ code: 'SERVICE_UNAVAILABLE', message: 'SSE not available' })
+    }
+
+    // Phase 1: identify caller
+    let playerPayload: any = null
+    let organizerPayload: any = null
+
+    try {
+      playerPayload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+    } catch {}
+
+    if (!playerPayload) {
+      try {
+        organizerPayload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      } catch {}
+    }
+
+    if (!playerPayload && !organizerPayload) {
+      log.warn('sse.auth.failed', { tournamentId })
+      return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Authentication required' })
+    }
+
+    // Phase 2: verify tournament membership
+    try {
+      if (playerPayload) {
+        assertPlayerInTournament(playerPayload, tournamentId)
+      } else {
+        assertOrganizerOwnsTournament(organizerPayload, tournament.creator_id)
+      }
+    } catch {
+      log.warn('sse.forbidden', { tournamentId })
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Access denied' })
+    }
+
+    // Rate limit: cap concurrent SSE connections per user
+    const userId: string = playerPayload?.playerId ?? organizerPayload.sub
+    const current = sseConnectionCount.get(userId) ?? 0
+    if (current >= MAX_SSE_CONNECTIONS_PER_USER) {
+      log.warn('sse.rate.limited', { tournamentId, userId })
+      return res.status(429).json({ code: 'TOO_MANY_REQUESTS', message: 'Too many active SSE connections' })
+    }
+    sseConnectionCount.set(userId, current + 1)
+
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.flushHeaders()
+
+    const unsubscribe = deps.broadcastBus.subscribe(tournamentId, (event, data) => {
+      if (!res.writableEnded) {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      }
+    })
+
+    req.on('close', () => {
+      unsubscribe()
+      const count = sseConnectionCount.get(userId) ?? 1
+      sseConnectionCount.set(userId, Math.max(0, count - 1))
+    })
   })
 
   return router
