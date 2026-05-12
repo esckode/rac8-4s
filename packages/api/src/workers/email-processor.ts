@@ -54,8 +54,11 @@ export async function processEmailSend(
   let sent = 0
   let skipped = 0
 
+  const distinctIds = Array.from(new Set(recipientIds))
+  const duplicates = recipientIds.length - distinctIds.length
+
   try {
-    for (const recipientId of recipientIds) {
+    for (const recipientId of distinctIds) {
       const player = deps.playerRepo.findById(recipientId)
       if (!player) {
         log.warn('email.recipient.not_found', { recipientId, ...(tournamentId && { tournamentId }) })
@@ -72,7 +75,7 @@ export async function processEmailSend(
       sent++
     }
 
-    log.info('email.sent', { type, sent, skipped, ...(tournamentId && { tournamentId }) })
+    log.info('email.sent', { type, sent, skipped, ...(duplicates > 0 && { duplicates }), ...(tournamentId && { tournamentId }) })
     return { sent, skipped }
   } catch (error) {
     log.error('email.send.failed', {

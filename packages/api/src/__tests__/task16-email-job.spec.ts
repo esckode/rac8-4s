@@ -419,4 +419,56 @@ describe('Task #16: Email Notification Job', () => {
       )
     })
   })
+
+  describe('Recipient deduplication', () => {
+    it('should deduplicate recipients and send only once per distinct ID', async () => {
+      const result = await processEmailSend(
+        {
+          type: 'registration_confirmation',
+          recipientIds: [player1Id, player2Id, player1Id, player3Id, player1Id],
+          data: { tournamentName: 'Test' },
+        },
+        { playerRepo, emailAdapter }
+      )
+
+      expect(result.sent).toBe(3)
+      expect(result.skipped).toBe(0)
+      expect(emailAdapter.sent).toHaveLength(3)
+      const recipients = emailAdapter.sent.map(e => e.to)
+      expect(recipients).toEqual(expect.arrayContaining([player1Email, player2Email, player3Email]))
+      const player1Emails = emailAdapter.sent.filter(e => e.to === player1Email)
+      expect(player1Emails).toHaveLength(1)
+    })
+
+    it('should log duplicates count when present', async () => {
+      await processEmailSend(
+        {
+          type: 'registration_confirmation',
+          recipientIds: [player1Id, player1Id, player2Id, player2Id, player2Id],
+          data: { tournamentName: 'Test' },
+        },
+        { playerRepo, emailAdapter }
+      )
+
+      expect(emailAdapter.sent).toHaveLength(2)
+      const recipients = emailAdapter.sent.map(e => e.to).sort()
+      expect(recipients).toEqual([player1Email, player2Email].sort())
+    })
+
+    it('should handle all duplicate recipients gracefully', async () => {
+      const result = await processEmailSend(
+        {
+          type: 'registration_confirmation',
+          recipientIds: [player1Id, player1Id, player1Id],
+          data: { tournamentName: 'Test' },
+        },
+        { playerRepo, emailAdapter }
+      )
+
+      expect(result.sent).toBe(1)
+      expect(result.skipped).toBe(0)
+      expect(emailAdapter.sent).toHaveLength(1)
+      expect(emailAdapter.sent[0].to).toBe(player1Email)
+    })
+  })
 })
