@@ -259,10 +259,10 @@ All Phase 3 tasks depend on #13 (job infrastructure). Tasks #14-17 can run in pa
 ### Task #13: Job queue infrastructure and consolidation
 **Status:** Pending  
 **Dependencies:** #1, #2, #3, #4, #5, #6  
-**Blocks:** #14, #15, #16, #17
+**Blocks:** #14, #15, #16
 
 **Description:**
-Set up BullMQ job queue infrastructure and implement job consolidation logic to prevent duplicate expensive operations.
+Set up BullMQ job queue infrastructure and implement job consolidation logic to prevent duplicate expensive operations. Job types are: `standings.recalculate`, `bracket.generate`, `email.send`. The `websocket.broadcast` job type is removed — real-time updates are handled by SSE via `BroadcastBus` (see Task #17).
 
 **Tests to write:**
 - Job creation and queuing: jobs added to queue correctly
@@ -292,9 +292,9 @@ Implement async job for standings recalculation triggered by score submissions, 
 - Idempotent execution: running twice = same result, no side effects
 - Consolidation: concurrent score submissions = 1 job execution
 - Error handling: failures logged, retried, eventually DLQ
-- WebSocket broadcast trigger: standings update triggers broadcast job
+- SSE broadcast trigger: after recalc, emit `standings.updated` event to `BroadcastBus` (Task #17) with `{ groupId, standings }` — no job enqueued
 
-**Success criteria:** Standings accuracy verified, cache invalidation correct, job consolidation working
+**Success criteria:** Standings accuracy verified, cache invalidation correct, job consolidation working, SSE event emitted
 
 ---
 
@@ -313,9 +313,9 @@ Implement async job for bracket generation when tournament advances to knockout 
 - Idempotent execution: running twice = same bracket, no duplicate matches
 - Error handling: invalid state (groups not complete) rejected gracefully
 - Timing: bracket only generated after group stage complete
-- WebSocket trigger: bracket publication triggers broadcast job
+- SSE broadcast trigger: after generation, emit `bracket.published` event to `BroadcastBus` (Task #17) with `{ matchCount, byeCount }` — no job enqueued
 
-**Success criteria:** Bracket accuracy verified, matches generated correctly, error handling robust
+**Success criteria:** Bracket accuracy verified, matches generated correctly, error handling robust, SSE event emitted
 
 ---
 
@@ -341,24 +341,35 @@ Implement async job for email notifications triggered by tournament events.
 
 ---
 
-### Task #17: WebSocket broadcast job
+### Task #17: SSE endpoint and BroadcastBus
 **Status:** Pending  
-**Dependencies:** #13  
-**Blocks:** #20 (E2E tests)
+**Dependencies:** #6  
+**Blocks:** #14, #15, #18, #20 (E2E tests)
 
 **Description:**
-Implement async job for WebSocket broadcasts of standings and bracket updates to real-time clients.
+Implement server-sent events (SSE) for real-time client updates. This replaces the planned `websocket.broadcast` job entirely. The architecture is:
+
+1. **`BroadcastBus`** — a thin in-process `EventEmitter` wrapper added to `AppDependencies`. Workers emit to it directly (no job enqueued).
+2. **`GET /tournaments/:id/events`** — authenticated SSE endpoint. Subscribes to `BroadcastBus` for the given `tournamentId`, streams events to the client, and cleans up on disconnect.
+3. **Remove `websocket.broadcast`** from `packages/worker/src/types.ts` job types.
+
+**Code changes required:**
+- `packages/worker/src/types.ts` — remove `websocket.broadcast` from `JobName` and `JobPayload`
+- `packages/api/src/app.ts` — add `broadcastBus: BroadcastBus` to `AppDependencies`
+- `packages/api/src/routes/tournaments.ts` — add `GET /:id/events` SSE route
+- `packages/api/src/workers/standings-processor.ts` — replace `jobQueue.add('websocket.broadcast', ...)` with `broadcastBus.emit(...)`
+- `packages/api/src/workers/bracket-processor.ts` — same replacement
 
 **Tests to write:**
-- Message formatting: correct data structure for standings/bracket updates
-- Recipient filtering: only players in tournament receive updates
-- Event triggers: standings update, bracket published, score submitted
-- Broadcast consistency: all connected clients receive same data
-- Error handling: disconnected clients don't block other broadcasts
-- State verification: broadcasted data matches database state
-- No duplicates: same event = 1 broadcast, not 5
+- SSE connection: client connects, receives `text/event-stream` response, stays open
+- Event delivery: emitting to `BroadcastBus` pushes event to connected client with correct `data:` payload
+- Tournament scoping: events for tournament A don't reach clients subscribed to tournament B
+- Disconnect cleanup: `BroadcastBus` listener removed when client disconnects (no leak)
+- Auth enforcement: unauthenticated request to `/events` returns 401
+- Standings event: `standings.updated` arrives with `{ groupId, standings }`
+- Bracket event: `bracket.published` arrives with `{ matchCount, byeCount }`
 
-**Success criteria:** Recipient filtering correct, message accuracy verified, no duplicates
+**Success criteria:** SSE streams correct events per tournament, auth enforced, no listener leaks on disconnect, `websocket.broadcast` job type fully removed
 
 ---
 
@@ -377,8 +388,9 @@ Implement and test frontend data management and state logic, verifying consisten
 - Standings calculations: display logic matches backend (mirrored)
 - Match list filtering: upcoming, completed, by player, by round
 - Player information management: caching, refresh logic
-- WebSocket event handling: standings update, bracket published, score submitted
-- Real-time updates: WebSocket events trigger state updates
+- SSE event handling: connect to `GET /tournaments/:id/events` via `EventSource`, handle `standings.updated` and `bracket.published` events
+- Real-time updates: SSE events trigger state updates without polling
+- Reconnection: `EventSource` auto-reconnects on drop; state re-fetched on reconnect
 - Error states: API errors handled gracefully, retry logic
 - Data consistency: frontend state never diverges from backend
 
@@ -402,7 +414,7 @@ Implement and test frontend UI components for tournament dashboards, standings t
 - Error states: error messages displayed appropriately
 - Responsive layout: mobile, tablet, desktop layouts work
 - Accessibility: aria labels, keyboard navigation, screen reader support
-- Real-time updates: WebSocket updates reflected immediately in UI
+- Real-time updates: SSE events reflected immediately in UI (standings table refreshes, bracket renders on publish)
 
 **Success criteria:** All components render correctly, interactions work, responsive design verified, accessible
 
@@ -425,7 +437,7 @@ Write E2E tests for full tournament workflows from organizer creation through fi
 6. **Organizer generates bracket:** review seeding, publish bracket
 7. **Knockout stage:** matches displayed, scores submitted, bracket progresses
 8. **Final results:** all matches complete, tournament marked complete
-9. **Real-time verification:** WebSocket updates trigger UI updates
+9. **Real-time verification:** SSE events (`standings.updated`, `bracket.published`) trigger UI updates
 10. **Email verification:** emails sent at each phase transition
 11. **Error scenarios:** deadline enforcement, authorization, invalid state transitions
 
@@ -445,10 +457,12 @@ Write E2E tests for full tournament workflows from organizer creation through fi
 ├─ #6 (Auth) ────────┬─ #7 (CRUD) ────┬─ #18
 │                    ├─ #8 (Registration)
 │                    ├─ #12 (Matches) ─┤
-│                    └─ #13 (Jobs) ────┼─ #14 (Standings Job)
-│                                      ├─ #15 (Bracket Job)
-│                                      ├─ #16 (Email)
-│                                      └─ #17 (WebSocket)
+│                    ├─ #13 (Jobs) ────┼─ #14 (Standings Job) ─┐
+│                    │                 ├─ #15 (Bracket Job) ────┼─ #20 (E2E)
+│                    │                 └─ #16 (Email) ──────────┘
+│                    └─ #17 (SSE/BroadcastBus) ──┬─ #14 (emits to bus)
+│                                                ├─ #15 (emits to bus)
+│                                                └─ #18 (EventSource client)
 │
 └─ #18 (Frontend State) ─┬─ #19 (Components)
                          └─ #20 (E2E) ◄─── #14, #15, #16, #17
@@ -461,7 +475,7 @@ Write E2E tests for full tournament workflows from organizer creation through fi
 **Can run in parallel (no blocking dependencies between them):**
 - Phase 1: Tasks #2, #3, #4, #5 (all depend only on #1)
 - Early Phase 2: Tasks #7, #8, #12 (all depend only on #6, which must complete first)
-- Phase 3: Tasks #14, #15, #16, #17 (all depend on #13, which must complete first)
+- Phase 3: Tasks #14, #15, #16 (all depend on #13); Task #17 (SSE) depends only on #6 and can run in parallel with #13
 
 **Must complete before next phase:**
 - All Phase 1 tasks (#2-5) before Phase 2 can fully start
