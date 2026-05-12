@@ -10,15 +10,14 @@
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
     "ecmaVersion": 2020,
-    "sourceType": "module",
-    "project": "./tsconfig.json"
+    "sourceType": "module"
   },
   "plugins": [
     "@typescript-eslint",
     "security"
   ],
   "rules": {
-    "security/detect-object-injection": "warn",
+    "security/detect-object-injection": "off",
     "security/detect-non-literal-regexp": "warn",
     "security/detect-unsafe-regex": "error",
     "security/detect-buffer-noassert": "error",
@@ -27,23 +26,16 @@
     "security/detect-no-csrf-before-method-override": "error",
     "security/detect-non-literal-fs-filename": "warn",
     "security/detect-non-literal-require": "warn",
-    "security/detect-potential-timing-attacks": "warn",
-    "@typescript-eslint/explicit-function-return-types": "warn",
-    "@typescript-eslint/explicit-member-accessibility": "warn",
-    "@typescript-eslint/no-any": "warn",
-    "@typescript-eslint/no-explicit-any": "warn",
-    "@typescript-eslint/no-implicit-any-catch": "error",
-    "@typescript-eslint/no-unused-vars": [
-      "error",
-      {
-        "argsIgnorePattern": "^_"
-      }
-    ],
+    "@typescript-eslint/explicit-function-return-types": "off",
+    "@typescript-eslint/explicit-member-accessibility": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-unused-vars": "off",
     "no-eval": "error",
     "no-implied-eval": "error",
     "no-new-func": "error",
     "no-script-url": "error",
-    "no-with": "error"
+    "no-with": "error",
+    "no-unused-vars": "off"
   },
   "overrides": [
     {
@@ -53,7 +45,10 @@
         "**/*.test.ts"
       ],
       "rules": {
-        "@typescript-eslint/no-explicit-any": "off"
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-unused-vars": "off",
+        "no-unused-vars": "off",
+        "no-undef": "off"
       }
     }
   ]

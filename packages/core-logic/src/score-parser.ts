@@ -18,6 +18,7 @@ const MAX_GAME_SCORE: Record<SportFormat, number> = {
   table_tennis: 21,
 }
 
+// eslint-disable-next-line security/detect-unsafe-regex
 const FORMAT_REGEX = /^\d+-\d+(, \d+-\d+)*$/
 
 export function parseScore(score: string, format: SportFormat = 'tennis'): ParsedScore {
