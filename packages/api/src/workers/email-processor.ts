@@ -50,6 +50,7 @@ export async function processEmailSend(
   deps: EmailProcessorDeps
 ): Promise<{ sent: number; skipped: number }> {
   const { type, recipientIds, data } = payload
+  const tournamentId = data.tournamentId as string | undefined
   let sent = 0
   let skipped = 0
 
@@ -57,7 +58,7 @@ export async function processEmailSend(
     for (const recipientId of recipientIds) {
       const player = deps.playerRepo.findById(recipientId)
       if (!player) {
-        log.warn('email.recipient.not_found', { recipientId })
+        log.warn('email.recipient.not_found', { recipientId, ...(tournamentId && { tournamentId }) })
         skipped++
         continue
       }
@@ -71,12 +72,13 @@ export async function processEmailSend(
       sent++
     }
 
-    log.info('email.sent', { type, sent, skipped })
+    log.info('email.sent', { type, sent, skipped, ...(tournamentId && { tournamentId }) })
     return { sent, skipped }
   } catch (error) {
     log.error('email.send.failed', {
       type,
       message: error instanceof Error ? error.message : String(error),
+      ...(tournamentId && { tournamentId }),
     })
     throw error
   }
