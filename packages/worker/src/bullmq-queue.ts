@@ -2,6 +2,8 @@ import { Queue, QueueOptions } from 'bullmq'
 import { EnqueuedJob, JobName, JobOptions, JobPayload } from './types'
 import { JobQueue } from './job-queue'
 
+export type { EnqueuedJob, JobName, JobOptions, JobPayload }
+
 export class BullMQJobQueue implements JobQueue {
   private queues = new Map<string, Queue>()
   private connection: { host: string; port: number }
@@ -38,6 +40,7 @@ export class BullMQJobQueue implements JobQueue {
       data: data as unknown,
       opts,
       attemptsMade: 0,
+      enqueuedAt: Date.now(),
     } as EnqueuedJob<JobPayload[K]>
   }
 

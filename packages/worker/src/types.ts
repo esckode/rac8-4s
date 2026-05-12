@@ -24,4 +24,5 @@ export interface EnqueuedJob<T = unknown> {
   opts: JobOptions
   failedReason?: string
   attemptsMade: number
+  enqueuedAt: number
 }

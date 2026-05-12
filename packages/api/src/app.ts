@@ -8,6 +8,7 @@ import tournamentsRouter from './routes/tournaments'
 import playerRouter from './routes/player'
 import type { JobQueue } from '@worker/job-queue'
 import type { StandingsCache } from './standings-cache'
+import { QueueMonitor } from './queue-monitor'
 
 const httpLog = getLogger('http')
 
@@ -24,6 +25,10 @@ export interface AppDependencies {
 export function createApp(deps: AppDependencies): Express {
   const app = express()
 
+  // Wrap queue with monitor for anomaly detection
+  const monitoredQueue = deps.jobQueue ? new QueueMonitor(deps.jobQueue) : undefined
+  const appDeps = { ...deps, jobQueue: monitoredQueue }
+
   app.use(express.json())
 
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -39,8 +44,8 @@ export function createApp(deps: AppDependencies): Express {
     runWithRequestId(requestId, next)
   })
 
-  app.use('/tournaments', tournamentsRouter(deps))
-  app.use('/player', playerRouter(deps))
+  app.use('/tournaments', tournamentsRouter(appDeps))
+  app.use('/player', playerRouter(appDeps))
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ForbiddenError) {

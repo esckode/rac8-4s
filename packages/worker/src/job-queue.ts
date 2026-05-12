@@ -1,5 +1,7 @@
 import { EnqueuedJob, JobName, JobOptions, JobPayload } from './types'
 
+export type { EnqueuedJob, JobName, JobOptions, JobPayload }
+
 export interface JobQueue {
   add<K extends JobName>(
     name: K,
@@ -34,6 +36,7 @@ export class InMemoryJobQueue implements JobQueue {
       data: data as unknown,
       opts,
       attemptsMade: 0,
+      enqueuedAt: Date.now(),
     }
 
     this.jobs.set(id, job)
