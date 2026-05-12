@@ -1,0 +1,81 @@
+import { calculateStandings, generateBracket } from '@core/index'
+import { GroupRepository, KnockoutRepository } from '../db'
+import type { JobQueue } from '@worker/job-queue'
+import { getLogger } from '../logger'
+
+const log = getLogger('bracket-processor')
+
+interface BracketProcessorDeps {
+  groupRepo: GroupRepository
+  knockoutRepo: KnockoutRepository
+  jobQueue?: JobQueue
+}
+
+export async function processBracketGenerate(
+  payload: { tournamentId: string },
+  deps: BracketProcessorDeps
+) {
+  const { tournamentId } = payload
+
+  try {
+    const pendingCount = deps.groupRepo.countPendingMatchesByTournament(tournamentId)
+    if (pendingCount > 0) {
+      throw new Error(`group stage not complete: ${pendingCount} matches pending`)
+    }
+
+    const existing = deps.knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
+    if (existing.length > 0) {
+      log.info('bracket.already.exists', { tournamentId, matchCount: existing.length })
+      return existing
+    }
+
+    const groups = deps.groupRepo.findGroupsByTournament(tournamentId)
+    const seeds: Array<{ playerId: string; seedPosition: number }> = []
+    let seedPos = 1
+    const maxAdvancing = Math.max(...groups.map(g => g.advancing_count))
+
+    for (let rank = 0; rank < maxAdvancing; rank++) {
+      for (const group of groups) {
+        if (rank >= group.advancing_count) continue
+        const members = deps.groupRepo.findMembersByGroup(group.id)
+        const matches = deps.groupRepo.findMatchesByGroup(group.id)
+        const players = members.map(m => ({ id: m.id, name: m.name }))
+        const matchData = matches.map(m => ({
+          player1Id: m.player1_id,
+          player2Id: m.player2_id,
+          winnerId: m.winner_id ?? null,
+          score: m.score ?? null,
+        }))
+        const standings = calculateStandings(players, matchData)
+        if (standings[rank]) {
+          seeds.push({ playerId: standings[rank].playerId, seedPosition: seedPos++ })
+        }
+      }
+    }
+
+    const bracket = generateBracket(seeds.length)
+
+    deps.knockoutRepo.setSeeds(tournamentId, seeds)
+
+    const seedMap = new Map(seeds.map(s => [s.seedPosition, s.playerId]))
+    const matches = deps.knockoutRepo.createKnockoutMatches(tournamentId, bracket, seedMap)
+
+    if (deps.jobQueue) {
+      await deps.jobQueue.add('websocket.broadcast', {
+        tournamentId,
+        event: 'bracket.published',
+        data: { matchCount: matches.length, byeCount: bracket.byeCount },
+      })
+    }
+
+    log.info('bracket.generated', { tournamentId, matchCount: matches.length, byeCount: bracket.byeCount })
+
+    return matches
+  } catch (error) {
+    log.error('bracket.generate.failed', {
+      tournamentId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
