@@ -1,7 +1,22 @@
-import { validateEmailJobPayload } from '../validation/email-job-validator'
 import { MAX_EMAIL_RECIPIENTS_PER_JOB } from '../constants'
 
+const mockLog = {
+  warn: jest.fn(),
+  info: jest.fn(),
+  debug: jest.fn(),
+  error: jest.fn(),
+}
+
+jest.mock('../logger', () => ({
+  getLogger: jest.fn(() => mockLog),
+}))
+
+import { validateEmailJobPayload } from '../validation/email-job-validator'
+
 describe('Task #7: Email Job Validation', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
   describe('Valid cases', () => {
     it('should accept single recipient', () => {
       const result = validateEmailJobPayload({
@@ -269,6 +284,112 @@ describe('Task #7: Email Job Validation', () => {
       const result = validateEmailJobPayload({ recipientIds })
 
       expect(result.valid).toBe(true)
+    })
+  })
+
+  describe('Audit logging', () => {
+    it('should log warn when rejecting for no recipients', () => {
+      validateEmailJobPayload({ recipientIds: [] })
+
+      expect(mockLog.warn).toHaveBeenCalledWith('email.job.rejected', {
+        reason: 'no_recipients',
+        recipientCount: 0,
+      })
+    })
+
+    it('should log warn when rejecting for limit exceeded', () => {
+      const recipientIds = Array.from({ length: 1500 }, (_, i) => `p${i}`)
+      validateEmailJobPayload({ recipientIds })
+
+      expect(mockLog.warn).toHaveBeenCalledWith('email.job.rejected', {
+        reason: 'limit_exceeded',
+        recipientCount: 1500,
+        maxAllowed: 1000,
+        excess: 500,
+      })
+    })
+
+    it('should log warn when rejecting for duplicate recipients', () => {
+      validateEmailJobPayload({
+        recipientIds: ['p1', 'p2', 'p1'],
+      })
+
+      expect(mockLog.warn).toHaveBeenCalledWith('email.job.rejected', {
+        reason: 'duplicate_recipients',
+        recipientCount: 3,
+        duplicateCount: 1,
+      })
+    })
+
+    it('should log info when recipients near limit (>= 800)', () => {
+      const recipientIds = Array.from({ length: 850 }, (_, i) => `p${i}`)
+      validateEmailJobPayload({ recipientIds })
+
+      expect(mockLog.info).toHaveBeenCalledWith('email.job.near_limit', {
+        recipientCount: 850,
+        percentageOfLimit: 85,
+      })
+    })
+
+    it('should log info at exactly 800 recipients', () => {
+      const recipientIds = Array.from({ length: 800 }, (_, i) => `p${i}`)
+      validateEmailJobPayload({ recipientIds })
+
+      expect(mockLog.info).toHaveBeenCalledWith('email.job.near_limit', {
+        recipientCount: 800,
+        percentageOfLimit: 80,
+      })
+    })
+
+    it('should not log near-limit warning below 800 recipients', () => {
+      const recipientIds = Array.from({ length: 799 }, (_, i) => `p${i}`)
+      validateEmailJobPayload({ recipientIds })
+
+      expect(mockLog.info).not.toHaveBeenCalled()
+    })
+
+    it('should not log warn or info when validation succeeds (no near-limit)', () => {
+      validateEmailJobPayload({
+        recipientIds: ['p1', 'p2', 'p3'],
+      })
+
+      expect(mockLog.warn).not.toHaveBeenCalled()
+      expect(mockLog.info).not.toHaveBeenCalled()
+    })
+
+    it('should log only rejection, not near-limit, when job exceeds limit', () => {
+      const recipientIds = Array.from({ length: 1200 }, (_, i) => `p${i}`)
+      validateEmailJobPayload({ recipientIds })
+
+      expect(mockLog.warn).toHaveBeenCalled()
+      expect(mockLog.info).not.toHaveBeenCalled()
+    })
+
+    it('should include percentage of limit in near-limit logs', () => {
+      const recipientIds = Array.from({ length: 900 }, (_, i) => `p${i}`)
+      validateEmailJobPayload({ recipientIds })
+
+      expect(mockLog.info).toHaveBeenCalledWith('email.job.near_limit', {
+        recipientCount: 900,
+        percentageOfLimit: 90,
+      })
+    })
+
+    it('should round percentage correctly', () => {
+      const recipientIds = Array.from({ length: 333 }, (_, i) => `p${i}`)
+      validateEmailJobPayload({ recipientIds })
+
+      expect(mockLog.info).not.toHaveBeenCalled()
+    })
+
+    it('should round percentage correctly for near-limit jobs', () => {
+      const recipientIds = Array.from({ length: 950 }, (_, i) => `p${i}`)
+      validateEmailJobPayload({ recipientIds })
+
+      expect(mockLog.info).toHaveBeenCalledWith('email.job.near_limit', {
+        recipientCount: 950,
+        percentageOfLimit: 95,
+      })
     })
   })
 })
