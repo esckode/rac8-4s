@@ -18,32 +18,41 @@ export async function processStandingsRecalculate(
 ) {
   const { tournamentId, groupId } = payload
 
-  deps.standingsCache?.clear(groupId)
+  try {
+    deps.standingsCache?.clear(groupId)
 
-  const members = deps.groupRepo.findMembersByGroup(groupId)
-  const matches = deps.groupRepo.findMatchesByGroup(groupId)
+    const members = deps.groupRepo.findMembersByGroup(groupId)
+    const matches = deps.groupRepo.findMatchesByGroup(groupId)
 
-  const players = members.map(m => ({ id: m.id, name: m.name }))
-  const matchData = matches.map(m => ({
-    player1Id: m.player1_id,
-    player2Id: m.player2_id,
-    winnerId: m.winner_id ?? null,
-    score: m.score ?? null,
-  }))
+    const players = members.map(m => ({ id: m.id, name: m.name }))
+    const matchData = matches.map(m => ({
+      player1Id: m.player1_id,
+      player2Id: m.player2_id,
+      winnerId: m.winner_id ?? null,
+      score: m.score ?? null,
+    }))
 
-  const standings = calculateStandings(players, matchData)
+    const standings = calculateStandings(players, matchData)
 
-  deps.standingsCache?.set(groupId, standings)
+    deps.standingsCache?.set(groupId, standings)
 
-  log.info('standings.recalculated', { tournamentId, groupId })
+    if (deps.jobQueue) {
+      await deps.jobQueue.add('websocket.broadcast', {
+        tournamentId,
+        event: 'standings.updated',
+        data: { groupId, standings },
+      })
+    }
 
-  if (deps.jobQueue) {
-    await deps.jobQueue.add('websocket.broadcast', {
+    log.info('standings.recalculated', { tournamentId, groupId })
+
+    return standings
+  } catch (error) {
+    log.error('standings.recalculate.failed', {
       tournamentId,
-      event: 'standings.updated',
-      data: { groupId, standings },
+      groupId,
+      message: error instanceof Error ? error.message : String(error),
     })
+    throw error
   }
-
-  return standings
 }
