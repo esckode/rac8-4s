@@ -122,8 +122,14 @@ describe('Task #15: Bracket Generation Job', () => {
 
   describe('Match creation', () => {
     it('should create knockout matches with correct advancing players', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      const match1 = groupRepo.findMatchById(match1Id)!
+      const match2 = groupRepo.findMatchById(match2Id)!
+
+      const expectedWinner1 = match1.player1_id
+      const expectedWinner2 = match2.player1_id
+
+      groupRepo.updateMatch(match1Id, expectedWinner1, '6-4, 6-3')
+      groupRepo.updateMatch(match2Id, expectedWinner2, '6-4, 6-2')
 
       await processBracketGenerate(
         { tournamentId },
@@ -135,7 +141,7 @@ describe('Task #15: Bracket Generation Job', () => {
 
       const finalMatch = matches[0]
       const playerIds = [finalMatch.player1_id, finalMatch.player2_id].sort()
-      const expectedPlayerIds = [player1Id, player3Id].sort()
+      const expectedPlayerIds = [expectedWinner1, expectedWinner2].sort()
 
       expect(playerIds).toEqual(expectedPlayerIds)
     })

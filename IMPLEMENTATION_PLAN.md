@@ -257,7 +257,7 @@ Implement and test match listing, coordination, and player contact information w
 All Phase 3 tasks depend on #13 (job infrastructure). Tasks #14-17 can run in parallel once #13 is done.
 
 ### Task #13: Job queue infrastructure and consolidation
-**Status:** Pending  
+**Status:** ✅ Complete  
 **Dependencies:** #1, #2, #3, #4, #5, #6  
 **Blocks:** #14, #15, #16
 
@@ -278,7 +278,7 @@ Set up BullMQ job queue infrastructure and implement job consolidation logic to 
 ---
 
 ### Task #14: Standings recalculation job
-**Status:** Pending  
+**Status:** ✅ Complete  
 **Dependencies:** #2, #13  
 **Blocks:** #20 (E2E tests)
 
@@ -299,7 +299,7 @@ Implement async job for standings recalculation triggered by score submissions, 
 ---
 
 ### Task #15: Bracket generation job
-**Status:** Pending  
+**Status:** ✅ Complete  
 **Dependencies:** #3, #13  
 **Blocks:** #20 (E2E tests)
 
@@ -320,7 +320,7 @@ Implement async job for bracket generation when tournament advances to knockout 
 ---
 
 ### Task #16: Email notification job
-**Status:** Pending  
+**Status:** ✅ Complete  
 **Dependencies:** #13  
 **Blocks:** #20 (E2E tests)
 
