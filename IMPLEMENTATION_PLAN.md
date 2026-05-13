@@ -347,7 +347,7 @@ Implement async job for email notifications triggered by tournament events. Exec
 ---
 
 ### Task #17: SSE endpoint and BroadcastBus
-**Status:** Pending  
+**Status:** ✅ Complete  
 **Dependencies:** #6  
 **Blocks:** #14, #15, #18, #20 (E2E tests)
 
