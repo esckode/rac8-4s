@@ -399,7 +399,7 @@ Implement and test frontend data management and state logic, verifying consisten
 - Error states: API errors handled gracefully, retry logic
 - Data consistency: frontend state never diverges from backend
 
-**Success criteria:** State accuracy verified, WebSocket integration tested, error handling robust
+**Success criteria:** State accuracy verified, SSE integration tested, error handling robust
 
 ---
 
