@@ -289,7 +289,7 @@ describe('Player Registration and Discovery', () => {
 
       expect(res.body.pagination).toBeDefined()
       expect(res.body.pagination.offset).toBe(0)
-      expect(res.body.pagination.limit).toBe(10)
+      expect(res.body.pagination.limit).toBe(20)
       expect(res.body.pagination.total).toBe(1)
       expect(res.body.pagination.hasMore).toBe(false)
     })

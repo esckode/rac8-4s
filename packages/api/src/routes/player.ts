@@ -16,7 +16,7 @@ export default function playerRouter(deps: AppDependencies) {
       const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
 
       const offset = req.query.offset ? parseInt(req.query.offset as string) : 0
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : deps.config.limits.paginationDefaults.tournaments
 
       const result = playerRepo.listTournamentsByPlayer(payload.playerId, { offset, limit })
 

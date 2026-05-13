@@ -1,4 +1,4 @@
-import { MAX_EMAIL_RECIPIENTS_PER_JOB } from '../constants'
+import type { AppConfig } from '../config'
 import { getLogger } from '../logger'
 
 const log = getLogger('email-job-validator')
@@ -10,13 +10,18 @@ export interface EmailJobValidationResult {
   duplicateCount?: number
 }
 
-export function validateEmailJobPayload(payload: {
-  recipientIds: string[]
-}): EmailJobValidationResult {
+export function validateEmailJobPayload(
+  payload: {
+    recipientIds: string[]
+  },
+  config: AppConfig
+): EmailJobValidationResult {
   const { recipientIds } = payload
   const recipientCount = recipientIds.length
   const distinctCount = new Set(recipientIds).size
   const duplicateCount = recipientCount - distinctCount
+  const maxLimit = config.limits.emailRecipientsPerJob
+  const nearLimitThreshold = Math.floor(maxLimit * 0.8)
 
   if (recipientCount === 0) {
     const result: EmailJobValidationResult = {
@@ -32,18 +37,18 @@ export function validateEmailJobPayload(payload: {
     return result
   }
 
-  if (recipientCount > MAX_EMAIL_RECIPIENTS_PER_JOB) {
+  if (recipientCount > maxLimit) {
     const result: EmailJobValidationResult = {
       valid: false,
-      error: `Email job exceeds maximum recipients (${recipientCount} > ${MAX_EMAIL_RECIPIENTS_PER_JOB})`,
+      error: `Email job exceeds maximum recipients (${recipientCount} > ${maxLimit})`,
       recipientCount,
       duplicateCount,
     }
     log.warn('email.job.rejected', {
       reason: 'limit_exceeded',
       recipientCount,
-      maxAllowed: MAX_EMAIL_RECIPIENTS_PER_JOB,
-      excess: recipientCount - MAX_EMAIL_RECIPIENTS_PER_JOB,
+      maxAllowed: maxLimit,
+      excess: recipientCount - maxLimit,
     })
     return result
   }
@@ -63,10 +68,10 @@ export function validateEmailJobPayload(payload: {
     return result
   }
 
-  if (recipientCount >= 800) {
+  if (recipientCount >= nearLimitThreshold) {
     log.info('email.job.near_limit', {
       recipientCount,
-      percentageOfLimit: Math.round((recipientCount / MAX_EMAIL_RECIPIENTS_PER_JOB) * 100),
+      percentageOfLimit: Math.round((recipientCount / maxLimit) * 100),
     })
   }
 

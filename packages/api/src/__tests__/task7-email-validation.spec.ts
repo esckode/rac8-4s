@@ -1,4 +1,4 @@
-import { MAX_EMAIL_RECIPIENTS_PER_JOB } from '../constants'
+import type { AppConfig } from '../config'
 
 const mockLog = {
   warn: jest.fn(),
@@ -13,6 +13,35 @@ jest.mock('../logger', () => ({
 
 import { validateEmailJobPayload } from '../validation/email-job-validator'
 
+const testConfig: AppConfig = {
+  auth: {
+    magicLinkTtlSeconds: 86400,
+    sessionTtlSeconds: 86400,
+    tokenBlocklistTtlSeconds: 86400,
+  },
+  limits: {
+    emailRecipientsPerJob: 1000,
+    playerQueryLimit: 10000,
+    sseMaxConnectionsPerUser: 5,
+    paginationDefaults: {
+      tournaments: 20,
+      matches: 20,
+      players: 50,
+    },
+    emailAuditThresholds: {
+      auditLogThreshold: 500,
+      warningLogThreshold: 100,
+      warningPercentOfLimit: 80,
+    },
+  },
+  jobs: {
+    maxAttempts: 3,
+    backoffBase: 1000,
+  },
+}
+
+const MAX_EMAIL_RECIPIENTS_PER_JOB = testConfig.limits.emailRecipientsPerJob
+
 describe('Task #7: Email Job Validation', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -21,7 +50,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should accept single recipient', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['player1'],
-      })
+      }, testConfig)
 
       expect(result.valid).toBe(true)
       expect(result.error).toBeUndefined()
@@ -31,7 +60,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should accept multiple distinct recipients', () => {
       const recipientIds = Array.from({ length: 100 }, (_, i) => `player${i}`)
-      const result = validateEmailJobPayload({ recipientIds })
+      const result = validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(result.valid).toBe(true)
       expect(result.error).toBeUndefined()
@@ -41,7 +70,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should accept exactly at the limit (1000 recipients)', () => {
       const recipientIds = Array.from({ length: 1000 }, (_, i) => `player${i}`)
-      const result = validateEmailJobPayload({ recipientIds })
+      const result = validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(result.valid).toBe(true)
       expect(result.error).toBeUndefined()
@@ -54,7 +83,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should reject 0 recipients', () => {
       const result = validateEmailJobPayload({
         recipientIds: [],
-      })
+      }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.error).toContain('at least one recipient')
@@ -63,7 +92,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should reject more than 1000 recipients', () => {
       const recipientIds = Array.from({ length: 1001 }, (_, i) => `player${i}`)
-      const result = validateEmailJobPayload({ recipientIds })
+      const result = validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.error).toContain('exceeds maximum recipients')
@@ -74,7 +103,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should reject 5000 recipients with clear error message', () => {
       const recipientIds = Array.from({ length: 5000 }, (_, i) => `player${i}`)
-      const result = validateEmailJobPayload({ recipientIds })
+      const result = validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.error).toContain('5000')
@@ -87,7 +116,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should reject single duplicate', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['player1', 'player2', 'player1'],
-      })
+      }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.error).toContain('duplicate')
@@ -99,7 +128,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should reject multiple duplicates', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['player1', 'player1', 'player2', 'player2', 'player3'],
-      })
+      }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.error).toContain('duplicate')
@@ -111,7 +140,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should reject all duplicates (same ID repeated)', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['player1', 'player1', 'player1', 'player1'],
-      })
+      }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.error).toContain('duplicate')
@@ -122,7 +151,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should distinguish between duplicates and total count', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['p1', 'p2', 'p3', 'p1', 'p2'],
-      })
+      }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.recipientCount).toBe(5)
@@ -134,7 +163,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should detect duplicates even with small recipient count', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['p1', 'p1'],
-      })
+      }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.error).toContain('duplicate')
@@ -144,7 +173,7 @@ describe('Task #7: Email Job Validation', () => {
       const recipientIds = Array.from({ length: 999 }, (_, i) => `player${i}`)
       recipientIds.push('player0')
 
-      const result = validateEmailJobPayload({ recipientIds })
+      const result = validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.error).toContain('duplicate')
@@ -154,7 +183,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should prioritize limit check over duplicate check (both violations)', () => {
       const recipientIds = Array.from({ length: 1001 }, (_, i) => `player${Math.floor(i / 2)}`)
-      const result = validateEmailJobPayload({ recipientIds })
+      const result = validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.error).toContain('exceeds maximum recipients')
@@ -165,7 +194,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should provide clear limit exceeded message with actual numbers', () => {
       const result = validateEmailJobPayload({
         recipientIds: Array.from({ length: 2000 }, (_, i) => `p${i}`),
-      })
+      }, testConfig)
 
       expect(result.error).toContain('2000')
       expect(result.error).toContain('1000')
@@ -174,7 +203,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should provide clear duplicate message with count', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['a', 'b', 'c', 'a', 'b'],
-      })
+      }, testConfig)
 
       expect(result.error).toContain('2')
       expect(result.error).toContain('duplicate')
@@ -183,7 +212,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should indicate empty recipient list clearly', () => {
       const result = validateEmailJobPayload({
         recipientIds: [],
-      })
+      }, testConfig)
 
       expect(result.error).toContain('at least one recipient')
     })
@@ -193,7 +222,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should include all fields on success', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['p1', 'p2'],
-      })
+      }, testConfig)
 
       expect(result).toHaveProperty('valid', true)
       expect(result).toHaveProperty('recipientCount', 2)
@@ -204,7 +233,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should include error and counts on failure (limit)', () => {
       const result = validateEmailJobPayload({
         recipientIds: Array.from({ length: 1001 }, (_, i) => `p${i}`),
-      })
+      }, testConfig)
 
       expect(result).toHaveProperty('valid', false)
       expect(result).toHaveProperty('error')
@@ -215,7 +244,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should include error and counts on failure (duplicates)', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['p1', 'p2', 'p1'],
-      })
+      }, testConfig)
 
       expect(result).toHaveProperty('valid', false)
       expect(result).toHaveProperty('error')
@@ -232,7 +261,7 @@ describe('Task #7: Email Job Validation', () => {
         '550e8400-e29b-41d4-a716-446655440000',
       ]
 
-      const result = validateEmailJobPayload({ recipientIds: uuids })
+      const result = validateEmailJobPayload({ recipientIds: uuids }, testConfig)
 
       expect(result.valid).toBe(false)
       expect(result.duplicateCount).toBe(1)
@@ -241,7 +270,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should be case-sensitive (treat different cases as different IDs)', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['Player1', 'player1'],
-      })
+      }, testConfig)
 
       expect(result.valid).toBe(true)
       expect(result.duplicateCount).toBe(0)
@@ -250,7 +279,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should handle whitespace in IDs (treat as different)', () => {
       const result = validateEmailJobPayload({
         recipientIds: ['player1', 'player1 ', ' player1'],
-      })
+      }, testConfig)
 
       expect(result.valid).toBe(true)
       expect(result.duplicateCount).toBe(0)
@@ -259,7 +288,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should handle very long lists efficiently', () => {
       const recipientIds = Array.from({ length: 999 }, (_, i) => `player${i}`)
       const start = Date.now()
-      const result = validateEmailJobPayload({ recipientIds })
+      const result = validateEmailJobPayload({ recipientIds }, testConfig)
       const duration = Date.now() - start
 
       expect(result.valid).toBe(true)
@@ -274,14 +303,14 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should reject at limit + 1', () => {
       const recipientIds = Array.from({ length: MAX_EMAIL_RECIPIENTS_PER_JOB + 1 }, (_, i) => `p${i}`)
-      const result = validateEmailJobPayload({ recipientIds })
+      const result = validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(result.valid).toBe(false)
     })
 
     it('should accept at limit', () => {
       const recipientIds = Array.from({ length: MAX_EMAIL_RECIPIENTS_PER_JOB }, (_, i) => `p${i}`)
-      const result = validateEmailJobPayload({ recipientIds })
+      const result = validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(result.valid).toBe(true)
     })
@@ -289,7 +318,7 @@ describe('Task #7: Email Job Validation', () => {
 
   describe('Audit logging', () => {
     it('should log warn when rejecting for no recipients', () => {
-      validateEmailJobPayload({ recipientIds: [] })
+      validateEmailJobPayload({ recipientIds: [] }, testConfig)
 
       expect(mockLog.warn).toHaveBeenCalledWith('email.job.rejected', {
         reason: 'no_recipients',
@@ -299,7 +328,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should log warn when rejecting for limit exceeded', () => {
       const recipientIds = Array.from({ length: 1500 }, (_, i) => `p${i}`)
-      validateEmailJobPayload({ recipientIds })
+      validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(mockLog.warn).toHaveBeenCalledWith('email.job.rejected', {
         reason: 'limit_exceeded',
@@ -312,7 +341,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should log warn when rejecting for duplicate recipients', () => {
       validateEmailJobPayload({
         recipientIds: ['p1', 'p2', 'p1'],
-      })
+      }, testConfig)
 
       expect(mockLog.warn).toHaveBeenCalledWith('email.job.rejected', {
         reason: 'duplicate_recipients',
@@ -323,7 +352,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should log info when recipients near limit (>= 800)', () => {
       const recipientIds = Array.from({ length: 850 }, (_, i) => `p${i}`)
-      validateEmailJobPayload({ recipientIds })
+      validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(mockLog.info).toHaveBeenCalledWith('email.job.near_limit', {
         recipientCount: 850,
@@ -333,7 +362,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should log info at exactly 800 recipients', () => {
       const recipientIds = Array.from({ length: 800 }, (_, i) => `p${i}`)
-      validateEmailJobPayload({ recipientIds })
+      validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(mockLog.info).toHaveBeenCalledWith('email.job.near_limit', {
         recipientCount: 800,
@@ -343,7 +372,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should not log near-limit warning below 800 recipients', () => {
       const recipientIds = Array.from({ length: 799 }, (_, i) => `p${i}`)
-      validateEmailJobPayload({ recipientIds })
+      validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(mockLog.info).not.toHaveBeenCalled()
     })
@@ -351,7 +380,7 @@ describe('Task #7: Email Job Validation', () => {
     it('should not log warn or info when validation succeeds (no near-limit)', () => {
       validateEmailJobPayload({
         recipientIds: ['p1', 'p2', 'p3'],
-      })
+      }, testConfig)
 
       expect(mockLog.warn).not.toHaveBeenCalled()
       expect(mockLog.info).not.toHaveBeenCalled()
@@ -359,7 +388,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should log only rejection, not near-limit, when job exceeds limit', () => {
       const recipientIds = Array.from({ length: 1200 }, (_, i) => `p${i}`)
-      validateEmailJobPayload({ recipientIds })
+      validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(mockLog.warn).toHaveBeenCalled()
       expect(mockLog.info).not.toHaveBeenCalled()
@@ -367,7 +396,7 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should include percentage of limit in near-limit logs', () => {
       const recipientIds = Array.from({ length: 900 }, (_, i) => `p${i}`)
-      validateEmailJobPayload({ recipientIds })
+      validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(mockLog.info).toHaveBeenCalledWith('email.job.near_limit', {
         recipientCount: 900,
@@ -377,14 +406,14 @@ describe('Task #7: Email Job Validation', () => {
 
     it('should round percentage correctly', () => {
       const recipientIds = Array.from({ length: 333 }, (_, i) => `p${i}`)
-      validateEmailJobPayload({ recipientIds })
+      validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(mockLog.info).not.toHaveBeenCalled()
     })
 
     it('should round percentage correctly for near-limit jobs', () => {
       const recipientIds = Array.from({ length: 950 }, (_, i) => `p${i}`)
-      validateEmailJobPayload({ recipientIds })
+      validateEmailJobPayload({ recipientIds }, testConfig)
 
       expect(mockLog.info).toHaveBeenCalledWith('email.job.near_limit', {
         recipientCount: 950,

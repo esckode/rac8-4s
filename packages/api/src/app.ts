@@ -30,7 +30,7 @@ export function createApp(deps: AppDependencies): Express {
   const app = express()
 
   // Wrap queue with monitor for anomaly detection
-  const monitoredQueue = deps.jobQueue ? new QueueMonitor(deps.jobQueue) : undefined
+  const monitoredQueue = deps.jobQueue ? new QueueMonitor(deps.jobQueue, deps.config) : undefined
   const appDeps = { ...deps, jobQueue: monitoredQueue }
 
   app.use(express.json())

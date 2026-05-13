@@ -76,6 +76,44 @@ export interface LimitsConfig {
    * - Tune based on: RAM available, query complexity, UI pagination needs
    */
   playerQueryLimit: number
+
+  /**
+   * Maximum concurrent SSE connections per user.
+   * Prevents resource exhaustion from a single user opening too many connections.
+   * Default: 5
+   *
+   * Usage: Rate limit on SSE /tournaments/:id/events endpoint.
+   * - Each connection reserves memory and file descriptor
+   * - Higher = allows more simultaneous tabs but uses more resources
+   * - Lower = prevents resource abuse but limits multi-tab experience
+   * - Typical value: 5-10 per user
+   */
+  sseMaxConnectionsPerUser: number
+
+  /**
+   * Default pagination limits for different list endpoints.
+   */
+  paginationDefaults: {
+    /** Default limit for tournament list endpoints */
+    tournaments: number
+    /** Default limit for match list endpoints */
+    matches: number
+    /** Default limit for player/registration list endpoints */
+    players: number
+  }
+
+  /**
+   * Email job audit and warning thresholds.
+   * Used to trigger logging and monitoring alerts.
+   */
+  emailAuditThresholds: {
+    /** Log audit entry when job exceeds this recipient count */
+    auditLogThreshold: number
+    /** Log warning when job exceeds this recipient count */
+    warningLogThreshold: number
+    /** Log warning when recipients exceed this percentage of max limit */
+    warningPercentOfLimit: number
+  }
 }
 
 /**
@@ -96,7 +134,7 @@ export interface JobsConfig extends RetryConfig {
    * - Higher = more resilient but slower failure path
    * - Lower = faster failure detection but less resilience
    */
-  maxAttempts?: number
+  maxAttempts: number
 
   /**
    * Base delay in milliseconds for exponential backoff.
@@ -111,7 +149,7 @@ export interface JobsConfig extends RetryConfig {
    * - Higher = conservative retries (good for slow systems, avoiding overload)
    * - Exponential prevents thundering herd: 1st retry is quick, later ones back off
    */
-  backoffBase?: number
+  backoffBase: number
 }
 
 /**
@@ -145,6 +183,17 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   limits: {
     emailRecipientsPerJob: 1000, // Reasonable batch size for email providers
     playerQueryLimit: 10000, // Should handle most tournaments without pagination
+    sseMaxConnectionsPerUser: 5, // Prevent resource exhaustion from one user
+    paginationDefaults: {
+      tournaments: 20, // Default limit for tournament listings
+      matches: 20, // Default limit for match listings
+      players: 50, // Default limit for player/registration listings
+    },
+    emailAuditThresholds: {
+      auditLogThreshold: 500, // Log when ≥500 recipients (significant batch)
+      warningLogThreshold: 100, // Log warning when ≥100 recipients (large batch)
+      warningPercentOfLimit: 80, // Log warning at 80% of max recipients limit
+    },
   },
   jobs: {
     maxAttempts: 3, // Try 3 times before giving up
@@ -159,6 +208,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
  * Examples:
  *   APP_AUTH_MAGIC_LINK_TTL_SECONDS=3600
  *   APP_LIMITS_EMAIL_RECIPIENTS_PER_JOB=500
+ *   APP_LIMITS_SSE_MAX_CONNECTIONS_PER_USER=10
+ *   APP_LIMITS_PAGINATION_TOURNAMENTS=20
  *   APP_JOBS_MAX_ATTEMPTS=5
  *   APP_JOBS_BACKOFF_BASE=2000
  */
@@ -188,6 +239,45 @@ export function getAppConfig(): AppConfig {
         process.env.APP_LIMITS_PLAYER_QUERY_LIMIT ?? String(DEFAULT_APP_CONFIG.limits.playerQueryLimit),
         10
       ),
+      sseMaxConnectionsPerUser: parseInt(
+        process.env.APP_LIMITS_SSE_MAX_CONNECTIONS_PER_USER ??
+          String(DEFAULT_APP_CONFIG.limits.sseMaxConnectionsPerUser),
+        10
+      ),
+      paginationDefaults: {
+        tournaments: parseInt(
+          process.env.APP_LIMITS_PAGINATION_TOURNAMENTS ??
+            String(DEFAULT_APP_CONFIG.limits.paginationDefaults.tournaments),
+          10
+        ),
+        matches: parseInt(
+          process.env.APP_LIMITS_PAGINATION_MATCHES ??
+            String(DEFAULT_APP_CONFIG.limits.paginationDefaults.matches),
+          10
+        ),
+        players: parseInt(
+          process.env.APP_LIMITS_PAGINATION_PLAYERS ??
+            String(DEFAULT_APP_CONFIG.limits.paginationDefaults.players),
+          10
+        ),
+      },
+      emailAuditThresholds: {
+        auditLogThreshold: parseInt(
+          process.env.APP_LIMITS_EMAIL_AUDIT_THRESHOLD ??
+            String(DEFAULT_APP_CONFIG.limits.emailAuditThresholds.auditLogThreshold),
+          10
+        ),
+        warningLogThreshold: parseInt(
+          process.env.APP_LIMITS_EMAIL_WARNING_THRESHOLD ??
+            String(DEFAULT_APP_CONFIG.limits.emailAuditThresholds.warningLogThreshold),
+          10
+        ),
+        warningPercentOfLimit: parseInt(
+          process.env.APP_LIMITS_EMAIL_WARNING_PERCENT ??
+            String(DEFAULT_APP_CONFIG.limits.emailAuditThresholds.warningPercentOfLimit),
+          10
+        ),
+      },
     },
     jobs: {
       maxAttempts: parseInt(

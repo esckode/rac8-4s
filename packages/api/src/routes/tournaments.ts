@@ -78,7 +78,6 @@ export default function tournamentsRouter(deps: AppDependencies) {
   const groupRepo = new GroupRepository(deps.db)
   const knockoutRepo = new KnockoutRepository(deps.db)
   const sseConnectionCount = new Map<string, number>()
-  const MAX_SSE_CONNECTIONS_PER_USER = 5
 
   // POST /tournaments - create tournament
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -376,8 +375,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
         const jobId = `standings.recalculate:${match.group_id}`
         await deps.jobQueue.add('standings.recalculate', { tournamentId, groupId: match.group_id }, {
           jobId,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
+          attempts: deps.config.jobs.maxAttempts,
+          backoff: { type: 'exponential', delay: deps.config.jobs.backoffBase },
         })
       }
 
@@ -860,7 +859,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
       const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
 
       const offset = req.query.offset ? parseInt(req.query.offset as string) : 0
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : deps.config.limits.paginationDefaults.tournaments
       const status = req.query.status as string | undefined
 
       const result = repo.listByOrganizer(payload.sub, { offset, limit, status })
@@ -1118,7 +1117,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
   // GET /tournaments/available - list available tournaments for registration
   router.get('/available', (req: Request, res: Response) => {
     const offset = req.query.offset ? parseInt(req.query.offset as string) : 0
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 20
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : deps.config.limits.paginationDefaults.tournaments
     const sport = req.query.sport as string | undefined
 
     const result = repo.listAvailable({ offset, limit, sport })
@@ -1183,7 +1182,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       const offset = req.query.offset ? parseInt(req.query.offset as string) : 0
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : deps.config.limits.paginationDefaults.players
 
       const result = playerRepo.findRegistrationsByTournament(tournamentId, { offset, limit })
 
@@ -1497,17 +1496,24 @@ export default function tournamentsRouter(deps: AppDependencies) {
       return res.status(503).json({ code: 'SERVICE_UNAVAILABLE', message: 'SSE not available' })
     }
 
+    // Support both Authorization header and query param token (for EventSource compatibility)
+    let authHeader = req.headers.authorization
+    if (!authHeader && req.query.token) {
+      const token = Array.isArray(req.query.token) ? req.query.token[0] : req.query.token
+      authHeader = `Bearer ${token}`
+    }
+
     // Phase 1: identify caller
     let playerPayload: any = null
     let organizerPayload: any = null
 
     try {
-      playerPayload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      playerPayload = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
     } catch {}
 
     if (!playerPayload) {
       try {
-        organizerPayload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+        organizerPayload = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
       } catch {}
     }
 
@@ -1531,7 +1537,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
     // Rate limit: cap concurrent SSE connections per user
     const userId: string = playerPayload?.playerId ?? organizerPayload.sub
     const current = sseConnectionCount.get(userId) ?? 0
-    if (current >= MAX_SSE_CONNECTIONS_PER_USER) {
+    if (current >= deps.config.limits.sseMaxConnectionsPerUser) {
       log.warn('sse.rate.limited', { tournamentId, userId })
       return res.status(429).json({ code: 'TOO_MANY_REQUESTS', message: 'Too many active SSE connections' })
     }

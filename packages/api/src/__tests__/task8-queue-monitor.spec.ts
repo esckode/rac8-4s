@@ -1,3 +1,5 @@
+import type { AppConfig } from '../config'
+
 const mockLog = {
   warn: jest.fn(),
   info: jest.fn(),
@@ -12,6 +14,33 @@ jest.mock('../logger', () => ({
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { QueueMonitor } from '../queue-monitor'
 
+const testConfig: AppConfig = {
+  auth: {
+    magicLinkTtlSeconds: 86400,
+    sessionTtlSeconds: 86400,
+    tokenBlocklistTtlSeconds: 86400,
+  },
+  limits: {
+    emailRecipientsPerJob: 1000,
+    playerQueryLimit: 10000,
+    sseMaxConnectionsPerUser: 5,
+    paginationDefaults: {
+      tournaments: 20,
+      matches: 20,
+      players: 50,
+    },
+    emailAuditThresholds: {
+      auditLogThreshold: 500,
+      warningLogThreshold: 101,
+      warningPercentOfLimit: 80,
+    },
+  },
+  jobs: {
+    maxAttempts: 3,
+    backoffBase: 1000,
+  },
+}
+
 describe('Task #8: Queue Monitoring', () => {
   let queue: InMemoryJobQueue
   let monitor: QueueMonitor
@@ -19,7 +48,7 @@ describe('Task #8: Queue Monitoring', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     queue = new InMemoryJobQueue()
-    monitor = new QueueMonitor(queue)
+    monitor = new QueueMonitor(queue, testConfig)
   })
 
   describe('Enqueue timestamp tracking', () => {

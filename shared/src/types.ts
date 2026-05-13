@@ -14,12 +14,12 @@ export interface Tournament {
   creatorId: string
   maxPlayers: number
   description?: string
-  registrationDeadline: Date
-  groupStageDeadline: Date
-  knockoutStageDeadline: Date
-  status: 'draft' | 'registration_open' | 'registration_closed' | 'group_stage' | 'knockout' | 'complete'
-  createdAt: Date
-  updatedAt: Date
+  registrationDeadline: string | Date
+  groupStageDeadline: string | Date
+  knockoutStageDeadline: string | Date
+  status: 'draft' | 'registration_open' | 'registration_closed' | 'group_stage_active' | 'group_stage_complete' | 'knockout_active' | 'tournament_complete'
+  createdAt: string | Date
+  updatedAt: string | Date
 }
 
 export interface Match {
@@ -37,8 +37,8 @@ export interface Standing {
   rank: number
   wins: number
   losses: number
-  setWon: number
-  setLost: number
+  setsWon: number
+  setsLost: number
 }
 
 export interface Group {

@@ -239,7 +239,7 @@ describe('Tournament CRUD Endpoints', () => {
       expect(response.body.tournaments[0].name).toBe('Tournament 1')
       expect(response.body.pagination).toEqual({
         offset: 0,
-        limit: 10,
+        limit: 20,
         total: 1,
         hasMore: false,
       })
