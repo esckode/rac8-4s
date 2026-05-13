@@ -409,7 +409,7 @@ Implement and test frontend data management and state logic, verifying consisten
 **Blocks:** #20
 
 **Description:**
-Implement and test frontend UI components for tournament dashboards, standings tables, bracket visualization.
+Implement and test frontend UI components for tournament dashboards, standings tables, and bracket visualization. For bracket visualization, use **@g-loot/react-tournament-brackets** (MIT, open-source) — provides single-elimination bracket rendering with built-in SVGViewer for pan/zoom, responsive design optimized for mobile/tablet/desktop, and production-tested.
 
 **Tests to write:**
 - Component rendering: correct data displayed
