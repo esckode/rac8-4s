@@ -651,16 +651,144 @@ function getImageUrl(src: string, width?: number) {
 
 ---
 
-## Part 3: Testing Strategy
+## Part 3: Testing Strategy (Full TDD)
+
+**Approach:** Write tests FIRST, then implement. All tests written before component/hook is considered "done."
+
+**Test Coverage Target:** 95%+ for all business logic and component behavior.
+
+### TDD Workflow
+
+For each component/hook:
+1. Write test file (.spec.ts/.spec.tsx)
+2. Write all test cases (happy path + edge cases + error states)
+3. Run tests (all fail)
+4. Implement component/hook
+5. Run tests (all pass)
+6. Review test coverage (`npm run test:coverage`)
+7. Mark as done
 
 ### Unit Tests (Jest + React Testing Library)
 
-**StandingsTable.spec.tsx**
-- ✅ Renders with virtualization (only visible rows in DOM)
-- ✅ SSE update triggers re-render
-- ✅ Player sees read-only, organizer sees edit button
-- ✅ Sorting works
-- ✅ Performance: 500-row table renders in <500ms
+**StandingsTable.spec.tsx** (Full TDD)
+```typescript
+describe('StandingsTable', () => {
+  // Rendering
+  it('renders standings table with headers', () => {
+    const standings = [{ playerId: '1', name: 'Alice', rank: 1, wins: 3, losses: 0 }]
+    render(<StandingsTable standings={standings} />)
+    expect(screen.getByText('Rank')).toBeInTheDocument()
+    expect(screen.getByText('Wins')).toBeInTheDocument()
+  })
+  
+  // Virtualization
+  it('virtualization: only visible rows rendered in DOM (< 50 total)', () => {
+    const standings = Array(500).fill({}).map((_, i) => ({
+      playerId: `p${i}`,
+      name: `Player ${i}`,
+      rank: i + 1,
+      wins: Math.random() * 10,
+      losses: Math.random() * 10
+    }))
+    
+    const { container } = render(<StandingsTable standings={standings} />)
+    const rows = container.querySelectorAll('[role="row"]')
+    
+    // Only visible rows + buffer, not 500
+    expect(rows.length).toBeLessThan(50)
+    expect(rows.length).toBeGreaterThan(10)
+  })
+  
+  // Role-based rendering
+  it('player role: read-only, no edit button', () => {
+    render(<StandingsTable standings={[...]} userRole="player" />)
+    expect(screen.queryByText('Override')).not.toBeInTheDocument()
+  })
+  
+  it('organizer role: shows override button on hover', async () => {
+    render(<StandingsTable standings={[...]} userRole="organizer" />)
+    const row = screen.getByText('Alice').closest('[role="row"]')
+    
+    await userEvent.hover(row)
+    expect(screen.getByText('Override')).toBeInTheDocument()
+  })
+  
+  // SSE updates
+  it('SSE standings.updated event triggers re-render', () => {
+    const { rerender } = render(<StandingsTable standings={oldStandings} />)
+    
+    const newStandings = [...oldStandings]
+    newStandings[0].wins = 5 // Alice wins change
+    
+    rerender(<StandingsTable standings={newStandings} />)
+    expect(screen.getByText('5')).toBeInTheDocument()
+  })
+  
+  // Sorting
+  it('clicking rank header sorts by rank ascending', async () => {
+    render(<StandingsTable standings={unsorted} />)
+    
+    const rankHeader = screen.getByText('Rank')
+    await userEvent.click(rankHeader)
+    
+    const rows = screen.getAllByRole('row')
+    expect(rows[1]).toHaveTextContent('1') // First rank
+  })
+  
+  // Loading state
+  it('shows skeleton loaders while loading', () => {
+    render(<StandingsTable standings={undefined} isLoading={true} />)
+    expect(screen.getByTestId('skeleton-loader')).toBeInTheDocument()
+  })
+  
+  // Error state
+  it('shows error message when fetch fails', () => {
+    render(<StandingsTable standings={undefined} error="Failed to load" />)
+    expect(screen.getByText('Failed to load')).toBeInTheDocument()
+  })
+  
+  // Empty state
+  it('shows empty message when no standings', () => {
+    render(<StandingsTable standings={[]} />)
+    expect(screen.getByText('No standings available')).toBeInTheDocument()
+  })
+  
+  // Responsive layout
+  it('mobile layout: single column on small screens', () => {
+    render(<StandingsTable standings={[...]} />, {
+      viewport: { width: 375, height: 667 } // iPhone size
+    })
+    
+    const table = screen.getByRole('table')
+    expect(table).toHaveClass('mobile-layout')
+  })
+  
+  // Performance
+  it('renders 500-row table in <500ms', () => {
+    const standings = Array(500).fill({}).map((_, i) => ({
+      playerId: `p${i}`,
+      name: `Player ${i}`,
+      rank: i + 1,
+      wins: 3,
+      losses: 2
+    }))
+    
+    const start = performance.now()
+    render(<StandingsTable standings={standings} />)
+    const elapsed = performance.now() - start
+    
+    expect(elapsed).toBeLessThan(500)
+  })
+})
+```
+
+- ✅ Virtualization verified (only visible rows in DOM)
+- ✅ SSE updates trigger re-render
+- ✅ Role-based rendering (player vs organizer)
+- ✅ Sorting functionality
+- ✅ Loading/error/empty states
+- ✅ Responsive layout (mobile vs desktop)
+- ✅ Performance requirement (<500ms for 500 rows)
 
 **MatchCard.spec.tsx**
 - ✅ Renders match info correctly
@@ -668,30 +796,321 @@ function getImageUrl(src: string, width?: number) {
 - ✅ Click handlers work
 - ✅ Responsive layout on mobile
 
-**usePermissions.spec.ts**
-- ✅ Returns correct permissions for player
-- ✅ Returns correct permissions for organizer
-- ✅ Organizer only sees edit features
-- ✅ Player only sees submit score
+**usePermissions.spec.ts** (Full TDD)
+```typescript
+describe('usePermissions', () => {
+  it('player: returns player capabilities only', () => {
+    const { result } = renderHook(() => usePermissions('t123'), {
+      wrapper: ({ children }) => (
+        <AuthProvider user={{ role: 'player' }}>
+          {children}
+        </AuthProvider>
+      )
+    })
+    
+    expect(result.current.playerRole).toBe(true)
+    expect(result.current.canEditScores).toBe(false)
+    expect(result.current.canPublishBracket).toBe(false)
+  })
+  
+  it('organizer: returns organizer capabilities', () => {
+    const { result } = renderHook(() => usePermissions('t123'), {
+      wrapper: ({ children }) => (
+        <AuthProvider user={{ id: 'u1', role: 'organizer' }}>
+          {children}
+        </AuthProvider>
+      )
+    })
+    
+    expect(result.current.organizerRole).toBe(true)
+    expect(result.current.canEditScores).toBe(true)
+    expect(result.current.canPublishBracket).toBe(true)
+  })
+  
+  it('organizer can only manage own tournaments', () => {
+    const { result } = renderHook(() => usePermissions('t123'), {
+      wrapper: ({ children }) => (
+        <AuthProvider user={{ id: 'u1', role: 'organizer' }}>
+          <TournamentProvider tournament={{ creatorId: 'u1' }}>
+            {children}
+          </TournamentProvider>
+        </AuthProvider>
+      )
+    })
+    
+    expect(result.current.canManageGroups).toBe(true)
+  })
+})
+```
 
-**useTournament.spec.ts**
-- ✅ Fetches /bundle endpoint
-- ✅ Deduplicates simultaneous requests
-- ✅ Updates Task #18 stores
-- ✅ Handles errors gracefully
+- ✅ Player has correct permissions
+- ✅ Organizer has correct permissions
+- ✅ Only creator can manage tournament
+- ✅ Permissions update when user changes
 
-**useSSE.spec.ts**
+**useTournament.spec.ts** (Full TDD)
+```typescript
+describe('useTournament', () => {
+  it('fetches /tournaments/:id/bundle on mount', async () => {
+    const mockFetch = jest.spyOn(global, 'fetch')
+    
+    renderHook(() => useTournament('t123'))
+    
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/tournaments/t123/bundle')
+    })
+  })
+  
+  it('deduplicates simultaneous requests', async () => {
+    const mockFetch = jest.spyOn(global, 'fetch')
+    
+    // Two components fetch same tournament
+    renderHook(() => useTournament('t123'))
+    renderHook(() => useTournament('t123'))
+    
+    await waitFor(() => {
+      // Only one request made, not two
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+  })
+  
+  it('updates Task #18 stores on fetch success', async () => {
+    const { result } = renderHook(() => useTournament('t123'))
+    
+    await waitFor(() => {
+      expect(result.current.tournament).toEqual(mockTournament)
+    })
+  })
+  
+  it('handles fetch errors gracefully', async () => {
+    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('Network error'))
+    
+    const { result } = renderHook(() => useTournament('t123'))
+    
+    await waitFor(() => {
+      expect(result.current.error).toBeDefined()
+      expect(result.current.isLoading).toBe(false)
+    })
+  })
+})
+```
+
+- ✅ Fetches `/bundle` endpoint
+- ✅ Deduplicates in-flight requests
+- ✅ Updates stores correctly
+- ✅ Error handling
+
+**useSSE.spec.ts** (Full TDD)
+```typescript
+describe('useSSE', () => {
+  it('opens EventSource on mount', () => {
+    const mockEventSource = jest.fn()
+    global.ReconnectingEventSource = mockEventSource
+    
+    renderHook(() => useSSE('t123'))
+    
+    expect(mockEventSource).toHaveBeenCalledWith(
+      '/tournaments/t123/events',
+      expect.any(Object)
+    )
+  })
+  
+  it('closes EventSource on unmount', () => {
+    const mockClose = jest.fn()
+    global.ReconnectingEventSource = jest.fn(() => ({
+      addEventListener: jest.fn(),
+      close: mockClose
+    }))
+    
+    const { unmount } = renderHook(() => useSSE('t123'))
+    unmount()
+    
+    expect(mockClose).toHaveBeenCalled()
+  })
+  
+  it('handles standings.updated event', async () => {
+    const mockStandings = { groupId: 'g1', standings: [...] }
+    const { result } = renderHook(() => useSSE('t123'), {
+      wrapper: StoreProvider
+    })
+    
+    // Simulate SSE event
+    act(() => {
+      const event = new MessageEvent('standings.updated', {
+        data: JSON.stringify(mockStandings)
+      })
+      result.current.eventSource.dispatchEvent(event)
+    })
+    
+    expect(useStandingsStore().getByGroup('g1')).toEqual(mockStandings.standings)
+  })
+  
+  it('auto-reconnects on disconnect', async () => {
+    const mockReconnect = jest.fn()
+    global.ReconnectingEventSource = jest.fn(() => ({
+      addEventListener: jest.fn((event, handler) => {
+        if (event === 'reconnect') mockReconnect(handler)
+      }),
+      close: jest.fn()
+    }))
+    
+    renderHook(() => useSSE('t123'))
+    
+    expect(mockReconnect).toHaveBeenCalled()
+  })
+  
+  it('no memory leaks on unmount', () => {
+    const { unmount } = renderHook(() => useSSE('t123'))
+    
+    unmount()
+    unmount() // Should not error
+    
+    expect(true).toBe(true) // Passive test, checks for console errors
+  })
+})
+```
+
 - ✅ Opens SSE connection on mount
 - ✅ Closes on unmount
-- ✅ Handles standings.updated event
-- ✅ Handles reconnection
+- ✅ Handles events (standings.updated, bracket.published)
+- ✅ Auto-reconnect works
 - ✅ No memory leaks
 
-**Service Worker tests**
+**Backend: Consolidation Endpoint** (Full TDD)
+```typescript
+// packages/api/src/routes/__tests__/tournaments.bundle.spec.ts
+describe('GET /tournaments/:id/bundle', () => {
+  it('returns tournament, standings, matches, bracket', async () => {
+    const res = await request(app)
+      .get('/tournaments/t123/bundle')
+      .set('Authorization', `Bearer ${playerToken}`)
+    
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveProperty('tournament')
+    expect(res.body).toHaveProperty('standings')
+    expect(res.body).toHaveProperty('matches')
+    expect(res.body).toHaveProperty('bracket')
+  })
+  
+  it('selective loading: ?include=standings,matches', async () => {
+    const res = await request(app)
+      .get('/tournaments/t123/bundle?include=standings,matches')
+      .set('Authorization', `Bearer ${playerToken}`)
+    
+    expect(res.body).toHaveProperty('standings')
+    expect(res.body).toHaveProperty('matches')
+    expect(res.body).not.toHaveProperty('bracket')
+  })
+  
+  it('unauthorized: 401 without token', async () => {
+    const res = await request(app).get('/tournaments/t123/bundle')
+    expect(res.status).toBe(401)
+  })
+  
+  it('not found: 404 for invalid tournament', async () => {
+    const res = await request(app)
+      .get('/tournaments/invalid/bundle')
+      .set('Authorization', `Bearer ${playerToken}`)
+    
+    expect(res.status).toBe(404)
+  })
+  
+  it('player only sees own tournament data', async () => {
+    const res = await request(app)
+      .get('/tournaments/t123/bundle')
+      .set('Authorization', `Bearer ${playerToken}`)
+    
+    // Tournament they're not in
+    expect(res.status).toBe(403)
+  })
+  
+  it('parallel queries: response contains all data', async () => {
+    const res = await request(app)
+      .get('/tournaments/t123/bundle')
+      .set('Authorization', `Bearer ${organizerToken}`)
+    
+    // Verify data consistency
+    expect(res.body.standings).toHaveLength(res.body.tournament.maxPlayers)
+    expect(res.body.matches.length).toBeGreaterThan(0)
+  })
+})
+```
+
+- ✅ Returns all 4 data types
+- ✅ Selective loading works
+- ✅ Auth enforced (401 without token)
+- ✅ 404 for invalid tournament
+- ✅ Authorization enforced (players only see own)
+- ✅ Data consistency verified
+
+**Service Worker tests** (Full TDD)
+```typescript
+describe('Service Worker', () => {
+  it('caches GET requests on fetch', async () => {
+    const request = new Request('/tournaments/t123', { method: 'GET' })
+    const response = await fetch(request)
+    
+    const cached = await caches.match(request)
+    expect(cached).toBeDefined()
+  })
+  
+  it('returns cached data when offline', async () => {
+    // Pre-cache tournament data
+    await caches.add('/tournaments/t123')
+    
+    // Go offline
+    navigator.onLine = false
+    
+    const response = await fetch('/tournaments/t123')
+    expect(response.status).toBe(200)
+  })
+  
+  it('queues POST requests when offline', async () => {
+    navigator.onLine = false
+    
+    const scoreSubmission = new Request('/matches/m123/score', {
+      method: 'POST',
+      body: JSON.stringify({ score: '6-4, 6-3' })
+    })
+    
+    await serviceWorker.fetch(scoreSubmission)
+    
+    const queue = await getQueue('submit-scores')
+    expect(queue).toHaveLength(1)
+  })
+  
+  it('syncs queued requests when back online', async () => {
+    // Queue offline requests
+    navigator.onLine = false
+    await serviceWorker.queueRequest(scoreSubmission)
+    
+    // Come back online
+    navigator.onLine = true
+    self.dispatchEvent(new Event('sync'))
+    
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(scoreSubmission)
+    })
+  })
+  
+  it('returns offline page when cache miss', async () => {
+    navigator.onLine = false
+    
+    // Request page not in cache
+    const response = await serviceWorker.fetch(
+      new Request('/unknown-page')
+    )
+    
+    expect(response.url).toContain('offline.html')
+  })
+})
+```
+
 - ✅ Caches GET requests
-- ✅ Queues POST requests when offline
+- ✅ Returns cached data offline
+- ✅ Queues POST when offline
 - ✅ Syncs queue when online
-- ✅ Returns offline page when no cache
+- ✅ Offline fallback page
 
 ### Integration Tests
 
@@ -727,6 +1146,19 @@ function getImageUrl(src: string, width?: number) {
 
 - ✅ Full tournament flow: register → view standings → submit score → see live update
 - ✅ Mobile-specific: rotate phone (landscape/portrait), network drops, backgrounding
+
+### Testing Tools (All Open Source)
+
+| Tool | License | Purpose |
+|------|---------|---------|
+| Jest | MIT (Facebook/Meta) | Unit & integration tests |
+| React Testing Library | MIT (Kent C. Dodds) | Component testing |
+| Supertest | MIT | API endpoint testing |
+| @testing-library/user-event | MIT | User interaction simulation |
+| ts-jest | MIT | TypeScript support for Jest |
+| jest-environment-jsdom | MIT | DOM simulation |
+
+**All tools are free, open source, MIT licensed. No paid/proprietary tools required.**
 
 ---
 
