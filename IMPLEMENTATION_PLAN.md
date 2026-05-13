@@ -152,7 +152,7 @@ Implement and test tournament creation, reading, updating, and publishing with i
 ---
 
 ### Task #8: Player registration and discovery endpoints
-**Status:** Pending  
+**Status:** ✅ Complete  
 **Dependencies:** #1, #6  
 **Blocks:** #18 (frontend state logic), #20 (E2E tests)
 
@@ -262,18 +262,21 @@ All Phase 3 tasks depend on #13 (job infrastructure). Tasks #14-17 can run in pa
 **Blocks:** #14, #15, #16
 
 **Description:**
-Set up BullMQ job queue infrastructure and implement job consolidation logic to prevent duplicate expensive operations. Job types are: `standings.recalculate`, `bracket.generate`, `email.send`. The `websocket.broadcast` job type is removed — real-time updates are handled by SSE via `BroadcastBus` (see Task #17).
+Set up `InMemoryJobQueue` job queue infrastructure (v1) and implement job consolidation logic to prevent duplicate expensive operations. Job types are: `standings.recalculate`, `bracket.generate`, `email.send`. The `websocket.broadcast` job type is removed — real-time updates are handled by SSE via `BroadcastBus` (see Task #17).
+
+`InMemoryJobQueue` provides in-process async execution with job consolidation. Jobs are not persisted — on server restart, pending jobs are lost (acceptable for v1). **v2 migration path:** Replace with `BullMQJobQueue` (already implemented, see Migration Notes below) for Redis-backed persistence and multi-process distribution.
 
 **Tests to write:**
 - Job creation and queuing: jobs added to queue correctly
 - Job deduplication: same group standings recalc job IDs prevent duplicates
 - Job consolidation: multiple score submissions for same group = 1 job, not 5
 - Idempotency verification: running job twice produces same result
-- Job retry logic: failed jobs retry with backoff
-- Dead-letter queue: failed jobs after retries moved to DLQ
-- Mocking: mock Redis and BullMQ for all tests
+- Job retry logic: failed jobs retry with exponential backoff (2^attempt * 1000ms)
+- Dead-letter queue: failed jobs after max attempts (3) moved to DLQ
+- Retry state: `attemptsMade` incremented on each retry
+- In-memory implementation: no external dependencies, single-process only
 
-**Success criteria:** Job consolidation prevents duplicate work, idempotency verified, mocking complete
+**Success criteria:** Job consolidation prevents duplicate work, idempotency verified, retry logic working, DLQ tracking failed jobs, all tests pass with InMemoryJobQueue
 
 ---
 
@@ -283,18 +286,18 @@ Set up BullMQ job queue infrastructure and implement job consolidation logic to 
 **Blocks:** #20 (E2E tests)
 
 **Description:**
-Implement async job for standings recalculation triggered by score submissions, using Phase 1 algorithm with cache invalidation.
+Implement async job for standings recalculation triggered by score submissions, using Phase 1 algorithm. Executed via `InMemoryJobQueue` with job consolidation.
 
 **Tests to write:**
 - Job execution: standings recalculated using Phase 1 algorithm
 - Result consistency: job produces identical result to Phase 1 function
-- Cache invalidation: Redis cache cleared before recalc, repopulated after
 - Idempotent execution: running twice = same result, no side effects
 - Consolidation: concurrent score submissions = 1 job execution
-- Error handling: failures logged, retried, eventually DLQ
+- Error handling: failures logged, retried with backoff, eventually moved to DLQ
+- Retry behavior: job retries on transient failures (e.g., database lock)
 - SSE broadcast trigger: after recalc, emit `standings.updated` event to `BroadcastBus` (Task #17) with `{ groupId, standings }` — no job enqueued
 
-**Success criteria:** Standings accuracy verified, cache invalidation correct, job consolidation working, SSE event emitted
+**Success criteria:** Standings accuracy verified, job consolidation working, retry logic working, SSE event emitted, tests pass
 
 ---
 
@@ -304,18 +307,19 @@ Implement async job for standings recalculation triggered by score submissions, 
 **Blocks:** #20 (E2E tests)
 
 **Description:**
-Implement async job for bracket generation when tournament advances to knockout stage.
+Implement async job for bracket generation when tournament advances to knockout stage. Executed via `InMemoryJobQueue` with job consolidation.
 
 **Tests to write:**
 - Job execution: bracket generated using Phase 1 algorithm
 - Result consistency: matches Phase 1 exactly (same seeding, same byes)
 - Match creation: all knockout matches created with correct pairings
 - Idempotent execution: running twice = same bracket, no duplicate matches
-- Error handling: invalid state (groups not complete) rejected gracefully
+- Error handling: invalid state (groups not complete) rejected gracefully, retried
+- Retry behavior: job retries on transient failures, eventually moved to DLQ if unrecoverable
 - Timing: bracket only generated after group stage complete
 - SSE broadcast trigger: after generation, emit `bracket.published` event to `BroadcastBus` (Task #17) with `{ matchCount, byeCount }` — no job enqueued
 
-**Success criteria:** Bracket accuracy verified, matches generated correctly, error handling robust, SSE event emitted
+**Success criteria:** Bracket accuracy verified, matches generated correctly, retry logic working, error handling robust, SSE event emitted, tests pass
 
 ---
 
@@ -325,7 +329,7 @@ Implement async job for bracket generation when tournament advances to knockout 
 **Blocks:** #20 (E2E tests)
 
 **Description:**
-Implement async job for email notifications triggered by tournament events.
+Implement async job for email notifications triggered by tournament events. Executed via `InMemoryJobQueue` with job consolidation.
 
 **Tests to write:**
 - Email generation: correct data in templates
@@ -334,10 +338,11 @@ Implement async job for email notifications triggered by tournament events.
 - Bracket publication: players notified when bracket published
 - Tournament results: all players notified when tournament complete
 - Recipient validation: correct players receive correct emails
-- Error handling: failed sends logged, retried
+- Error handling: failed sends logged, retried with backoff, eventually moved to DLQ
+- Retry behavior: job retries on transient failures (e.g., SMTP timeout)
 - No duplicates: same event = 1 email sent, not 5
 
-**Success criteria:** Email content accurate, recipients correct, no duplicates, error handling tested
+**Success criteria:** Email content accurate, recipients correct, no duplicates, retry logic working, error handling tested, tests pass
 
 ---
 
@@ -506,6 +511,36 @@ All tasks are currently **pending**. Mark tasks as:
 - **deleted** if scope changes make task unnecessary
 
 Use `TaskUpdate` to change status and track progress through the implementation.
+
+---
+
+## Migration Notes: v1 → v2
+
+**v1 (Current):** Uses `InMemoryJobQueue` for Phase 3 async jobs.
+- ✅ Single-process, no external dependencies
+- ✅ Job consolidation and deduplication
+- ✅ Job retry logic with exponential backoff
+- ✅ Dead-letter queue for failed jobs
+- ✅ Suitable for initial launch and single-server deployments
+- ❌ Jobs lost on server restart (acceptable for v1)
+- ❌ No multi-process distribution
+
+**v2 (Future):** Replace with `BullMQJobQueue` for production scale.
+- ✅ Redis-backed job persistence (jobs survive restarts)
+- ✅ Multi-process worker distribution
+- ✅ Job retry logic with exponential backoff (same as v1)
+- ✅ Dead-letter queue for failed jobs (same as v1)
+- ✅ Same `JobQueue` interface (zero code changes to job logic)
+
+**Key difference:** v2 adds persistence and distributed workers; retry logic is identical.
+
+**Migration effort:** ~30 minutes (config only)
+1. Install `bullmq` and Redis
+2. Replace `new InMemoryJobQueue()` with `new BullMQJobQueue({ host, port })`
+3. Configure worker process to consume from Redis queues
+4. No changes to job implementations or tests — interface is identical
+
+**Already implemented:** `BullMQJobQueue` class exists at `packages/worker/src/bullmq-queue.ts`, ready for v2.
 
 ---
 
