@@ -149,7 +149,7 @@ describe('requireOrganizerAuth', () => {
     )
     // Manually mark as invalidated
     const { invalidateOrganizerToken } = await import('../auth/tokens')
-    await invalidateOrganizerToken(tokenPair.accessToken, STANDARD_CONFIG, store)
+    await invalidateOrganizerToken(tokenPair.accessToken, STANDARD_CONFIG, store, 3600)
     await expect(
       requireOrganizerAuth(
         `Bearer ${tokenPair.accessToken}`,

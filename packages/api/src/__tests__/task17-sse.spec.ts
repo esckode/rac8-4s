@@ -9,6 +9,7 @@ import { BroadcastBus } from '../broadcast-bus'
 import { issueOrganizerToken } from '../auth/tokens'
 import { processStandingsRecalculate } from '../workers/standings-processor'
 import { processBracketGenerate } from '../workers/bracket-processor'
+import { DEFAULT_APP_CONFIG } from '../config'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
@@ -123,7 +124,7 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
       jobQueue = new InMemoryJobQueue()
       broadcastBus = new BroadcastBus()
 
-      app = createApp({ db, jwtConfig: STANDARD_CONFIG, tokenStore, jobQueue, broadcastBus })
+      app = createApp({ config: DEFAULT_APP_CONFIG, db, jwtConfig: STANDARD_CONFIG, tokenStore, jobQueue, broadcastBus })
       await new Promise<void>(resolve => { server = app.listen(0, resolve) })
 
       const tournamentRepo = new TournamentRepository(db)
@@ -171,7 +172,7 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
       groupId = groups[0].id
 
       // Register player via API to get a valid player token
-      const appForReg = createApp({ db, jwtConfig: STANDARD_CONFIG, tokenStore, jobQueue, broadcastBus })
+      const appForReg = createApp({ config: DEFAULT_APP_CONFIG, db, jwtConfig: STANDARD_CONFIG, tokenStore, jobQueue, broadcastBus })
       const tournamentRepo2 = new TournamentRepository(db)
       tournamentRepo2.updateStatus(tournamentId, 'registration_open')
 

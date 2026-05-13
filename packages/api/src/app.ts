@@ -9,6 +9,7 @@ import playerRouter from './routes/player'
 import type { JobQueue } from '@worker/job-queue'
 import type { StandingsCache } from './standings-cache'
 import type { BroadcastBus } from './broadcast-bus'
+import type { AppConfig } from './config'
 import { QueueMonitor } from './queue-monitor'
 
 const httpLog = getLogger('http')
@@ -17,6 +18,7 @@ export interface AppDependencies {
   db: Database.Database
   jwtConfig: JwtConfig
   tokenStore: TokenStore
+  config: AppConfig
   jobQueue?: JobQueue
   standingsCache?: StandingsCache
   broadcastBus?: BroadcastBus

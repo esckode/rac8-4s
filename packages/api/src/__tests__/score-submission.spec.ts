@@ -3,6 +3,7 @@ import { createApp } from '../app'
 import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
+import { DEFAULT_APP_CONFIG } from '../config'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
@@ -41,7 +42,8 @@ describe('Score Submission Endpoints', () => {
     tokenStore = new InMemoryTokenStore()
     db = openDatabase(':memory:')
     app = createApp({
-      db,
+
+      config: DEFAULT_APP_CONFIG,      db,
       jwtConfig: STANDARD_CONFIG,
       tokenStore,
     })

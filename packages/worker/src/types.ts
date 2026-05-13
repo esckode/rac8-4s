@@ -20,7 +20,8 @@ export interface EnqueuedJob<T = unknown> {
   name: string
   data: T
   opts: JobOptions
-  failedReason?: string
   attemptsMade: number
   enqueuedAt: number
+  lastError?: string
+  failedReason?: string
 }

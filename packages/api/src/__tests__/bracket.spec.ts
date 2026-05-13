@@ -3,6 +3,7 @@ import { createApp } from '../app'
 import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
+import { DEFAULT_APP_CONFIG } from '../config'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
@@ -23,7 +24,7 @@ describe('Bracket Management', () => {
   beforeEach(async () => {
     db = openDatabase(':memory:')
     tokenStore = new InMemoryTokenStore()
-    app = createApp({ db, tokenStore, jwtConfig: STANDARD_CONFIG })
+    app = createApp({ config: DEFAULT_APP_CONFIG, db, tokenStore, jwtConfig: STANDARD_CONFIG })
 
     tournamentRepo = new TournamentRepository(db)
     playerRepo = new PlayerRepository(db)

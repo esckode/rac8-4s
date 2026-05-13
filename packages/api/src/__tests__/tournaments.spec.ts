@@ -4,6 +4,7 @@ import { createApp } from '../app'
 import { openDatabase, TournamentRepository } from '../db'
 import { InMemoryTokenStore, issueOrganizerToken } from '../auth'
 import type { JwtConfig } from '../auth'
+import { DEFAULT_APP_CONFIG } from '../config'
 
 const TEST_JWT_SECRET = 'test-secret-at-least-32-chars-long-for-testing!'
 const STANDARD_CONFIG: JwtConfig = { secret: TEST_JWT_SECRET, expiresInSeconds: 3600 }
@@ -20,7 +21,8 @@ describe('Tournament CRUD Endpoints', () => {
     tokenStore = new InMemoryTokenStore()
     db = openDatabase(':memory:')
     app = createApp({
-      db,
+
+      config: DEFAULT_APP_CONFIG,      db,
       jwtConfig: STANDARD_CONFIG,
       tokenStore,
     })

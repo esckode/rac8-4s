@@ -6,6 +6,7 @@ import { issueOrganizerToken } from '../auth/tokens'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import Database from 'better-sqlite3'
+import { DEFAULT_APP_CONFIG } from '../config'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
@@ -19,7 +20,7 @@ describe('Task #8 - Missing Endpoints', () => {
   beforeEach(() => {
     tokenStore = new InMemoryTokenStore()
     db = openDatabase(':memory:')
-    app = createApp({ db, jwtConfig: STANDARD_CONFIG, tokenStore })
+    app = createApp({ config: DEFAULT_APP_CONFIG, db, jwtConfig: STANDARD_CONFIG, tokenStore })
     playerRepo = new PlayerRepository(db)
     tournamentRepo = new TournamentRepository(db)
   })

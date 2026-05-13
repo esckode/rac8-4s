@@ -207,7 +207,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'advancingPerGroup must be an integer >= 1' })
       }
 
-      const registrations = playerRepo.listTournamentsByPlayer(payload.sub, { offset: 0, limit: 10000 })
+      const registrations = playerRepo.listTournamentsByPlayer(payload.sub, { offset: 0, limit: deps.config.limits.playerQueryLimit })
       const playerIds: string[] = []
 
       // Fetch all registered players for this tournament
@@ -952,7 +952,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       const magicLink = await generateMagicLinkToken(
         { playerId: player.id, tournamentId, email: player.email, createdAt: Date.now() },
-        86400,
+        deps.config.auth.magicLinkTtlSeconds,
         deps.tokenStore
       )
 
@@ -960,7 +960,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       res.status(202).json({
         message: `Registration email sent to ${player.email}`,
-        magicLinkExpires: 86400,
+        magicLinkExpires: deps.config.auth.magicLinkTtlSeconds,
         magicLinkToken: magicLink.token,
       })
     } catch (err) {
@@ -990,13 +990,13 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       assertPlayerInTournament(magicPayload, tournamentId)
 
-      const sessionToken = await generatePlayerSession(magicPayload, 86400, deps.tokenStore)
+      const sessionToken = await generatePlayerSession(magicPayload, deps.config.auth.sessionTtlSeconds, deps.tokenStore)
 
       log.info('session.issued', { tournamentId, playerId: magicPayload.playerId })
 
       res.status(200).json({
         playerToken: sessionToken.token,
-        expiresIn: 86400,
+        expiresIn: deps.config.auth.sessionTtlSeconds,
         playerId: magicPayload.playerId,
         tournamentId: magicPayload.tournamentId,
       })
@@ -1020,7 +1020,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         if (reg) {
           await generateMagicLinkToken(
             { playerId: player.id, tournamentId, email: player.email, createdAt: Date.now() },
-            86400,
+            deps.config.auth.magicLinkTtlSeconds,
             deps.tokenStore
           )
         }
@@ -1030,7 +1030,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       res.status(202).json({
         message: `If an account with this email is registered, a magic link has been sent.`,
-        magicLinkExpires: 86400,
+        magicLinkExpires: deps.config.auth.magicLinkTtlSeconds,
       })
     } catch (err) {
       next(err)

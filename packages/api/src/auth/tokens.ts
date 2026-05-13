@@ -63,7 +63,8 @@ export function verifyOrganizerToken(
 export async function invalidateOrganizerToken(
   token: string,
   config: JwtConfig,
-  store: TokenStore
+  store: TokenStore,
+  tokenBlocklistTtlSeconds: number
 ): Promise<void> {
   try {
     const decoded = jwt.decode(token) as any
@@ -71,7 +72,8 @@ export async function invalidateOrganizerToken(
       return
     }
 
-    const remainingSeconds = decoded.exp ? Math.max(0, decoded.exp - Math.floor(Date.now() / 1000)) : 3600
+    // Use token's remaining lifetime, or fallback to configured TTL if can't determine
+    const remainingSeconds = decoded.exp ? Math.max(0, decoded.exp - Math.floor(Date.now() / 1000)) : tokenBlocklistTtlSeconds
 
     await store.set(`jwt:blocklist:${decoded.jti}`, 'true', remainingSeconds)
   } catch {
@@ -100,7 +102,8 @@ export async function refreshOrganizerToken(
   token: string,
   config: JwtConfig,
   store: TokenStore,
-  sessionTtlSeconds: number
+  sessionTtlSeconds: number,
+  tokenBlocklistTtlSeconds: number
 ): Promise<TokenPair> {
   const payload = verifyOrganizerToken(token, config)
   const invalidated = await isTokenInvalidated(token, store)
@@ -109,7 +112,7 @@ export async function refreshOrganizerToken(
     throw new TokenInvalidError('Token has been invalidated (logged out)')
   }
 
-  await invalidateOrganizerToken(token, config, store)
+  await invalidateOrganizerToken(token, config, store, tokenBlocklistTtlSeconds)
 
   const newToken = issueOrganizerToken(
     {

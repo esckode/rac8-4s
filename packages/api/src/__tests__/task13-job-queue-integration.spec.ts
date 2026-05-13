@@ -4,6 +4,7 @@ import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository }
 import { InMemoryTokenStore } from '../auth/token-store'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { issueOrganizerToken } from '../auth/tokens'
+import { DEFAULT_APP_CONFIG } from '../config'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
@@ -30,7 +31,8 @@ describe('Task #13: Job Queue Integration', () => {
     jobQueue = new InMemoryJobQueue()
     db = openDatabase(':memory:')
     app = createApp({
-      db,
+
+      config: DEFAULT_APP_CONFIG,      db,
       jwtConfig: STANDARD_CONFIG,
       tokenStore,
       jobQueue,
@@ -189,7 +191,7 @@ describe('Task #13: Job Queue Integration', () => {
 
   describe('No job queue graceful handling', () => {
     it('should not throw when jobQueue is not provided', async () => {
-      const appNoQueue = createApp({
+      const appNoQueue = createApp({ config: DEFAULT_APP_CONFIG,
         db,
         jwtConfig: STANDARD_CONFIG,
         tokenStore,

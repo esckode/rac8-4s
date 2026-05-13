@@ -1,4 +1,5 @@
 import { hashPassword, verifyPassword } from '../auth/password'
+import { DEFAULT_APP_CONFIG } from '../config'
 import {
   issueOrganizerToken,
   verifyOrganizerToken,
@@ -232,7 +233,8 @@ describe('Organizer JWT Tokens', () => {
       await invalidateOrganizerToken(
         issued.accessToken,
         STANDARD_CONFIG,
-        store
+        store,
+        3600
       )
       const invalidated = await isTokenInvalidated(issued.accessToken, store)
       expect(invalidated).toBe(true)
@@ -247,7 +249,8 @@ describe('Organizer JWT Tokens', () => {
       await invalidateOrganizerToken(
         issued.accessToken,
         STANDARD_CONFIG,
-        store
+        store,
+        3600
       )
       expect(await isTokenInvalidated(issued.accessToken, store)).toBe(true)
     })
@@ -270,10 +273,11 @@ describe('Organizer JWT Tokens', () => {
       await invalidateOrganizerToken(
         issued.accessToken,
         STANDARD_CONFIG,
-        store
+        store,
+        3600
       )
       await expect(
-        invalidateOrganizerToken(issued.accessToken, STANDARD_CONFIG, store)
+        invalidateOrganizerToken(issued.accessToken, STANDARD_CONFIG, store, 3600)
       ).resolves.not.toThrow()
     })
   })
@@ -289,7 +293,7 @@ describe('Organizer JWT Tokens', () => {
       const store = new InMemoryTokenStore()
       const fakeToken = 'not-a-valid-jwt-token'
       await expect(
-        invalidateOrganizerToken(fakeToken, STANDARD_CONFIG, store)
+        invalidateOrganizerToken(fakeToken, STANDARD_CONFIG, store, 3600)
       ).resolves.not.toThrow()
     })
   })
@@ -305,7 +309,8 @@ describe('Organizer JWT Tokens', () => {
         issued.accessToken,
         STANDARD_CONFIG,
         store,
-        STANDARD_CONFIG.expiresInSeconds
+        STANDARD_CONFIG.expiresInSeconds,
+        3600
       )
       expect(refreshed.accessToken).not.toBe(issued.accessToken)
       expect(refreshed.expiresAt).toBeGreaterThanOrEqual(issued.expiresAt)
@@ -321,7 +326,8 @@ describe('Organizer JWT Tokens', () => {
         issued.accessToken,
         STANDARD_CONFIG,
         store,
-        STANDARD_CONFIG.expiresInSeconds
+        STANDARD_CONFIG.expiresInSeconds,
+        3600
       )
       expect(await isTokenInvalidated(issued.accessToken, store)).toBe(true)
     })
@@ -339,7 +345,8 @@ describe('Organizer JWT Tokens', () => {
           issued.accessToken,
           SHORT_TTL_CONFIG,
           store,
-          SHORT_TTL_CONFIG.expiresInSeconds
+          SHORT_TTL_CONFIG.expiresInSeconds,
+          3600
         )
       ).rejects.toThrow(TokenExpiredError)
       jest.useRealTimers()
@@ -354,14 +361,16 @@ describe('Organizer JWT Tokens', () => {
       await invalidateOrganizerToken(
         issued.accessToken,
         STANDARD_CONFIG,
-        store
+        store,
+        3600
       )
       await expect(
         refreshOrganizerToken(
           issued.accessToken,
           STANDARD_CONFIG,
           store,
-          STANDARD_CONFIG.expiresInSeconds
+          STANDARD_CONFIG.expiresInSeconds,
+          3600
         )
       ).rejects.toThrow(TokenInvalidError)
     })
