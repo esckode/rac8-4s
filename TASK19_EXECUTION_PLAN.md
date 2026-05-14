@@ -45,6 +45,31 @@
 
 ---
 
+## Architectural Decisions (Validated via Grill Session)
+
+### Core Data & State Architecture
+- **Frontend stores:** In-memory only (Task #18 stores: useTournamentStore, useStandingsStore, useMatchStore, useBracketStore)
+- **App startup:** Always refetch full bundle via GET `/tournaments/:id/bundle` to populate all stores
+- **SSE updates:** Apply blindly (trust server data). On SSE reconnect after disconnect, refetch full bundle
+- **Offline-first approach:** Service Worker serves cached data immediately. Background sync retries failed submissions with 3× exponential backoff (1s, 2s, 4s)
+
+### Frontend Architecture
+- **Role-based rendering:** Shared TournamentDetail page with conditional components (player vs organizer)
+- **Component independence:** Components animate independently; no inter-component animation coordination
+- **Animations:** CSS-only, mobile-first, <300ms durations. All animations reference design tokens from Task 0.2
+- **Error handling:** Score submissions retry 3× with exponential backoff. API failures auto-retry every 10s with user cancel option
+
+### Testing Strategy
+- **True TDD:** Tests written first, then implementation code
+- **Interface-first parallelization:** Phase 2 hook tests define contracts → Phase 3 component tests use mocks/stubs against those contracts → implementation runs in parallel
+- **Test coverage:** 95%+ across all business logic and component behavior
+
+### Table & Real-Time Updates
+- **Tables:** TanStack Table + react-window (virtualization). Auto-sorting on SSE updates (TanStack Table re-sorts when underlying data changes)
+- **Consolidation endpoint:** GET `/tournaments/:id/bundle?include=standings,matches,bracket` returns selected fields. Frontend uses full bundle on app open
+
+---
+
 ## Task Overview
 
 This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced tasks with clear prerequisites and success criteria. Tasks are ordered to allow parallel work where possible while respecting critical dependencies.
@@ -160,7 +185,7 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 
 ### Task 0.2: Create Design Tokens File
 **File:** `src/design/tokens.ts`  
-**Estimated Time:** 1 hour  
+**Estimated Time:** 1.5 hours  
 **Owner:** TBD
 
 #### Prerequisites
@@ -184,8 +209,12 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 5. Export `breakpoints` object:
    - mobile: '640px'
    - tablet: '1024px'
-6. Ensure all exports are TypeScript constants with proper types
-7. Create simple unit test to verify tokens are properly exported
+6. **NEW: Export `animations` object (required for Task 3.7):**
+   - `durations`: { fast: '100ms', normal: '200ms', slow: '300ms' }
+   - `easing`: { snap: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', smooth: 'cubic-bezier(0.4, 0, 0.2, 1)', easeOut: 'cubic-bezier(0, 0, 0.2, 1)' }
+   - Document that all animations must use these tokens for consistency
+7. Ensure all exports are TypeScript constants with proper types
+8. Create simple unit test to verify tokens are properly exported
 
 #### Success Criteria
 - ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
@@ -193,6 +222,7 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 - ✅ Colors match Pastel Flat 2.0 palette exactly
 - ✅ Typography tokens include all required properties
 - ✅ Spacing values are consistent with design spec
+- ✅ **Animation tokens defined:** durations and easing curves documented
 - ✅ Tokens can be imported in components without errors
 - ✅ TypeScript types are correct
 - ✅ File is validated with unit test
@@ -342,6 +372,24 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 
 ## Phase 2: Frontend Hooks (Core Logic)
 
+**CRITICAL PATTERN - TRUE TDD & INTERFACE-FIRST PARALLELIZATION:**
+
+This phase demonstrates the interface-first parallelization strategy:
+1. **Test-First Approach:** Each task writes tests FIRST (2.1, 2.3, 2.5, 2.7), which define the hook interface/contract
+2. **Test files define contracts:** `usePermissions.spec.ts` defines what `usePermissions` should return, even before the hook exists
+3. **Mocking in component tests:** Phase 3 component tests (3.1-3.6) can write tests SIMULTANEOUSLY using mocked hooks
+   - Example: `StandingsTable.spec.ts` imports `usePermissions` and mocks it with Jest
+   - Component tests pass with mock hooks, even while real hooks are still being implemented
+4. **Parallel Implementation:** Phase 2 hook implementations (2.1, 2.3, 2.5, 2.7) run in parallel with Phase 3 component implementations
+   - Phase 2 team implements real hooks
+   - Phase 3 team implements components against mocked hooks
+   - When Phase 2 completes, Phase 3 simply removes mocks and uses real hooks
+5. **Benefit:** 25-35% time savings vs sequential development
+
+**All Phase 2 tasks follow this pattern:** Write tests → implement to pass tests → done
+
+---
+
 ### Task 2.1: Create usePermissions Hook
 **File:** `src/hooks/usePermissions.ts`  
 **Estimated Time:** 45 minutes  
@@ -387,10 +435,12 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 **Estimated Time:** 1 hour  
 **Owner:** TBD
 
+**TRUE TDD PATTERN:** This test file should be written BEFORE Task 2.1 implementation. See Phase 2 intro for interface-first parallelization.
+
 #### Prerequisites
-- ✅ Task 2.1 completed (hook implemented)
 - ✅ React Testing Library configured
 - ✅ renderHook utility available
+- ⚠️ Task 2.1 NOT YET IMPLEMENTED (tests define the interface)
 
 #### Implementation Steps
 1. Create test file: `src/hooks/__tests__/usePermissions.spec.ts`
@@ -523,6 +573,9 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 **Estimated Time:** 1.5 hours  
 **Owner:** TBD
 
+**SSE RECONNECTION STRATEGY (Validated):**
+On SSE reconnect after a disconnect, refetch the full bundle via GET `/tournaments/:id/bundle` to ensure data consistency (in case updates were missed during the disconnect). This prevents stale data from SSE delta updates.
+
 #### Prerequisites
 - ✅ Task #18 completed (stores available)
 - ✅ reconnecting-eventsource library installed
@@ -539,14 +592,18 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
      - 'standings.updated': parse data, call standingsStore.update()
      - 'bracket.published': parse data, call matchStore.setMatches()
      - Other relevant tournament events
+   - **NEW: Add reconnect handler:**
+     - When SSE connection is restored (after being disconnected), call useTournament().refetchBundle()
+     - This ensures stores are fresh after any missed updates
    - Return cleanup function: eventSource.close()
 5. Add error handling:
-   - Log connection errors
-   - Log parsing errors
+   - Log connection errors (but don't crash)
+   - Log parsing errors (but don't crash)
    - Don't crash on malformed data
 6. Return object with:
    - connected: boolean (connection status)
    - error: error message if connection failed
+   - reconnecting: boolean (in process of reconnecting)
 7. Ensure hook only opens connection when tournamentId is provided
 
 #### Success Criteria
@@ -933,20 +990,35 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 **File:** `src/components/ANIMATION_SPEC.md`  
 **Estimated Time:** 2 hours  
 **Owner:** TBD
+**Critical:** Task 3.7 is a PREREQUISITE for Tasks 3.1-3.6 (blocks component implementation)
 
 #### Prerequisites
-- ✅ Task 0.2 completed (design tokens available)
-- ✅ Task 3.1-3.6 completed (components designed)
+- ✅ Task 0.2 completed (design tokens with animation tokens available)
 - ✅ Pastel Flat 2.0 design finalized
 
-#### Implementation Steps
-1. Create `src/components/ANIMATION_SPEC.md` documenting all animations and transitions
+#### Blocking Relationship
+- **This task BLOCKS:** Tasks 3.1-3.6 (StandingsTable, MatchCard, TournamentCard, PhaseIndicator, Modal)
+- **Reason:** Components need animation specifications before implementation to avoid rework. Developers must know animation requirements upfront
 
-2. **Page Navigation Animations:**
+#### Implementation Steps
+
+**SCOPE & CONSTRAINTS (Critical for this task):**
+- **CSS-only:** All animations use CSS transitions, NOT JavaScript animation libraries (no Framer Motion, React Spring)
+- **Mobile-first:** Design animations that work at 60fps on mid-range phones (not just desktop)
+- **Mid-level detail:** Specify durations, easing curves, and CSS properties, but NOT code implementations
+- **Component independence:** Each component's animations are independent; no inter-component animation coordination
+- **Performance:** Use only `transform` and `opacity` for 60fps animations. Avoid animating layout properties (width, height, padding)
+- **Reference tokens:** All durations and easing must use animation tokens from Task 0.2 (`tokens.animations.durations.*`, `tokens.animations.easing.*`)
+
+1. Create `src/components/ANIMATION_SPEC.md` documenting all animations and transitions
+2. Create a reference table showing animation name | duration (from tokens) | easing (from tokens) | CSS properties | use cases | performance notes
+
+3. **Page Navigation Animations:**
    - Route transitions: fade-in/fade-out or slide (left-to-right on mobile)
-   - Duration: 200-300ms
-   - Easing: ease-in-out
+   - Duration: use `tokens.animations.durations.normal` (200-300ms)
+   - Easing: use `tokens.animations.easing.smooth`
    - Document for mobile vs desktop
+   - Note: No coordinated animations between pages, each page animates independently
 
 3. **Component State Animations:**
    - Modal open/close: scale + fade (100ms)
@@ -1285,6 +1357,8 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 **Estimated Time:** 2 hours  
 **Owner:** TBD
 
+**OFFLINE-FIRST PATTERN:** Service Worker serves cached data IMMEDIATELY, then syncs fresh data in background. Users see data instantly, not waiting for network.
+
 #### Prerequisites
 - ✅ Task 4.6 completed (pages exist)
 - ✅ TypeScript configured
@@ -1294,22 +1368,25 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 2. Implement install event:
    - Create CACHE_NAME = 'tournament-v1'
    - Cache offline.html fallback page
-3. Implement fetch event:
+3. Implement fetch event (OFFLINE-FIRST):
    - GET requests: cache-first strategy
-     - Try cache first, fall back to network
-     - Cache response on network success
-     - Serve offline.html on network failure and not in cache
+     - Serve from cache IMMEDIATELY (no waiting for network)
+     - Update cache from network in background (if online)
+     - Serve offline.html only if not in cache and offline
    - POST requests: queue if offline
      - Try to fetch normally
-     - If offline, queue request with queueForSync()
+     - If offline, queue request with queueForSync() and show "Syncing..." status
 4. Implement sync event:
    - Listen for 'sync-scores' tag
    - Call syncQueuedRequests() to send queued POSTs
+   - Use exponential backoff: 1s, 2s, 4s (max 3 retries)
+   - Update UI status: "Syncing..." → "Synced" or error
 5. Queue management:
    - Store queue in IndexedDB
-   - queueForSync(request): add to queue
-   - syncQueuedRequests(): send all queued requests
+   - queueForSync(request): add to queue with timestamp
+   - syncQueuedRequests(): send all queued requests with retry logic
 6. Add error handling and logging
+7. Track sync status in app state for UI feedback (show "Syncing..." indicator during background sync)
 
 #### Success Criteria
 - ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
@@ -1809,30 +1886,47 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 **Estimated Time:** 1.5 hours  
 **Owner:** TBD
 
+**ERROR HANDLING STRATEGY (Validated):**
+- **Score submission failures:** Retry 3 times with exponential backoff (1s, 2s, 4s). After 3 failures, show persistent error banner with "Retry" button. Queue in Service Worker for background sync.
+- **API call failures (consolidation endpoint, etc):** Show error banner. Auto-retry every 10s. Provide user "Cancel" option to stop retrying.
+- **SSE update failures:** Apply updates blindly (trust server). If data seems inconsistent, user can manually refresh.
+
 #### Prerequisites
 - ✅ All components implemented
+- ✅ Service Worker implemented (Task 5.1)
 
 #### Implementation Steps
-1. Test error scenarios:
-   - Network error while loading tournament
-   - Network error while submitting score
-   - Invalid tournament ID
-   - User not authorized for tournament
-   - SSE connection drops and reconnects
-   - Empty lists (no tournaments, no standings)
-   - Missing data in API response
-2. Ensure error messages are clear and user-friendly
-3. Provide retry options where appropriate
-4. Log errors for debugging
-5. Graceful degradation (partial data still useful)
+1. Implement retry logic for score submissions:
+   - Hook: `useScoreSubmit()` with retry state and exponential backoff
+   - Show "Submitting..." → "Failed, retrying..." → "Synced!" or error
+   - After max retries, show banner with manual retry button
+2. Implement API error handling:
+   - Wrap API calls in try-catch with auto-retry timer
+   - Show error banner on 4xx/5xx
+   - Auto-retry every 10s with counter
+   - Provide cancel button to stop retrying
+3. Test error scenarios:
+   - Network error while loading tournament → banner with retry
+   - Network error while submitting score → Service Worker queues, retry on reconnect
+   - Invalid tournament ID → 404 error handled gracefully
+   - User not authorized → 403 redirect to login
+   - SSE connection drops → reconnect, refetch full bundle
+   - Empty lists (no tournaments, no standings) → show "No data" message
+   - Missing data in API response → fallback to cached data or show error
+4. Ensure error messages are clear and user-friendly
+5. Log errors for debugging (structured logging per CLAUDE.md)
 
 #### Success Criteria
 - ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
-- ✅ All error scenarios handled
-- ✅ Error messages user-friendly
-- ✅ Retry options available
+- ✅ Score submission retries 3× with exponential backoff
+- ✅ Failed submissions show error banner with retry button
+- ✅ API errors auto-retry every 10s with cancel option
+- ✅ SSE reconnects and refetches full bundle
+- ✅ All error scenarios tested and handled
+- ✅ Error messages user-friendly and actionable
 - ✅ No unhandled promise rejections
-- ✅ Graceful degradation
+- ✅ Graceful degradation (partial data still useful)
+- ✅ Structured logging for all error paths
 
 ---
 

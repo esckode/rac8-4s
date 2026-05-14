@@ -1209,7 +1209,7 @@ describe('Service Worker', () => {
 
 ## Notes
 
-- This plan assumes React 18+, TypeScript, Vite (from TASK19_WIREFLOW.md recommendations)
+- This plan assumes React 19+, TypeScript, Vite (from TASK19_WIREFLOW.md recommendations)
 - All optimizations are designed to work together, not in isolation
 - Mobile-first approach: design for 320px screens first, enhance for larger
 - Accessibility: all interactive elements keyboard navigable, proper ARIA labels
