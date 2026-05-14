@@ -1659,61 +1659,167 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 
 ---
 
-## Implementation Sequence & Dependencies
+## Implementation Sequence & Dependencies (Optimized for Parallelization)
+
+### Parallelization Strategy
+
+The plan is reorganized into streams that can execute in parallel:
+- **Stream A:** Design Specs (Phase 0) — foundational, must complete early
+- **Stream B:** Backend API (Phase 1) — independent, can run with Phase 0
+- **Stream C:** Independent Frontend Hooks (Phase 2A) — can run parallel with Phase 1
+- **Stream D:** Dependent Frontend Hooks (Phase 2B) — must wait for Phase 1
+- **Stream E:** Frontend Components (Phase 3) — must wait for Phase 0 & 2A, can start before 2B
+- **Merge Point:** Pages (Phase 4) — must wait for Phase 3 & 2B
+- **Stream F:** Mobile Optimizations Split (Phase 5A) — can start after Phase 2A
+- **Stream G:** Mobile Optimizations (Phase 5B) — must wait for Phase 4
+- **Phase 6:** Testing — TDD-first approach, integrated with each phase
+- **Phase 7:** Polish & Launch — final verification
+
+### Execution Timeline
 
 ```
-Phase 0: Design Specifications (Critical Path - must complete first)
-  0.1 Design Spec Document
-  0.2 Design Tokens File
-  0.3 Component Specifications
-        ↓
-Phase 1: Backend API
-  1.1 Consolidation Endpoint → 1.2 Test Endpoint
-        ↓
-Phase 2: Frontend Hooks (Parallel with Phase 3)
-  2.1 usePermissions → 2.2 Test
-  2.3 useTournament → 2.4 Test
-  2.5 useSSE → 2.6 Test
-  2.7 Additional Hooks (useInfiniteScroll, useVirtualScroll, usePrefetch)
-        ↓
-Phase 3: Frontend Components (Parallel with Phase 2)
-  3.1 Shared Components (Button, Badge, Spinner, Banner)
-  3.2 StandingsTable (Virtualized)
-  3.3 MatchCard
-  3.4 TournamentCard
-  3.5 PhaseIndicator
-  3.6 Modal/Dialog
-        ↓
-Phase 4: Pages & Routing (Requires Phase 2 & 3)
-  4.1 Layout Infrastructure
-  4.2 Landing Page
-  4.3 BrowseTournaments
-  4.4 MyTournaments
-  4.5 OrganizerDashboard
-  4.6 TournamentDetail (Shared, role-based)
-        ↓
-Phase 5: Mobile Optimizations (Requires Phase 4)
-  5.1 Service Worker → 5.2 Register
-  5.3 Image Optimization
-  5.4 Pagination Controls
-  5.5 Prefetch Strategy
-  5.6 Request Deduplication
-        ↓
-Phase 6: Testing (Comprehensive - runs throughout, finalizes at end)
-  6.1 Test StandingsTable
-  6.2 Test MatchCard
-  6.3 Test Consolidation Endpoint
-  6.4 Integration: Tournament Detail Flow
-  6.5 Integration: Offline Flow
-  6.6 Integration: Pagination Flow
-  6.7 Integration: Virtualization Performance
-        ↓
-Phase 7: Polish & Launch
-  7.1 Responsive Design
-  7.2 Accessibility Audit
-  7.3 Error Handling
-  7.4 Performance Verification
-  7.5 Documentation
+WEEK 1:
+┌─ Phase 0: Design Specs (1-2 hours, START FIRST)
+│  ├─ 0.1 Design Spec Document
+│  ├─ 0.2 Design Tokens File
+│  └─ 0.3 Component Specifications
+│
+├─ Phase 1: Backend API (1 hour, PARALLEL with Phase 0)
+│  ├─ 1.1 Consolidation Endpoint
+│  └─ 1.2 Test Endpoint
+│
+└─ Phase 2A: Independent Hooks (1.5 hours, PARALLEL with Phase 1)
+   ├─ 2.1 usePermissions + 2.2 Test (45 min)
+   └─ 2.7 Additional Hooks + Tests (useInfiniteScroll, useVirtualScroll, usePrefetch) (45 min)
+
+WEEK 2:
+├─ Phase 2B: Dependent Hooks (2 hours, AFTER Phase 1 completes)
+│  ├─ 2.3 useTournament + 2.4 Test (1 hour)
+│  └─ 2.5 useSSE + 2.6 Test (1 hour)
+│
+├─ Phase 3: Frontend Components (3 hours, PARALLEL with Phase 2B, AFTER Phase 0)
+│  ├─ 3.1 Shared Components (2 hours)
+│  ├─ 3.2 StandingsTable (2 hours)
+│  ├─ 3.3 MatchCard (1.5 hours)
+│  ├─ 3.4 TournamentCard (1 hour)
+│  ├─ 3.5 PhaseIndicator (30 min)
+│  └─ 3.6 Modal/Dialog (1 hour)
+│
+└─ Phase 5A: Early Mobile Optimizations (1.5 hours, PARALLEL with Phase 3)
+   ├─ 5.3 Image Optimization (1.5 hours)
+   ├─ 5.4 Pagination Controls (1 hour)
+   └─ 5.5 Prefetch Strategy (1.5 hours)
+
+WEEK 3:
+├─ Phase 4: Pages & Routing (4 hours, AFTER Phase 3 & 2B complete)
+│  ├─ 4.1 Layout Infrastructure (1.5 hours)
+│  ├─ 4.2 Landing Page (1 hour)
+│  ├─ 4.3 BrowseTournaments (1.5 hours)
+│  ├─ 4.4 MyTournaments (1.5 hours)
+│  ├─ 4.5 OrganizerDashboard (1.5 hours)
+│  └─ 4.6 TournamentDetail (3 hours)
+│
+└─ Phase 5B: Service Worker & Integration (2.5 hours, PARALLEL with Phase 4)
+   ├─ 5.1 Service Worker (2 hours)
+   ├─ 5.2 Register Service Worker (30 min)
+   └─ 5.6 Request Deduplication Verification (included in Phase 2B tests)
+
+WEEK 4:
+├─ Phase 6: Testing (Throughout - Integrated TDD)
+│  ├─ 6.1 Test StandingsTable (2 hours)
+│  ├─ 6.2 Test MatchCard (1.5 hours)
+│  ├─ 6.3 Test Consolidation Endpoint (1.5 hours)
+│  ├─ 6.4 Integration: Tournament Detail Flow (2 hours)
+│  ├─ 6.5 Integration: Offline Flow (2 hours)
+│  ├─ 6.6 Integration: Pagination Flow (1.5 hours)
+│  └─ 6.7 Integration: Virtualization Performance (1.5 hours)
+│
+└─ Phase 7: Polish & Launch (4 hours)
+   ├─ 7.1 Responsive Design (1.5 hours)
+   ├─ 7.2 Accessibility Audit (2 hours)
+   ├─ 7.3 Error Handling (1.5 hours)
+   ├─ 7.4 Performance Verification (2 hours)
+   └─ 7.5 Documentation (1.5 hours)
+```
+
+### Critical Path (Longest Sequential Chain)
+
+```
+Phase 0 → Phase 1 → Phase 2B → Phase 4 → Phase 7
+(2h)     (1h)     (2h)        (4h)     (4h)
+= 13 hours minimum with full parallelization
+vs 18-20 hours sequential
+= 25-35% time savings
+```
+
+### Parallel Streams (Can run simultaneously)
+
+```
+Stream A (Design):        Phase 0 (2h)
+Stream B (Backend):       Phase 1 (1h)        + Phase 2A (1.5h)
+Stream C (Components):    Phase 3 (3h)        + Phase 5A (1.5h)
+Stream D (Pages):         Phase 4 (4h)        + Phase 5B (2.5h)
+Stream E (Testing):       Phase 6 (throughout)
+Stream F (Polish):        Phase 7 (4h)
+
+Maximum parallel work: 4 streams running simultaneously
+Estimated speedup: 25-35% faster than sequential execution
+```
+
+### Reorganized Task Listing by Stream
+
+**STREAM A: Design Specifications** (1-2 hours)
+- Phase 0.1: Design Specification Document
+- Phase 0.2: Design Tokens File
+- Phase 0.3: Component Specifications
+
+**STREAM B: Backend API & Early Frontend Hooks** (2.5 hours)
+- Phase 1.1: Create Consolidation Endpoint
+- Phase 1.2: Test Consolidation Endpoint
+- Phase 2.1: Create usePermissions Hook
+- Phase 2.2: Test usePermissions Hook
+- Phase 2.7: Create Additional Hooks (useInfiniteScroll, useVirtualScroll, usePrefetch)
+
+**STREAM C: Components & Image Optimization** (4.5 hours)
+- Phase 3.1: Create Shared Components
+- Phase 3.2: Create StandingsTable Component
+- Phase 3.3: Create MatchCard Component
+- Phase 3.4: Create TournamentCard Component
+- Phase 3.5: Create PhaseIndicator Component
+- Phase 3.6: Create Modal/Dialog Component
+- Phase 5.3: Create Image Optimization Service
+- Phase 5.4: Create Pagination Controls
+- Phase 5.5: Create Prefetch Strategy
+
+**STREAM D: Dependent Hooks & Pages** (6 hours)
+- Phase 2.3: Create useTournament Hook
+- Phase 2.4: Test useTournament Hook
+- Phase 2.5: Create useSSE Hook
+- Phase 2.6: Test useSSE Hook
+- Phase 4.1: Create Layout Infrastructure
+- Phase 4.2: Create Landing Page
+- Phase 4.3: Create BrowseTournaments Page
+- Phase 4.4: Create MyTournaments Page
+- Phase 4.5: Create OrganizerDashboard Page
+- Phase 4.6: Create TournamentDetail Page
+- Phase 5.1: Create Service Worker
+- Phase 5.2: Register Service Worker
+
+**STREAM E: Testing & Verification** (Throughout all streams)
+- Phase 6.1: Test StandingsTable
+- Phase 6.2: Test MatchCard
+- Phase 6.3: Test Consolidation Endpoint
+- Phase 6.4: Integration Test - Tournament Detail Flow
+- Phase 6.5: Integration Test - Offline Flow
+- Phase 6.6: Integration Test - Pagination Flow
+- Phase 6.7: Integration Test - Virtualization Performance
+
+**STREAM F: Polish & Launch** (After all other streams)
+- Phase 7.1: Responsive Design & Breakpoints
+- Phase 7.2: Accessibility Audit
+- Phase 7.3: Error Handling & Edge Cases
+- Phase 7.4: Performance Verification
+- Phase 7.5: Documentation & Handoff
 ```
 
 ---
@@ -1770,50 +1876,60 @@ Phase 7: Polish & Launch
 
 ---
 
-## Task Checklist
+## Task Checklist (Organized by Parallel Streams)
 
-Use this to track progress through implementation:
-
-- [ ] 0.1: Design Spec Document created
-- [ ] 0.2: Design Tokens file created
+### Stream A: Design Specifications (1-2 hours)
+- [ ] 0.1: Design Specification Document created
+- [ ] 0.2: Design Tokens file created and exported
 - [ ] 0.3: Component Specifications documented
-- [ ] 1.1: Consolidation Endpoint implemented
-- [ ] 1.2: Endpoint tested
+
+### Stream B: Backend API & Independent Hooks (2.5 hours) — *Parallel with Stream A*
+- [ ] 1.1: Consolidation Endpoint (GET /tournaments/:id/bundle) implemented
+- [ ] 1.2: Consolidation Endpoint tested (8+ test cases)
 - [ ] 2.1: usePermissions hook created
-- [ ] 2.2: usePermissions tested
+- [ ] 2.2: usePermissions hook tested
+- [ ] 2.7: useInfiniteScroll hook created
+- [ ] 2.7: useVirtualScroll hook created
+- [ ] 2.7: usePrefetch hook created
+
+### Stream C: Components & Early Optimizations (4.5 hours) — *Parallel with Stream B (after A)*
+- [ ] 3.1: Shared components created (Button, Badge, Spinner, Banners, Skeleton)
+- [ ] 3.2: StandingsTable component created (virtualized, 500+ rows)
+- [ ] 3.3: MatchCard component created
+- [ ] 3.4: TournamentCard component created
+- [ ] 3.5: PhaseIndicator component created
+- [ ] 3.6: Modal/Dialog component created
+- [ ] 5.3: Image optimization service created (lazy load, WebP, responsive)
+- [ ] 5.4: Pagination controls component created
+- [ ] 5.5: Prefetch strategy integrated
+
+### Stream D: Dependent Hooks & Pages (6 hours) — *Parallel with Stream C (after B)*
 - [ ] 2.3: useTournament hook created
-- [ ] 2.4: useTournament tested
+- [ ] 2.4: useTournament hook tested (fetch, dedup, error handling)
 - [ ] 2.5: useSSE hook created
-- [ ] 2.6: useSSE tested
-- [ ] 2.7: Additional hooks created
-- [ ] 3.1: Shared components created
-- [ ] 3.2: StandingsTable created
-- [ ] 3.3: MatchCard created
-- [ ] 3.4: TournamentCard created
-- [ ] 3.5: PhaseIndicator created
-- [ ] 3.6: Modal component created
-- [ ] 4.1: Layout & routing infrastructure
+- [ ] 2.6: useSSE hook tested (connection, events, reconnect, cleanup)
+- [ ] 4.1: Layout infrastructure (ResponsiveLayout, bottom nav, routing)
 - [ ] 4.2: Landing page created
-- [ ] 4.3: BrowseTournaments page created
+- [ ] 4.3: BrowseTournaments page created (infinite scroll)
 - [ ] 4.4: MyTournaments page created
 - [ ] 4.5: OrganizerDashboard page created
-- [ ] 4.6: TournamentDetail page created
-- [ ] 5.1: Service Worker implemented
-- [ ] 5.2: Service Worker registered
-- [ ] 5.3: Image optimization implemented
-- [ ] 5.4: Pagination controls created
-- [ ] 5.5: Prefetch strategy implemented
-- [ ] 5.6: Request deduplication verified
-- [ ] 6.1: StandingsTable component tested
-- [ ] 6.2: MatchCard component tested
-- [ ] 6.3: Endpoint tested
-- [ ] 6.4: Tournament detail flow integration tested
-- [ ] 6.5: Offline flow integration tested
-- [ ] 6.6: Pagination flow integration tested
-- [ ] 6.7: Virtualization performance tested
-- [ ] 7.1: Responsive design verified
-- [ ] 7.2: Accessibility audit passed
-- [ ] 7.3: Error handling complete
-- [ ] 7.4: Performance targets verified
-- [ ] 7.5: Documentation complete
+- [ ] 4.6: TournamentDetail page created (shared, role-based rendering)
+- [ ] 5.1: Service Worker created (caching, offline sync, queue)
+- [ ] 5.2: Service Worker registered and functional
+
+### Stream E: Testing & Verification (Throughout all streams, finalize week 4)
+- [ ] 6.1: StandingsTable component tested (13+ test cases, virtualization, SSE)
+- [ ] 6.2: MatchCard component tested (8+ test cases, role-based rendering)
+- [ ] 6.3: Consolidation endpoint tested (8+ test cases, auth, selective loading)
+- [ ] 6.4: Integration test — Tournament detail flow (full flow, /bundle, SSE, navigation)
+- [ ] 6.5: Integration test — Offline flow (caching, queueing, sync)
+- [ ] 6.6: Integration test — Pagination flow (load more, no redundant requests)
+- [ ] 6.7: Integration test — Virtualization performance (500 rows <500ms, 60fps scroll)
+
+### Stream F: Polish & Launch (4 hours) — *After all other streams complete*
+- [ ] 7.1: Responsive design verified (375px, 768px, 1440px breakpoints)
+- [ ] 7.2: Accessibility audit passed (WCAG AA, focus indicators, keyboard nav)
+- [ ] 7.3: Error handling complete (network errors, missing data, edge cases)
+- [ ] 7.4: Performance targets verified (< 1s load, < 200ms SSE, 60fps)
+- [ ] 7.5: Documentation complete (README, SETUP, ARCHITECTURE, TESTING)
 
