@@ -929,6 +929,94 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 
 ---
 
+### Task 3.7: Create Animation & Transition Specification
+**File:** `src/components/ANIMATION_SPEC.md`  
+**Estimated Time:** 2 hours  
+**Owner:** TBD
+
+#### Prerequisites
+- ✅ Task 0.2 completed (design tokens available)
+- ✅ Task 3.1-3.6 completed (components designed)
+- ✅ Pastel Flat 2.0 design finalized
+
+#### Implementation Steps
+1. Create `src/components/ANIMATION_SPEC.md` documenting all animations and transitions
+
+2. **Page Navigation Animations:**
+   - Route transitions: fade-in/fade-out or slide (left-to-right on mobile)
+   - Duration: 200-300ms
+   - Easing: ease-in-out
+   - Document for mobile vs desktop
+
+3. **Component State Animations:**
+   - Modal open/close: scale + fade (100ms)
+   - Dropdown open/close: slide + fade (150ms)
+   - Collapse/expand: height transition (200ms)
+   - Button click feedback: scale(0.98) + opacity
+
+4. **Loading State Animations:**
+   - Skeleton shimmer: left-to-right gradient animation (1500ms loop)
+   - Loading spinner: 360° rotation (1200ms loop)
+   - Loading progress bar: smooth width transition (300ms per step)
+
+5. **SSE Update Animations (Real-time):**
+   - Standing row update: brief yellow highlight (500ms) → fade to normal
+   - New match notification: slide-in from top + pulse highlight
+   - Bracket change: affected matches flash (2-3 times)
+   - Status change: color transition (300ms)
+
+6. **Interactive State Transitions:**
+   - Hover: opacity/shadow change (100ms)
+   - Focus: ring animation (smooth)
+   - Active/pressed: scale(0.95) + opacity shift (50ms)
+   - Disabled: opacity 0.5 (no transition)
+
+7. **Success/Error Feedback:**
+   - Toast notification slide-in from top (250ms)
+   - Success checkmark animation (scale + rotate)
+   - Error shake animation (100ms × 3)
+   - Auto-dismiss after 3-5 seconds with fade-out (300ms)
+
+8. **Offline Mode Indicators:**
+   - Syncing status: rotating icon + text change
+   - "Syncing..." → "Synced" with checkmark animation
+   - Reconnect pulse: pulsing connection icon
+   - Queue size indicator: count animation
+
+9. **Responsive Design Transitions:**
+   - Breakpoint transitions: smooth reflow (no snap)
+   - Layout shift animations: affected elements fade in (200ms)
+   - Navigation collapse/expand: smooth height transition (250ms)
+
+10. **Performance Considerations:**
+    - Use CSS transitions where possible (not JS)
+    - Use `transform` and `opacity` for 60fps animations
+    - Avoid animating layout properties (width, height, padding)
+    - Document which animations can be disabled (user preference: prefers-reduced-motion)
+
+11. **Accessibility:**
+    - Respect `prefers-reduced-motion` media query (reduce animations by 50% or disable)
+    - Ensure animations don't interfere with screen readers
+    - Document which animations are essential vs decorative
+
+#### Success Criteria
+- ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
+- ✅ `src/components/ANIMATION_SPEC.md` exists with complete animation specifications
+- ✅ All animations have documented durations and easing functions
+- ✅ Page navigation transitions specified for mobile and desktop
+- ✅ Component state animations (modal, dropdown, button) specified
+- ✅ Loading state animations (skeleton, spinner, progress) specified
+- ✅ SSE update animations (standing changes, bracket changes) specified
+- ✅ Success/error feedback animations specified
+- ✅ Offline mode indicator animations specified
+- ✅ Responsive transition details documented
+- ✅ Performance guidance provided (CSS vs JS, transform/opacity priority)
+- ✅ Accessibility considerations documented (prefers-reduced-motion)
+- ✅ Animations align with Pastel Flat 2.0 design aesthetic
+- ✅ Developers can implement animations exactly as specified
+
+---
+
 ## Phase 4: Pages and Routing
 
 ### Task 4.1: Create Layout Infrastructure
@@ -1870,13 +1958,14 @@ WEEK 2:
 │  ├─ 2.3 useTournament + 2.4 Test (1 hour)
 │  └─ 2.5 useSSE + 2.6 Test (1 hour)
 │
-├─ Phase 3: Frontend Components (3 hours, PARALLEL with Phase 2B, AFTER Phase 0)
+├─ Phase 3: Frontend Components & Animations (5 hours, PARALLEL with Phase 2B, AFTER Phase 0)
 │  ├─ 3.1 Shared Components (2 hours)
 │  ├─ 3.2 StandingsTable (2 hours)
 │  ├─ 3.3 MatchCard (1.5 hours)
 │  ├─ 3.4 TournamentCard (1 hour)
 │  ├─ 3.5 PhaseIndicator (30 min)
-│  └─ 3.6 Modal/Dialog (1 hour)
+│  ├─ 3.6 Modal/Dialog (1 hour)
+│  └─ 3.7 Animation & Transition Spec (2 hours)
 │
 └─ Phase 5A: Early Mobile Optimizations (1.5 hours, PARALLEL with Phase 3)
    ├─ 5.3 Image Optimization (1.5 hours)
@@ -2065,13 +2154,14 @@ Estimated speedup: 25-35% faster than sequential execution
 - [ ] 2.7: useVirtualScroll hook created
 - [ ] 2.7: usePrefetch hook created
 
-### Stream C: Components & Early Optimizations (4.5 hours) — *Parallel with Stream B (after A)*
+### Stream C: Components, Animations & Early Optimizations (6.5 hours) — *Parallel with Stream B (after A)*
 - [ ] 3.1: Shared components created (Button, Badge, Spinner, Banners, Skeleton)
 - [ ] 3.2: StandingsTable component created (virtualized, 500+ rows)
 - [ ] 3.3: MatchCard component created
 - [ ] 3.4: TournamentCard component created
 - [ ] 3.5: PhaseIndicator component created
 - [ ] 3.6: Modal/Dialog component created
+- [ ] 3.7: Animation & Transition specification documented
 - [ ] 5.3: Image optimization service created (lazy load, WebP, responsive)
 - [ ] 5.4: Pagination controls component created
 - [ ] 5.5: Prefetch strategy integrated
