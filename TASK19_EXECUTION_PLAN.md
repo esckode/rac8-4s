@@ -51,6 +51,35 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 
 ---
 
+## Universal Success Criteria (Apply to ALL 48 Tasks)
+
+**IMPORTANT:** Every single task in this execution plan (0.1 through 7.5) must meet ALL of these criteria. Do not mark a task as complete unless it passes these checks.
+
+### Code Quality Standards (CLAUDE.md) — ALL TASKS
+✅ **No console errors or warnings** — `npm run lint` passes cleanly with zero warnings
+✅ **No TypeScript errors** — `npx tsc --noEmit` completes without errors
+✅ **Simplicity First** — Implementation follows CLAUDE.md guidelines (no over-engineering, minimum code, no speculative features)
+✅ **Surgical changes only** — Only changes necessary for the task (no unrelated refactoring, cleanup, or "improvements")
+✅ **No hardcoded values** — All magic strings/numbers use design tokens, constants, config, or env vars
+✅ **Code style consistent** — Follows existing project patterns and conventions
+
+### Backend-Specific Criteria — ONLY Tasks 1.1, 1.2 (Consolidation Endpoint)
+✅ **Structured logging added** — Implements CLAUDE.md Section 6: logger.info() with proper event naming (noun.verb)
+✅ **Security audit passed** — Parameterized queries (no SQL injection), no secrets in logs, proper auth/authorization checks
+✅ **No memory leaks** — Proper cleanup of database connections, event listeners, timers
+
+### Frontend-Specific Criteria — All Hooks (2.1-2.7), Components (3.1-3.6), Pages (4.1-4.6), Service Workers (5.1-5.2)
+✅ **No memory leaks** — useEffect cleanup functions implemented, EventSource.close() called on unmount, event listeners removed
+✅ **Proper cleanup on unmount** — All subscriptions unsubscribed, timers cleared, listeners removed
+✅ **No console.log in production code** — Logging via console only in dev/debug scenarios with feature flags
+
+### Testing Standards — ALL Testing Tasks (Phase 6)
+✅ **Tests are isolated** — No cross-test dependencies, no shared state between tests, fixtures/mocks reset between tests
+✅ **Test database cleaned** — Integration tests use fresh database per test (rollback or cleanup after each test)
+✅ **No flaky tests** — Tests pass consistently (no race conditions, timing issues, or external dependencies)
+
+---
+
 ## Phase 0: Design Specifications (Critical Path)
 
 ### Task 0.1: Create Design Specification Document
@@ -116,6 +145,7 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
    - Screen reader support (semantic HTML, ARIA labels)
 
 #### Success Criteria
+- ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
 - ✅ `TASK19_DESIGN_SPEC.md` exists with all sections documented
 - ✅ Color palette fully specified with Tailwind mappings
 - ✅ Typography scale documented for all text sizes
