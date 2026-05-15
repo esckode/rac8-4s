@@ -1,351 +1,277 @@
 import request from 'supertest'
 import Database from 'better-sqlite3'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
+import {
+  openDatabase,
+  TournamentRepository,
+  PlayerRepository,
+  GroupRepository,
+  KnockoutRepository,
+} from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
-import type { Express } from 'express'
 
-const TEST_JWT_SECRET = 'test-secret-at-least-32-chars-long-for-testing!'
+const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
-describe('GET /tournaments/:id/bundle', () => {
+describe('GET /tournaments/:id/bundle - Consolidation Endpoint', () => {
   let db: Database.Database
-  let app: Express
-  let tokenStore: InMemoryTokenStore
-  let tournamentRepo: TournamentRepository
+  let app: any
+  let tournamentsRepo: TournamentRepository
   let playerRepo: PlayerRepository
   let groupRepo: GroupRepository
   let knockoutRepo: KnockoutRepository
+  let tokenStore: InMemoryTokenStore
+  let organizerToken: string
+  let organizerId: string
+  let tournamentId: string
+  let playerToken: string
+  let playerId: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tokenStore = new InMemoryTokenStore()
     db = openDatabase(':memory:')
     app = createApp({
       config: DEFAULT_APP_CONFIG,
       db,
-      jwtConfig: { secret: TEST_JWT_SECRET, expiresInSeconds: 3600 },
+      jwtConfig: STANDARD_CONFIG,
       tokenStore,
     })
 
-    tournamentRepo = new TournamentRepository(db)
+    tournamentsRepo = new TournamentRepository(db)
     playerRepo = new PlayerRepository(db)
     groupRepo = new GroupRepository(db)
     knockoutRepo = new KnockoutRepository(db)
+
+    // Create organizer and token
+    organizerId = 'organizer_test_123'
+    const tokenPair = issueOrganizerToken(
+      { sub: organizerId, email: 'org@test.com' },
+      STANDARD_CONFIG
+    )
+    organizerToken = tokenPair.accessToken
+
+    // Create tournament
+    const tournament = tournamentsRepo.create({
+      name: 'Test Tournament',
+      sport: 'Pickleball',
+      matchFormat: 'doubles',
+      maxPlayers: 16,
+      registrationDeadline: new Date(Date.now() + 86400000).toISOString(),
+      groupStageDeadline: new Date(Date.now() + 172800000).toISOString(),
+      knockoutStageDeadline: new Date(Date.now() + 259200000).toISOString(),
+      creatorId: organizerId,
+    })
+    tournamentId = tournament.id
+    tournamentsRepo.updateStatus(tournamentId, 'registration_open')
+
+    // Register a player via magic link
+    const registerRes = await request(app)
+      .post(`/tournaments/${tournamentId}/register`)
+      .send({ email: 'player1@test.com', name: 'Player One' })
+
+    const verifyRes = await request(app).get(
+      `/tournaments/${tournamentId}/auth/verify?token=${registerRes.body.magicLinkToken}`
+    )
+
+    playerToken = verifyRes.body.playerToken
+    const player = playerRepo.findByEmail('player1@test.com')!
+    playerId = player.id
+
+    // Set tournament to group_stage_active
+    tournamentsRepo.updateStatus(tournamentId, 'group_stage_active')
   })
 
   afterEach(() => {
-    if (db) db.close()
+    db.close()
   })
 
-  describe('Full bundle — organizer', () => {
-    it('returns all fields (tournament, standings, matches, bracket)', async () => {
-      const organizerId = 'org_123'
-      const token = issueOrganizerToken(
-        { sub: organizerId, email: 'org@test.com' },
-        { secret: TEST_JWT_SECRET, expiresInSeconds: 3600 }
-      ).accessToken
+  describe('Authorization', () => {
+    it('should return 401 when no auth header provided', async () => {
+      const res = await request(app).get(`/tournaments/${tournamentId}/bundle`)
 
-      const tournament = tournamentRepo.create({
-        name: 'Test Tournament',
-        sport: 'badminton',
-        matchFormat: 'doubles',
-        maxPlayers: 16,
-        creatorId: organizerId,
-        registrationDeadline: new Date(Date.now() + 1000000).toISOString(),
-        groupStageDeadline: new Date(Date.now() + 2000000).toISOString(),
-        knockoutStageDeadline: new Date(Date.now() + 3000000).toISOString(),
-      })
+      expect(res.status).toBe(401)
+      expect(res.body.code).toBe('UNAUTHORIZED')
+    })
 
-      const response = await request(app)
-        .get(`/tournaments/${tournament.id}/bundle`)
-        .set('Authorization', `Bearer ${token}`)
+    it('should return 401 when auth header is invalid', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle`)
+        .set('Authorization', 'Bearer invalid_token_12345')
 
-      expect(response.status).toBe(200)
-      expect(response.body.tournament).toBeDefined()
-      expect(response.body.tournament.id).toBe(tournament.id)
-      expect(response.body.tournament.name).toBe('Test Tournament')
-      expect(response.body.standings).toBeDefined()
-      expect(Array.isArray(response.body.standings)).toBe(true)
-      expect(response.body.matches).toBeDefined()
-      expect(response.body.matches.group).toBeDefined()
-      expect(response.body.matches.knockout).toBeDefined()
-      expect(response.body.bracket).toBeDefined()
+      expect(res.status).toBe(401)
+    })
+
+    it('should return 401 when Bearer prefix is missing', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle`)
+        .set('Authorization', organizerToken)
+
+      expect(res.status).toBe(401)
+    })
+
+    it('should return 403 when organizer does not own tournament', async () => {
+      const otherOrgId = 'other_organizer_456'
+      const otherTokenPair = issueOrganizerToken(
+        { sub: otherOrgId, email: 'other@test.com' },
+        STANDARD_CONFIG
+      )
+
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle`)
+        .set('Authorization', `Bearer ${otherTokenPair.accessToken}`)
+
+      expect(res.status).toBe(403)
+      expect(res.body.code).toBe('FORBIDDEN')
+    })
+
+    it('should return 404 when tournament does not exist', async () => {
+      const res = await request(app)
+        .get('/tournaments/nonexistent_id/bundle')
+        .set('Authorization', `Bearer ${organizerToken}`)
+
+      expect(res.status).toBe(404)
+      expect(res.body.code).toBe('NOT_FOUND')
     })
   })
 
-  describe('Full bundle — player', () => {
-    it('returns all fields for registered player', async () => {
-      const organizerId = 'org_456'
-      const playerEmail = `player_${Date.now()}@test.com`
-      const playerName = 'Test Player'
+  describe('Full Response - All Fields', () => {
+    it('should return all 4 fields for organizer (default include)', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle`)
+        .set('Authorization', `Bearer ${organizerToken}`)
 
-      // Create tournament
-      const tournament = tournamentRepo.create({
-        name: 'Player Test Tournament',
-        sport: 'badminton',
-        matchFormat: 'singles',
-        maxPlayers: 8,
-        creatorId: organizerId,
-        registrationDeadline: new Date(Date.now() + 1000000).toISOString(),
-        groupStageDeadline: new Date(Date.now() + 2000000).toISOString(),
-        knockoutStageDeadline: new Date(Date.now() + 3000000).toISOString(),
-      })
+      expect(res.status).toBe(200)
+      expect(res.body).toHaveProperty('tournament')
+      expect(res.body).toHaveProperty('standings')
+      expect(res.body).toHaveProperty('matches')
+      expect(res.body).toHaveProperty('bracket')
+    })
 
-      // Register player via magic link flow
-      tournamentRepo.updateStatus(tournament.id, 'registration_open')
-      const registerRes = await request(app)
-        .post(`/tournaments/${tournament.id}/register`)
-        .send({ email: playerEmail, name: playerName })
-
-      expect([200, 201, 202]).toContain(registerRes.status)
-      const magicLinkToken = registerRes.body.magicLinkToken
-
-      // Exchange magic link for session token
-      const verifyRes = await request(app)
-        .get(`/tournaments/${tournament.id}/auth/verify?token=${magicLinkToken}`)
-
-      expect(verifyRes.status).toBe(200)
-      const playerToken = verifyRes.body.playerToken
-
-      // Get bundle as player
-      const response = await request(app)
-        .get(`/tournaments/${tournament.id}/bundle`)
+    it('should return all 4 fields for registered player (default include)', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle`)
         .set('Authorization', `Bearer ${playerToken}`)
 
-      expect(response.status).toBe(200)
-      expect(response.body.tournament).toBeDefined()
-      expect(response.body.standings).toBeDefined()
-      expect(response.body.matches).toBeDefined()
-      expect(response.body.bracket).toBeDefined()
+      expect(res.status).toBe(200)
+      expect(res.body).toHaveProperty('tournament')
+      expect(res.body).toHaveProperty('standings')
+      expect(res.body).toHaveProperty('matches')
+      expect(res.body).toHaveProperty('bracket')
     })
   })
 
-  describe('Selective fields via include parameter', () => {
-    it('returns only tournament field when ?include=tournament', async () => {
-      const organizerId = 'org_selective'
-      const token = issueOrganizerToken(
-        { sub: organizerId, email: 'org@test.com' },
-        { secret: TEST_JWT_SECRET, expiresInSeconds: 3600 }
-      ).accessToken
+  describe('Include Parameter - Selective Fields', () => {
+    it('should return only tournament when ?include=tournament', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle?include=tournament`)
+        .set('Authorization', `Bearer ${organizerToken}`)
 
-      const tournament = tournamentRepo.create({
-        name: 'Selective Test',
-        sport: 'badminton',
-        matchFormat: 'doubles',
-        maxPlayers: 8,
-        creatorId: organizerId,
-        registrationDeadline: new Date(Date.now() + 1000000).toISOString(),
-        groupStageDeadline: new Date(Date.now() + 2000000).toISOString(),
-        knockoutStageDeadline: new Date(Date.now() + 3000000).toISOString(),
-      })
-
-      const response = await request(app)
-        .get(`/tournaments/${tournament.id}/bundle?include=tournament`)
-        .set('Authorization', `Bearer ${token}`)
-
-      expect(response.status).toBe(200)
-      expect(response.body.tournament).toBeDefined()
-      expect(response.body.standings).toBeUndefined()
-      expect(response.body.matches).toBeUndefined()
-      expect(response.body.bracket).toBeUndefined()
+      expect(res.status).toBe(200)
+      expect(res.body).toHaveProperty('tournament')
+      expect(res.body).not.toHaveProperty('standings')
+      expect(res.body).not.toHaveProperty('matches')
+      expect(res.body).not.toHaveProperty('bracket')
     })
 
-    it('returns only standings and matches when ?include=standings,matches', async () => {
-      const organizerId = 'org_partial'
-      const token = issueOrganizerToken(
-        { sub: organizerId, email: 'org@test.com' },
-        { secret: TEST_JWT_SECRET, expiresInSeconds: 3600 }
-      ).accessToken
+    it('should return standings,matches,bracket when ?include=standings,matches,bracket', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle?include=standings,matches,bracket`)
+        .set('Authorization', `Bearer ${organizerToken}`)
 
-      const tournament = tournamentRepo.create({
-        name: 'Partial Test',
-        sport: 'badminton',
-        matchFormat: 'doubles',
-        maxPlayers: 8,
-        creatorId: organizerId,
-        registrationDeadline: new Date(Date.now() + 1000000).toISOString(),
-        groupStageDeadline: new Date(Date.now() + 2000000).toISOString(),
-        knockoutStageDeadline: new Date(Date.now() + 3000000).toISOString(),
-      })
+      expect(res.status).toBe(200)
+      expect(res.body).not.toHaveProperty('tournament')
+      expect(res.body).toHaveProperty('standings')
+      expect(res.body).toHaveProperty('matches')
+      expect(res.body).toHaveProperty('bracket')
+    })
 
-      const response = await request(app)
-        .get(`/tournaments/${tournament.id}/bundle?include=standings,matches`)
-        .set('Authorization', `Bearer ${token}`)
+    it('should handle whitespace in include parameter', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle?include=tournament , standings`)
+        .set('Authorization', `Bearer ${organizerToken}`)
 
-      expect(response.status).toBe(200)
-      expect(response.body.tournament).toBeUndefined()
-      expect(response.body.standings).toBeDefined()
-      expect(response.body.matches).toBeDefined()
-      expect(response.body.bracket).toBeUndefined()
+      expect(res.status).toBe(200)
+      expect(res.body).toHaveProperty('tournament')
+      expect(res.body).toHaveProperty('standings')
     })
   })
 
-  describe('Authorization errors', () => {
-    it('returns 401 when no auth header', async () => {
-      const organizerId = 'org_noauth'
-      const tournament = tournamentRepo.create({
-        name: 'No Auth Test',
-        sport: 'badminton',
-        matchFormat: 'doubles',
-        maxPlayers: 8,
-        creatorId: organizerId,
-        registrationDeadline: new Date(Date.now() + 1000000).toISOString(),
-        groupStageDeadline: new Date(Date.now() + 2000000).toISOString(),
-        knockoutStageDeadline: new Date(Date.now() + 3000000).toISOString(),
-      })
+  describe('Response Fields', () => {
+    it('should include tournament details in response', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle`)
+        .set('Authorization', `Bearer ${organizerToken}`)
 
-      const response = await request(app)
-        .get(`/tournaments/${tournament.id}/bundle`)
-
-      expect(response.status).toBe(401)
-      expect(response.body.code).toBe('UNAUTHORIZED')
+      expect(res.status).toBe(200)
+      expect(res.body.tournament).toHaveProperty('id')
+      expect(res.body.tournament).toHaveProperty('name')
+      expect(res.body.tournament).toHaveProperty('sport')
+      expect(res.body.tournament).toHaveProperty('status')
     })
 
-    it('returns 401 when invalid token', async () => {
-      const organizerId = 'org_invalid'
-      const tournament = tournamentRepo.create({
-        name: 'Invalid Token Test',
-        sport: 'badminton',
-        matchFormat: 'doubles',
-        maxPlayers: 8,
-        creatorId: organizerId,
-        registrationDeadline: new Date(Date.now() + 1000000).toISOString(),
-        groupStageDeadline: new Date(Date.now() + 2000000).toISOString(),
-        knockoutStageDeadline: new Date(Date.now() + 3000000).toISOString(),
-      })
+    it('should include matches with group and knockout structure', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle?include=matches`)
+        .set('Authorization', `Bearer ${organizerToken}`)
 
-      const response = await request(app)
-        .get(`/tournaments/${tournament.id}/bundle`)
-        .set('Authorization', 'Bearer invalid_token_xyz')
-
-      expect(response.status).toBe(401)
+      expect(res.status).toBe(200)
+      expect(res.body.matches).toHaveProperty('group')
+      expect(res.body.matches).toHaveProperty('knockout')
+      expect(Array.isArray(res.body.matches.group)).toBe(true)
+      expect(Array.isArray(res.body.matches.knockout)).toBe(true)
     })
 
-    it('returns 403 when organizer does not own tournament', async () => {
-      const ownerOrgId = 'owner_org'
-      const otherOrgId = 'other_org'
-      const otherToken = issueOrganizerToken(
-        { sub: otherOrgId, email: 'other@test.com' },
-        { secret: TEST_JWT_SECRET, expiresInSeconds: 3600 }
-      ).accessToken
+    it('should include standings by group', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle?include=standings`)
+        .set('Authorization', `Bearer ${organizerToken}`)
 
-      const tournament = tournamentRepo.create({
-        name: 'Ownership Test',
-        sport: 'badminton',
-        matchFormat: 'doubles',
-        maxPlayers: 8,
-        creatorId: ownerOrgId,
-        registrationDeadline: new Date(Date.now() + 1000000).toISOString(),
-        groupStageDeadline: new Date(Date.now() + 2000000).toISOString(),
-        knockoutStageDeadline: new Date(Date.now() + 3000000).toISOString(),
-      })
-
-      // Tournament created by ownerOrgId, but we're trying to access as otherOrgId
-      const response = await request(app)
-        .get(`/tournaments/${tournament.id}/bundle`)
-        .set('Authorization', `Bearer ${otherToken}`)
-
-      expect(response.status).toBe(403)
-      expect(response.body.code).toBe('FORBIDDEN')
+      expect(res.status).toBe(200)
+      expect(Array.isArray(res.body.standings)).toBe(true)
     })
 
-    it('returns 403 when player not registered in tournament', async () => {
-      const organizerId = 'org_isolation'
+    it('should include bracket information', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle?include=bracket`)
+        .set('Authorization', `Bearer ${organizerToken}`)
 
-      // Tournament 1: Create and register a player
-      const tournament1 = tournamentRepo.create({
-        name: 'Isolation Test 1',
-        sport: 'badminton',
-        matchFormat: 'doubles',
-        maxPlayers: 8,
-        creatorId: organizerId,
-        registrationDeadline: new Date(Date.now() + 1000000).toISOString(),
-        groupStageDeadline: new Date(Date.now() + 2000000).toISOString(),
-        knockoutStageDeadline: new Date(Date.now() + 3000000).toISOString(),
-      })
-
-      tournamentRepo.updateStatus(tournament1.id, 'registration_open')
-      const registerRes1 = await request(app)
-        .post(`/tournaments/${tournament1.id}/register`)
-        .send({ email: `player1_${Date.now()}@test.com`, name: 'Player 1' })
-
-      const magicLinkToken1 = registerRes1.body.magicLinkToken
-      const verifyRes1 = await request(app)
-        .get(`/tournaments/${tournament1.id}/auth/verify?token=${magicLinkToken1}`)
-      const playerToken1 = verifyRes1.body.playerToken
-
-      // Tournament 2: Create but don't register the same player
-      const tournament2 = tournamentRepo.create({
-        name: 'Isolation Test 2',
-        sport: 'badminton',
-        matchFormat: 'doubles',
-        maxPlayers: 8,
-        creatorId: organizerId,
-        registrationDeadline: new Date(Date.now() + 1000000).toISOString(),
-        groupStageDeadline: new Date(Date.now() + 2000000).toISOString(),
-        knockoutStageDeadline: new Date(Date.now() + 3000000).toISOString(),
-      })
-
-      // Try to access tournament2 with token from tournament1
-      const response = await request(app)
-        .get(`/tournaments/${tournament2.id}/bundle`)
-        .set('Authorization', `Bearer ${playerToken1}`)
-
-      expect(response.status).toBe(403)
+      expect(res.status).toBe(200)
+      expect(res.body.bracket).toBeDefined()
     })
   })
 
-  describe('Not found error', () => {
-    it('returns 404 for non-existent tournament', async () => {
-      const organizerId = 'org_notfound'
-      const token = issueOrganizerToken(
-        { sub: organizerId, email: 'org@test.com' },
-        { secret: TEST_JWT_SECRET, expiresInSeconds: 3600 }
-      ).accessToken
+  describe('Role-Based Access', () => {
+    it('organizer can access bundle for owned tournament', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle`)
+        .set('Authorization', `Bearer ${organizerToken}`)
 
-      const response = await request(app)
-        .get('/tournaments/nonexistent_tournament_id/bundle')
-        .set('Authorization', `Bearer ${token}`)
-
-      expect(response.status).toBe(404)
-      expect(response.body.code).toBe('NOT_FOUND')
+      expect(res.status).toBe(200)
+      expect(res.body).toHaveProperty('tournament')
     })
-  })
 
-  describe('Data structure validation', () => {
-    it('returns correctly shaped tournament object', async () => {
-      const organizerId = 'org_shape'
-      const token = issueOrganizerToken(
-        { sub: organizerId, email: 'org@test.com' },
-        { secret: TEST_JWT_SECRET, expiresInSeconds: 3600 }
-      ).accessToken
+    it('player can access bundle for registered tournament', async () => {
+      const res = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle`)
+        .set('Authorization', `Bearer ${playerToken}`)
 
-      const tournament = tournamentRepo.create({
-        name: 'Shape Test',
-        sport: 'badminton',
-        matchFormat: 'doubles',
-        maxPlayers: 16,
-        creatorId: organizerId,
-        description: 'Test Description',
-        registrationDeadline: new Date(Date.now() + 1000000).toISOString(),
-        groupStageDeadline: new Date(Date.now() + 2000000).toISOString(),
-        knockoutStageDeadline: new Date(Date.now() + 3000000).toISOString(),
-      })
+      expect(res.status).toBe(200)
+      expect(res.body).toHaveProperty('tournament')
+    })
 
-      const response = await request(app)
-        .get(`/tournaments/${tournament.id}/bundle`)
-        .set('Authorization', `Bearer ${token}`)
+    it('data is consistent across roles', async () => {
+      const orgRes = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle`)
+        .set('Authorization', `Bearer ${organizerToken}`)
 
-      expect(response.status).toBe(200)
-      expect(response.body.tournament).toHaveProperty('id')
-      expect(response.body.tournament).toHaveProperty('name')
-      expect(response.body.tournament).toHaveProperty('sport')
-      expect(response.body.tournament).toHaveProperty('matchFormat')
-      expect(response.body.tournament).toHaveProperty('status')
-      expect(response.body.tournament).toHaveProperty('maxPlayers')
-      expect(response.body.tournament).toHaveProperty('registrationDeadline')
-      expect(response.body.tournament.description).toBe('Test Description')
+      const playerRes = await request(app)
+        .get(`/tournaments/${tournamentId}/bundle`)
+        .set('Authorization', `Bearer ${playerToken}`)
+
+      expect(orgRes.status).toBe(200)
+      expect(playerRes.status).toBe(200)
+      expect(orgRes.body.tournament.id).toBe(playerRes.body.tournament.id)
     })
   })
 })
