@@ -29,3 +29,6 @@ export type { MatchCardProps } from './MatchCard'
 
 export { TournamentCard } from './TournamentCard'
 export type { TournamentCardProps } from './TournamentCard'
+
+export { PhaseIndicator } from './PhaseIndicator'
+export type { PhaseIndicatorProps } from './PhaseIndicator'
