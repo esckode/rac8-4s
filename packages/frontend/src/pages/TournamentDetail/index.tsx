@@ -2,6 +2,11 @@ import React, { useMemo } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useAuth } from '../../hooks/useAuth'
+import { useSSE } from '../../hooks/useSSE'
+import { Standings } from './Standings'
+import { Matches } from './Matches'
+import { Bracket } from './Bracket'
+import { Details } from './Details'
 import '../../../styles/tokens.css'
 
 export const TournamentDetail: React.FC = () => {
@@ -10,6 +15,7 @@ export const TournamentDetail: React.FC = () => {
   const location = useLocation()
   const { user, isAuthenticated } = useAuth()
   const permissions = usePermissions(tournamentId || '')
+  const sseState = useSSE(tournamentId || '')
 
   // Get current tab from URL pathname
   const currentPath = location.pathname
@@ -70,6 +76,21 @@ export const TournamentDetail: React.FC = () => {
 
   const handleBackClick = () => {
     navigate(-1)
+  }
+
+  const renderTabContent = () => {
+    switch (currentTab) {
+      case 'standings':
+        return <Standings />
+      case 'matches':
+        return <Matches />
+      case 'bracket':
+        return <Bracket />
+      case 'details':
+        return <Details />
+      default:
+        return <Standings />
+    }
   }
 
   return (
@@ -147,7 +168,7 @@ export const TournamentDetail: React.FC = () => {
         ))}
       </div>
 
-      {/* Content Area - Placeholder for tab content */}
+      {/* Content Area */}
       <div
         className={`
           rounded-[--r-lg]
@@ -158,19 +179,12 @@ export const TournamentDetail: React.FC = () => {
           bg-white
         `}
       >
-        <div className="text-center py-12">
-          <h2 className="text-2xl font-bold text-[--ink-900] mb-[--s-2]">
-            {tabs.find((t) => t.id === currentTab)?.label}
-          </h2>
-          <p className="text-[--ink-600]">
-            {currentTab.charAt(0).toUpperCase() + currentTab.slice(1)} tab content will appear here
-          </p>
-          <div className="mt-[--s-6] space-y-[--s-2] text-sm text-[--ink-500]">
-            <p>Tournament ID: {tournamentId}</p>
-            <p>User Role: {permissions.organizerRole ? 'Organizer' : 'Player'}</p>
-            <p>Current User: {user?.email}</p>
+        {sseState.error && (
+          <div className="bg-[--rose-50] border border-[--rose-200] rounded-[--r-lg] p-[--s-4] text-[--rose-800] mb-[--s-4]">
+            <p className="text-sm">SSE Connection Error: {sseState.error}</p>
           </div>
-        </div>
+        )}
+        {renderTabContent()}
       </div>
 
       {/* Debug Info (remove in production) */}
@@ -191,6 +205,8 @@ export const TournamentDetail: React.FC = () => {
           <p>Current Tab: {currentTab}</p>
           <p>Tournament ID: {tournamentId}</p>
           <p>Is Organizer: {permissions.organizerRole ? 'yes' : 'no'}</p>
+          <p>SSE Connected: {sseState.connected ? 'yes' : 'no'}</p>
+          <p>SSE Reconnecting: {sseState.reconnecting ? 'yes' : 'no'}</p>
         </div>
       )}
     </div>
