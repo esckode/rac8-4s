@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Offline - Tournament</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
+          'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
+          'Helvetica Neue', sans-serif;
+        background: linear-gradient(135deg, #f5f3ff 0%, #faf7ff 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        text-align: center;
+        background: white;
+        padding: 60px 40px;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+        max-width: 400px;
+      }
+
+      .icon {
+        font-size: 64px;
+        margin-bottom: 20px;
+      }
+
+      h1 {
+        font-size: 28px;
+        color: #1a1a1a;
+        margin-bottom: 12px;
+        font-weight: 600;
+      }
+
+      p {
+        color: #666;
+        font-size: 16px;
+        line-height: 1.6;
+        margin-bottom: 30px;
+      }
+
+      .status {
+        display: inline-block;
+        padding: 12px 20px;
+        background: #f0f0f0;
+        border-radius: 8px;
+        color: #999;
+        font-size: 14px;
+        margin-bottom: 30px;
+      }
+
+      button {
+        background: #4f46e5;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.3s ease;
+      }
+
+      button:hover {
+        background: #4338ca;
+      }
+
+      button:active {
+        transform: scale(0.98);
+      }
+
+      .divider {
+        height: 1px;
+        background: #e5e5e5;
+        margin: 30px 0;
+      }
+
+      .tips {
+        text-align: left;
+      }
+
+      .tips h2 {
+        font-size: 14px;
+        color: #999;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 12px;
+        font-weight: 600;
+      }
+
+      .tips ul {
+        list-style: none;
+        font-size: 14px;
+        color: #666;
+        line-height: 1.8;
+      }
+
+      .tips li:before {
+        content: '✓ ';
+        color: #4f46e5;
+        font-weight: bold;
+        margin-right: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="icon">📡</div>
+      <h1>You're Offline</h1>
+      <p>It looks like you've lost your internet connection.</p>
+
+      <div class="status">
+        <span id="status">Waiting for connection...</span>
+      </div>
+
+      <button onclick="location.reload()">Try Again</button>
+
+      <div class="divider"></div>
+
+      <div class="tips">
+        <h2>What you can do:</h2>
+        <ul>
+          <li>Check your internet connection</li>
+          <li>Try moving closer to your WiFi router</li>
+          <li>Refresh the page when reconnected</li>
+          <li>Your data will sync automatically</li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      // Update status when connection returns
+      const statusEl = document.getElementById('status')
+
+      window.addEventListener('online', () => {
+        statusEl.textContent = 'Connection restored!'
+        setTimeout(() => {
+          location.reload()
+        }, 1000)
+      })
+
+      window.addEventListener('offline', () => {
+        statusEl.textContent = 'Still offline'
+      })
+    </script>
+  </body>
+</html>
