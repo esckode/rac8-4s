@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReconnectingEventSource from 'reconnecting-eventsource'
 import { standingsStore, matchStore } from '../state'
 import { useTournament } from './useTournament'
+import { useAnalytics } from './useAnalytics'
 import type { StandingsUpdatedPayload, BracketPublishedPayload } from '../types'
 
 export interface SSEState {
@@ -25,8 +26,10 @@ export function useSSE(tournamentId: string): SSEState {
   const eventSourceRef = useRef<ReconnectingEventSource | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const wasConnectedRef = useRef(false)
+  const eventTimestampRef = useRef<number>(0)
 
   const { refetch: refetchTournament } = useTournament(tournamentId)
+  const { track } = useAnalytics()
 
   useEffect(() => {
     // Only open connection if tournamentId is provided
@@ -61,8 +64,17 @@ export function useSSE(tournamentId: string): SSEState {
       eventSource.addEventListener('standings.updated', (event: Event) => {
         try {
           if (event instanceof MessageEvent) {
+            const receivedAt = Date.now()
             const payload: StandingsUpdatedPayload = JSON.parse(event.data)
             standingsStore.update(payload)
+
+            // Track SSE update latency
+            const latency = eventTimestampRef.current ? receivedAt - eventTimestampRef.current : 0
+            track('sse_update', {
+              eventType: 'standings.updated',
+              latency,
+              recordCount: payload.standings?.length ?? 0,
+            })
           }
         } catch (err) {
           console.error('Failed to parse standings.updated event', err)
@@ -74,9 +86,17 @@ export function useSSE(tournamentId: string): SSEState {
       eventSource.addEventListener('bracket.published', (event: Event) => {
         try {
           if (event instanceof MessageEvent) {
+            const receivedAt = Date.now()
             const payload: BracketPublishedPayload = JSON.parse(event.data)
             // TODO: Update bracket store when available
             // For now, just log that we received it
+
+            // Track SSE update
+            const latency = eventTimestampRef.current ? receivedAt - eventTimestampRef.current : 0
+            track('sse_update', {
+              eventType: 'bracket.published',
+              latency,
+            })
           }
         } catch (err) {
           console.error('Failed to parse bracket.published event', err)
@@ -109,7 +129,7 @@ export function useSSE(tournamentId: string): SSEState {
       setError(errorMessage)
       setConnected(false)
     }
-  }, [tournamentId, refetchTournament])
+  }, [tournamentId, refetchTournament, track])
 
   return {
     connected,

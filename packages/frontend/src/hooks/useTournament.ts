@@ -10,6 +10,7 @@ import type { Tournament, Standing, Match } from '@shared/types'
 import type { BracketData, MatchWithOpponent } from '../types'
 import { tournamentStore, standingsStore, matchStore } from '../state'
 import { useAuth } from './useAuth'
+import { useAnalytics } from './useAnalytics'
 
 export interface TournamentBundle {
   tournament: Tournament | null
@@ -55,6 +56,7 @@ async function fetchTournamentBundle(
 export function useTournament(tournamentId: string): TournamentHookState {
   const authState = useAuth()
   const queryClient = useQueryClient()
+  const { track } = useAnalytics()
 
   const {
     data: bundle,
@@ -65,7 +67,26 @@ export function useTournament(tournamentId: string): TournamentHookState {
     queryKey: ['tournament', tournamentId],
     queryFn: async () => {
       if (!authState.user) throw new Error('Not authenticated')
-      return fetchTournamentBundle(tournamentId, authState.user.id)
+
+      const apiStart = performance.now()
+      const bundle = await fetchTournamentBundle(tournamentId, authState.user.id)
+      const apiEnd = performance.now()
+
+      // Measure render time using requestAnimationFrame
+      const renderStart = apiEnd
+      await new Promise(resolve => requestAnimationFrame(resolve))
+      const renderEnd = performance.now()
+
+      // Track time_to_data metrics
+      track('time_to_data', {
+        screen: 'bundle',
+        apiDuration: apiEnd - apiStart,
+        renderDuration: renderEnd - renderStart,
+        totalDuration: renderEnd - apiStart,
+        recordCount: (bundle.standings?.length ?? 0) + (bundle.matches?.group?.length ?? 0) + (bundle.matches?.knockout?.length ?? 0),
+      })
+
+      return bundle
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes (formerly cacheTime)
