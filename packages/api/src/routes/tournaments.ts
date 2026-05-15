@@ -1561,5 +1561,203 @@ export default function tournamentsRouter(deps: AppDependencies) {
     })
   })
 
+  // GET /:id/bundle - consolidation endpoint for tournament + standings + matches + bracket
+  router.get('/:id/bundle', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.id as string
+
+      // Dual auth: organizer or player
+      let userId: string
+      const authHeader = req.headers.authorization
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Missing authentication' })
+      }
+
+      let isOrganizer = false
+      try {
+        const orgPayload = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
+        const tournament = repo.findById(tournamentId)
+        if (!tournament) {
+          return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+        }
+        if (tournament.creator_id !== orgPayload.sub) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'You do not own this tournament' })
+        }
+        isOrganizer = true
+        userId = orgPayload.sub
+      } catch (err) {
+        try {
+          const playerPayload = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
+          assertPlayerInTournament(playerPayload, tournamentId)
+          userId = playerPayload.playerId
+        } catch (playerErr) {
+          if (playerErr instanceof ForbiddenError) {
+            return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not registered in this tournament' })
+          }
+          return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Invalid or missing authentication' })
+        }
+      }
+
+      const tournament = repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      // Parse include parameter (default: all fields)
+      const fields = new Set(
+        (req.query.include as string | undefined)?.split(',').map(f => f.trim()) ??
+        ['tournament', 'standings', 'matches', 'bracket']
+      )
+
+      // Phase 1: Parallel base fetches
+      const [groups, seeds, knockoutMatches] = await Promise.all([
+        (fields.has('standings') || fields.has('matches'))
+          ? groupRepo.findGroupsByTournament(tournamentId)
+          : Promise.resolve([]),
+        fields.has('bracket')
+          ? knockoutRepo.getSeeds(tournamentId)
+          : Promise.resolve([]),
+        (fields.has('matches') || fields.has('bracket'))
+          ? knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
+          : Promise.resolve([]),
+      ])
+
+      // Phase 2: Per-group data (if needed)
+      const groupDetails = (fields.has('standings') || fields.has('matches'))
+        ? await Promise.all(groups.map(g => Promise.all([
+            groupRepo.findMembersByGroup(g.id),
+            groupRepo.findMatchesByGroup(g.id),
+          ])))
+        : []
+
+      // Build response object
+      const response: any = {}
+
+      if (fields.has('tournament')) {
+        response.tournament = {
+          id: tournament.id,
+          name: tournament.name,
+          sport: tournament.sport,
+          matchFormat: tournament.match_format,
+          status: tournament.status,
+          maxPlayers: tournament.max_players,
+          description: tournament.description,
+          registrationDeadline: tournament.registration_deadline,
+          groupStageDeadline: tournament.group_stage_deadline,
+          knockoutStageDeadline: tournament.knockout_stage_deadline,
+        }
+      }
+
+      if (fields.has('standings')) {
+        response.standings = groups.map((group, idx) => {
+          const [members, matches] = groupDetails[idx] || [[], []]
+          const standings = calculateStandings(
+            members.map(m => ({ id: m.id, name: m.name })),
+            matches.map(m => ({
+              player1Id: m.player1_id,
+              player2Id: m.player2_id,
+              winnerId: m.winner_id || null,
+              score: m.score || null,
+            }))
+          )
+          return {
+            groupId: group.id,
+            groupName: group.name,
+            standings: standings.map((s: any) => {
+              const player = members.find(m => m.id === s.playerId)
+              return {
+                rank: s.rank,
+                playerId: s.playerId,
+                name: player?.name || 'Unknown',
+                wins: s.wins,
+                losses: s.losses,
+                setsWon: s.setsWon,
+                setsLost: s.setsLost,
+              }
+            }),
+          }
+        })
+      }
+
+      if (fields.has('matches')) {
+        const groupMatches = groupDetails.flatMap(([_, matches]) => matches || [])
+        response.matches = {
+          group: groupMatches.map(m => ({
+            id: m.id,
+            groupId: m.group_id,
+            player1Id: m.player1_id,
+            player2Id: m.player2_id,
+            winnerId: m.winner_id || null,
+            score: m.score || null,
+            status: m.status,
+          })),
+          knockout: knockoutMatches.map(m => ({
+            id: m.id,
+            round: m.round,
+            position: m.position,
+            player1Id: m.player1_id,
+            player2Id: m.player2_id,
+            winnerId: m.winner_id || null,
+            score: m.score || null,
+            status: m.status,
+          })),
+        }
+      }
+
+      if (fields.has('bracket')) {
+        if (seeds.length > 0) {
+          const seedMap = new Map(seeds.map(s => [s.seedPosition, s.playerId]))
+          const bracket = generateBracket(seeds.length)
+          const matchById = new Map(knockoutMatches.map(m => [`${m.round}-${m.position}`, m]))
+
+          const rounds = bracket.rounds.map((r) => ({
+            round: r.round,
+            matches: r.matches.map((m) => {
+              const dbMatch = matchById.get(`${m.round}-${m.position}`)
+              if (dbMatch) {
+                return {
+                  id: dbMatch.id,
+                  round: dbMatch.round,
+                  position: dbMatch.position,
+                  player1Id: dbMatch.player1_id,
+                  player2Id: dbMatch.player2_id,
+                  winnerId: dbMatch.winner_id || null,
+                  score: dbMatch.score,
+                  status: dbMatch.status,
+                }
+              }
+              const player1Id = m.player1 ? seedMap.get(parseInt(m.player1.replace('seed_', ''))) ?? null : null
+              const player2Id = m.player2 ? seedMap.get(parseInt(m.player2.replace('seed_', ''))) ?? null : null
+              return {
+                id: m.id,
+                round: m.round,
+                position: m.position,
+                player1Id,
+                player2Id,
+                winnerId: null,
+                score: null,
+                status: 'pending',
+              }
+            }),
+          }))
+
+          response.bracket = {
+            rounds,
+            totalPlayers: seeds.length,
+            byeCount: bracket.byeCount,
+          }
+        } else {
+          response.bracket = null
+        }
+      }
+
+      log.info('tournament.bundle.fetched', { tournamentId, userId })
+
+      res.json(response)
+    } catch (err) {
+      next(err)
+    }
+  })
+
   return router
 }
