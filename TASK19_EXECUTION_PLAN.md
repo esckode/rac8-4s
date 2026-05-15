@@ -70,6 +70,49 @@
 
 ---
 
+## Supporting Documentation (Reference for All Tasks)
+
+### Wireflow & Navigation Design
+**File:** `TASK19_WIREFLOW.md`
+
+This document defines the complete user flows and screen architecture for Task #19. **All tasks should reference this document** when implementing components, pages, and features.
+
+**Key Content:**
+- **Player User Flow:** Discovery → Registration → Group Stage → Knockout → Results
+- **Organizer User Flow:** Tournament setup → Group management → Match oversight → Bracket publication
+- **Screen Specifications:** Tournament list, details, standings, matches, bracket, registration confirmation
+- **Navigation Patterns:** Bottom tabs (mobile), breadcrumbs, deep linking
+- **Real-Time Interaction Points:** SSE for standings/bracket updates, score submission flows
+
+**How to Use:**
+- **Component Builders (Phase 3):** Reference screen specs to understand context and data flow
+- **Page Layout (Phase 4):** Use screen specifications to guide page structure
+- **Route Implementation (Phase 5):** Use navigation patterns to build routing
+- **Integration Tests (Phase 6):** Use user flows as scenarios for end-to-end testing
+
+### Design Tokens & Component Library
+**Files:**
+- `packages/frontend/src/styles/tokens.css` — Complete CSS design token system
+- `packages/frontend/src/ui/lib.jsx` — Pre-built, production-ready component library
+
+**Tokens Coverage:**
+- **Colors:** Court Blue (logo brand), Lavender (secondary), Accents (Mint, Peach, Pink, Rose, Gold), Ink/Neutrals, Semantic phase colors
+- **Spacing:** 10-step scale (4px → 64px)
+- **Typography:** 3 font families (Fredoka, Plus Jakarta Sans, JetBrains Mono) with feature settings
+- **Radius & Shadows:** Complete set from `--r-xs` to `--r-full` and `--shadow-xs` to `--shadow-xl`
+- **Surfaces & Backgrounds:** White, tinted, sunken, glass, radial gradient backgrounds
+
+**Component Library (12+ Components):**
+Logo, Button (6 variants, 3 sizes, icon support), Icon, PhaseBadge, Chip, Avatar, AvatarStack, Card, LiveDot, SectionHeading, Shuttle, CourtDoodle — all use CSS tokens and support responsive/accessible rendering.
+
+**How to Use:**
+- **All frontend tasks:** Import components from `lib.jsx` and use CSS tokens from `tokens.css`
+- **Animation tokens:** Add to `tokens.css` in Phase 0.2 if needed (currently missing)
+- **Component specifications:** Extract from existing implementations in `lib.jsx` (Phase 0.3)
+- **Design mockups:** Reference `packages/frontend/src/ui/section-*.jsx` for complete UI examples
+
+---
+
 ## Task Overview
 
 This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced tasks with clear prerequisites and success criteria. Tasks are ordered to allow parallel work where possible while respecting critical dependencies.
@@ -115,162 +158,153 @@ This execution plan breaks down TASK19_FINAL_PLAN.md into actionable, sequenced 
 #### Prerequisites
 - ✅ Pastel Flat 2.0 design mockups finalized (TASK19_PASTEL_FLAT2_MOCKUP.html)
 - ✅ Design token decisions made (colors, typography, spacing)
+- ✅ Design tokens already exist in `packages/frontend/src/styles/tokens.css` (validate & document)
 
 #### Implementation Steps
 1. Create `TASK19_DESIGN_SPEC.md` with complete design system documentation
-2. Document Color Palette section:
-   - Primary: #A8D5FF (Soft sky blue)
-   - Secondary: #D4A5F7 (Soft lavender)
-   - Success: #A8E6C1 (Soft mint green)
-   - Warning: #FFD9A8 (Soft peach)
-   - Error: #FF9999 (Soft red)
-   - Neutral grays: 50-900 scale
-   - Map each color to Tailwind classes
-3. Document Typography section:
-   - Font family: system fonts (-apple-system, BlinkMacSystemFont, Segoe UI, Roboto)
-   - Font sizes and weights for headings, body, small text
-   - Line heights and letter spacing
-   - Mobile scaling rules (e.g., Heading 1: 32px desktop → 24px mobile)
-4. Document Spacing System section:
-   - Base unit: 4px/8px
-   - Spacing scale: xs (4px), sm (8px), md (16px), lg (24px), xl (32px)
-5. Document Responsive Breakpoints:
-   - Mobile: < 640px
+2. Document Color Palette section (from `packages/frontend/src/styles/tokens.css`):
+   - **Court Blue** (logo brand): 50-900 scale (#F5FAFF → #0F3D6B)
+   - **Lavender** (secondary): 50-700 scale
+   - **Accents**: Mint, Peach, Pink, Rose, Gold (4 tones each)
+   - **Ink/Neutrals**: 50-900 scale for text, borders, surfaces
+   - **Phase Colors**: Registration open/closed, group, knockout, complete
+   - Document CSS variable names (--court-300, --lavender-400, etc.)
+3. Document Typography section (from `packages/frontend/src/styles/tokens.css`):
+   - Font families: Fredoka (display), Plus Jakarta Sans (UI), JetBrains Mono (code)
+   - Feature settings and font smoothing configuration
+   - Document CSS variable names (--font-display, --font-ui, --font-mono)
+   - Note: Actual font sizes documented in component specs (Phase 0.3)
+4. Document Spacing System section (from `packages/frontend/src/styles/tokens.css`):
+   - Base units: 4px (s-1) through 64px (s-16)
+   - Document CSS variable names (--s-1, --s-2, --s-4, etc.)
+5. Document Surfaces & Shadows section:
+   - Surface variants: white, tinted, sunken, glass, gradient
+   - Shadows: xs through xl + focus ring
+   - Border radius: xs (6px) through full (999px)
+6. Document Responsive Breakpoints (from wireflow & design patterns):
+   - Mobile: < 640px (priority)
    - Tablet: 640px - 1024px
    - Desktop: > 1024px
    - Mobile-first approach confirmed
-6. Document Component Specifications for all 12+ components:
-   - Buttons (primary, secondary, outline, disabled, loading)
-   - Form inputs (text, email, select, checkbox)
-   - Cards (tournament card, match card)
-   - Tables (standings with virtualization)
-   - Modals/Dialogs
-   - Badges/Pills (phase indicator)
-   - Spinners/Loading states
-   - Error/Success banners
-   - Navigation (bottom tabs, breadcrumbs)
-   - Tournament list (grid vs list layout)
-   - Standings table (row hover, sorting)
-   - Match list (upcoming, completed, grouped)
-   - Bracket view (player match-focused, organizer full tree)
-7. For each component specify:
-   - Default appearance (colors, spacing, typography)
-   - Interactive states (hover, focus, active, disabled, loading)
-   - Mobile appearance
-   - Accessibility requirements (focus indicators, contrast)
+7. Note: Detailed Component Specifications documented in Task 0.3 (`COMPONENT_SPECS.md`)
 8. Document Layout & Spacing Rules:
-   - Page padding: 16px mobile, 24px tablet, 32px desktop
-   - Card spacing: 16px gap
-   - Section spacing: 24px between major sections
+   - Page padding: 16px mobile (--s-4), 24px tablet (--s-6), 32px desktop (--s-8)
+   - Card spacing: 16px gap (--s-4)
+   - Section spacing: 24px between major sections (--s-6)
+   - Touch targets: 44px minimum on mobile
 9. Document Accessibility Requirements:
-   - Focus indicators visible on all interactive elements
-   - WCAG AA minimum color contrast
+   - Focus indicators visible on all interactive elements (use --shadow-focus)
+   - WCAG AA minimum color contrast (verify in tokens)
    - Touch targets: 44px minimum on mobile
    - Keyboard navigation for all interactive elements
    - Screen reader support (semantic HTML, ARIA labels)
 
 #### Success Criteria
 - ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
-- ✅ `TASK19_DESIGN_SPEC.md` exists with all sections documented
-- ✅ Color palette fully specified with Tailwind mappings
-- ✅ Typography scale documented for all text sizes
-- ✅ Spacing system defined with examples
-- ✅ All 12+ components specified with appearance + states + mobile + a11y
+- ✅ `TASK19_DESIGN_SPEC.md` exists documenting the Pastel Flat 2.0 design system
+- ✅ Color palette documented with CSS variable names from tokens.css
+- ✅ Typography defined (font families, feature settings)
+- ✅ Spacing system defined with CSS variable references (--s-1 through --s-16)
+- ✅ Surfaces, shadows, radius documented
 - ✅ Responsive breakpoints and mobile-first approach clearly documented
 - ✅ Accessibility guidelines meet WCAG AA standards
-- ✅ Design decisions align with Pastel Flat 2.0 mockup
-- ✅ Developers can implement without asking "what color is this?"
+- ✅ All design decisions align with existing tokens in `packages/frontend/src/styles/tokens.css`
+- ✅ Design spec references existing component library (Task 0.3) for detailed component specs
+- ✅ Developers can reference this as source-of-truth for design decisions
 
 ---
 
-### Task 0.2: Create Design Tokens File
-**File:** `src/design/tokens.ts`  
-**Estimated Time:** 1.5 hours  
+### Task 0.2: Enhance Design Tokens with Animation Definitions
+**File:** `packages/frontend/src/styles/tokens.css` (modification)  
+**Estimated Time:** 1 hour  
 **Owner:** TBD
 
-#### Prerequisites
-- ✅ Task 0.1 completed (design spec finalized)
-- ✅ TypeScript project structure in place
+#### Current State
+✅ **Design tokens file already exists** with complete coverage:
+- Colors: Court Blue, Lavender, Accents, Ink/Neutrals, phase colors
+- Spacing: 10-step scale (s-1 through s-16)
+- Typography: 3 font families with feature settings
+- Radius: 8 variants (xs → full)
+- Shadows: 6 variants (xs → xl) + focus ring
+- Surfaces: 5 variants (white, tinted, sunken, glass, gradient)
 
 #### Implementation Steps
-1. Create `src/design/tokens.ts` file
-2. Export `colors` object:
-   - Pastel primary: #A8D5FF
-   - Pastel secondary: #D4A5F7
-   - Success: #A8E6C1
-   - Warning: #FFD9A8
-   - Error: #FF9999
-   - Gray scale (50-900) in increments of 100
-3. Export `typography` object:
-   - heading1, heading2, body, small
-   - Each with fontSize, fontWeight, lineHeight properties
-4. Export `spacing` object:
-   - xs, sm, md, lg, xl values
-5. Export `breakpoints` object:
-   - mobile: '640px'
-   - tablet: '1024px'
-6. **NEW: Export `animations` object (required for Task 3.7):**
-   - `durations`: { fast: '100ms', normal: '200ms', slow: '300ms' }
-   - `easing`: { snap: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', smooth: 'cubic-bezier(0.4, 0, 0.2, 1)', easeOut: 'cubic-bezier(0, 0, 0.2, 1)' }
-   - Document that all animations must use these tokens for consistency
-7. Ensure all exports are TypeScript constants with proper types
-8. Create simple unit test to verify tokens are properly exported
+1. Add animation tokens to `packages/frontend/src/styles/tokens.css` `:root` section:
+   ```css
+   /* ---------- Animations ---------- */
+   --duration-fast: 100ms;
+   --duration-normal: 200ms;
+   --duration-slow: 300ms;
+   
+   --easing-snap: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+   --easing-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+   --easing-ease-out: cubic-bezier(0, 0, 0.2, 1);
+   ```
+2. Document animation token usage at bottom of file:
+   - When to use each duration (fast: UI interactions, normal: transitions, slow: page-level)
+   - When to use each easing (snap: snappy interactions, smooth: content reveals, easeOut: dismissals)
+3. Verify all color tokens match Pastel Flat 2.0 design decisions
+4. Add comment block documenting the complete token system
 
 #### Success Criteria
 - ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
-- ✅ `src/design/tokens.ts` exists and exports all token categories
-- ✅ Colors match Pastel Flat 2.0 palette exactly
-- ✅ Typography tokens include all required properties
-- ✅ Spacing values are consistent with design spec
-- ✅ **Animation tokens defined:** durations and easing curves documented
-- ✅ Tokens can be imported in components without errors
-- ✅ TypeScript types are correct
-- ✅ File is validated with unit test
+- ✅ `packages/frontend/src/styles/tokens.css` is the source of truth for all design tokens
+- ✅ Animation tokens added: `--duration-fast/normal/slow` and `--easing-snap/smooth/ease-out`
+- ✅ All colors match Pastel Flat 2.0 palette
+- ✅ All spacing values consistent with design spec
+- ✅ Animation tokens documented with usage guidelines
+- ✅ All Phase 2-7 tasks can reference these tokens
+- ✅ CSS custom properties work across all browsers (no TS file needed)
 
 ---
 
-### Task 0.3: Document Component Specifications
-**File:** `src/components/COMPONENT_SPECS.md`  
+### Task 0.3: Extract & Document Component Library Specifications
+**File:** `packages/frontend/src/ui/COMPONENT_SPECS.md` (new)  
 **Estimated Time:** 2 hours  
 **Owner:** TBD
 
-#### Prerequisites
-- ✅ Task 0.1 completed (design spec available)
-- ✅ Task 0.2 completed (tokens defined)
+#### Current State
+✅ **Component library already exists** in `packages/frontend/src/ui/lib.jsx`:
+- 12+ production-ready components using CSS tokens
+- All components responsive and accessible
+- Full working implementation, not just specs
 
 #### Implementation Steps
-1. Create `src/components/COMPONENT_SPECS.md`
-2. Document each of the following components with sections:
-   - **Appearance:** default colors, spacing, typography
-   - **Interactive States:** hover, focus, active, disabled, loading
-   - **Mobile Layout:** appearance and behavior on < 640px screens
-   - **Accessibility:** focus indicators, contrast, keyboard nav, ARIA labels
-   - **Example Usage:** code snippet showing typical implementation
-3. Components to document (in order):
-   - Button (primary, secondary, outline variants)
-   - Form inputs (text, email, select, checkbox)
-   - TournamentCard
-   - MatchCard
-   - StandingsTable (with virtualization note)
-   - PhaseIndicator badge
-   - LoadingSpinner
-   - ErrorBanner / SuccessBanner
-   - BottomNav (mobile navigation)
-   - Breadcrumb navigation
-   - Modal/Dialog
-   - Skeleton loaders (for loading state)
-4. Use Pastel Flat 2.0 colors from design tokens
-5. Include examples showing Tailwind class usage
+1. Create `packages/frontend/src/ui/COMPONENT_SPECS.md` documenting the existing components
+2. For each component in `lib.jsx`, document:
+   - **Appearance:** default colors, spacing, typography (reference actual code)
+   - **Props & Variants:** all available variant options and their meanings
+   - **Interactive States:** hover, focus, active, disabled, loading (verify in code)
+   - **Mobile Layout:** responsive behavior on < 640px (verify or add if missing)
+   - **Accessibility:** focus indicators, contrast, ARIA labels (verify in code)
+   - **Example Usage:** show actual prop combinations from section-*.jsx mockups
+   - **Token References:** document which CSS tokens are used
+3. Components to document (from lib.jsx):
+   - **Logo** (tone variants: navy, light, mono-court; with/without tagline)
+   - **Button** (6 variants: primary, primaryBold, secondary, ghost, soft, dark; 3 sizes; icon support)
+   - **Icon** (SVG icon system with color/size/stroke customization)
+   - **PhaseBadge** (tournament phase indicators: reg-open, reg-closed, group, knockout, complete)
+   - **Chip** (variant system: court, lavender, mint, peach, default, dark; icon support)
+   - **Avatar** (single user avatar with ring/color options)
+   - **AvatarStack** (multiple avatars with overflow max)
+   - **Card** (default, padded, styled variants)
+   - **LiveDot** (real-time status indicator)
+   - **SectionHeading** (eyebrow, title, subtitle layout)
+   - **Shuttle** (badminton decorative icon)
+   - **CourtDoodle** (court visualization)
+4. Note: Form inputs, tables, modals documented in Phase 3 (more complex, will be built then)
+5. Reference actual usage from `packages/frontend/src/ui/section-components.jsx` mockups
 
 #### Success Criteria
 - ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
-- ✅ `src/components/COMPONENT_SPECS.md` exists with all components documented
-- ✅ Each component has appearance, states, mobile, and a11y sections
-- ✅ All colors reference design tokens
+- ✅ `packages/frontend/src/ui/COMPONENT_SPECS.md` documents all 12 existing components
+- ✅ Each component spec includes: appearance, props, states, mobile, a11y, example usage
+- ✅ All colors reference CSS tokens from tokens.css
 - ✅ Mobile layouts explicitly documented for < 640px
-- ✅ Accessibility requirements specified for each component
-- ✅ Example code snippets are accurate and implementable
-- ✅ Developers can use this spec to build components to exact spec
+- ✅ Accessibility requirements verified for each component
+- ✅ Example code snippets match actual implementations in lib.jsx
+- ✅ Developers can reference this spec when building Phase 3-4 features
+- ✅ Specs include which components to import/use vs. which to rebuild
 
 ---
 

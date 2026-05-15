@@ -1,0 +1,163 @@
+/* =========================================================
+   C U At Court — Design Tokens
+   Refined pastel system: disciplined, flat with soft depth.
+   ========================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ---------- Brand: Court Blue (from logo) ---------- */
+  --court-50:  #F5FAFF;
+  --court-100: #EAF4FF;
+  --court-200: #C9E5FF;
+  --court-300: #A8D5FF;   /* logo light */
+  --court-400: #7BC3FF;   /* logo primary */
+  --court-500: #4FA9F0;
+  --court-600: #2E8AD4;
+  --court-700: #1F6BAA;
+  --court-900: #0F3D6B;
+
+  /* ---------- Secondary: Lavender ---------- */
+  --lavender-50:  #FAF6FF;
+  --lavender-100: #F2EBFF;
+  --lavender-200: #E0CFF7;
+  --lavender-300: #C5AEEF;
+  --lavender-400: #A98AE0;
+  --lavender-500: #8E69C9;
+  --lavender-700: #5F3FA0;
+
+  /* ---------- Accents (pastel utility) ---------- */
+  --mint-100:  #E8F8EF;
+  --mint-200:  #C6EFD6;
+  --mint-400:  #6BCF96;
+  --mint-600:  #2F9D6B;
+
+  --peach-100: #FFF2E0;
+  --peach-200: #FFDDB3;
+  --peach-400: #FFB35F;
+  --peach-600: #D87A1F;
+
+  --pink-100:  #FFEBF4;
+  --pink-300:  #FFB3D9;
+  --pink-500:  #E36EA8;
+
+  --rose-100:  #FFE5E5;
+  --rose-200:  #FFCBCB;
+  --rose-400:  #FF8A8A;
+  --rose-600:  #C84545;
+
+  --gold-200:  #FFE8A3;
+  --gold-400:  #F2C24A;
+  --gold-600:  #B58308;
+
+  /* ---------- Ink / Neutrals ---------- */
+  --ink-900: #0F1B2E;     /* page text */
+  --ink-800: #1C2A42;
+  --ink-700: #2A3A55;
+  --ink-600: #455369;
+  --ink-500: #5B6B7D;
+  --ink-400: #8693A6;
+  --ink-300: #A5AFC0;
+  --ink-200: #CCD3DF;
+  --ink-100: #E3E8F0;
+  --ink-50:  #F0F3F8;
+
+  /* ---------- Surfaces ---------- */
+  --surface:        #FFFFFF;
+  --surface-tint:   #FAFBFD;
+  --surface-sunken: #F3F6FB;
+  --surface-court:  linear-gradient(180deg, #FAFCFF 0%, #EFF6FF 100%);
+  --surface-glass:  rgba(255, 255, 255, 0.72);
+
+  /* Page background — soft pastel wash */
+  --bg-app: radial-gradient(140% 100% at 0% 0%, #EAF4FF 0%, #FAFCFF 38%, #FAF6FF 75%, #F0E6FF 100%);
+
+  /* ---------- Borders ---------- */
+  --border:       #E3E8F0;
+  --border-soft:  #EDF1F7;
+  --border-strong:#CCD3DF;
+  --border-court: #C9E5FF;
+
+  /* ---------- Radius ---------- */
+  --r-xs:  6px;
+  --r-sm:  8px;
+  --r-md:  12px;
+  --r-lg:  16px;
+  --r-xl:  20px;
+  --r-2xl: 24px;
+  --r-3xl: 32px;
+  --r-full: 999px;
+
+  /* ---------- Shadow (soft, tinted) ---------- */
+  --shadow-xs: 0 1px 2px rgba(31, 107, 170, 0.06);
+  --shadow-sm: 0 2px 6px rgba(31, 107, 170, 0.07);
+  --shadow-md: 0 6px 18px rgba(31, 107, 170, 0.09);
+  --shadow-lg: 0 18px 40px rgba(31, 107, 170, 0.12);
+  --shadow-xl: 0 28px 60px rgba(31, 107, 170, 0.16);
+  --shadow-focus: 0 0 0 4px rgba(123, 195, 255, 0.30);
+
+  /* ---------- Spacing ---------- */
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  20px;
+  --s-6:  24px;
+  --s-8:  32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* ---------- Type ---------- */
+  --font-display: 'Fredoka', system-ui, sans-serif;
+  --font-ui:      'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+
+  /* ---------- Phase colors (semantic) ---------- */
+  --phase-reg-open: var(--mint-400);
+  --phase-reg-closed: var(--ink-400);
+  --phase-group: var(--court-400);
+  --phase-knockout: var(--lavender-400);
+  --phase-complete: var(--gold-400);
+
+  /* ---------- Animation Durations ---------- */
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+
+  /* ---------- Animation Easing ---------- */
+  --easing-snap: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --easing-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-ease-out: cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* ---------- Base reset ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+body, .uac {
+  font-family: var(--font-ui);
+  color: var(--ink-900);
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+
+.uac-display { font-family: var(--font-display); letter-spacing: -0.01em; }
+.uac-mono    { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.uac-num     { font-variant-numeric: tabular-nums; }
+
+/* ---------- Animation Usage Guidelines ---------- */
+/*
+  DURATIONS:
+  - --duration-fast (100ms): Quick feedback, hover states, icon transitions
+  - --duration-normal (200ms): Standard transitions, page elements, button interactions
+  - --duration-slow (300ms): Page-level reveals, important state changes, modal/drawer opens
+
+  EASING:
+  - --easing-snap: Snappy, responsive interactions (bounce/spring feel)
+  - --easing-smooth: Smooth, natural transitions (content reveals, list updates)
+  - --easing-ease-out: Deceleration, dismissals (modals closing, items fading out)
+
+  EXAMPLE:
+    transition: opacity var(--duration-normal) var(--easing-smooth);
+    animation: slideIn var(--duration-slow) var(--easing-ease-out) forwards;
+*/
