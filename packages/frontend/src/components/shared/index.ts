@@ -32,3 +32,6 @@ export type { TournamentCardProps } from './TournamentCard'
 
 export { PhaseIndicator } from './PhaseIndicator'
 export type { PhaseIndicatorProps } from './PhaseIndicator'
+
+export { Modal } from './Modal'
+export type { ModalProps, ModalAction } from './Modal'
