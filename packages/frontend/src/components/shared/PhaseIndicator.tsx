@@ -1,6 +1,6 @@
 import React from 'react'
 import { Badge } from './Badge'
-import '../../../styles/tokens.css'
+import '../../../styles/globals.css'
 
 export interface PhaseIndicatorProps {
   phase: 'group' | 'knockout'

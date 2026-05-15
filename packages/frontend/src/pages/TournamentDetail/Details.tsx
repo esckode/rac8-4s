@@ -1,7 +1,7 @@
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import { useTournament } from '../../hooks/useTournament'
-import '../../styles/tokens.css'
+import '../../styles/globals.css'
 
 export const Details: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()

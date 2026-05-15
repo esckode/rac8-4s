@@ -2,7 +2,7 @@ import React from 'react'
 // @ts-expect-error - React 19 includes types but TypeScript may have issues
 import ReactDOM from 'react-dom'
 import App from './App'
-import './styles/tokens.css'
+import './styles/globals.css'
 
 const root = (ReactDOM as any).createRoot(document.getElementById('root') || document.body)
 

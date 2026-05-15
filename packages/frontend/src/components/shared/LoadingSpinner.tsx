@@ -6,7 +6,7 @@
  */
 
 import React from 'react'
-import '../../../styles/tokens.css'
+import '../../../styles/globals.css'
 
 export interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg'

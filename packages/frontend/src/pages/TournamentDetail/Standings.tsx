@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useTournament } from '../../hooks/useTournament'
 import { usePermissions } from '../../hooks/usePermissions'
 import { StandingsTable } from '../../components/shared/StandingsTable'
-import '../../styles/tokens.css'
+import '../../styles/globals.css'
 
 export const Standings: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()

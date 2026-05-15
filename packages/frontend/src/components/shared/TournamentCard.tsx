@@ -2,7 +2,7 @@ import React from 'react'
 import type { Tournament } from '@shared/types'
 import { Badge } from './Badge'
 import { usePrefetch } from '../../hooks/usePrefetch'
-import '../../../styles/tokens.css'
+import '../../../styles/globals.css'
 
 export interface TournamentCardProps {
   tournament: Tournament

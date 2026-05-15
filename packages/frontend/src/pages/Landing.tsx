@@ -1,7 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import '../../styles/tokens.css'
+import '../../styles/globals.css'
 
 export const Landing: React.FC = () => {
   const navigate = useNavigate()

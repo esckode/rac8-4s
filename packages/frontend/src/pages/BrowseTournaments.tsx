@@ -4,7 +4,7 @@ import type { Tournament } from '@shared/types'
 import { TournamentCard } from '../components/shared'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
 import { fetchPublicTournaments } from '../api/client'
-import '../../styles/tokens.css'
+import '../../styles/globals.css'
 
 export const BrowseTournaments: React.FC = () => {
   const navigate = useNavigate()

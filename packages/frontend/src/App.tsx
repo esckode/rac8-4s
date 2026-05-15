@@ -2,7 +2,7 @@ import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ResponsiveLayout } from './components/shared'
 import { Landing } from './pages/Landing'
-import './styles/tokens.css'
+import './styles/globals.css'
 
 const Standings = () => (
   <div className="text-center py-12">

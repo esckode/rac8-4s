@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { Tournament } from '@shared/types'
 import { TournamentCard } from '../components/shared'
 import { useAuth } from '../hooks/useAuth'
-import '../../styles/tokens.css'
+import '../../styles/globals.css'
 
 type TournamentStatus = 'active' | 'upcoming' | 'completed'
 

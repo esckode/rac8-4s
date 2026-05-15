@@ -7,7 +7,7 @@
 
 import React from 'react'
 import { Button } from './Button'
-import '../../../styles/tokens.css'
+import '../../../styles/globals.css'
 
 export interface ErrorBannerProps {
   message: string
@@ -39,6 +39,7 @@ export const ErrorBanner: React.FC<ErrorBannerProps> = ({ message, onDismiss, cl
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 20 20"
           fill="currentColor"
+          aria-hidden="true"
         >
           <path
             fillRule="evenodd"
@@ -61,6 +62,7 @@ export const ErrorBanner: React.FC<ErrorBannerProps> = ({ message, onDismiss, cl
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 20 20"
             fill="currentColor"
+            aria-hidden="true"
           >
             <path
               fillRule="evenodd"

@@ -7,7 +7,7 @@ import { Standings } from './Standings'
 import { Matches } from './Matches'
 import { Bracket } from './Bracket'
 import { Details } from './Details'
-import '../../../styles/tokens.css'
+import '../../../styles/globals.css'
 
 export const TournamentDetail: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
@@ -117,7 +117,7 @@ export const TournamentDetail: React.FC = () => {
         >
           ← Back
         </button>
-        <h1 className="text-2xl sm:text-3xl font-bold text-[--ink-900]">
+        <h1 className="responsive-heading text-[--ink-900]">
           Tournament Details
         </h1>
       </div>
@@ -132,6 +132,7 @@ export const TournamentDetail: React.FC = () => {
           border-[--border]
           pb-[--s-2]
         `}
+        role="tablist"
       >
         {tabs.map((tab) => (
           <button
@@ -143,13 +144,12 @@ export const TournamentDetail: React.FC = () => {
               gap-[--s-2]
               px-[--s-4]
               py-[--s-3]
-              text-sm
-              sm:text-base
               font-medium
               rounded-t-[--r-md]
               transition-all
               duration-[--duration-normal]
               whitespace-nowrap
+              responsive-tab-label
               ${
                 currentTab === tab.id
                   ? 'bg-[--court-50] text-[--court-600] border-b-2 border-[--court-500]'
@@ -160,16 +160,19 @@ export const TournamentDetail: React.FC = () => {
               focus:ring-[--court-400]
               focus:ring-offset-2
             `}
+            role="tab"
             aria-selected={currentTab === tab.id}
+            aria-controls={`tab-${tab.id}`}
           >
-            <span className="text-lg">{tab.icon}</span>
-            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="text-lg" aria-hidden="true">{tab.icon}</span>
+            <span className="responsive-hidden-mobile">{tab.label}</span>
           </button>
         ))}
       </div>
 
       {/* Content Area */}
       <div
+        id={`tab-${currentTab}`}
         className={`
           rounded-[--r-lg]
           border
@@ -178,6 +181,7 @@ export const TournamentDetail: React.FC = () => {
           min-h-[400px]
           bg-white
         `}
+        role="tabpanel"
       >
         {sseState.error && (
           <div className="bg-[--rose-50] border border-[--rose-200] rounded-[--r-lg] p-[--s-4] text-[--rose-800] mb-[--s-4]">

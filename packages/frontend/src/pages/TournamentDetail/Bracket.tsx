@@ -4,7 +4,7 @@ import { useTournament } from '../../hooks/useTournament'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useAuth } from '../../hooks/useAuth'
 import { Badge } from '../../components/shared/Badge'
-import '../../styles/tokens.css'
+import '../../styles/globals.css'
 
 export const Bracket: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()

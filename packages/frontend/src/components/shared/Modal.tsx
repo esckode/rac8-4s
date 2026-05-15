@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { Button } from './Button'
-import '../../../styles/tokens.css'
+import '../../../styles/globals.css'
 
 export interface ModalAction {
   label: string

@@ -4,7 +4,7 @@ import type { Match } from '@shared/types'
 import { useTournament } from '../../hooks/useTournament'
 import { usePermissions } from '../../hooks/usePermissions'
 import { MatchCard } from '../../components/shared/MatchCard'
-import '../../styles/tokens.css'
+import '../../styles/globals.css'
 
 type FilterStatus = 'all' | 'pending' | 'completed'
 
