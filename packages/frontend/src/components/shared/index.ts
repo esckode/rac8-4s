@@ -20,3 +20,6 @@ export type { SuccessBannerProps } from './SuccessBanner'
 
 export { SkeletonLoader } from './SkeletonLoader'
 export type { SkeletonLoaderProps } from './SkeletonLoader'
+
+export { StandingsTable } from './StandingsTable'
+export type { StandingsTableProps } from './StandingsTable'
