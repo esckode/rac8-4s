@@ -422,6 +422,15 @@ This phase demonstrates the interface-first parallelization strategy:
 
 **All Phase 2 tasks follow this pattern:** Write tests → implement to pass tests → done
 
+**PHASE 2 TASK BREAKDOWN:**
+- **Tasks 2.1-2.7:** Core hooks (permissions, tournament, SSE, misc utilities)
+- **Tasks 2.8-2.10:** Analytics hooks (NEW - integrates metrics collection from the start)
+  - 2.8: useAnalytics (event buffering and batching)
+  - 2.9: usePageNavigation (screen_view tracking)
+  - 2.10: Integrate into data hooks (time_to_data tracking)
+  - **Why Phase 2?** Metrics collection happens at the hook layer (where data flows). Zero impact on Phase 3-4 UI building. Early visibility into performance.
+  - **Backend:** Phase 7 (POST /api/analytics/events endpoint)
+
 ---
 
 ### Task 2.1: Create usePermissions Hook
@@ -741,6 +750,206 @@ On SSE reconnect after a disconnect, refetch the full bundle via GET `/tournamen
 - ✅ usePrefetch triggers prefetch on hover/focus
 - ✅ Hooks properly typed with TypeScript
 - ✅ No console errors or warnings
+
+---
+
+### Task 2.8: Create useAnalytics Hook
+**File:** `src/hooks/useAnalytics.ts`  
+**Estimated Time:** 1 hour  
+**Owner:** TBD
+
+#### Prerequisites
+- ✅ useAuth hook exists (to get userId)
+- ✅ Frontend package structure ready
+- ✅ Backend endpoint stub ready (will implement in Phase 7)
+
+#### Implementation Steps
+1. Create `src/hooks/useAnalytics.ts`
+2. Implement analytics event buffer:
+   - Initialize empty `eventBuffer: AnalyticsEvent[]` (module-level)
+   - Each event: `{ timestamp, userId, eventType, screen?, duration?, data? }`
+3. Implement `track(eventType: string, data?: Record<string, any>)` function:
+   - Create event object with timestamp, userId, eventType, and data
+   - Add to eventBuffer
+   - Flush if buffer reaches 10 events
+4. Implement `flushEvents()` function:
+   - POST to `/api/analytics/events` endpoint with all buffered events
+   - Clear buffer after successful POST
+   - Silent fail on error (don't break app for metrics)
+5. Set up auto-flush on page unload:
+   - `window.addEventListener('beforeunload', ...)`
+   - Use `navigator.sendBeacon()` for unload (reliable delivery)
+6. Export useAnalytics hook that returns `{ track }`
+7. Add TypeScript types for AnalyticsEvent, EventData
+
+**Code Pattern:**
+```typescript
+// Usage in other hooks:
+const { track } = useAnalytics()
+track('time_to_data', {
+  screen: 'standings',
+  apiDuration: 1200,
+  totalDuration: 2300,
+  recordCount: 24
+})
+```
+
+#### Success Criteria
+- ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
+- ✅ No memory leaks (event buffer doesn't grow unbounded, listeners cleaned on unmount)
+- ✅ `useAnalytics()` hook exported and returns `{ track }` function
+- ✅ Events are buffered and batched (max 10 before flush)
+- ✅ Auto-flush on page unload via navigator.sendBeacon()
+- ✅ Failed sends don't break the app (silent fail with debug log)
+- ✅ Events include: timestamp, userId, eventType, screen (optional), data (optional)
+- ✅ TypeScript types defined for AnalyticsEvent and track parameters
+- ✅ Ready for Phase 2.9 integration and Phase 7 backend endpoint
+
+---
+
+### Task 2.9: Create usePageNavigation Hook
+**File:** `src/hooks/usePageNavigation.ts`  
+**Estimated Time:** 1.5 hours  
+**Owner:** TBD
+
+#### Prerequisites
+- ✅ Task 2.8 completed (useAnalytics hook exists)
+- ✅ React hooks pattern established
+- ✅ Animation tokens available (from tokens.css)
+
+#### Implementation Steps
+1. Create `src/hooks/usePageNavigation.ts`
+2. Implement hook to track page navigation and time-on-screen:
+   - `currentPage` state (initially 'landing')
+   - `previousPageRef` ref (to store previous page for cleanup)
+   - `pageEnterTimeRef` ref (to measure time on screen)
+3. Create useEffect that runs when currentPage changes:
+   - If previousPageRef exists, calculate time on previous page
+   - Call `track('screen_view', { screen: previousPageRef, duration: timeOnScreen })`
+   - Update refs to current page
+4. Create cleanup useEffect (on unmount):
+   - Log time on current page when component unmounts
+   - Ensures no data loss on navigation
+5. Return object: `{ currentPage, navigateTo: (page: string) => void }`
+6. Add TypeScript types for page names (or use generic string for flexibility)
+
+**Code Pattern:**
+```typescript
+// Usage in root app component:
+const { currentPage, navigateTo } = usePageNavigation()
+
+// When user clicks a link:
+navigateTo('tournament_details') // Auto-logs time on previous screen
+```
+
+#### How It Works
+```
+Page loaded (landing page)
+  → pageEnterTime = now
+User navigates to "tournament_list"
+  → Logs: screen_view { screen: 'landing', duration: 4500 }
+  → pageEnterTime = now
+User navigates to "tournament_details"
+  → Logs: screen_view { screen: 'tournament_list', duration: 2300 }
+  → pageEnterTime = now
+Page unload
+  → Cleanup effect logs: screen_view { screen: 'tournament_details', duration: 1200 }
+```
+
+#### Success Criteria
+- ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
+- ✅ No memory leaks (refs cleaned on unmount, no listener leaks)
+- ✅ Proper cleanup on unmount (final screen_view event logged via cleanup effect)
+- ✅ `usePageNavigation()` hook exported
+- ✅ Tracks time on each screen accurately
+- ✅ Auto-logs screen_view events via useAnalytics on page change
+- ✅ Works with page unload (cleanup effect fires)
+- ✅ Returns `{ currentPage, navigateTo }` with correct typing
+- ✅ Integrates seamlessly with useAnalytics (calls track automatically)
+
+---
+
+### Task 2.10: Integrate Analytics into Data Hooks (useStandingsStore, useMatchStore)
+**File:** `src/hooks/*.ts` (modifications to existing hooks)  
+**Estimated Time:** 1.5 hours  
+**Owner:** TBD
+
+#### Prerequisites
+- ✅ Task 2.8 completed (useAnalytics hook exists)
+- ✅ Task 2.3 completed (useTournament hook exists)
+- ✅ Task 2.5 completed (useSSE hook exists)
+- ✅ Existing data hooks from Task #18 (useStandingsStore, useMatchStore, useBracketStore)
+
+#### Implementation Steps
+1. Update `useStandingsStore` hook:
+   - Import useAnalytics
+   - Measure API fetch time: `const apiStart = performance.now()`
+   - After data fetches: `const apiEnd = performance.now()`
+   - After component renders (via requestAnimationFrame): `const renderEnd = performance.now()`
+   - Call `track('time_to_data', { screen: 'standings', apiDuration, renderDuration, totalDuration, recordCount })`
+
+2. Update `useMatchStore` hook:
+   - Same pattern as useStandingsStore
+   - Track 'matches' screen name
+   - Include matchCount in data
+
+3. Update `useBracketStore` hook:
+   - Same pattern for bracket screen
+   - Include participantCount in data
+
+4. Update `useSSE` hook (if data updates via SSE):
+   - Track 'sse_update' event when SSE event arrives
+   - Include eventType, latency (now - event.timestamp)
+   - Helps measure real-time update performance
+
+**Code Pattern:**
+```typescript
+// In useStandingsStore:
+export const useStandingsStore = (tournamentId: string) => {
+  const [standings, setStandings] = useState<Standing[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const { track } = useAnalytics() // ADD THIS
+
+  useEffect(() => {
+    const apiStart = performance.now()
+
+    fetch(`/api/tournaments/${tournamentId}/standings`)
+      .then(res => res.json())
+      .then(data => {
+        const apiEnd = performance.now()
+        const renderStart = performance.now()
+
+        setStandings(data)
+
+        // Measure when render completes
+        requestAnimationFrame(() => {
+          const renderEnd = performance.now()
+          track('time_to_data', {
+            screen: 'standings',
+            apiDuration: apiEnd - apiStart,
+            renderDuration: renderEnd - renderStart,
+            totalDuration: renderEnd - apiStart,
+            recordCount: data.length
+          })
+        })
+      })
+  }, [tournamentId, track])
+
+  return { standings, loading }
+}
+```
+
+#### Success Criteria
+- ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
+- ✅ No memory leaks (performance timing doesn't leak references)
+- ✅ useStandingsStore tracks time_to_data for 'standings' screen
+- ✅ useMatchStore tracks time_to_data for 'matches' screen
+- ✅ useBracketStore tracks time_to_data for 'bracket' screen
+- ✅ useSSE (if applicable) tracks sse_update events with latency
+- ✅ Metrics include: apiDuration, renderDuration, totalDuration, and relevant counts
+- ✅ Timing is accurate (performance.now() used consistently)
+- ✅ All modifications preserve existing hook behavior (metrics are additive)
+- ✅ Ready for Phase 7 backend to persist metrics
 
 ---
 
@@ -2001,13 +2210,180 @@ On SSE reconnect after a disconnect, refetch the full bundle via GET `/tournamen
 
 ---
 
+### Task 7.4a: Create Analytics API Endpoint
+**File:** `packages/api/src/routes/analytics.ts` (new)  
+**Estimated Time:** 1.5 hours  
+**Owner:** TBD
+
+#### Prerequisites
+- ✅ Task 2.8 completed (useAnalytics hook exists and collects events)
+- ✅ Task 2.9 completed (usePageNavigation hook exists and fires events)
+- ✅ Task 2.10 completed (data hooks integrated with analytics)
+- ✅ API routing structure in place
+- ✅ Authentication middleware configured
+
+#### Implementation Steps
+1. Create `packages/api/src/routes/analytics.ts`:
+2. Implement `POST /api/analytics/events` endpoint:
+   - Require authentication (auth middleware)
+   - Accept batch of analytics events in request body
+   - Validate event structure (eventType, timestamp required)
+   - Store events in `user_events` table (created in 7.4b)
+3. Add error handling:
+   - 400 if events array is missing or empty
+   - 401 if not authenticated
+   - 500 on database error
+4. Add structured logging (CLAUDE.md Section 6):
+   - Log `analytics.batch_received` on success
+   - Include userId, eventCount, eventTypes
+5. Return 204 No Content on success
+6. Register route in API server
+
+**Code Pattern:**
+```typescript
+router.post('/analytics/events', auth, async (ctx) => {
+  const { events } = ctx.request.body
+
+  if (!Array.isArray(events) || events.length === 0) {
+    ctx.status = 400
+    return
+  }
+
+  for (const event of events) {
+    await db.query(
+      'INSERT INTO user_events (userId, eventType, screen, duration, data, createdAt) VALUES (?, ?, ?, ?, ?, NOW())',
+      [ctx.state.userId, event.eventType, event.screen, event.duration, JSON.stringify(event.data)]
+    )
+  }
+
+  log.info('analytics.batch_received', {
+    userId: ctx.state.userId,
+    eventCount: events.length,
+    eventTypes: [...new Set(events.map(e => e.eventType))].join(',')
+  })
+
+  ctx.status = 204
+})
+```
+
+#### Success Criteria
+- ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
+- ✅ Structured logging added (CLAUDE.md Section 6)
+- ✅ Security audit passed (proper auth, no injection, sanitized data)
+- ✅ No memory leaks
+- ✅ `POST /api/analytics/events` endpoint exists
+- ✅ Accepts batch of events (array)
+- ✅ Stores in `user_events` table with proper columns
+- ✅ Returns 204 on success, 400 on bad input, 401 on auth failure
+- ✅ Logs analytics.batch_received events
+- ✅ Handles concurrent requests properly
+
+---
+
+### Task 7.4b: Create user_events Database Table
+**File:** Database migration or schema file  
+**Estimated Time:** 30 minutes  
+**Owner:** TBD
+
+#### Prerequisites
+- ✅ Database schema and migration system set up
+- ✅ Task 7.4a will implement endpoint to store events
+
+#### Implementation Steps
+1. Create migration or schema definition for `user_events` table:
+   ```sql
+   CREATE TABLE user_events (
+     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     userId UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+     eventType VARCHAR(50) NOT NULL, -- 'screen_view', 'time_to_data', 'sse_update'
+     screen VARCHAR(100), -- 'standings', 'matches', 'bracket', etc. (optional)
+     duration INT, -- milliseconds (optional, for time_to_data, screen_view)
+     data JSONB, -- flexible schema for additional metrics
+     createdAt TIMESTAMP NOT NULL DEFAULT NOW()
+   )
+   CREATE INDEX idx_user_events_userId_createdAt ON user_events(userId, createdAt)
+   CREATE INDEX idx_user_events_eventType ON user_events(eventType)
+   CREATE INDEX idx_user_events_screen ON user_events(screen)
+   ```
+
+2. Add constraints:
+   - userId is NOT NULL (every event tied to user)
+   - eventType is NOT NULL (required to classify event)
+   - createdAt is NOT NULL (for temporal queries)
+
+3. Ensure indexes for common queries:
+   - `user_events.userId + createdAt` (find user's events in time range)
+   - `user_events.eventType` (find all events of a type)
+   - `user_events.screen` (find all events for a screen)
+
+#### Success Criteria
+- ✅ Meets all universal criteria
+- ✅ `user_events` table exists with proper schema
+- ✅ All columns properly typed (UUID, VARCHAR, INT, JSONB, TIMESTAMP)
+- ✅ Foreign key constraint on userId (referential integrity)
+- ✅ Indexes created for common queries (userId+createdAt, eventType, screen)
+- ✅ Cascade delete on user deletion (cleanup)
+- ✅ Ready to receive analytics data from Task 7.4a endpoint
+
+---
+
+### Task 7.4c: Create Analytics Query Examples & Documentation
+**File:** `ANALYTICS_QUERIES.md` (new documentation)  
+**Estimated Time:** 1 hour  
+**Owner:** TBD
+
+#### Prerequisites
+- ✅ Task 7.4a (endpoint) completed
+- ✅ Task 7.4b (table) completed
+
+#### Implementation Steps
+1. Create `ANALYTICS_QUERIES.md` with common SQL queries:
+   - User's navigation path (which screens they visited in order)
+   - Average time on each screen
+   - P95 wait time for data (time_to_data metric)
+   - Slowest screens (by p95 total wait)
+   - Real-time update latency (SSE events)
+   - Feature usage (% of users viewing brackets vs. matches)
+2. Create sample queries that answer key questions:
+   - "Which routes do users take to reach a screen?"
+   - "How long do users wait to view results?"
+   - "Which screens have slowest performance?"
+   - "What's the breakdown of time spent API vs. rendering?"
+3. Include example output/results
+4. Document how to run queries (SQL client, psql, etc.)
+
+**Example Query:**
+```sql
+-- User's navigation path to standings screen
+SELECT 
+  userId, 
+  screen, 
+  duration,
+  timestamp,
+  ROW_NUMBER() OVER (PARTITION BY userId ORDER BY timestamp) as sequence
+FROM user_events
+WHERE eventType = 'screen_view' 
+  AND userId = $1
+ORDER BY timestamp
+```
+
+#### Success Criteria
+- ✅ Meets all universal criteria
+- ✅ `ANALYTICS_QUERIES.md` created with 5+ example queries
+- ✅ Queries answer the key UX questions (routes, wait times, performance)
+- ✅ Examples show expected output
+- ✅ Instructions clear on how to run queries
+- ✅ Queries are performant (use indexes)
+
+---
+
 ### Task 7.5: Documentation & Handoff
 **File:** README, SETUP, etc.  
 **Estimated Time:** 1.5 hours  
 **Owner:** TBD
 
 #### Prerequisites
-- ✅ All features complete
+- ✅ All features complete (including analytics)
 
 #### Implementation Steps
 1. Create or update README.md with:
@@ -2031,20 +2407,30 @@ On SSE reconnect after a disconnect, refetch the full bundle via GET `/tournamen
    - API integration (/bundle endpoint)
    - SSE subscription lifecycle
    - Mobile optimizations implemented
+   - **Analytics architecture** (hooks → events → backend endpoint)
 5. Create TESTING.md documenting:
    - How to run tests
    - Test coverage
    - Adding new tests
-6. Code comments for non-obvious logic
+   - Analytics testing (verifying metrics are collected)
+6. Create ANALYTICS.md documenting:
+   - Which metrics are collected (screen_view, time_to_data, sse_update)
+   - Where they're collected (Phase 2 hooks)
+   - How to query results (ANALYTICS_QUERIES.md)
+   - Privacy policy
+7. Code comments for non-obvious logic
 
 #### Success Criteria
 - ✅ Meets all universal criteria (no console errors, TypeScript clean, follows CLAUDE.md)
 - ✅ README updated with project overview
 - ✅ Setup instructions clear and complete
-- ✅ Architecture documented
-- ✅ Features documented
-- ✅ Testing guide documented
+- ✅ Architecture documented (including analytics)
+- ✅ Features documented (including metrics collection)
+- ✅ Analytics guide documented (ANALYTICS.md)
+- ✅ Testing guide documented (including analytics tests)
+- ✅ Query examples documented (ANALYTICS_QUERIES.md)
 - ✅ New developers can get running in < 30min
+- ✅ Analytics collection explained to operators/stakeholders
 
 ---
 
