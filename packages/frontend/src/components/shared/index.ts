@@ -35,3 +35,6 @@ export type { PhaseIndicatorProps } from './PhaseIndicator'
 
 export { Modal } from './Modal'
 export type { ModalProps, ModalAction } from './Modal'
+
+export { ResponsiveLayout } from './ResponsiveLayout'
+export type { ResponsiveLayoutProps } from './ResponsiveLayout'
