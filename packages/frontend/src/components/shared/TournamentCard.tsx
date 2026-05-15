@@ -1,6 +1,7 @@
 import React from 'react'
 import type { Tournament } from '@shared/types'
 import { Badge } from './Badge'
+import { usePrefetch } from '../../hooks/usePrefetch'
 import '../../../styles/tokens.css'
 
 export interface TournamentCardProps {
@@ -16,6 +17,8 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
   onClick,
   className,
 }) => {
+  const { handleMouseEnter, handleFocus } = usePrefetch(tournament.id)
+
   const getPhaseVariant = (status: string): 'group' | 'knockout' | 'live' | 'registration' | 'complete' => {
     if (status.includes('group')) return 'group'
     if (status.includes('knockout')) return 'knockout'
@@ -47,6 +50,9 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
   return (
     <div
       onClick={onClick}
+      onMouseEnter={handleMouseEnter}
+      onFocus={handleFocus}
+      tabIndex={onClick ? 0 : -1}
       className={`
         bg-white
         border
@@ -55,7 +61,7 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
         p-[--s-4]
         transition-all
         duration-[--duration-normal]
-        ${onClick ? 'hover:shadow-md hover:border-[--court-300] cursor-pointer' : ''}
+        ${onClick ? 'hover:shadow-md hover:border-[--court-300] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[--court-300] focus:ring-offset-2' : ''}
         ${className}
       `}
     >

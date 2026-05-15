@@ -2,6 +2,7 @@
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowseTournaments } from '../BrowseTournaments'
 
 jest.mock('../../api/client', () => ({
@@ -24,7 +25,12 @@ const mockUseInfiniteScroll = useInfiniteScroll as jest.MockedFunction<
 
 describe('BrowseTournaments', () => {
   const renderWithRouter = (component: React.ReactElement) => {
-    return render(<BrowserRouter>{component}</BrowserRouter>)
+    const queryClient = new QueryClient()
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>{component}</BrowserRouter>
+      </QueryClientProvider>
+    )
   }
 
   const mockTournament = {
