@@ -26,3 +26,6 @@ export type { StandingsTableProps } from './StandingsTable'
 
 export { MatchCard } from './MatchCard'
 export type { MatchCardProps } from './MatchCard'
+
+export { TournamentCard } from './TournamentCard'
+export type { TournamentCardProps } from './TournamentCard'
