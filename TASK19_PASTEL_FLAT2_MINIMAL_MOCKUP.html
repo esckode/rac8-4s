@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task #19 - Pastel Flat 2.0 Minimal Design Mockup (Standings Page)</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* ===== DESIGN TOKENS (Pastel Flat 2.0 Minimal Theme) ===== */
+    :root {
+      /* Clean Minimal Pastel */
+      --primary: #98C9E3;        /* Soft blue */
+      --primary-dark: #6BA8D5;
+      --primary-light: #E6F2FF;
+
+      --secondary: #C4B5FD;      /* Soft purple */
+      --secondary-dark: #A78BFA;
+      --secondary-light: #F3E8FF;
+
+      --accent-1: #FED7AA;       /* Soft peach */
+      --accent-2: #A7F3D0;       /* Soft mint */
+      --accent-3: #FBCFE8;       /* Soft pink */
+
+      --success: #BBF7D0;        /* Soft green */
+      --success-dark: #86EFAC;
+      --success-light: #F0FDF4;
+
+      --warning: #FED7AA;        /* Soft amber */
+      --error: #FCA5A5;          /* Soft red */
+
+      --gray-50: #FAFAFA;
+      --gray-100: #F5F5F5;
+      --gray-200: #EEEEEE;
+      --gray-300: #E0E0E0;
+      --gray-400: #BDBDBD;
+      --gray-500: #9E9E9E;
+      --gray-600: #757575;
+      --gray-700: #616161;
+      --gray-900: #212121;
+
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+
+      /* Flat 2.0: Minimal Shadows */
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.08);
+      --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.1);
+      --shadow-hover: 0 8px 16px rgba(0, 0, 0, 0.12);
+    }
+
+    /* ===== GLOBAL STYLES ===== */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: #FAFAFA;
+      color: var(--gray-900);
+      line-height: 1.6;
+    }
+
+    /* ===== LAYOUT ===== */
+    .app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: #FFFFFF;
+      border-bottom: 1px solid var(--gray-200);
+      padding: var(--spacing-md) var(--spacing-lg);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--primary-dark);
+    }
+
+    .phase-badge {
+      display: inline-block;
+      padding: var(--spacing-sm) var(--spacing-md);
+      background: var(--primary);
+      color: var(--gray-700);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border: none;
+      box-shadow: none;
+    }
+
+    .phase-badge:hover {
+      background: var(--primary-dark);
+      color: white;
+    }
+
+    .phase-badge.knockout {
+      background: var(--secondary);
+    }
+
+    .main-content {
+      flex: 1;
+      padding: var(--spacing-lg);
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* ===== TABS/NAVIGATION ===== */
+    .tab-nav {
+      display: flex;
+      gap: var(--spacing-lg);
+      border-bottom: 1px solid var(--gray-300);
+      margin-bottom: var(--spacing-lg);
+      overflow-x: auto;
+    }
+
+    .tab-nav button {
+      padding: var(--spacing-md) 0;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-500);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .tab-nav button:hover {
+      color: var(--primary-dark);
+    }
+
+    .tab-nav button.active {
+      color: var(--primary-dark);
+      border-bottom-color: var(--primary-dark);
+    }
+
+    /* ===== STANDINGS TABLE ===== */
+    .standings-container {
+      background: #FFFFFF;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--gray-200);
+    }
+
+    .standings-container:hover {
+      box-shadow: var(--shadow-lg);
+    }
+
+    .standings-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .standings-table thead {
+      background: #F5F5F5;
+      border-bottom: 1px solid var(--gray-300);
+    }
+
+    .standings-table th {
+      padding: var(--spacing-md) var(--spacing-lg);
+      text-align: left;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--gray-700);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .standings-table tbody tr {
+      border-bottom: 1px solid var(--gray-200);
+      transition: background-color 0.2s ease;
+    }
+
+    .standings-table tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    .standings-table tbody tr:hover {
+      background: #FAFAFA;
+    }
+
+    .standings-table td {
+      padding: var(--spacing-md) var(--spacing-lg);
+      font-size: 14px;
+    }
+
+    .rank-col {
+      font-weight: 800;
+      color: var(--primary-dark);
+      min-width: 40px;
+      font-size: 16px;
+    }
+
+    .name-col {
+      font-weight: 600;
+      color: var(--gray-900);
+    }
+
+    .stat-col {
+      text-align: center;
+      color: var(--gray-600);
+    }
+
+    .stat-col.wins {
+      color: var(--success-dark);
+      font-weight: 700;
+    }
+
+    /* ===== ACTION BUTTONS ===== */
+    .actions {
+      display: flex;
+      gap: var(--spacing-sm);
+      justify-content: flex-end;
+    }
+
+    .btn {
+      padding: var(--spacing-sm) var(--spacing-md);
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: relative;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: var(--gray-700);
+      border: none;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      color: white;
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: #F5F5F5;
+      color: var(--gray-700);
+      border: 1px solid var(--gray-300);
+      box-shadow: none;
+    }
+
+    .btn-secondary:hover {
+      background: #EEEEEE;
+      border-color: var(--gray-400);
+      box-shadow: var(--shadow-sm);
+      transform: translateY(-1px);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 2px solid var(--primary-dark);
+      color: var(--primary-dark);
+    }
+
+    .btn-outline:hover {
+      background: var(--primary-light);
+    }
+
+    /* ===== STATUS INDICATORS ===== */
+    .status-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: var(--spacing-sm);
+      background-color: var(--success);
+      box-shadow: 0 0 6px rgba(134, 239, 172, 0.5);
+      animation: pulse-minimal 2s infinite;
+    }
+
+    .status-live {
+      background-color: var(--success);
+    }
+
+    @keyframes pulse-minimal {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    /* ===== INFO BOX ===== */
+    .info-box {
+      background: var(--primary-light);
+      color: var(--gray-900);
+      padding: var(--spacing-md) var(--spacing-lg);
+      border-radius: 8px;
+      margin-bottom: var(--spacing-lg);
+      font-size: 14px;
+      box-shadow: var(--shadow-sm);
+      border: 1px solid rgba(107, 168, 213, 0.2);
+      font-weight: 500;
+    }
+
+    .info-box.organizer {
+      background: var(--secondary-light);
+      border-color: rgba(167, 139, 250, 0.2);
+    }
+
+    .info-box.success {
+      background: var(--success-light);
+      color: var(--gray-900);
+      border-color: rgba(134, 239, 172, 0.2);
+    }
+
+    /* ===== CARD STYLES ===== */
+    .card {
+      background: #FFFFFF;
+      border-radius: 8px;
+      padding: var(--spacing-lg);
+      box-shadow: var(--shadow-md);
+      transition: all 0.2s ease;
+      border: 1px solid var(--gray-200);
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-lg);
+    }
+
+    /* ===== BOTTOM NAV (Mobile) ===== */
+    .bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #FFFFFF;
+      border-top: 1px solid var(--gray-300);
+      padding: var(--spacing-sm) 0;
+      flex-direction: row;
+      justify-content: space-around;
+      z-index: 20;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--spacing-xs);
+      padding: var(--spacing-md);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--gray-500);
+      transition: all 0.2s ease;
+      position: relative;
+      font-weight: 600;
+    }
+
+    .nav-item::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      width: 0;
+      height: 3px;
+      background: var(--primary-dark);
+      transition: width 0.2s ease;
+    }
+
+    .nav-item:hover,
+    .nav-item.active {
+      color: var(--primary-dark);
+    }
+
+    .nav-item.active::before {
+      width: 100%;
+    }
+
+    .nav-icon {
+      font-size: 20px;
+      transition: transform 0.2s ease;
+    }
+
+    .nav-item:hover .nav-icon {
+      transform: scale(1.1);
+    }
+
+    /* ===== STATS BOX ===== */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: var(--spacing-md);
+      margin-bottom: var(--spacing-lg);
+    }
+
+    .stat-item {
+      background: #FFFFFF;
+      padding: var(--spacing-md);
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: var(--shadow-sm);
+      border-left: 3px solid var(--primary);
+      transition: all 0.2s ease;
+      border: 1px solid var(--gray-200);
+    }
+
+    .stat-item:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    .stat-item.success {
+      border-left-color: var(--success);
+    }
+
+    .stat-item.warning {
+      border-left-color: var(--accent-1);
+    }
+
+    .stat-item.secondary {
+      border-left-color: var(--secondary);
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--primary-dark);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--gray-600);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: var(--spacing-sm);
+      font-weight: 600;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .header {
+        padding: var(--spacing-md);
+      }
+
+      .header h1 {
+        font-size: 20px;
+      }
+
+      .main-content {
+        padding: var(--spacing-md);
+        padding-bottom: 100px;
+      }
+
+      .bottom-nav {
+        display: flex;
+      }
+
+      .tab-nav {
+        flex-wrap: wrap;
+        gap: var(--spacing-md);
+      }
+
+      .standings-table th,
+      .standings-table td {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 12px;
+      }
+
+      .actions {
+        gap: 4px;
+      }
+
+      .btn {
+        padding: 4px 8px;
+        font-size: 11px;
+      }
+
+      .stats-row {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    /* ===== UTILITIES ===== */
+    .text-center {
+      text-align: center;
+    }
+
+    .text-muted {
+      color: var(--gray-600);
+    }
+
+    .mt-lg {
+      margin-top: var(--spacing-lg);
+    }
+
+    .demo-controls {
+      display: flex;
+      gap: var(--spacing-md);
+      flex-wrap: wrap;
+    }
+
+    /* ===== COLOR SWATCHES ===== */
+    .color-swatches {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: var(--spacing-md);
+      margin-top: var(--spacing-md);
+    }
+
+    .swatch {
+      padding: var(--spacing-md);
+      border-radius: 6px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--gray-700);
+      border: none;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .swatch-primary {
+      background: var(--primary);
+    }
+
+    .swatch-secondary {
+      background: var(--secondary);
+    }
+
+    .swatch-success {
+      background: var(--success);
+    }
+
+    .swatch-accent1 {
+      background: var(--accent-1);
+    }
+
+    .swatch-accent2 {
+      background: var(--accent-2);
+    }
+
+    .swatch-accent3 {
+      background: var(--accent-3);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div>
+          <h1>Doubles Pickleball Cup</h1>
+          <span class="phase-badge">Group Stage Active</span>
+        </div>
+        <div class="text-muted">
+          <small>Group A Standings</small>
+        </div>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+      <button class="active">Standings</button>
+      <button>Matches</button>
+      <button>Groups</button>
+      <button>Bracket</button>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Stats Overview -->
+      <div class="stats-row">
+        <div class="stat-item">
+          <div class="stat-value">4</div>
+          <div class="stat-label">Teams</div>
+        </div>
+        <div class="stat-item success">
+          <div class="stat-value" style="color: var(--success-dark);">12</div>
+          <div class="stat-label">Matches</div>
+        </div>
+        <div class="stat-item warning">
+          <div class="stat-value" style="color: var(--gray-900);">Group A</div>
+          <div class="stat-label">Active</div>
+        </div>
+      </div>
+
+      <!-- Status Info -->
+      <div class="info-box">
+        <span class="status-indicator status-live"></span>
+        <strong>Live Updates</strong> — Standings update in real-time as scores are submitted
+      </div>
+
+      <!-- Organizer Info (conditionally shown) -->
+      <div class="info-box organizer" style="display: none;" id="organizerInfo">
+        <strong>Organizer Mode</strong> — You can override scores and manage tournament details
+      </div>
+
+      <!-- Standings Table -->
+      <div class="standings-container">
+        <table class="standings-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Team</th>
+              <th>Matches</th>
+              <th>Wins</th>
+              <th>Losses</th>
+              <th>Set Diff</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="rank-col">1</td>
+              <td class="name-col">Sarah & Alex</td>
+              <td class="stat-col">3</td>
+              <td class="stat-col wins">3</td>
+              <td class="stat-col">0</td>
+              <td class="stat-col">
+                <span style="background: rgba(134, 239, 172, 0.2); color: var(--success-dark); padding: 2px 6px; border-radius: 4px; font-weight: 600;">+12</span>
+              </td>
+              <td>
+                <div class="actions">
+                  <button class="btn btn-secondary">View</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="rank-col">2</td>
+              <td class="name-col">Jamie & Casey</td>
+              <td class="stat-col">3</td>
+              <td class="stat-col wins">2</td>
+              <td class="stat-col">1</td>
+              <td class="stat-col">+4</td>
+              <td>
+                <div class="actions">
+                  <button class="btn btn-secondary">View</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="rank-col">3</td>
+              <td class="name-col">Morgan & Taylor</td>
+              <td class="stat-col">3</td>
+              <td class="stat-col wins">1</td>
+              <td class="stat-col">2</td>
+              <td class="stat-col">-6</td>
+              <td>
+                <div class="actions">
+                  <button class="btn btn-secondary">View</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="rank-col">4</td>
+              <td class="name-col">Jordan & Riley</td>
+              <td class="stat-col">3</td>
+              <td class="stat-col">0</td>
+              <td class="stat-col">3</td>
+              <td class="stat-col">-10</td>
+              <td>
+                <div class="actions">
+                  <button class="btn btn-secondary">View</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Player vs Organizer Demo -->
+      <div class="card mt-lg">
+        <p class="text-muted" style="margin-bottom: var(--spacing-md);">
+          <strong>Demo:</strong> Toggle between Player and Organizer views • Pastel Flat 2.0 Minimal Theme
+        </p>
+        <div class="demo-controls">
+          <button class="btn btn-primary" onclick="showPlayerView()">
+            👤 View as Player
+          </button>
+          <button class="btn btn-primary" onclick="showOrganizerView()">
+            ⚙️ View as Organizer
+          </button>
+        </div>
+      </div>
+
+      <!-- Color Palette -->
+      <div class="card mt-lg">
+        <h3 style="color: var(--gray-900); margin-bottom: var(--spacing-md);">Minimal Color Palette</h3>
+        <div class="color-swatches">
+          <div class="swatch swatch-primary">
+            <div>Primary</div>
+            <small>#98C9E3</small>
+          </div>
+          <div class="swatch swatch-secondary">
+            <div>Secondary</div>
+            <small>#C4B5FD</small>
+          </div>
+          <div class="swatch swatch-success">
+            <div>Success</div>
+            <small>#BBF7D0</small>
+          </div>
+          <div class="swatch swatch-accent1">
+            <div>Accent 1</div>
+            <small>#FED7AA</small>
+          </div>
+          <div class="swatch swatch-accent2">
+            <div>Accent 2</div>
+            <small>#A7F3D0</small>
+          </div>
+          <div class="swatch swatch-accent3">
+            <div>Accent 3</div>
+            <small>#FBCFE8</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Design Features -->
+      <div class="card mt-lg" style="background: #F5F5F5; border: 1px solid var(--gray-300);">
+        <h3 style="color: var(--primary-dark); margin-bottom: var(--spacing-md);">✨ Pastel Flat 2.0 Minimal</h3>
+        <ul style="color: var(--gray-700); line-height: 1.8; list-position: inside;">
+          <li>🎨 Clean, minimal color usage (focus on content)</li>
+          <li>📐 Reduced visual noise with flat design</li>
+          <li>🌫️ Generous whitespace for breathing room</li>
+          <li>⚡ Subtle, understated interactions</li>
+          <li>📱 Perfect for mobile-first interfaces</li>
+          <li>🎯 Maximum readability with minimal distraction</li>
+          <li>💼 Professional, clean appearance</li>
+        </ul>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation (Mobile) -->
+    <nav class="bottom-nav">
+      <button class="nav-item active">
+        <span class="nav-icon">📊</span>
+        <span>Standings</span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">🎾</span>
+        <span>Matches</span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">🏆</span>
+        <span>Bracket</span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">⚙️</span>
+        <span>More</span>
+      </button>
+    </nav>
+  </div>
+
+  <script>
+    function showPlayerView() {
+      document.getElementById('organizerInfo').style.display = 'none';
+      alert('Switched to Player View\n\nNotice: Clean, minimal design with focus on content');
+    }
+
+    function showOrganizerView() {
+      document.getElementById('organizerInfo').style.display = 'block';
+      alert('Switched to Organizer View\n\nNotice: Same minimal aesthetic with organizer controls visible');
+    }
+  </script>
+</body>
+</html>

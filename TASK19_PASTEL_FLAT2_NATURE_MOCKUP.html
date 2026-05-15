@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task #19 - Pastel Flat 2.0 Nature Tones Design Mockup (Standings Page)</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* ===== DESIGN TOKENS (Pastel Flat 2.0 Nature Tones Theme) ===== */
+    :root {
+      /* Nature Pastel Colors - Greens, Teals, Soft Sage */
+      --primary: #A8F5D9;        /* Soft mint green */
+      --primary-dark: #7FEAD9;
+      --primary-light: #D9FFED;
+
+      --secondary: #A8E6C1;      /* Soft sage green */
+      --secondary-dark: #7DD9A8;
+      --secondary-light: #E6F7F0;
+
+      --accent-1: #B8EDDA;       /* Soft teal */
+      --accent-2: #A8E8D9;       /* Soft cyan green */
+      --accent-3: #C1F0D9;       /* Soft light green */
+
+      --success: #A8E6C1;        /* Soft green */
+      --success-dark: #7DD9A8;
+      --success-light: #E6F7F0;
+
+      --warning: #FFD9A8;        /* Soft amber */
+      --error: #FFB3B3;          /* Soft red */
+
+      --gray-50: #FAFBFB;
+      --gray-100: #F3F6F5;
+      --gray-200: #E8F0ED;
+      --gray-300: #D9E8E0;
+      --gray-400: #B8D0C8;
+      --gray-500: #8BA8A0;
+      --gray-600: #5B7B73;
+      --gray-700: #3D5C52;
+      --gray-900: #1A3230;
+
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+
+      /* Flat 2.0: Subtle Shadows */
+      --shadow-sm: 0 1px 2px 0 rgba(127, 234, 217, 0.08);
+      --shadow-md: 0 4px 6px -1px rgba(127, 234, 217, 0.12), 0 2px 4px -1px rgba(168, 245, 217, 0.08);
+      --shadow-lg: 0 10px 15px -3px rgba(127, 234, 217, 0.15), 0 4px 6px -2px rgba(168, 245, 217, 0.1);
+      --shadow-hover: 0 20px 25px -5px rgba(127, 234, 217, 0.2), 0 10px 10px -5px rgba(168, 245, 217, 0.12);
+    }
+
+    /* ===== GLOBAL STYLES ===== */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #FAFBFB 0%, #E6F7F0 25%, #D9FFED 50%, #E6F7F0 75%, #FAFBFB 100%);
+      background-attachment: fixed;
+      color: var(--gray-900);
+      line-height: 1.5;
+    }
+
+    /* ===== LAYOUT ===== */
+    .app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(230, 247, 240, 0.8) 100%);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(168, 245, 217, 0.3);
+      padding: var(--spacing-md) var(--spacing-lg);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(127, 234, 217, 0.1);
+    }
+
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--gray-900);
+      background: linear-gradient(135deg, #7FEAD9 0%, #7DD9A8 50%, #B8EDDA 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .phase-badge {
+      display: inline-block;
+      padding: var(--spacing-sm) var(--spacing-md);
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: var(--gray-700);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: var(--shadow-md);
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+    }
+
+    .phase-badge::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.2);
+      transition: left 0.3s ease;
+    }
+
+    .phase-badge:hover::before {
+      left: 100%;
+    }
+
+    .phase-badge.knockout {
+      background: linear-gradient(135deg, var(--secondary) 0%, var(--secondary-dark) 100%);
+    }
+
+    .main-content {
+      flex: 1;
+      padding: var(--spacing-lg);
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* ===== TABS/NAVIGATION ===== */
+    .tab-nav {
+      display: flex;
+      gap: var(--spacing-md);
+      border-bottom: 2px solid rgba(168, 245, 217, 0.2);
+      margin-bottom: var(--spacing-lg);
+      overflow-x: auto;
+    }
+
+    .tab-nav button {
+      padding: var(--spacing-md) var(--spacing-lg);
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-500);
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .tab-nav button:hover {
+      color: var(--primary-dark);
+    }
+
+    .tab-nav button.active {
+      color: var(--primary-dark);
+      border-bottom-color: var(--primary);
+    }
+
+    .tab-nav button.active::after {
+      content: '';
+      position: absolute;
+      bottom: -5px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--primary), transparent);
+      opacity: 0.5;
+    }
+
+    /* ===== STANDINGS TABLE ===== */
+    .standings-container {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(230, 247, 240, 0.5) 100%);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+      transition: box-shadow 0.3s ease;
+      border: 1px solid rgba(168, 245, 217, 0.2);
+      backdrop-filter: blur(10px);
+    }
+
+    .standings-container:hover {
+      box-shadow: var(--shadow-hover);
+    }
+
+    .standings-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .standings-table thead {
+      background: linear-gradient(135deg, rgba(230, 247, 240, 0.6) 0%, rgba(217, 255, 237, 0.4) 100%);
+      border-bottom: 2px solid rgba(168, 245, 217, 0.3);
+    }
+
+    .standings-table th {
+      padding: var(--spacing-md) var(--spacing-lg);
+      text-align: left;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--gray-600);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .standings-table tbody tr {
+      border-bottom: 1px solid rgba(168, 245, 217, 0.15);
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .standings-table tbody tr::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 4px;
+      background: linear-gradient(180deg, var(--primary), transparent);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    .standings-table tbody tr:hover {
+      background: linear-gradient(90deg, rgba(230, 247, 240, 0.4) 0%, transparent 100%);
+      box-shadow: inset 0 0 0 1px rgba(168, 245, 217, 0.2);
+    }
+
+    .standings-table tbody tr:hover::before {
+      opacity: 1;
+    }
+
+    .standings-table td {
+      padding: var(--spacing-md) var(--spacing-lg);
+      font-size: 14px;
+    }
+
+    .rank-col {
+      font-weight: 700;
+      color: var(--primary-dark);
+      min-width: 40px;
+      font-size: 16px;
+    }
+
+    .name-col {
+      font-weight: 600;
+      color: var(--gray-900);
+    }
+
+    .stat-col {
+      text-align: center;
+      color: var(--gray-500);
+    }
+
+    .stat-col.wins {
+      color: var(--success-dark);
+      font-weight: 600;
+    }
+
+    /* ===== ACTION BUTTONS ===== */
+    .actions {
+      display: flex;
+      gap: var(--spacing-sm);
+      justify-content: flex-end;
+    }
+
+    .btn {
+      padding: var(--spacing-sm) var(--spacing-md);
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+    }
+
+    .btn::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+
+    .btn:active::before {
+      width: 300px;
+      height: 300px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: var(--gray-700);
+      box-shadow: var(--shadow-md);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+    }
+
+    .btn-primary:hover {
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-2px);
+      background: linear-gradient(135deg, var(--primary-dark) 0%, #6FD9C8 100%);
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(230, 247, 240, 0.5) 100%);
+      color: var(--gray-700);
+      box-shadow: var(--shadow-sm);
+      border: 1px solid rgba(168, 245, 217, 0.3);
+    }
+
+    .btn-secondary:hover {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(230, 247, 240, 0.7) 100%);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 2px solid var(--primary-dark);
+      color: var(--primary-dark);
+    }
+
+    .btn-outline:hover {
+      background: var(--primary-light);
+    }
+
+    /* ===== STATUS INDICATORS ===== */
+    .status-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: var(--spacing-sm);
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .status-live {
+      background-color: var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--success); }
+      50% { opacity: 0.6; box-shadow: 0 0 12px var(--success); }
+    }
+
+    /* ===== INFO BOX ===== */
+    .info-box {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: var(--gray-700);
+      padding: var(--spacing-md) var(--spacing-lg);
+      border-radius: 12px;
+      margin-bottom: var(--spacing-lg);
+      font-size: 14px;
+      box-shadow: var(--shadow-md);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      backdrop-filter: blur(10px);
+    }
+
+    .info-box.organizer {
+      background: linear-gradient(135deg, var(--secondary) 0%, var(--secondary-dark) 100%);
+    }
+
+    .info-box.success {
+      background: linear-gradient(135deg, var(--success) 0%, var(--success-dark) 100%);
+      color: var(--gray-700);
+    }
+
+    /* ===== CARD STYLES ===== */
+    .card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(193, 240, 217, 0.4) 100%);
+      border-radius: 16px;
+      padding: var(--spacing-lg);
+      box-shadow: var(--shadow-md);
+      transition: all 0.3s ease;
+      border: 1px solid rgba(168, 245, 217, 0.2);
+      backdrop-filter: blur(10px);
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-4px);
+      border-color: rgba(168, 245, 217, 0.4);
+    }
+
+    /* ===== BOTTOM NAV (Mobile) ===== */
+    .bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(193, 240, 217, 0.7) 100%);
+      border-top: 1px solid rgba(168, 245, 217, 0.3);
+      padding: var(--spacing-sm) 0;
+      flex-direction: row;
+      justify-content: space-around;
+      z-index: 20;
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(10px);
+    }
+
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--spacing-xs);
+      padding: var(--spacing-md);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--gray-400);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .nav-item::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      width: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      transition: width 0.3s ease;
+    }
+
+    .nav-item:hover,
+    .nav-item.active {
+      color: var(--primary-dark);
+    }
+
+    .nav-item.active::before {
+      width: 100%;
+    }
+
+    .nav-icon {
+      font-size: 20px;
+      transition: transform 0.2s ease;
+    }
+
+    .nav-item:hover .nav-icon {
+      transform: scale(1.1);
+    }
+
+    /* ===== STATS BOX ===== */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: var(--spacing-md);
+      margin-bottom: var(--spacing-lg);
+    }
+
+    .stat-item {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(230, 247, 240, 0.4) 100%);
+      padding: var(--spacing-md);
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: var(--shadow-sm);
+      border-left: 4px solid var(--primary);
+      transition: all 0.2s ease;
+      border: 1px solid rgba(168, 245, 217, 0.2);
+      backdrop-filter: blur(10px);
+    }
+
+    .stat-item:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    .stat-item.success {
+      border-left-color: var(--success);
+    }
+
+    .stat-item.warning {
+      border-left-color: var(--accent-1);
+    }
+
+    .stat-item.secondary {
+      border-left-color: var(--secondary);
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--gray-900);
+      background: linear-gradient(135deg, var(--primary-dark), var(--secondary-dark));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--gray-500);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: var(--spacing-sm);
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .header {
+        padding: var(--spacing-md);
+      }
+
+      .header h1 {
+        font-size: 20px;
+      }
+
+      .main-content {
+        padding: var(--spacing-md);
+        padding-bottom: 100px;
+      }
+
+      .bottom-nav {
+        display: flex;
+      }
+
+      .tab-nav {
+        flex-wrap: wrap;
+        gap: var(--spacing-sm);
+      }
+
+      .standings-table th,
+      .standings-table td {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 12px;
+      }
+
+      .actions {
+        gap: 4px;
+      }
+
+      .btn {
+        padding: 4px 8px;
+        font-size: 11px;
+      }
+
+      .stats-row {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    /* ===== UTILITIES ===== */
+    .text-center {
+      text-align: center;
+    }
+
+    .text-muted {
+      color: var(--gray-500);
+    }
+
+    .mt-lg {
+      margin-top: var(--spacing-lg);
+    }
+
+    .demo-controls {
+      display: flex;
+      gap: var(--spacing-md);
+      flex-wrap: wrap;
+    }
+
+    /* ===== PASTEL COLOR SWATCHES ===== */
+    .color-swatches {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: var(--spacing-md);
+      margin-top: var(--spacing-md);
+    }
+
+    .swatch {
+      padding: var(--spacing-md);
+      border-radius: 8px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-700);
+      box-shadow: var(--shadow-sm);
+      border: 1px solid rgba(168, 245, 217, 0.2);
+    }
+
+    .swatch-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    }
+
+    .swatch-secondary {
+      background: linear-gradient(135deg, var(--secondary) 0%, var(--secondary-dark) 100%);
+    }
+
+    .swatch-success {
+      background: linear-gradient(135deg, var(--success) 0%, var(--success-dark) 100%);
+    }
+
+    .swatch-accent1 {
+      background: linear-gradient(135deg, var(--accent-1) 0%, #A5E8CF 100%);
+    }
+
+    .swatch-accent2 {
+      background: linear-gradient(135deg, var(--accent-2) 0%, #95E0D0 100%);
+    }
+
+    .swatch-accent3 {
+      background: linear-gradient(135deg, var(--accent-3) 0%, #AFE8CE 100%);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div>
+          <h1>Doubles Pickleball Cup</h1>
+          <span class="phase-badge">Group Stage Active</span>
+        </div>
+        <div class="text-muted">
+          <small>Group A Standings</small>
+        </div>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+      <button class="active">Standings</button>
+      <button>Matches</button>
+      <button>Groups</button>
+      <button>Bracket</button>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Stats Overview -->
+      <div class="stats-row">
+        <div class="stat-item">
+          <div class="stat-value">4</div>
+          <div class="stat-label">Teams</div>
+        </div>
+        <div class="stat-item success">
+          <div class="stat-value" style="color: var(--success-dark);">12</div>
+          <div class="stat-label">Matches</div>
+        </div>
+        <div class="stat-item warning">
+          <div class="stat-value" style="color: var(--gray-900);">Group A</div>
+          <div class="stat-label">Active</div>
+        </div>
+      </div>
+
+      <!-- Status Info -->
+      <div class="info-box">
+        <span class="status-indicator status-live"></span>
+        <strong>Live Updates</strong> — Standings update in real-time as scores are submitted
+      </div>
+
+      <!-- Organizer Info (conditionally shown) -->
+      <div class="info-box organizer" style="display: none;" id="organizerInfo">
+        <strong>Organizer Mode</strong> — You can override scores and manage tournament details
+      </div>
+
+      <!-- Standings Table -->
+      <div class="standings-container">
+        <table class="standings-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Team</th>
+              <th>Matches</th>
+              <th>Wins</th>
+              <th>Losses</th>
+              <th>Set Diff</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="rank-col">1</td>
+              <td class="name-col">Sarah & Alex</td>
+              <td class="stat-col">3</td>
+              <td class="stat-col wins">3</td>
+              <td class="stat-col">0</td>
+              <td class="stat-col">
+                <span style="background: linear-gradient(135deg, rgba(168, 229, 193, 0.5), rgba(125, 217, 168, 0.5)); color: var(--success-dark); padding: 2px 6px; border-radius: 4px; font-weight: 600;">+12</span>
+              </td>
+              <td>
+                <div class="actions">
+                  <button class="btn btn-secondary">View</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="rank-col">2</td>
+              <td class="name-col">Jamie & Casey</td>
+              <td class="stat-col">3</td>
+              <td class="stat-col wins">2</td>
+              <td class="stat-col">1</td>
+              <td class="stat-col">+4</td>
+              <td>
+                <div class="actions">
+                  <button class="btn btn-secondary">View</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="rank-col">3</td>
+              <td class="name-col">Morgan & Taylor</td>
+              <td class="stat-col">3</td>
+              <td class="stat-col wins">1</td>
+              <td class="stat-col">2</td>
+              <td class="stat-col">-6</td>
+              <td>
+                <div class="actions">
+                  <button class="btn btn-secondary">View</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="rank-col">4</td>
+              <td class="name-col">Jordan & Riley</td>
+              <td class="stat-col">3</td>
+              <td class="stat-col">0</td>
+              <td class="stat-col">3</td>
+              <td class="stat-col">-10</td>
+              <td>
+                <div class="actions">
+                  <button class="btn btn-secondary">View</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Player vs Organizer Demo -->
+      <div class="card mt-lg">
+        <p class="text-muted" style="margin-bottom: var(--spacing-md);">
+          <strong>Demo:</strong> Toggle between Player and Organizer views • Pastel Flat 2.0 Nature Tones Theme
+        </p>
+        <div class="demo-controls">
+          <button class="btn btn-primary" onclick="showPlayerView()">
+            👤 View as Player
+          </button>
+          <button class="btn btn-primary" onclick="showOrganizerView()">
+            ⚙️ View as Organizer
+          </button>
+        </div>
+      </div>
+
+      <!-- Color Palette -->
+      <div class="card mt-lg">
+        <h3 style="color: var(--gray-900); margin-bottom: var(--spacing-md);">Pastel Nature Tones Palette</h3>
+        <div class="color-swatches">
+          <div class="swatch swatch-primary">
+            <div>Primary</div>
+            <small>#A8F5D9</small>
+          </div>
+          <div class="swatch swatch-secondary">
+            <div>Secondary</div>
+            <small>#A8E6C1</small>
+          </div>
+          <div class="swatch swatch-success">
+            <div>Success</div>
+            <small>#A8E6C1</small>
+          </div>
+          <div class="swatch swatch-accent1">
+            <div>Accent 1</div>
+            <small>#B8EDDA</small>
+          </div>
+          <div class="swatch swatch-accent2">
+            <div>Accent 2</div>
+            <small>#A8E8D9</small>
+          </div>
+          <div class="swatch swatch-accent3">
+            <div>Accent 3</div>
+            <small>#C1F0D9</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Design Features -->
+      <div class="card mt-lg" style="background: linear-gradient(135deg, rgba(230, 247, 240, 0.6) 0%, rgba(217, 255, 237, 0.6) 100%); border: 2px solid rgba(168, 245, 217, 0.3);">
+        <h3 style="color: var(--primary-dark); margin-bottom: var(--spacing-md);">✨ Pastel Flat 2.0 Nature Tones</h3>
+        <ul style="color: var(--gray-700); line-height: 1.8; list-position: inside;">
+          <li>🌿 Nature-inspired pastel palette (greens, teals, sage)</li>
+          <li>💫 Soft gradients with natural color harmony</li>
+          <li>🌊 Layered depth with gentle shadows</li>
+          <li>✨ Smooth animations and transitions</li>
+          <li>🔮 Backdrop blur effects for modern feel</li>
+          <li>🎯 Excellent readability with nature tones</li>
+          <li>💎 Organic, refreshing, balanced appearance</li>
+        </ul>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation (Mobile) -->
+    <nav class="bottom-nav">
+      <button class="nav-item active">
+        <span class="nav-icon">📊</span>
+        <span>Standings</span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">🎾</span>
+        <span>Matches</span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">🏆</span>
+        <span>Bracket</span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">⚙️</span>
+        <span>More</span>
+      </button>
+    </nav>
+  </div>
+
+  <script>
+    function showPlayerView() {
+      document.getElementById('organizerInfo').style.display = 'none';
+      alert('Switched to Player View\n\nNotice: Nature-inspired pastels with organic, refreshing aesthetic');
+    }
+
+    function showOrganizerView() {
+      document.getElementById('organizerInfo').style.display = 'block';
+      alert('Switched to Organizer View\n\nNotice: Same beautiful nature tone design with organizer controls visible');
+    }
+  </script>
+</body>
+</html>

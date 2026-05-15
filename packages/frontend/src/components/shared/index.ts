@@ -23,3 +23,6 @@ export type { SkeletonLoaderProps } from './SkeletonLoader'
 
 export { StandingsTable } from './StandingsTable'
 export type { StandingsTableProps } from './StandingsTable'
+
+export { MatchCard } from './MatchCard'
+export type { MatchCardProps } from './MatchCard'
