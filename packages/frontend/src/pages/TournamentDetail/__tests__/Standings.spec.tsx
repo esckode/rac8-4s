@@ -28,7 +28,9 @@ describe('Standings', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -54,6 +56,8 @@ describe('Standings', () => {
       isLoading: true,
       error: null,
       refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
     })
 
     mockUsePermissions.mockReturnValue({
@@ -81,7 +85,9 @@ describe('Standings', () => {
       isLoading: false,
       error: { code: 'FETCH_ERROR', message: 'Failed to load standings' },
       refetch: refetchMock,
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -106,6 +112,8 @@ describe('Standings', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
     })
 
     mockUsePermissions.mockReturnValue({
@@ -133,6 +141,8 @@ describe('Standings', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
     })
 
     mockUsePermissions.mockReturnValue({
@@ -160,6 +170,8 @@ describe('Standings', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
     })
 
     mockUsePermissions.mockReturnValue({

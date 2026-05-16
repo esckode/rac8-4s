@@ -133,5 +133,18 @@ export async function fetchBracket(tournamentId: string): Promise<BracketData> {
   return response
 }
 
+export async function submitScore(
+  tournamentId: string,
+  matchId: string,
+  score: string,
+  token: string,
+  matchType: 'group' | 'knockout' = 'group'
+): Promise<void> {
+  const path = matchType === 'knockout'
+    ? `/tournaments/${tournamentId}/knockout/${matchId}/score`
+    : `/tournaments/${tournamentId}/matches/${matchId}/score`
+  await apiFetch<{ message: string }>(path, { method: 'POST', token, body: { score } })
+}
+
 // Import MatchWithOpponent from types for proper typing
 import type { MatchWithOpponent } from '../types'

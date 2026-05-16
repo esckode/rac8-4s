@@ -99,6 +99,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       renderHook(() => useSSE(tournamentId))
@@ -118,6 +120,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { unmount } = renderHook(() => useSSE(tournamentId))
@@ -138,6 +142,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       renderHook(() => useSSE(''))
@@ -158,6 +164,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       renderHook(() => useSSE(tournamentId))
@@ -195,6 +203,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       renderHook(() => useSSE(tournamentId))
@@ -223,6 +233,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => useSSE(tournamentId))
@@ -247,6 +259,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => useSSE(tournamentId))
@@ -270,6 +284,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => useSSE(tournamentId))
@@ -310,6 +326,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => useSSE(tournamentId))
@@ -338,6 +356,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => useSSE(tournamentId))
@@ -404,6 +424,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       renderHook(() => useSSE(tournamentId))
@@ -424,6 +446,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { unmount } = renderHook(() => useSSE(tournamentId))
@@ -448,6 +472,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { unmount } = renderHook(() => useSSE(tournamentId))

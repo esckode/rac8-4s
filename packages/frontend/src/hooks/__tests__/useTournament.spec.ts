@@ -155,6 +155,8 @@ describe('useTournament', () => {
         isLoading: false,
         error: null,
         refetch: expect.any(Function),
+        retryIn: null,
+        cancelAutoRetry: expect.any(Function),
       })
     })
 

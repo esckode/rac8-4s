@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useAuth } from '../../hooks/useAuth'
 import { useSSE } from '../../hooks/useSSE'
+import { useTournament } from '../../hooks/useTournament'
 import { Standings } from './Standings'
 import { Matches } from './Matches'
 import { Bracket } from './Bracket'
@@ -16,6 +17,7 @@ export const TournamentDetail: React.FC = () => {
   const { user, isAuthenticated } = useAuth()
   const permissions = usePermissions(tournamentId || '')
   const sseState = useSSE(tournamentId || '')
+  const { error, refetch, retryIn, cancelAutoRetry } = useTournament(tournamentId || '')
 
   // Get current tab from URL pathname
   const currentPath = location.pathname
@@ -169,6 +171,35 @@ export const TournamentDetail: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* Error Banner with Auto-Retry */}
+      {error && (
+        <div role="alert" className="bg-[--rose-50] border border-[--rose-200] rounded-[--r-lg] p-[--s-4] flex items-center justify-between gap-[--s-4]">
+          <div>
+            <p className="font-medium text-[--rose-800]">Failed to load tournament data</p>
+            <p className="text-sm text-[--rose-700] mt-[--s-1]">{error.message}</p>
+            {retryIn !== null && (
+              <p className="text-xs text-[--rose-600] mt-[--s-1]">Auto-retry in {retryIn}s</p>
+            )}
+          </div>
+          <div className="flex gap-[--s-2] flex-shrink-0">
+            {retryIn !== null && (
+              <button
+                onClick={cancelAutoRetry}
+                className="text-sm text-[--rose-700] hover:text-[--rose-900]"
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              onClick={refetch}
+              className="text-sm font-medium text-[--rose-700] underline hover:text-[--rose-900]"
+            >
+              Retry now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Content Area */}
       <div

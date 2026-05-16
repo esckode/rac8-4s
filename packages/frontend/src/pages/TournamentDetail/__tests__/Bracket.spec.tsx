@@ -38,7 +38,9 @@ describe('Bracket', () => {
       isLoading: true,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -114,7 +116,9 @@ describe('Bracket', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -159,7 +163,9 @@ describe('Bracket', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -203,7 +209,9 @@ describe('Bracket', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: false,
@@ -237,7 +245,9 @@ describe('Bracket', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: false,
@@ -270,7 +280,9 @@ describe('Bracket', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -309,7 +321,9 @@ describe('Bracket', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: false,

@@ -5,6 +5,7 @@
  * Uses React Query for deduplication and caching.
  */
 
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Tournament, Standing, Match } from '@shared/types'
 import type { BracketData, MatchWithOpponent } from '../types'
@@ -26,6 +27,8 @@ export interface TournamentHookState extends TournamentBundle {
   isLoading: boolean
   error: null | { code: string; message: string }
   refetch: () => Promise<void>
+  retryIn: number | null
+  cancelAutoRetry: () => void
 }
 
 async function fetchTournamentBundle(
@@ -57,6 +60,8 @@ export function useTournament(tournamentId: string): TournamentHookState {
   const authState = useAuth()
   const queryClient = useQueryClient()
   const { track } = useAnalytics()
+  const [retryIn, setRetryIn] = useState<number | null>(null)
+  const retryIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const {
     data: bundle,
@@ -93,6 +98,48 @@ export function useTournament(tournamentId: string): TournamentHookState {
     enabled: !!authState.user && !!tournamentId,
     retry: 1,
   })
+
+  const stopAutoRetry = () => {
+    if (retryIntervalRef.current) {
+      clearInterval(retryIntervalRef.current)
+      retryIntervalRef.current = null
+    }
+    setRetryIn(null)
+  }
+
+  const cancelAutoRetry = () => {
+    stopAutoRetry()
+  }
+
+  // Auto-retry countdown when error occurs
+  useEffect(() => {
+    if (!error) {
+      stopAutoRetry()
+      return
+    }
+
+    const startCountdown = () => {
+      setRetryIn(10)
+      let remaining = 10
+
+      retryIntervalRef.current = setInterval(() => {
+        remaining -= 1
+        setRetryIn(remaining)
+
+        if (remaining <= 0) {
+          stopAutoRetry()
+          queryRefetch().then(
+            () => { /* success, stop retrying */ },
+            () => { /* failed, restart countdown */ startCountdown() }
+          )
+        }
+      }, 1000)
+    }
+
+    startCountdown()
+
+    return () => stopAutoRetry()
+  }, [!!error, queryRefetch])
 
   // Update stores when bundle data arrives
   if (bundle) {
@@ -152,5 +199,7 @@ export function useTournament(tournamentId: string): TournamentHookState {
     refetch: async () => {
       await queryRefetch()
     },
+    retryIn,
+    cancelAutoRetry,
   }
 }

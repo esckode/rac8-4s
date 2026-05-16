@@ -64,6 +64,8 @@ describe('usePermissions', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => usePermissions(tournamentId))
@@ -115,6 +117,8 @@ describe('usePermissions', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => usePermissions(tournamentId))
@@ -165,6 +169,8 @@ describe('usePermissions', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => usePermissions(tournamentId))
@@ -217,6 +223,8 @@ describe('usePermissions', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result, rerender } = renderHook(() => usePermissions(tournamentId))
@@ -278,6 +286,8 @@ describe('usePermissions', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result, rerender } = renderHook(() => usePermissions(tournamentId))
@@ -307,6 +317,8 @@ describe('usePermissions', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       rerender()
@@ -347,6 +359,8 @@ describe('usePermissions', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => usePermissions(tournamentId))
@@ -382,6 +396,8 @@ describe('usePermissions', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => usePermissions(tournamentId))
@@ -426,6 +442,8 @@ describe('usePermissions', () => {
         isLoading: false,
         error: null,
         refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
       })
 
       const { result } = renderHook(() => usePermissions(tournamentId))

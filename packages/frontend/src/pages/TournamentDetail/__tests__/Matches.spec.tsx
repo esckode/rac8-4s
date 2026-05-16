@@ -38,7 +38,9 @@ describe('Matches', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -64,7 +66,9 @@ describe('Matches', () => {
       isLoading: true,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -117,7 +121,9 @@ describe('Matches', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -145,7 +151,9 @@ describe('Matches', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -175,7 +183,9 @@ describe('Matches', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,
@@ -203,7 +213,9 @@ describe('Matches', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: false,
@@ -232,7 +244,9 @@ describe('Matches', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     mockUsePermissions.mockReturnValue({
       playerRole: true,

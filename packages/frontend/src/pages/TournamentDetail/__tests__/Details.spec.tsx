@@ -39,7 +39,9 @@ describe('Details', () => {
       isLoading: true,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     render(<Details />)
 
@@ -76,7 +78,9 @@ describe('Details', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     render(<Details />)
 
@@ -96,7 +100,9 @@ describe('Details', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     render(<Details />)
 
@@ -116,7 +122,9 @@ describe('Details', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     render(<Details />)
 
@@ -134,7 +142,9 @@ describe('Details', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     render(<Details />)
 
@@ -156,7 +166,9 @@ describe('Details', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     render(<Details />)
 
@@ -176,7 +188,9 @@ describe('Details', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     render(<Details />)
 
@@ -198,7 +212,9 @@ describe('Details', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     render(<Details />)
 
@@ -219,7 +235,9 @@ describe('Details', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     render(<Details />)
 
@@ -237,7 +255,9 @@ describe('Details', () => {
       isLoading: false,
       error: null,
       refetch: jest.fn(),
-    })
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    } as any)
 
     render(<Details />)
 
