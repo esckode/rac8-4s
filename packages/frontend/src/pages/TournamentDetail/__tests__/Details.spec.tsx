@@ -60,6 +60,8 @@ describe('Details', () => {
       isLoading: false,
       error: { code: 'FETCH_ERROR', message: 'Failed to load tournament' },
       refetch: refetchMock,
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
     })
 
     render(<Details />)

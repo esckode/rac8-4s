@@ -16,7 +16,7 @@ export interface MatchCardProps {
   className?: string
 }
 
-export const MatchCard: React.FC<MatchCardProps> = ({
+const MatchCardComponent: React.FC<MatchCardProps> = ({
   match,
   userRole = 'player',
   isLoading = false,
@@ -145,3 +145,5 @@ export const MatchCard: React.FC<MatchCardProps> = ({
     </div>
   )
 }
+
+export const MatchCard = React.memo(MatchCardComponent)

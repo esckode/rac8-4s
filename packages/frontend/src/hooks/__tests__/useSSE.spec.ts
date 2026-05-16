@@ -389,6 +389,8 @@ describe('useSSE', () => {
         isLoading: false,
         error: null,
         refetch: mockRefetch,
+        retryIn: null,
+        cancelAutoRetry: jest.fn(),
       })
 
       renderHook(() => useSSE(tournamentId))

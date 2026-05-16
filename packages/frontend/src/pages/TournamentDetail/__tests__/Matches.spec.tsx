@@ -95,6 +95,8 @@ describe('Matches', () => {
       isLoading: false,
       error: { code: 'FETCH_ERROR', message: 'Failed to load matches' },
       refetch: refetchMock,
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
     })
 
     mockUsePermissions.mockReturnValue({

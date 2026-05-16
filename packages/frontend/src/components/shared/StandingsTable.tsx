@@ -29,7 +29,7 @@ export interface StandingsTableProps {
 type SortField = 'rank' | 'wins' | 'losses' | 'setDiff'
 type SortDirection = 'asc' | 'desc'
 
-export const StandingsTable: React.FC<StandingsTableProps> = ({
+const StandingsTableComponent: React.FC<StandingsTableProps> = ({
   standings,
   isLoading = false,
   error = null,
@@ -244,3 +244,5 @@ export const StandingsTable: React.FC<StandingsTableProps> = ({
     </div>
   )
 }
+
+export const StandingsTable = React.memo(StandingsTableComponent)

@@ -74,6 +74,8 @@ describe('Bracket', () => {
       isLoading: false,
       error: { code: 'FETCH_ERROR', message: 'Failed to load bracket' },
       refetch: refetchMock,
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
     })
 
     mockUsePermissions.mockReturnValue({
