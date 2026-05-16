@@ -14,23 +14,28 @@ export const Logo: React.FC<LogoProps> = ({
   tagline = false,
   className = '',
 }) => {
-  const textColor = tone === 'light' ? '#FFFFFF' : 'var(--ink-900)'
-  const markSize = size * 1.5
+  // tone: navy (dark on light), light (light on dark), mono-court
+  const ink = tone === 'light' ? '#FFFFFF' : 'var(--ink-900)'
+  const mark1 = tone === 'light' ? '#A8D5FF' : 'var(--court-400)'
+  const mark2 = tone === 'light' ? '#7BC3FF' : 'var(--court-500)'
 
   return (
-    <div className={`flex items-center gap-[${size * 0.35}px] ${className}`} style={{ gap: `${size * 0.35}px` }}>
-      {/* Logo mark */}
-      <LogoMark size={markSize} />
-
-      {/* Brand text and optional tagline */}
-      <div className="flex flex-col">
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: size * 0.35,
+      }}
+      className={className}
+    >
+      <LogoMark size={size * 1.5} color={mark1} accent={mark2} />
+      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
         <div
           style={{
-            fontSize: `${size}px`,
             fontWeight: 700,
-            color: textColor,
-            lineHeight: 1,
-            letterSpacing: '-0.01em',
+            fontSize: size,
+            color: ink,
+            letterSpacing: '-0.02em',
           }}
         >
           U At Court
@@ -38,11 +43,14 @@ export const Logo: React.FC<LogoProps> = ({
         {tagline && (
           <div
             style={{
-              fontSize: `${size * 0.42}px`,
+              fontSize: size * 0.42,
+              marginTop: size * 0.18,
+              color:
+                tone === 'light'
+                  ? 'rgba(255,255,255,0.7)'
+                  : 'var(--ink-500)',
               fontWeight: 500,
-              color: textColor,
-              opacity: 0.7,
-              lineHeight: 1.2,
+              letterSpacing: '0.02em',
             }}
           >
             Make Your Play Count

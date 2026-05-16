@@ -8,35 +8,38 @@ export interface LogoMarkProps {
 }
 
 export const LogoMark: React.FC<LogoMarkProps> = ({
-  size = 88,
+  size = 56,
   color = 'var(--court-400)',
-  accent = 'var(--court-500)',
+  accent,
   className = '',
 }) => {
+  const accentColor = accent || color
+
   return (
     <svg
+      viewBox="0 0 100 100"
       width={size}
       height={size}
-      viewBox="0 0 88 88"
-      fill="none"
+      aria-hidden="true"
       className={className}
     >
-      <defs>
-        <mask id={`crescent-outer-${size}`}>
-          <rect width="88" height="88" fill="white" />
-          <circle cx="60" cy="44" r="44" fill="black" />
-        </mask>
-        <mask id={`crescent-inner-${size}`}>
-          <rect width="88" height="88" fill="white" />
-          <circle cx="56" cy="44" r="32" fill="black" />
-        </mask>
-      </defs>
-
-      {/* Outer crescent - more pronounced C-curve */}
-      <circle cx="24" cy="44" r="44" fill={color} mask={`url(#crescent-outer-${size})`} />
-
-      {/* Inner crescent - smaller C-curve offset */}
-      <circle cx="28" cy="44" r="32" fill={accent} opacity="0.85" mask={`url(#crescent-inner-${size})`} />
+      {/* Outer crescent — large C opening to the right */}
+      <path
+        d="M 50 6
+           A 44 44 0 1 0 50 94
+           A 32 32 0 1 1 50 18
+           Z"
+        fill={color}
+      />
+      {/* Inner crescent — smaller C, slightly offset */}
+      <path
+        d="M 50 24
+           A 26 26 0 1 0 50 76
+           A 14 14 0 1 1 50 32
+           Z"
+        fill={accentColor}
+        opacity="0.85"
+      />
     </svg>
   )
 }
