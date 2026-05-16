@@ -142,13 +142,16 @@ describe('Full Tournament Lifecycle', () => {
 
     expect(advanceRes1.status).toBe(200)
 
-    // Step 5: Create groups (direct repo, no HTTP endpoint)
-    groupRepo.createGroups(tournamentId, 1, 2, [
-      player1.playerId,
-      player2.playerId,
-      player3.playerId,
-      player4.playerId,
-    ])
+    // Step 5: Create groups via HTTP endpoint
+    const createGroupsRes = await request(app)
+      .post(`/tournaments/${tournamentId}/groups`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .send({
+        numGroups: 1,
+        advancingPerGroup: 2,
+      })
+
+    expect([200, 201]).toContain(createGroupsRes.status)
 
     // Step 6: Start group stage
     const advanceRes2 = await request(app)
@@ -164,7 +167,10 @@ describe('Full Tournament Lifecycle', () => {
       .set('Authorization', `Bearer ${organizerToken}`)
 
     expect(groupRes.status).toBe(200)
-    const groupId = groupRes.body[0].id
+    const groups = groupRes.body.groups || groupRes.body
+    expect(groups).toBeDefined()
+    expect(groups.length).toBeGreaterThan(0)
+    const groupId = groups[0].id
 
     const matchesRes = await request(app)
       .get(`/tournaments/${tournamentId}/matches`)
@@ -283,12 +289,13 @@ describe('Real-Time SSE Events', () => {
       .set('Authorization', `Bearer ${organizerToken}`)
       .send({ action: 'CLOSE_REGISTRATION' })
 
-    groupRepo.createGroups(tournamentId, 1, 2, [
-      player1.playerId,
-      player2.playerId,
-      player3.playerId,
-      player4.playerId,
-    ])
+    await request(app)
+      .post(`/tournaments/${tournamentId}/groups`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .send({
+        numGroups: 1,
+        advancingPerGroup: 2,
+      })
 
     await request(app)
       .post(`/tournaments/${tournamentId}/advance`)
@@ -355,12 +362,13 @@ describe('Real-Time SSE Events', () => {
       .set('Authorization', `Bearer ${organizerToken}`)
       .send({ action: 'CLOSE_REGISTRATION' })
 
-    groupRepo.createGroups(tournamentId, 1, 2, [
-      player1.playerId,
-      player2.playerId,
-      player3.playerId,
-      player4.playerId,
-    ])
+    await request(app)
+      .post(`/tournaments/${tournamentId}/groups`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .send({
+        numGroups: 1,
+        advancingPerGroup: 2,
+      })
 
     await request(app)
       .post(`/tournaments/${tournamentId}/advance`)
@@ -484,12 +492,13 @@ describe('Email Notifications', () => {
       .set('Authorization', `Bearer ${organizerToken}`)
       .send({ action: 'CLOSE_REGISTRATION' })
 
-    groupRepo.createGroups(tournamentId, 1, 2, [
-      player1.playerId,
-      player2.playerId,
-      player3.playerId,
-      player4.playerId,
-    ])
+    await request(app)
+      .post(`/tournaments/${tournamentId}/groups`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .send({
+        numGroups: 1,
+        advancingPerGroup: 2,
+      })
 
     await request(app)
       .post(`/tournaments/${tournamentId}/advance`)
@@ -621,12 +630,13 @@ describe('Error Scenarios', () => {
       .set('Authorization', `Bearer ${organizerToken}`)
       .send({ action: 'CLOSE_REGISTRATION' })
 
-    groupRepo.createGroups(tournamentId, 1, 2, [
-      player1.playerId,
-      player2.playerId,
-      player3.playerId,
-      player4.playerId,
-    ])
+    await request(app)
+      .post(`/tournaments/${tournamentId}/groups`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .send({
+        numGroups: 1,
+        advancingPerGroup: 2,
+      })
 
     await request(app)
       .post(`/tournaments/${tournamentId}/advance`)
@@ -671,12 +681,13 @@ describe('Error Scenarios', () => {
       .set('Authorization', `Bearer ${organizerToken}`)
       .send({ action: 'CLOSE_REGISTRATION' })
 
-    groupRepo.createGroups(tournamentId, 1, 2, [
-      player1.playerId,
-      player2.playerId,
-      player3.playerId,
-      player4.playerId,
-    ])
+    await request(app)
+      .post(`/tournaments/${tournamentId}/groups`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .send({
+        numGroups: 1,
+        advancingPerGroup: 2,
+      })
 
     await request(app)
       .post(`/tournaments/${tournamentId}/advance`)
