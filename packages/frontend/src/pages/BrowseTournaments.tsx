@@ -3,8 +3,36 @@ import { useNavigate } from 'react-router-dom'
 import type { Tournament } from '@shared/types'
 import { TournamentCard } from '../components/shared'
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll'
+import { usePrefetch } from '../hooks/usePrefetch'
 import { fetchPublicTournaments } from '../api/client'
 import '../../styles/globals.css'
+
+// Wrapper component that prefetches tournament data on hover
+interface TournamentCardWrapperProps {
+  tournament: Tournament
+  onClick: () => void
+}
+
+const TournamentCardWrapper: React.FC<TournamentCardWrapperProps> = ({ tournament, onClick }) => {
+  const { handleMouseEnter, handleFocus } = usePrefetch(tournament.id)
+
+  return (
+    <div
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          onClick()
+        }
+      }}
+      onMouseEnter={handleMouseEnter}
+      onFocus={handleFocus}
+    >
+      <TournamentCard tournament={tournament} onClick={onClick} />
+    </div>
+  )
+}
 
 export const BrowseTournaments: React.FC = () => {
   const navigate = useNavigate()
@@ -99,22 +127,11 @@ export const BrowseTournaments: React.FC = () => {
           `}
         >
           {tournaments.map((tournament) => (
-            <div
+            <TournamentCardWrapper
               key={tournament.id}
+              tournament={tournament}
               onClick={() => handleTournamentClick(tournament.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  handleTournamentClick(tournament.id)
-                }
-              }}
-            >
-              <TournamentCard
-                tournament={tournament}
-                onClick={() => handleTournamentClick(tournament.id)}
-              />
-            </div>
+            />
           ))}
         </div>
       )}

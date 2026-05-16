@@ -1,14 +1,17 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, Suspense, lazy } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useAuth } from '../../hooks/useAuth'
 import { useSSE } from '../../hooks/useSSE'
 import { useTournament } from '../../hooks/useTournament'
 import { Standings } from './Standings'
-import { Matches } from './Matches'
-import { Bracket } from './Bracket'
-import { Details } from './Details'
+import { SkeletonLoader } from '../../components/shared/SkeletonLoader'
 import '../../../styles/globals.css'
+
+// Lazy-load non-critical tabs for code splitting
+const Matches = lazy(() => import('./Matches').then(m => ({ default: m.Matches })))
+const Bracket = lazy(() => import('./Bracket').then(m => ({ default: m.Bracket })))
+const Details = lazy(() => import('./Details').then(m => ({ default: m.Details })))
 
 export const TournamentDetail: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
@@ -85,11 +88,23 @@ export const TournamentDetail: React.FC = () => {
       case 'standings':
         return <Standings />
       case 'matches':
-        return <Matches />
+        return (
+          <Suspense fallback={<SkeletonLoader count={3} height="60px" />}>
+            <Matches />
+          </Suspense>
+        )
       case 'bracket':
-        return <Bracket />
+        return (
+          <Suspense fallback={<SkeletonLoader count={2} height="80px" />}>
+            <Bracket />
+          </Suspense>
+        )
       case 'details':
-        return <Details />
+        return (
+          <Suspense fallback={<SkeletonLoader count={4} height="40px" />}>
+            <Details />
+          </Suspense>
+        )
       default:
         return <Standings />
     }
