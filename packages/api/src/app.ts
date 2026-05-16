@@ -6,6 +6,7 @@ import { AuthError, ForbiddenError, MissingTokenError } from './auth/errors'
 import { getLogger, runWithRequestId } from './logger'
 import tournamentsRouter from './routes/tournaments'
 import playerRouter from './routes/player'
+import analyticsRouter from './routes/analytics'
 import type { JobQueue } from '@worker/job-queue'
 import type { StandingsCache } from './standings-cache'
 import type { BroadcastBus } from './broadcast-bus'
@@ -50,6 +51,7 @@ export function createApp(deps: AppDependencies): Express {
 
   app.use('/tournaments', tournamentsRouter(appDeps))
   app.use('/player', playerRouter(appDeps))
+  app.use('/api/analytics', analyticsRouter(appDeps))
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ForbiddenError) {

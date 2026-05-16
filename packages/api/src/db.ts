@@ -112,6 +112,10 @@ export function openDatabase(filename?: string): Database.Database {
   const migration8 = fs.readFileSync(migration8Path, 'utf-8')
   db.exec(migration8)
 
+  const migration9Path = path.join(__dirname, '../../..', 'db', 'migrations', '009_create_user_events.sql')
+  const migration9 = fs.readFileSync(migration9Path, 'utf-8')
+  db.exec(migration9)
+
   return db
 }
 
