@@ -37,9 +37,15 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     }
 
     const sizeClasses = {
-      sm: 'px-[--s-3] py-[--s-2] text-sm rounded-[--r-sm] min-h-[36px]',
-      md: 'px-[--s-4] py-[--s-3] text-base rounded-[--r-md] min-h-[44px]',
-      lg: 'px-[--s-6] py-[--s-4] text-base rounded-[--r-lg] min-h-[48px]',
+      sm: 'px-[--s-3] py-[--s-2] text-sm min-h-[36px]',
+      md: 'px-[--s-4] py-[--s-3] text-base min-h-[44px]',
+      lg: 'px-[--s-6] py-[--s-4] text-base min-h-[48px]',
+    }
+
+    const sizeStyles = {
+      sm: { borderRadius: 'var(--r-md)' },
+      md: { borderRadius: 'var(--r-lg)' },
+      lg: { borderRadius: 'var(--r-lg)' },
     }
 
     const disabledClasses = disabled || loading ? 'opacity-60 cursor-not-allowed' : ''
@@ -61,6 +67,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         `}
         style={{
           ...variantStyles[variant],
+          ...sizeStyles[size],
           ...style,
         }}
         {...props}
