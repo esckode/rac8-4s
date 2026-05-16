@@ -7,7 +7,7 @@
  */
 
 import React from 'react'
-import '../../../styles/globals.css'
+import '../../styles/globals.css'
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'soft' | 'dark'
@@ -17,14 +17,23 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = 'primary', size = 'md', loading = false, disabled, className, children, ...props }, ref) => {
+  ({ variant = 'primary', size = 'md', loading = false, disabled, className, style, children, ...props }, ref) => {
     const variantClasses = {
-      primary: 'bg-[--court-400] text-white hover:bg-[--court-500] active:bg-[--court-600]',
-      secondary: 'bg-[--lavender-400] text-white hover:bg-[--lavender-500] active:bg-[--lavender-600]',
-      outline: 'bg-transparent border-2 border-[--court-400] text-[--court-600] hover:bg-[--court-50] active:bg-[--court-100]',
+      primary: 'text-white',
+      secondary: 'text-white',
+      outline: 'bg-transparent border-2 text-[--court-600] hover:bg-[--court-50] active:bg-[--court-100]',
       ghost: 'bg-transparent text-[--ink-600] hover:bg-[--ink-50] active:bg-[--ink-100]',
-      soft: 'bg-[--court-100] text-[--court-700] hover:bg-[--court-200] active:bg-[--court-300]',
-      dark: 'bg-[--ink-900] text-white hover:bg-[--ink-800] active:bg-[--ink-700]',
+      soft: 'text-[--court-700] hover:bg-[--court-200] active:bg-[--court-300]',
+      dark: 'text-white hover:bg-[--ink-800] active:bg-[--ink-700]',
+    }
+
+    const variantStyles = {
+      primary: { backgroundColor: 'var(--court-400)' },
+      secondary: { backgroundColor: 'var(--lavender-400)' },
+      outline: { borderColor: 'var(--court-400)' },
+      ghost: {},
+      soft: { backgroundColor: 'var(--court-100)' },
+      dark: { backgroundColor: 'var(--ink-900)' },
     }
 
     const sizeClasses = {
@@ -50,6 +59,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           ${transitionClasses}
           ${className}
         `}
+        style={{
+          ...variantStyles[variant],
+          ...style,
+        }}
         {...props}
       >
         {loading ? (
