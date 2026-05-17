@@ -109,15 +109,14 @@ export const BrowseTournaments: React.FC = () => {
             <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
               <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>🎾 Badminton</span>
               <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>Mixed</span>
+              <button
+                onClick={() => handleBracketClick(MOCK_TOURNAMENTS[0].id)}
+                style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', border: 'none', cursor: 'pointer' }}
+              >
+                🔀 Bracket
+              </button>
             </div>
           </div>
-          <button
-            onClick={() => handleBracketClick(MOCK_TOURNAMENTS[0].id)}
-            style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--court-50)', border: '1px solid var(--court-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 20, flexShrink: 0 }}
-            aria-label="View bracket"
-          >
-            🏆
-          </button>
         </div>
 
         {/* Coming up */}
@@ -133,22 +132,21 @@ export const BrowseTournaments: React.FC = () => {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h4 style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 600, color: 'var(--ink-900)', letterSpacing: '-0.01em' }}>{tournament.name}</h4>
                 <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 8 }}>{tournament.date}, {tournament.time} · {tournament.venue}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>
                     {tournament.phase === 'reg-open' ? 'Reg Open' : tournament.phase === 'knockout' ? 'Knockout' : tournament.phase}
                   </span>
                   <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>
                     👥 {tournament.players}/{tournament.capacity}
                   </span>
+                  <button
+                    onClick={() => handleBracketClick(tournament.id)}
+                    style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', border: 'none', cursor: 'pointer' }}
+                  >
+                    🔀 Bracket
+                  </button>
                 </div>
               </div>
-              <button
-                onClick={() => handleBracketClick(tournament.id)}
-                style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--court-50)', border: '1px solid var(--court-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 20, flexShrink: 0 }}
-                aria-label="View bracket"
-              >
-                🏆
-              </button>
             </div>
           ))}
         </div>

@@ -74,45 +74,45 @@ const Standings = () => {
               onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'}
               onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => handleTournamentClick(tournament.id)}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, cursor: 'pointer' }} onClick={() => handleTournamentClick(tournament.id)}>
+                <div style={{ flex: 1 }}>
                   <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>{tournament.name}</h3>
                   <div style={{ fontSize: 12, color: 'var(--ink-500)' }}>{tournament.group}</div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{
-                    padding: '4px 8px',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    borderRadius: 4,
-                    background: tournament.status === 'live' ? 'var(--court-100)' : tournament.status === 'upcoming' ? 'var(--ink-50)' : 'var(--ink-50)',
-                    color: tournament.status === 'live' ? 'var(--court-700)' : 'var(--ink-500)',
-                  }}>
-                    {tournament.status === 'live' ? '🔴 Live' : tournament.status === 'upcoming' ? 'Upcoming' : 'Completed'}
-                  </span>
-                  <button
-                    onClick={() => handleBracketClick(tournament.id)}
-                    style={{ width: 32, height: 32, borderRadius: 6, background: 'var(--court-50)', border: '1px solid var(--court-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 16, padding: 0 }}
-                    aria-label="View bracket"
-                  >
-                    🏆
-                  </button>
-                </div>
+                <span style={{
+                  padding: '4px 8px',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  borderRadius: 4,
+                  background: tournament.status === 'live' ? 'var(--court-100)' : tournament.status === 'upcoming' ? 'var(--ink-50)' : 'var(--ink-50)',
+                  color: tournament.status === 'live' ? 'var(--court-700)' : 'var(--ink-500)',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {tournament.status === 'live' ? '🔴 Live' : tournament.status === 'upcoming' ? 'Upcoming' : 'Completed'}
+                </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, cursor: 'pointer' }} onClick={() => handleTournamentClick(tournament.id)}>
-                <div style={{ padding: 8, background: 'var(--ink-50)', borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, color: 'var(--ink-500)', fontWeight: 600, textTransform: 'uppercase' }}>Rank</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--ink-900)', marginTop: 4 }}>#{tournament.yourRank}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, cursor: 'pointer' }} onClick={() => handleTournamentClick(tournament.id)}>
+                  <div style={{ padding: 8, background: 'var(--ink-50)', borderRadius: 6 }}>
+                    <div style={{ fontSize: 10, color: 'var(--ink-500)', fontWeight: 600, textTransform: 'uppercase' }}>Rank</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--ink-900)', marginTop: 4 }}>#{tournament.yourRank}</div>
+                  </div>
+                  <div style={{ padding: 8, background: 'var(--ink-50)', borderRadius: 6 }}>
+                    <div style={{ fontSize: 10, color: 'var(--ink-500)', fontWeight: 600, textTransform: 'uppercase' }}>Record</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)', marginTop: 4 }}>{tournament.wins}W · {tournament.losses}L</div>
+                  </div>
+                  <div style={{ padding: 8, background: 'var(--ink-50)', borderRadius: 6 }}>
+                    <div style={{ fontSize: 10, color: 'var(--ink-500)', fontWeight: 600, textTransform: 'uppercase' }}>Points</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--ink-900)', marginTop: 4 }}>{tournament.points}</div>
+                  </div>
                 </div>
-                <div style={{ padding: 8, background: 'var(--ink-50)', borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, color: 'var(--ink-500)', fontWeight: 600, textTransform: 'uppercase' }}>Record</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)', marginTop: 4 }}>{tournament.wins}W · {tournament.losses}L</div>
-                </div>
-                <div style={{ padding: 8, background: 'var(--ink-50)', borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, color: 'var(--ink-500)', fontWeight: 600, textTransform: 'uppercase' }}>Points</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--ink-900)', marginTop: 4 }}>{tournament.points}</div>
-                </div>
+                <button
+                  onClick={() => handleBracketClick(tournament.id)}
+                  style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', border: 'none', cursor: 'pointer', width: 'fit-content' }}
+                >
+                  🔀 Bracket
+                </button>
               </div>
             </div>
           ))}
