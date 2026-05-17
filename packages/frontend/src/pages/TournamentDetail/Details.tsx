@@ -82,7 +82,7 @@ export const Details: React.FC = () => {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Sport</h3>
-            <p className="text-lg text-[--ink-900]">{tournament.sport || 'Racket Sport'}</p>
+            <p className="text-lg text-[--ink-900]">{tournament.sport || 'Tennis'}</p>
           </div>
           <div>
             <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Match Format</h3>

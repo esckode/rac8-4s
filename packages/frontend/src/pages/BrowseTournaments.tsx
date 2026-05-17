@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 
 const MOCK_TOURNAMENTS = [
   {
@@ -12,7 +11,6 @@ const MOCK_TOURNAMENTS = [
     phase: 'featured',
     players: 9,
     capacity: 24,
-    sport: 'Badminton',
   },
   {
     id: '2',
@@ -24,7 +22,6 @@ const MOCK_TOURNAMENTS = [
     phase: 'reg-open',
     players: 22,
     capacity: 32,
-    sport: 'Tennis',
   },
   {
     id: '3',
@@ -36,7 +33,6 @@ const MOCK_TOURNAMENTS = [
     phase: 'knockout',
     players: 8,
     capacity: 8,
-    sport: 'Pickleball',
   },
 ]
 
@@ -49,7 +45,6 @@ const coverColors: Record<string, string> = {
 }
 
 export const BrowseTournaments: React.FC = () => {
-  const navigate = useNavigate()
   const [filterActive, setFilterActive] = useState('All')
 
   return (
@@ -102,18 +97,13 @@ export const BrowseTournaments: React.FC = () => {
         <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--court-600)', letterSpacing: '0.12em', marginBottom: 10 }}>
           FEATURED · THIS WEEK
         </div>
-        <div
-          onClick={() => navigate(`/tournament/${MOCK_TOURNAMENTS[0].id}/standings`)}
-          style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', marginBottom: 20, display: 'flex', gap: 14, cursor: 'pointer', transition: 'box-shadow 0.2s' }}
-          onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'}
-          onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
-        >
+        <div style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', marginBottom: 20, display: 'flex', gap: 14 }}>
           <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[MOCK_TOURNAMENTS[0].cover], flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
             <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>{MOCK_TOURNAMENTS[0].name}</h3>
             <div style={{ fontSize: 11, color: 'var(--ink-500)', marginTop: 2 }}>{MOCK_TOURNAMENTS[0].date}, {MOCK_TOURNAMENTS[0].time} · {MOCK_TOURNAMENTS[0].venue}</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-              <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>🎾 {MOCK_TOURNAMENTS[0].sport || 'Sport'}</span>
+              <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>🎾 Badminton</span>
               <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>Mixed</span>
             </div>
           </div>
@@ -127,13 +117,7 @@ export const BrowseTournaments: React.FC = () => {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {MOCK_TOURNAMENTS.slice(1).map(tournament => (
-            <div
-              key={tournament.id}
-              onClick={() => navigate(`/tournament/${tournament.id}/standings`)}
-              style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', display: 'flex', gap: 14, alignItems: 'flex-start', cursor: 'pointer', transition: 'box-shadow 0.2s' }}
-              onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'}
-              onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
-            >
+            <div key={tournament.id} style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
               <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[tournament.cover], flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h4 style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 600, color: 'var(--ink-900)', letterSpacing: '-0.01em' }}>{tournament.name}</h4>
