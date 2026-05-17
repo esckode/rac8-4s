@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ResponsiveLayout } from './components/shared'
 import { Landing } from './pages/Landing'
 import { BrowseTournaments } from './pages/BrowseTournaments'
+import { TournamentDetail } from './pages/TournamentDetail'
 import './styles/globals.css'
 
 const MOCK_USER_TOURNAMENTS = [
@@ -44,6 +45,10 @@ const MOCK_USER_TOURNAMENTS = [
 const Standings = () => {
   const [tournaments] = useState(MOCK_USER_TOURNAMENTS)
 
+  const handleTournamentClick = (tournamentId: string) => {
+    window.location.href = `/tournament/${tournamentId}/standings`
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--surface)' }}>
       {/* Header */}
@@ -58,7 +63,13 @@ const Standings = () => {
       <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px 110px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {tournaments.map(tournament => (
-            <div key={tournament.id} style={{ padding: 16, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', cursor: 'pointer' }}>
+            <div
+              key={tournament.id}
+              onClick={() => handleTournamentClick(tournament.id)}
+              style={{ padding: 16, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', cursor: 'pointer', transition: 'box-shadow 0.2s' }}
+              onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'}
+              onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                 <div style={{ flex: 1 }}>
                   <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>{tournament.name}</h3>
@@ -137,6 +148,20 @@ export const App: React.FC = () => {
             <ResponsiveLayout showHeader showNav>
               <BrowseTournaments />
             </ResponsiveLayout>
+          }
+        />
+        <Route
+          path="/tournament/:tournamentId/:tab"
+          element={
+            <ResponsiveLayout showHeader showNav>
+              <TournamentDetail />
+            </ResponsiveLayout>
+          }
+        />
+        <Route
+          path="/tournament/:tournamentId"
+          element={
+            <Navigate to={`/tournament/:tournamentId/standings`} replace />
           }
         />
         <Route

@@ -4,7 +4,7 @@ import { playerCache } from '../../state'
 import { Badge } from './Badge'
 import { LoadingSpinner } from './LoadingSpinner'
 import { Button } from './Button'
-import '../../../styles/globals.css'
+import '../../styles/globals.css'
 
 export interface MatchCardProps {
   match: Match

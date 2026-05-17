@@ -79,42 +79,62 @@ export interface GroupMatchWithPlayers extends GroupMatchRow {
 export function openDatabase(filename?: string): Database.Database {
   const db = new Database(filename)
 
-  // Load and run migrations
-  const migration1Path = path.join(__dirname, '../../..', 'db', 'migrations', '001_create_tournaments.sql')
-  const migration1 = fs.readFileSync(migration1Path, 'utf-8')
-  db.exec(migration1)
+  // Create migrations tracking table if it doesn't exist
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      version TEXT UNIQUE NOT NULL,
+      executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
 
-  const migration2Path = path.join(__dirname, '../../..', 'db', 'migrations', '002_create_players.sql')
-  const migration2 = fs.readFileSync(migration2Path, 'utf-8')
-  db.exec(migration2)
+  // List of migrations to run (in order)
+  const migrations = [
+    '001_create_tournaments.sql',
+    '002_create_players.sql',
+    '003_create_groups.sql',
+    '004_create_knockout.sql',
+    '005_create_locations.sql',
+    '006_create_courts.sql',
+    '007_extend_registrations.sql',
+    '008_match_coordination.sql',
+    '009_create_user_events.sql',
+  ]
 
-  const migration3Path = path.join(__dirname, '../../..', 'db', 'migrations', '003_create_groups.sql')
-  const migration3 = fs.readFileSync(migration3Path, 'utf-8')
-  db.exec(migration3)
+  // Run migrations that haven't been executed yet
+  const migrationsDir = path.join(__dirname, '../../..', 'db', 'migrations')
+  for (const migration of migrations) {
+    // Check if migration has already been run
+    const exists = db
+      .prepare('SELECT 1 FROM schema_migrations WHERE version = ?')
+      .get(migration)
 
-  const migration4Path = path.join(__dirname, '../../..', 'db', 'migrations', '004_create_knockout.sql')
-  const migration4 = fs.readFileSync(migration4Path, 'utf-8')
-  db.exec(migration4)
+    if (!exists) {
+      try {
+        const filePath = path.join(migrationsDir, migration)
+        const sql = fs.readFileSync(filePath, 'utf-8')
 
-  const migration5Path = path.join(__dirname, '../../..', 'db', 'migrations', '005_create_locations.sql')
-  const migration5 = fs.readFileSync(migration5Path, 'utf-8')
-  db.exec(migration5)
+        // Try to run the migration; if it fails due to duplicate columns, that's ok
+        try {
+          db.exec(sql)
+        } catch (execError: any) {
+          // If it's a duplicate column error, it means the column already exists
+          // This can happen if migrations were re-applied or the schema was manually modified
+          if (execError.message && execError.message.includes('duplicate column')) {
+            console.warn(`Migration ${migration} skipped - columns already exist`)
+          } else {
+            throw execError
+          }
+        }
 
-  const migration6Path = path.join(__dirname, '../../..', 'db', 'migrations', '006_create_courts.sql')
-  const migration6 = fs.readFileSync(migration6Path, 'utf-8')
-  db.exec(migration6)
-
-  const migration7Path = path.join(__dirname, '../../..', 'db', 'migrations', '007_extend_registrations.sql')
-  const migration7 = fs.readFileSync(migration7Path, 'utf-8')
-  db.exec(migration7)
-
-  const migration8Path = path.join(__dirname, '../../..', 'db', 'migrations', '008_match_coordination.sql')
-  const migration8 = fs.readFileSync(migration8Path, 'utf-8')
-  db.exec(migration8)
-
-  const migration9Path = path.join(__dirname, '../../..', 'db', 'migrations', '009_create_user_events.sql')
-  const migration9 = fs.readFileSync(migration9Path, 'utf-8')
-  db.exec(migration9)
+        // Record that this migration has been run
+        db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(migration)
+      } catch (error) {
+        console.error(`Failed to run migration ${migration}:`, error)
+        throw error
+      }
+    }
+  }
 
   return db
 }

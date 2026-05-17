@@ -4,7 +4,7 @@ import type { Tournament } from '@shared/types'
 import { TournamentCard } from '../components/shared'
 import { useAuth } from '../hooks/useAuth'
 import { usePermissions } from '../hooks/usePermissions'
-import '../../styles/globals.css'
+import '../styles/globals.css'
 
 export const OrganizerDashboard: React.FC = () => {
   const navigate = useNavigate()

@@ -55,6 +55,7 @@ export class BullMQJobQueue implements JobQueue {
           data: job.data,
           opts: {},
           attemptsMade: job.attemptsMade,
+          enqueuedAt: job.timestamp || Date.now(),
         }
       }
     }

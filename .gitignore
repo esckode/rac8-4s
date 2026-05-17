@@ -40,3 +40,6 @@ Thumbs.db
 # Temporary
 tmp/
 temp/
+
+# Screenshots (for design reference, not versioned)
+screenshots/

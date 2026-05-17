@@ -13,7 +13,7 @@ import { playerCache } from '../../state'
 import { Button } from './Button'
 import { ErrorBanner } from './ErrorBanner'
 import { SkeletonLoader } from './SkeletonLoader'
-import '../../../styles/globals.css'
+import '../../styles/globals.css'
 
 export interface StandingsTableProps {
   standings: Standing[]
