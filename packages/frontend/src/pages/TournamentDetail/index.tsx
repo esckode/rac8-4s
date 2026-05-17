@@ -50,6 +50,24 @@ export const TournamentDetail: React.FC = () => {
     )
   }
 
+  if (!isAuthenticated) {
+    return (
+      <div
+        className={`
+          text-center
+          py-[--s-12]
+          rounded-[--r-lg]
+          border
+          border-dashed
+          border-[--border]
+          bg-[--ink-50]
+        `}
+      >
+        <p className="text-lg text-[--ink-600]">Sign in to view tournament details</p>
+      </div>
+    )
+  }
+
   const tabs = [
     { id: 'standings', label: 'Standings', icon: '📊' },
     { id: 'matches', label: 'Matches', icon: '🎾' },
