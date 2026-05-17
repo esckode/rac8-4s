@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import type { Match } from '@shared/types'
 import { useTournament } from '../../hooks/useTournament'
 import { usePermissions } from '../../hooks/usePermissions'
+import { useAuth } from '../../hooks/useAuth'
 import { MatchCard } from '../../components/shared/MatchCard'
 import '../../styles/globals.css'
 
@@ -10,10 +11,29 @@ type FilterStatus = 'all' | 'pending' | 'completed'
 
 export const Matches: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
+  const { isAuthenticated } = useAuth()
   const { matches, isLoading, error, refetch } = useTournament(tournamentId || '')
   const { organizerRole } = usePermissions(tournamentId || '')
   const [selectedStatus, setSelectedStatus] = useState<FilterStatus>('all')
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null)
+
+  if (!isAuthenticated) {
+    return (
+      <div
+        className={`
+          text-center
+          py-[--s-12]
+          rounded-[--r-lg]
+          border
+          border-dashed
+          border-[--border]
+          bg-[--ink-50]
+        `}
+      >
+        <p className="text-lg text-[--ink-600]">Sign in to view matches</p>
+      </div>
+    )
+  }
 
   const allMatches: Match[] = useMemo(() => {
     return [...(matches.group || []), ...(matches.knockout || [])]

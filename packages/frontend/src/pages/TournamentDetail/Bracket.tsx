@@ -10,7 +10,25 @@ export const Bracket: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
   const { bracket, matches, isLoading, error, refetch } = useTournament(tournamentId || '')
   const { organizerRole } = usePermissions(tournamentId || '')
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
+
+  if (!isAuthenticated) {
+    return (
+      <div
+        className={`
+          text-center
+          py-[--s-12]
+          rounded-[--r-lg]
+          border
+          border-dashed
+          border-[--border]
+          bg-[--ink-50]
+        `}
+      >
+        <p className="text-lg text-[--ink-600]">Sign in to view bracket</p>
+      </div>
+    )
+  }
 
   const knockoutMatches = useMemo(() => {
     return matches.knockout || []
