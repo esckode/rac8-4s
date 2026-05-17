@@ -110,8 +110,9 @@ const Standings = () => {
                 <button
                   onClick={() => handleBracketClick(tournament.id)}
                   style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', border: 'none', cursor: 'pointer', width: 'fit-content' }}
+                  title="View bracket"
                 >
-                  🔀 Bracket
+                  🔀
                 </button>
               </div>
             </div>
