@@ -116,26 +116,6 @@ const Standings = () => {
   )
 }
 
-const Matches = () => (
-  <div className="text-center py-12">
-    <h2 className="text-2xl font-bold text-[--ink-900]">Matches</h2>
-    <p className="text-[--ink-600] mt-2">Matches page coming soon</p>
-  </div>
-)
-
-const Bracket = () => (
-  <div className="text-center py-12">
-    <h2 className="text-2xl font-bold text-[--ink-900]">Bracket</h2>
-    <p className="text-[--ink-600] mt-2">Bracket page coming soon</p>
-  </div>
-)
-
-const More = () => (
-  <div className="text-center py-12">
-    <h2 className="text-2xl font-bold text-[--ink-900]">More</h2>
-    <p className="text-[--ink-600] mt-2">More options coming soon</p>
-  </div>
-)
 
 export const App: React.FC = () => {
   return (
@@ -169,30 +149,6 @@ export const App: React.FC = () => {
           element={
             <ResponsiveLayout showHeader showNav>
               <Standings />
-            </ResponsiveLayout>
-          }
-        />
-        <Route
-          path="/matches"
-          element={
-            <ResponsiveLayout showHeader showNav>
-              <Matches />
-            </ResponsiveLayout>
-          }
-        />
-        <Route
-          path="/bracket"
-          element={
-            <ResponsiveLayout showHeader showNav>
-              <Bracket />
-            </ResponsiveLayout>
-          }
-        />
-        <Route
-          path="/more"
-          element={
-            <ResponsiveLayout showHeader showNav>
-              <More />
             </ResponsiveLayout>
           }
         />
