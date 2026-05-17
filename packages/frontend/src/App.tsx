@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ResponsiveLayout } from './components/shared'
 import { Landing } from './pages/Landing'
 import { BrowseTournaments } from './pages/BrowseTournaments'
+import { Matches } from './pages/Matches'
 import { TournamentDetail } from './pages/TournamentDetail'
 import './styles/globals.css'
 
@@ -127,6 +128,14 @@ export const App: React.FC = () => {
           element={
             <ResponsiveLayout showHeader showNav>
               <BrowseTournaments />
+            </ResponsiveLayout>
+          }
+        />
+        <Route
+          path="/matches"
+          element={
+            <ResponsiveLayout showHeader showNav>
+              <Matches />
             </ResponsiveLayout>
           }
         />
