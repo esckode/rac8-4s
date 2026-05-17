@@ -2,7 +2,6 @@ import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ResponsiveLayout } from './components/shared'
 import { Landing } from './pages/Landing'
-import { DesignSpec } from './pages/DesignSpec'
 import { BrowseTournaments } from './pages/BrowseTournaments'
 import './styles/globals.css'
 
@@ -39,7 +38,6 @@ export const App: React.FC = () => {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/spec" element={<DesignSpec />} />
         <Route
           element={
             <ResponsiveLayout showHeader showNav>

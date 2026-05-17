@@ -6,7 +6,7 @@ import type {
   PlayerMatchesResponse,
   BracketData,
 } from '../types'
-import type { Standing } from '@shared/types'
+import type { Standing } from '../../../shared/src/types'
 
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:3000'
 
