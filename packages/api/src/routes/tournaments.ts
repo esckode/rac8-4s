@@ -54,6 +54,7 @@ function validateTournamentInput(data: any): string | null {
 }
 
 const STATUS_TO_STATE: Record<string, TournamentState> = {
+  draft: 'DRAFT',
   registration_open: 'REGISTRATION_OPEN',
   registration_closed: 'REGISTRATION_CLOSED',
   group_stage_active: 'GROUP_STAGE_ACTIVE',
@@ -63,6 +64,7 @@ const STATUS_TO_STATE: Record<string, TournamentState> = {
 }
 
 const STATE_TO_STATUS: Record<TournamentState, string> = {
+  DRAFT: 'draft',
   REGISTRATION_OPEN: 'registration_open',
   REGISTRATION_CLOSED: 'registration_closed',
   GROUP_STAGE_ACTIVE: 'group_stage_active',

@@ -1,4 +1,5 @@
 export type TournamentState =
+  | 'DRAFT'
   | 'REGISTRATION_OPEN'
   | 'REGISTRATION_CLOSED'
   | 'GROUP_STAGE_ACTIVE'
@@ -32,6 +33,7 @@ interface TransitionResult {
 }
 
 const VALID_TRANSITIONS: Record<TournamentState, TransitionAction[]> = {
+  DRAFT: ['OPEN_REGISTRATION'],
   REGISTRATION_OPEN: ['CLOSE_REGISTRATION'],
   REGISTRATION_CLOSED: ['START_GROUP_STAGE'],
   GROUP_STAGE_ACTIVE: ['COMPLETE_GROUP_STAGE'],
