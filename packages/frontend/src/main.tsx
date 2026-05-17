@@ -1,14 +1,22 @@
 import React from 'react'
-// @ts-expect-error - React 19 includes types but TypeScript may have issues
-import ReactDOM from 'react-dom'
+import { createRoot } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import './styles/globals.css'
 
-const root = (ReactDOM as any).createRoot(document.getElementById('root') || document.body)
+const rootElement = document.getElementById('root')
+if (!rootElement) {
+  throw new Error('Root element not found')
+}
+
+const queryClient = new QueryClient()
+const root = createRoot(rootElement)
 
 root.render(
   <React.StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
   </React.StrictMode>
 )
 

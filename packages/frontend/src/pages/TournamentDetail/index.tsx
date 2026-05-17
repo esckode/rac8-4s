@@ -6,7 +6,7 @@ import { useSSE } from '../../hooks/useSSE'
 import { useTournament } from '../../hooks/useTournament'
 import { Standings } from './Standings'
 import { SkeletonLoader } from '../../components/shared/SkeletonLoader'
-import '../../../styles/globals.css'
+import '../../styles/globals.css'
 
 // Lazy-load non-critical tabs for code splitting
 const Matches = lazy(() => import('./Matches').then(m => ({ default: m.Matches })))
@@ -238,7 +238,7 @@ export const TournamentDetail: React.FC = () => {
       </div>
 
       {/* Debug Info (remove in production) */}
-      {process.env.NODE_ENV === 'development' && (
+      {import.meta.env.DEV && (
         <div
           className={`
             rounded-[--r-lg]
