@@ -1,11 +1,13 @@
-import React from 'react'
-import { TournamentCard } from '../components/shared'
+import React, { useState } from 'react'
 
 export const BrowseTournaments: React.FC = () => {
+  const [tournaments, setTournaments] = useState<any[]>([])
+
   return (
     <div style={{ padding: '20px' }}>
       <h1>Browse Tournaments</h1>
-      <p>Coming soon</p>
+      <p>Tournaments: {tournaments.length}</p>
+      <p>This page is under development</p>
     </div>
   )
 }

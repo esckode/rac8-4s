@@ -39,16 +39,42 @@ export const App: React.FC = () => {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route
+          path="/browse"
           element={
             <ResponsiveLayout showHeader showNav>
-              <Routes>
-                <Route path="/browse" element={<BrowseTournaments />} />
-                <Route path="/standings" element={<Standings />} />
-                <Route path="/matches" element={<Matches />} />
-                <Route path="/bracket" element={<Bracket />} />
-                <Route path="/more" element={<More />} />
-                <Route path="*" element={<Navigate to="/standings" replace />} />
-              </Routes>
+              <BrowseTournaments />
+            </ResponsiveLayout>
+          }
+        />
+        <Route
+          path="/standings"
+          element={
+            <ResponsiveLayout showHeader showNav>
+              <Standings />
+            </ResponsiveLayout>
+          }
+        />
+        <Route
+          path="/matches"
+          element={
+            <ResponsiveLayout showHeader showNav>
+              <Matches />
+            </ResponsiveLayout>
+          }
+        />
+        <Route
+          path="/bracket"
+          element={
+            <ResponsiveLayout showHeader showNav>
+              <Bracket />
+            </ResponsiveLayout>
+          }
+        />
+        <Route
+          path="/more"
+          element={
+            <ResponsiveLayout showHeader showNav>
+              <More />
             </ResponsiveLayout>
           }
         />
