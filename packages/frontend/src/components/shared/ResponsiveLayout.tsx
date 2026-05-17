@@ -1,6 +1,6 @@
 import React from 'react'
 import { useLocation } from 'react-router-dom'
-import '../../../styles/globals.css'
+import '../../styles/globals.css'
 
 export interface ResponsiveLayoutProps {
   children: React.ReactNode
@@ -69,7 +69,7 @@ const TopNav = () => {
 const Header = () => {
   return (
     <header className="responsive-header">
-      <h1>Doubles Pickleball</h1>
+      <h1>C.U.At.Court</h1>
       <div className="responsive-header-buttons">
         <button className="responsive-header-button" aria-label="Open account menu">Account</button>
       </div>
