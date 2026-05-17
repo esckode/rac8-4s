@@ -51,7 +51,7 @@ export const Landing: React.FC = () => {
               variant="primary"
               size="lg"
               className="w-full"
-              onClick={() => navigate('/tournaments')}
+              onClick={() => navigate('/browse')}
             >
               Continue with email
             </Button>
