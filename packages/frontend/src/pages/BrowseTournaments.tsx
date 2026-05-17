@@ -143,8 +143,9 @@ export const BrowseTournaments: React.FC = () => {
                   <button
                     onClick={() => handleBracketClick(tournament.id)}
                     style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', border: 'none', cursor: 'pointer' }}
+                    title="View bracket"
                   >
-                    🔀 Bracket
+                    🔀
                   </button>
                 </div>
               </div>
