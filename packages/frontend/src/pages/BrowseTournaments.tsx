@@ -47,6 +47,10 @@ const coverColors: Record<string, string> = {
 export const BrowseTournaments: React.FC = () => {
   const [filterActive, setFilterActive] = useState('All')
 
+  const handleBracketClick = (tournamentId: string) => {
+    window.location.href = `/tournament/${tournamentId}/bracket`
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--surface)' }}>
       {/* Header */}
@@ -107,6 +111,13 @@ export const BrowseTournaments: React.FC = () => {
               <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>Mixed</span>
             </div>
           </div>
+          <button
+            onClick={() => handleBracketClick(MOCK_TOURNAMENTS[0].id)}
+            style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--court-50)', border: '1px solid var(--court-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 20, flexShrink: 0 }}
+            aria-label="View bracket"
+          >
+            🏆
+          </button>
         </div>
 
         {/* Coming up */}
@@ -131,6 +142,13 @@ export const BrowseTournaments: React.FC = () => {
                   </span>
                 </div>
               </div>
+              <button
+                onClick={() => handleBracketClick(tournament.id)}
+                style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--court-50)', border: '1px solid var(--court-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 20, flexShrink: 0 }}
+                aria-label="View bracket"
+              >
+                🏆
+              </button>
             </div>
           ))}
         </div>

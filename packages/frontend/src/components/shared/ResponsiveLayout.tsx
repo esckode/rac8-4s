@@ -15,7 +15,6 @@ const BottomNav = () => {
   const tabs = [
     { path: '/standings', label: 'Standings', icon: '📊' },
     { path: '/matches', label: 'Matches', icon: '🎾' },
-    { path: '/bracket', label: 'Bracket', icon: '🏆' },
     { path: '/more', label: 'More', icon: '⋯' },
   ]
 
