@@ -6,3 +6,12 @@ global.ResizeObserver = jest.fn().mockImplementation(() => ({
   unobserve: jest.fn(),
   disconnect: jest.fn(),
 }))
+
+declare global {
+  interface ImportMeta {
+    env: {
+      REACT_APP_API_BASE?: string
+      [key: string]: string | undefined
+    }
+  }
+}

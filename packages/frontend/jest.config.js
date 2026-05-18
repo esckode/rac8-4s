@@ -22,4 +22,24 @@ module.exports = {
     '^@shared/(.*)$': '<rootDir>/../../shared/src/$1',
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
   },
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', {
+      tsconfig: {
+        module: 'esnext',
+        target: 'esnext',
+        lib: ['esnext', 'dom'],
+        jsx: 'react-jsx',
+        esModuleInterop: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        resolveJsonModule: true,
+        moduleResolution: 'node',
+        baseUrl: '.',
+        paths: {
+          '@shared/*': ['../../shared/src/*'],
+        },
+      },
+      isolatedModules: true,
+    }],
+  },
 };

@@ -4,6 +4,309 @@
 
 This document captures the complete authentication design for the C.U.At.Court webapp, covering player auth implementation with a forward-compatible schema for organizer and admin authentication.
 
+**Development Approach:** UI-first with TDD. This document defines page specifications to drive frontend development, then backend endpoints follow via test-driven implementation.
+
+---
+
+## Auth Pages Specification
+
+### 1. Login Page (`/login`)
+
+**Purpose:** Allow existing users to sign in with email + password
+
+**URL:** `/login`
+
+**Form Fields:**
+| Field | Type | Required | Validation | Error Message |
+|-------|------|----------|-----------|---------------|
+| Email | text | Yes | Valid email format | "Please enter a valid email" |
+| Password | password | Yes | Min 1 character | "Password is required" |
+| Show/Hide Password | toggle | No | N/A | N/A |
+
+**Buttons:**
+- **"Sign In"** (primary, full-width)
+  - Disabled while loading
+  - Shows spinner on loading state
+  - Disabled if form has validation errors
+
+**Navigation Links:**
+- **"Need an account?"** → `/signup`
+- **"Forgot password?"** → `/forgot-password`
+
+**Form Behavior:**
+- Real-time email validation (on blur)
+- Submit on Enter key
+- Focus first field on page load
+
+**Success State (201):**
+- Clear form
+- Store token in localStorage
+- Redirect to `/browse`
+
+**Error States:**
+| Status | Message | Where |
+|--------|---------|-------|
+| 401 | "Invalid email or password" | Above form |
+| 400 | Field-specific | Below field |
+| 500 | "Something went wrong. Please try again." | Above form |
+
+**Loading State:**
+- Button shows spinner, text becomes "Signing in..."
+- Form fields disabled
+
+**Mobile Responsive:**
+- Full-width form
+- Touch-friendly button (min 48px height)
+- Keyboard appears for email field
+
+---
+
+### 2. Signup Page (`/signup`)
+
+**Purpose:** Create a new account (standalone or via magic link)
+
+**URL:** `/signup` or `/signup?token=xxx`
+
+**Form Fields:**
+| Field | Type | Required | Validation | Behavior |
+|-------|------|----------|-----------|----------|
+| Email | text | Yes | Valid email format | Editable even if pre-filled from token |
+| Name | text | Yes | Min 2 characters | Always empty on load |
+| Password | password | Yes | Min 6 characters | Show/hide toggle |
+| Confirm Password | password | Yes | Must match Password | Show/hide toggle, real-time validation |
+
+**Magic Link Mode (`?token=xxx`):**
+- Email field pre-filled from token
+- Email field editable (user can change it)
+- All other fields empty
+- Token passed to `/api/auth/signup` on submit
+
+**Standalone Mode (no token):**
+- All fields empty
+- Email editable
+- No token sent to API
+
+**Buttons:**
+- **"Create Account"** (primary, full-width)
+  - Disabled while loading
+  - Disabled if form has validation errors
+  - Disabled if passwords don't match
+
+**Navigation Links:**
+- **"Already have an account?"** → `/login`
+
+**Form Behavior:**
+- Real-time email validation (on blur)
+- Real-time password match validation (on blur of confirm password)
+- Visual indicator when passwords match (green checkmark or similar)
+- Submit on Enter key
+- Focus first empty field on page load
+
+**Real-Time Validation:**
+| Field | Trigger | Error Message | Show When |
+|-------|---------|---------------|-----------|
+| Email | On blur | "Please enter a valid email" | Invalid format |
+| Name | On blur | "Name must be at least 2 characters" | Less than 2 chars |
+| Password | On blur | "Password must be at least 6 characters" | Less than 6 chars |
+| Confirm | On blur | "Passwords don't match" | Doesn't match Password |
+
+**Success State (201):**
+- Clear form
+- Store token in localStorage
+- Redirect to `/browse`
+- Show welcome toast (optional): "Account created! Welcome to U At Court"
+
+**Error States:**
+| Status | Message | Where |
+|--------|---------|-------|
+| 409 | "Email already in use" | Below email field |
+| 400 | "Password must be at least 6 characters" | Below password field |
+| 401 | "This link has expired or is invalid" | Above form (if token provided) |
+| 500 | "Something went wrong. Please try again." | Above form |
+
+**Loading State:**
+- Button shows spinner, text becomes "Creating account..."
+- Form fields disabled
+- Show progress indicator (optional)
+
+**Mobile Responsive:**
+- Full-width form
+- Touch-friendly button (min 48px height)
+- Keyboard appears for email field
+- Show/hide password toggle easily tappable
+
+---
+
+### 3. Forgot Password Page (`/forgot-password`)
+
+**Purpose:** Request a password reset code via email
+
+**URL:** `/forgot-password`
+
+**Form Fields:**
+| Field | Type | Required | Validation | Error Message |
+|-------|------|----------|-----------|---------------|
+| Email | text | Yes | Valid email format | "Please enter a valid email" |
+
+**Buttons:**
+- **"Send Reset Code"** (primary, full-width)
+  - Disabled while loading
+  - Disabled if email field empty or invalid
+
+**Navigation Links:**
+- **"Remember your password?"** → `/login`
+
+**Form Behavior:**
+- Real-time email validation (on blur)
+- Submit on Enter key
+- Focus email field on page load
+
+**Success State (202):**
+- Clear form
+- Show success message: "Check your email for a password reset code"
+- Heading changes to show email
+- Show secondary action: **"Enter code"** button → `/reset-password`
+- Optional: "Didn't receive code? [Resend]" (after 30 seconds)
+
+**Error States:**
+| Status | Message | Where |
+|--------|---------|-------|
+| 400 | "Please enter a valid email" | Below field |
+| 500 | "Something went wrong. Please try again." | Above form |
+
+**Security Note:**
+- Even if email doesn't exist, show success message (don't reveal if email is registered)
+- This is intentional
+
+**Loading State:**
+- Button shows spinner, text becomes "Sending code..."
+- Email field disabled
+
+**Success Screen Layout:**
+```
+✓ Reset code sent
+
+We've sent a 6-digit code to:
+alice@example.com
+
+[Enter code] ← secondary button
+[Change email] ← link back to form
+```
+
+**Mobile Responsive:**
+- Full-width form
+- Large touch-friendly button (min 48px height)
+- Success message easily readable
+
+---
+
+### 4. Reset Password Page (`/reset-password`)
+
+**Purpose:** Reset password using code sent via email
+
+**URL:** `/reset-password`
+
+**Form Fields:**
+| Field | Type | Required | Validation | Behavior |
+|-------|------|----------|-----------|----------|
+| Email | text | Yes | Valid email format | Editable, user enters email again |
+| Reset Code | text | Yes | Exactly 6 digits | Auto-format: groups of 2 (e.g., "12 34 56") |
+| New Password | password | Yes | Min 6 characters | Show/hide toggle |
+| Confirm Password | password | Yes | Must match New Password | Show/hide toggle, real-time validation |
+
+**Code Input Behavior:**
+- Accept only digits
+- Auto-space between groups of 2: `12 34 56`
+- Allow paste (auto-format)
+- Auto-focus next field after 6 digits entered (optional)
+
+**Buttons:**
+- **"Update Password"** (primary, full-width)
+  - Disabled while loading
+  - Disabled if form has validation errors
+  - Disabled if passwords don't match
+
+**Navigation Links:**
+- **"Back to login"** → `/login`
+
+**Form Behavior:**
+- Real-time email validation (on blur)
+- Real-time code validation: must be 6 digits
+- Real-time password match validation
+- Visual indicator when passwords match
+- Submit on Enter key
+
+**Real-Time Validation:**
+| Field | Trigger | Error Message | Show When |
+|-------|---------|---------------|-----------|
+| Email | On blur | "Please enter a valid email" | Invalid format |
+| Code | On change | "Code must be 6 digits" | Not 6 digits |
+| Password | On blur | "Password must be at least 6 characters" | Less than 6 chars |
+| Confirm | On blur | "Passwords don't match" | Doesn't match password |
+
+**Success State (200):**
+- Clear form
+- Show success message: "Password updated successfully"
+- Redirect to `/login` after 2 seconds
+- Optional: show button "Sign in now" → `/login`
+
+**Error States:**
+| Status | Message | Where | Action |
+|--------|---------|-------|--------|
+| 400 | "Please enter a valid email" | Below email | Try again |
+| 400 | "Code must be 6 digits" | Below code | Try again |
+| 401 | "Invalid reset code" | Below code | Request new code → `/forgot-password` |
+| 401 | "Reset code expired" | Below code | Request new code → `/forgot-password` |
+| 429 | "Too many attempts. Try again later." | Above form | Wait or request new code |
+| 500 | "Something went wrong. Please try again." | Above form | Try again |
+
+**Attempt Limiting:**
+- Show warning after 2 failed attempts: "2 attempts remaining"
+- Block after 5 failed attempts (429 error)
+- Encourage requesting new code
+
+**Loading State:**
+- Button shows spinner, text becomes "Updating password..."
+- Form fields disabled
+
+**Mobile Responsive:**
+- Full-width form
+- Large touch-friendly button (min 48px height)
+- Code input large and tappable
+- Show/hide password easily accessible
+
+---
+
+## Page Navigation Flow
+
+```
+Landing
+  ├─→ [Continue with email] → /login
+  │    ├─→ [Need an account?] → /signup
+  │    │    ├─→ [Already have an account?] → /login
+  │    │    └─→ [Success] → /browse
+  │    ├─→ [Forgot password?] → /forgot-password
+  │    │    ├─→ [Remember password?] → /login
+  │    │    ├─→ [Enter code] → /reset-password
+  │    │    │    ├─→ [Back to login] → /login
+  │    │    │    ├─→ [Request new code] → /forgot-password
+  │    │    │    └─→ [Success] → /login
+  │    │    └─→ [Resend] → /forgot-password
+  │    └─→ [Success] → /browse
+  │
+  └─→ [Browse tournaments] → /browse (public, no auth required)
+       └─→ [Register] → /login (if not authenticated)
+```
+
+**Flow Summary:**
+1. **Landing** offers two paths: login or browse
+2. **Login** is the gateway - users with accounts log in, or create account from here
+3. **Signup** is accessible only from login or magic link
+4. **Forgot password** is accessible only from login
+5. **Browse** is public but registration requires authentication
+
+---
+
 ---
 
 ## Authentication Model
@@ -15,26 +318,40 @@ This document captures the complete authentication design for the C.U.At.Court w
 
 All three roles share a single `accounts` table with a `role` column. No separate tables per role — simplifies auth logic and keeps login flow unified.
 
-### Account Activation Flow
+### Account Activation Flows
 
-**For new users (first-time signup via invite):**
-1. Organizer or existing player provides new user's email → system sends magic link invite
-2. User clicks magic link → lands on `/setup-account?token=xxx`
-3. User enters: name (required), email (pre-filled, read-only), password
-4. System activates account (`status: 'active'`, hashes password, sets session cookie)
-5. User is logged in, account is complete
+#### 1. Standalone Signup (Self-Service)
+1. User navigates to `/signup` (or from Landing)
+2. User enters: email, name, password, confirm password
+3. System creates account with `status: 'active'`, hashes password
+4. Session cookie issued, user is logged in
+5. User redirected to `/browse`
 
-**For returning users (password-based login):**
+#### 2. Magic Link Signup (Tournament Registration)
+1. User provides email to tournament registration form
+2. System generates 24-hour magic link token
+3. User receives email with magic link
+4. User clicks link → lands on `/signup?token=xxx`
+5. User enters: name, password, confirm password (email pre-filled, editable)
+6. System validates token, creates account, issues session cookie
+7. User is logged in and registered for tournament
+
+#### 3. Login (Returning Users)
 1. User navigates to `/login`
 2. User enters email + password
 3. System validates against `accounts.password_hash`
 4. Session cookie issued, user is logged in
+5. User redirected to `/browse`
 
-**Password recovery:**
-1. User clicks "Forgot password" → `/forgot-password`
-2. User enters email → system sends magic link
-3. Same flow as new user setup (click link, set new password)
-4. No separate "reset password" page — reuses the setup flow
+#### 4. Password Recovery (Time-Limited Code)
+1. User clicks "Forgot password" on `/login` → goes to `/forgot-password`
+2. User enters email
+3. System generates 6-digit reset code (15-minute expiration)
+4. User receives email with code (mocked for now)
+5. User navigates to `/reset-password`
+6. User enters email, code, new password, confirm password
+7. System validates code, updates password, invalidates code
+8. User redirected to `/login`
 
 ---
 
@@ -158,15 +475,18 @@ Separate subdomains (`app.example.com` → frontend, `api.example.com` → API).
 
 ## API Endpoints
 
-### Auth Routes (`/auth/`)
+### Auth Routes (`/api/auth/`)
 
-| Endpoint | Method | Auth | Input | Output | Notes |
-|----------|--------|------|-------|--------|-------|
-| `/login` | POST | None | `{ email, password }` | 200 + session cookie | Existing account with password |
-| `/logout` | POST | Session | None | 204 | Clears session cookie |
-| `/me` | GET | Session | None | 200 `{ id, email, role, name }` | Restores session on page load |
-| `/setup` | POST | None | `{ token, name, password }` | 200 + session cookie | Magic link → activate account |
-| `/magic-link` | POST | None | `{ email }` | 202 | Sends magic link (forgot password or re-invite) |
+| Endpoint | Method | Auth | Input | Output | Success | Error |
+|----------|--------|------|-------|--------|---------|-------|
+| `/login` | POST | None | `{ email, password }` | 200 `{ user, token }` | User validated | 401 Invalid credentials |
+| `/signup` | POST | None | `{ email, name, password, token? }` | 201 `{ user, token }` | Account created | 409 Email exists, 400 Validation |
+| `/logout` | POST | Session | None | 204 | Session cleared | 401 Not authenticated |
+| `/me` | GET | Session | None | 200 `{ id, email, name, role }` | Session restored | 401 Session invalid |
+| `/forgot-password` | POST | None | `{ email }` | 202 `{ message }` | Code generated, email sent | (never fails, security) |
+| `/reset-password` | POST | None | `{ email, code, newPassword }` | 200 `{ message }` | Password updated | 401 Invalid code, 409 Expired |
+
+**Note:** All endpoints return `{ user, token }` on auth success. Frontend stores token in localStorage for session persistence.
 
 ### Protected Tournament Routes
 
@@ -210,10 +530,11 @@ Uses existing `packages/api/src/workers/` email infrastructure (Task #16):
 
 ### Public Routes (no auth required)
 - `/` — Landing page
+- `/login` — Email + Password login (returning users)
+- `/signup` — Create account (standalone or magic link `/signup?token=xxx`)
+- `/forgot-password` — Request password reset code
+- `/reset-password` — Reset password with code
 - `/browse` — Browse tournaments (public list, registration forms)
-- `/login` — Email + password login
-- `/setup-account?token=xxx` — Account setup after magic link
-- `/forgot-password` — Password recovery initiation
 
 ### Protected Routes (auth required)
 - `/my-tournaments` — Player's registered tournaments
@@ -223,12 +544,119 @@ Uses existing `packages/api/src/workers/` email infrastructure (Task #16):
   - `/matches` — Match list + score submission
   - `/bracket` — Player or organizer bracket view
   - `/groups` — Group management (organizer only)
+- `/matches` — All matches user is in
 
-**Auth gating:** Routes check `useAuth().isAuthenticated` and `user.role` before rendering. Unauthenticated users redirected to `/login`. Unauthorized users (e.g., player accessing organizer dashboard) shown error.
+**Auth gating:** 
+- Routes check `useAuth().isAuthenticated` before rendering
+- Unauthenticated users redirected to `/login`
+- Unauthorized users (e.g., player accessing organizer routes) shown error
+- Logged-in users accessing `/login`, `/signup`, etc. redirected to `/browse`
 
 ---
 
-## Admin Bootstrapping
+## Implementation Strategy: UI-First with TDD
+
+### Phase 1: Frontend UI (MSW Mocks)
+
+**Goal:** Build and test the complete auth UI flow without backend implementation.
+
+**Deliverables:**
+1. **MSW Mock Handlers** (`packages/frontend/src/mocks/handlers.ts`)
+   - `POST /api/auth/login` → mock success/error scenarios
+   - `POST /api/auth/signup` → mock success/error scenarios
+   - `POST /api/auth/forgot-password` → mock code generation
+   - `POST /api/auth/reset-password` → mock code validation
+
+2. **Four Auth Pages** with full form validation
+   - `/login` — Email + Password, validation, error handling
+   - `/signup` — Email + Name + Password + Confirm Password, magic link token support
+   - `/forgot-password` — Email form, success confirmation
+   - `/reset-password` — Email + Code + Password + Confirm Password
+
+3. **useAuth() Hook** (React Context)
+   - `user`, `isAuthenticated`, `loading` state
+   - `login()`, `signup()`, `forgotPassword()`, `resetPassword()`, `logout()` methods
+   - Token persistence in localStorage
+   - Session restoration on page load
+
+4. **Route Protection**
+   - Protected routes require auth
+   - Redirect unauthenticated users to `/login`
+   - Redirect authenticated users away from auth pages
+
+5. **Browser Testing**
+   - All form validations work
+   - Errors display correctly
+   - Navigation flows work
+   - Session persists across page reload
+
+### Phase 2: Backend API (TDD)
+
+**Goal:** Implement API endpoints to match frontend expectations. Use TDD: write tests first, then implementation.
+
+**Test-Driven Development Approach:**
+
+For each endpoint:
+1. **Write integration tests** that verify the endpoint behavior
+   - Success paths (happy path)
+   - Error scenarios (invalid input, duplicate email, etc.)
+   - State changes (password hashed, token issued, etc.)
+2. **Implement endpoint** to make tests pass
+3. **Verify frontend still works** against real API
+
+**Endpoints (in order):**
+
+1. **POST /api/auth/login** (Tests first)
+   - ✅ Valid email + password → return user + token
+   - ✅ Invalid password → 401 error
+   - ✅ Unknown email → 401 error
+   - ✅ Implementation: authenticate user, hash password check, issue token
+
+2. **POST /api/auth/signup** (Tests first)
+   - ✅ Valid email + name + password → create account + return user + token
+   - ✅ Duplicate email → 409 error
+   - ✅ Invalid password (too short) → 400 error
+   - ✅ Magic link token provided → extract email from token, validate token
+   - ✅ Implementation: create account row, hash password, issue token
+
+3. **POST /api/auth/forgot-password** (Tests first)
+   - ✅ Valid email → generate 6-digit code, store with 15-min expiration
+   - ✅ Unknown email → also succeeds (security: don't reveal if email exists)
+   - ✅ Implementation: generate code, store in database (temp table or column)
+
+4. **POST /api/auth/reset-password** (Tests first)
+   - ✅ Valid email + code + password → update password, invalidate code
+   - ✅ Invalid code → 401 error
+   - ✅ Expired code → 401 error
+   - ✅ Too many attempts → 429 error (rate limiting)
+   - ✅ Implementation: validate code, update password_hash, mark code used
+
+5. **POST /api/auth/logout** (Tests first)
+   - ✅ Valid session → clear token
+   - ✅ Implementation: delete token from store
+
+6. **GET /api/auth/me** (Tests first)
+   - ✅ Valid session → return user info
+   - ✅ Invalid session → 401 error
+   - ✅ Implementation: validate token, return user
+
+### Switching Between Phases
+
+**During Phase 1 (UI-only):**
+- MSW intercepts all `/api/auth/*` calls
+- No backend needed
+- Frontend developer can iterate on UI freely
+
+**Transition to Phase 2:**
+- Start backend endpoint implementations
+- Write tests first (TDD)
+- MSW automatically "bypassed" as real endpoints respond
+- Frontend tests continue to pass (assuming contract matches)
+
+**Final Testing:**
+- Run frontend tests against real API
+- Run backend tests independently
+- Run E2E tests (Playwright) with full stack
 
 ### Seed Script: `scripts/seed-admin.ts`
 
@@ -288,35 +716,114 @@ The `accounts` schema and session flow support organizers with zero changes:
 
 ## Testing Strategy
 
-### Unit Tests
-- Password hashing/verification
-- Token generation/validation
-- Magic link token lifecycle (single-use enforcement)
+### Phase 1: Frontend Tests (MSW Mocks)
 
-### Integration Tests
-- Full auth flow: magic link → setup account → login
-- Session persistence and rolling re-issue
-- CORS credential handling
-- Protected routes reject unauthenticated requests
+**Unit Tests (UI Components)**
+- Form validation: email format, password length, confirm password match
+- Error message display
+- Loading states
+- Navigation between pages
 
-### E2E Tests
-- User clicks email link → lands on setup page → sets password → logged in
-- User logs in with email + password → redirected to dashboard
-- User logs out → session cleared, redirected to login
-- Session survives page refresh
-- Session expires after 30 days
+**Integration Tests (Flows)**
+- Signup flow: fill form → submit → redirected to /browse
+- Login flow: fill form → submit → redirected to /browse
+- Forgot password flow: enter email → success message shown
+- Reset password flow: enter code + password → redirected to /login
+- Session persistence: reload page → user still logged in
+- Protected routes: unauthenticated redirect to /login
+
+**Manual Browser Testing**
+- All form validations work (real-time error messages)
+- All MSW mock scenarios tested (success, errors, edge cases)
+- Mobile responsiveness
+- Accessibility
+
+### Phase 2: Backend Tests (TDD)
+
+**Unit Tests**
+- Password hashing/verification with bcryptjs
+- Token generation (random, unique)
+- Code generation (6-digit, random, unique)
+- Code expiration logic
+- Rate limiting logic
+
+**Integration Tests** (one per endpoint, written before implementation)
+1. **POST /api/auth/login**
+   - Valid credentials → 200 + user + token
+   - Invalid credentials → 401
+   - Hash verification works
+
+2. **POST /api/auth/signup**
+   - Valid input → 201 + user + token, account created
+   - Duplicate email → 409
+   - Invalid password → 400
+   - Magic link token → extract email from token
+
+3. **POST /api/auth/forgot-password**
+   - Any email → 202 + code generated
+   - Code stored with expiration
+   - Rate limiting applied
+
+4. **POST /api/auth/reset-password**
+   - Valid code → 200, password updated, code invalidated
+   - Invalid code → 401
+   - Expired code → 401
+   - Rate limiting applied
+
+5. **GET /api/auth/me**
+   - Valid token → 200 + user info
+   - Invalid token → 401
+
+### Phase 3: E2E Tests (Full Stack with Playwright)
+
+- User completes standalone signup → can access protected routes
+- User receives magic link → completes signup → can access tournament
+- User logs in → can access protected routes
+- User logs out → redirected to login, can't access protected routes
+- User forgets password → completes reset flow → can log in with new password
+- Session persists across page reload
+- Rate limiting prevents brute force attacks
 
 ---
 
-## Known Gaps & Future Work
+## Known Gaps & Deferred Work
 
-1. **Organizer login endpoint** — designed but not implemented. Uses same schema, will be a small addition.
-2. **Admin panel** — for creating/managing organizer accounts. Currently only seed script.
-3. **Rate limiting** — on `/login`, `/magic-link`, `/setup` to prevent brute force.
-4. **Email verification** — could require email verification before account fully active. Optional.
-5. **Two-factor authentication** — post-MVP, if needed.
-6. **Social login** — (Google, etc.) post-MVP.
-7. **Session expiration UX** — "Your session expired" toast before logout. Future improvement.
+### Phase 1 Only (Frontend + MSW Mocks)
+- Email sending (mocked, not real)
+- Backend storage (all state in-memory via MSW)
+- Rate limiting (mocked to always succeed)
+- Session persistence (localStorage only, no server session)
+
+### Phase 2 (Backend Implementation)
+1. **Email sending integration** — AWS SES or similar for forgot-password codes
+   - Currently mocked in MSW
+   - Add email template system
+   - Handle delivery failures
+
+2. **Rate limiting** — on `/login`, `/forgot-password`, `/reset-password`
+   - Use `express-rate-limit` or similar
+   - Prevent brute force attacks
+   - Track by IP + email
+
+3. **Token/Code storage** — move from in-memory to persistent
+   - `password_reset_codes` table for 6-digit codes
+   - Cleanup job for expired codes
+   - Attempt counter for rate limiting
+
+4. **Session management** — httpOnly cookies or JWT
+   - Decide: cookie-based vs token-based
+   - Implement token store (SQLite or Redis)
+   - Rolling session refresh
+
+### Phase 3 & Beyond
+1. **Tournament registration form** — email-only form that generates magic link
+2. **Organizer authentication** — login for organizer role
+3. **Admin panel** — for creating/managing organizer accounts
+4. **Email verification** — require email verification before account fully active
+5. **Two-factor authentication** — TOTP or SMS codes
+6. **Social login** — Google, etc.
+7. **Session expiration UX** — "Your session expired" toast
+8. **Account recovery codes** — backup codes for password reset
 
 ---
 
@@ -333,14 +840,35 @@ The `accounts` schema and session flow support organizers with zero changes:
 
 ---
 
+## Implementation Approach: UI-First + TDD
+
+This authentication system is being implemented in **two phases**:
+
+### Phase 1: Frontend UI-First (Current)
+- Build all 4 auth pages with MSW mock handlers
+- Complete form validation and UX flows
+- No backend required
+- Browser-testable end-to-end
+
+**Why:** Clarify UX, design API contract, validate user flows before backend work.
+
+### Phase 2: Backend with TDD
+- Write integration tests for each endpoint (tests first)
+- Implement endpoints to pass tests
+- Switch real API responses in (frontend tests still pass)
+- Add persistent storage, email, rate limiting
+
+**Why:** Ensures API matches frontend expectations, prevents surprises late in development.
+
 ## Summary
 
-This plan establishes a **single-tier auth system** for players with a forward-compatible schema for organizers and admins. Key design choices:
+This plan establishes a **modern auth system** for players with deferred organizer/admin support. Key design choices:
 
-- **Magic links for activation, passwords for login** — low-friction UX for invites, secure for repeat logins
-- **httpOnly cookies** — immune to XSS, standard practice
-- **Rolling 30-day sessions** — users stay logged in as long as they're active
-- **SQLiteTokenStore for sessions, InMemoryTokenStore for magic links** — simple, correct separation of concerns
+- **Standalone + Magic link signup** — self-service or tournament-driven flows
+- **Time-limited 6-digit codes for password reset** — more secure than magic links
+- **Frontend-first UI development** — validate flows, then implement backend
+- **Test-driven backend** — write tests before implementation
+- **MSW mocks** — complete UI testing without backend
 - **Unified login flow** — same `/login` for all roles
 
-The schema, middleware, and API routes are role-agnostic — adding organizer/admin login is a matter of creating accounts and leveraging the same session/middleware layer. No architectural changes needed.
+The system is designed for **incremental development**: Phase 1 delivers a working UI with mocks, Phase 2 adds persistence and email, Phase 3 adds tournament registration and organizer support.
