@@ -1,0 +1,14 @@
+{
+  "name": "RAC8-4S Development Skills",
+  "version": "1.0.0",
+  "description": "Reusable workflows and guides for developing this React webapp",
+  "skills": [
+    {
+      "id": "develop-frontend-page",
+      "name": "Develop Frontend Page",
+      "description": "Guided workflow for implementing new frontend pages",
+      "path": "skills/engineering/SKILL.md",
+      "bucket": "engineering"
+    }
+  ]
+}
