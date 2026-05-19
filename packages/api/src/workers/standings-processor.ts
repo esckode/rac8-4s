@@ -23,8 +23,8 @@ export async function processStandingsRecalculate(
   try {
     deps.standingsCache?.clear(groupId)
 
-    const members = deps.groupRepo.findMembersByGroup(groupId)
-    const matches = deps.groupRepo.findMatchesByGroup(groupId)
+    const members = await deps.groupRepo.findMembersByGroup(groupId)
+    const matches = await deps.groupRepo.findMatchesByGroup(groupId)
 
     const players = members.map(m => ({ id: m.id, name: m.name }))
     const matchData = matches.map(m => ({

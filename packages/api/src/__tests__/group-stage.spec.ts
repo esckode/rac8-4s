@@ -343,10 +343,10 @@ describe('Group Stage Management', () => {
         .send({ numGroups: 2, advancingPerGroup: 1 })
 
       // Find which group contains player 1 (standingsPlayerIds[0])
-      const allGroups = groupRepo.findGroupsByTournament(standingsTournamentId)
+      const allGroups = await groupRepo.findGroupsByTournament(standingsTournamentId)
       const player1Id = standingsPlayerIds[0]
       for (const g of allGroups) {
-        const members = groupRepo.findMembersByGroup(g.id)
+        const members = await groupRepo.findMembersByGroup(g.id)
         if (members.find(m => m.id === player1Id)) {
           groupId = g.id
           break
@@ -415,7 +415,7 @@ describe('Group Stage Management', () => {
 
     it('should return 403 if player not in tournament', async () => {
       // Create another tournament and register a player there
-      const otherTournament = tournamentsRepo.create({
+      const otherTournament = await tournamentsRepo.create({
         name: 'Other Tournament',
         sport: 'Tennis',
         matchFormat: 'singles',
@@ -426,7 +426,7 @@ describe('Group Stage Management', () => {
         creatorId: organizerId,
       })
 
-      tournamentsRepo.updateStatus(otherTournament.id, 'registration_open')
+      await tournamentsRepo.updateStatus(otherTournament.id, 'registration_open')
 
       // Register a player for the other tournament
       const registerRes = await request(app)

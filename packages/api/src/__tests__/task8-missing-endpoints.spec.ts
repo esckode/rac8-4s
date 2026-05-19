@@ -39,7 +39,7 @@ describe('Task #8 - Missing Endpoints', () => {
       const tokenPair = issueOrganizerToken({ sub: organizerId, email: 'org@test.com' }, STANDARD_CONFIG)
 
       // Create tournament 1
-      const tour1 = tournamentRepo.create({
+      const tour1 = await tournamentRepo.create({
         name: 'Available Tournament 1',
         sport: 'badminton',
         matchFormat: 'singles',
@@ -55,7 +55,7 @@ describe('Task #8 - Missing Endpoints', () => {
       db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', tournamentId1)
 
       // Create tournament 2
-      const tour2 = tournamentRepo.create({
+      const tour2 = await tournamentRepo.create({
         name: 'Available Tournament 2',
         sport: 'tennis',
         matchFormat: 'doubles',
@@ -120,7 +120,7 @@ describe('Task #8 - Missing Endpoints', () => {
 
     it('should only show registration_open tournaments', async () => {
       // Create a draft tournament
-      const draftTour = tournamentRepo.create({
+      const draftTour = await tournamentRepo.create({
         name: 'Draft Tournament',
         sport: 'squash',
         matchFormat: 'singles',
@@ -152,7 +152,7 @@ describe('Task #8 - Missing Endpoints', () => {
       organizerToken = tokenPair.accessToken
 
       // Create tournament
-      const tour = tournamentRepo.create({
+      const tour = await tournamentRepo.create({
         name: 'Players List Tournament',
         sport: 'volleyball',
         matchFormat: 'singles',
@@ -278,7 +278,7 @@ describe('Task #8 - Missing Endpoints', () => {
       organizerToken = tokenPair.accessToken
 
       // Create doubles tournament
-      const tour = tournamentRepo.create({
+      const tour = await tournamentRepo.create({
         name: 'Partner Confirm Tournament',
         sport: 'badminton',
         matchFormat: 'doubles',
@@ -419,7 +419,7 @@ describe('Task #8 - Missing Endpoints', () => {
       // Create tournament with future deadline
       const deadlineStr = new Date(Date.now() + 86400000).toISOString()
 
-      const tour = tournamentRepo.create({
+      const tour = await tournamentRepo.create({
         name: 'Withdrawal Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -542,7 +542,7 @@ describe('Task #8 - Missing Endpoints', () => {
       // Create tournament with past deadline
       const pastDeadline = new Date(Date.now() - 86400000).toISOString()
 
-      const tour = tournamentRepo.create({
+      const tour = await tournamentRepo.create({
         name: 'Past Deadline Tournament',
         sport: 'squash',
         matchFormat: 'singles',

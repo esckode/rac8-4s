@@ -20,18 +20,18 @@ export async function processBracketGenerate(
   const { tournamentId } = payload
 
   try {
-    const pendingCount = deps.groupRepo.countPendingMatchesByTournament(tournamentId)
+    const pendingCount = await deps.groupRepo.countPendingMatchesByTournament(tournamentId)
     if (pendingCount > 0) {
       throw new Error(`group stage not complete: ${pendingCount} matches pending`)
     }
 
-    const existing = deps.knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
+    const existing = await deps.knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
     if (existing.length > 0) {
       log.info('bracket.already.exists', { tournamentId, matchCount: existing.length })
       return existing
     }
 
-    const groups = deps.groupRepo.findGroupsByTournament(tournamentId)
+    const groups = await deps.groupRepo.findGroupsByTournament(tournamentId)
     if (groups.length === 0) {
       throw new Error('no groups found for tournament')
     }
@@ -47,8 +47,8 @@ export async function processBracketGenerate(
     for (let rank = 0; rank < maxAdvancing; rank++) {
       for (const group of groups) {
         if (rank >= group.advancing_count) continue
-        const members = deps.groupRepo.findMembersByGroup(group.id)
-        const matches = deps.groupRepo.findMatchesByGroup(group.id)
+        const members = await deps.groupRepo.findMembersByGroup(group.id)
+        const matches = await deps.groupRepo.findMatchesByGroup(group.id)
         const players = members.map(m => ({ id: m.id, name: m.name }))
         const matchData = matches.map(m => ({
           player1Id: m.player1_id,
@@ -65,10 +65,10 @@ export async function processBracketGenerate(
 
     const bracket = generateBracket(seeds.length)
 
-    deps.knockoutRepo.setSeeds(tournamentId, seeds)
+    await deps.knockoutRepo.setSeeds(tournamentId, seeds)
 
     const seedMap = new Map(seeds.map(s => [s.seedPosition, s.playerId]))
-    const matches = deps.knockoutRepo.createKnockoutMatches(tournamentId, bracket, seedMap)
+    const matches = await deps.knockoutRepo.createKnockoutMatches(tournamentId, bracket, seedMap)
 
     deps.broadcastBus?.emit(tournamentId, 'bracket.published', { matchCount: matches.length, byeCount: bracket.byeCount })
 
