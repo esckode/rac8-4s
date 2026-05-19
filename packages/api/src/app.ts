@@ -3,6 +3,13 @@ import { Pool } from 'pg'
 import { randomUUID } from 'node:crypto'
 import { JwtConfig, TokenStore } from './auth'
 import { AuthError, ForbiddenError, MissingTokenError } from './auth/errors'
+import {
+  DatabaseError,
+  ConstraintViolationError,
+  ConnectionError,
+  TimeoutError,
+  DeadlockError,
+} from './db/errors'
 import { getLogger, runWithRequestId } from './logger'
 import tournamentsRouter from './routes/tournaments'
 import playerRouter from './routes/player'
@@ -14,6 +21,61 @@ import type { AppConfig } from './config'
 import { QueueMonitor } from './queue-monitor'
 
 const httpLog = getLogger('http')
+
+function parsePostgresError(err: Error): Error {
+  const msg = err.message || ''
+
+  // Connection/network errors
+  if (msg.includes('ECONNREFUSED') || msg.includes('connect ECONNREFUSED')) {
+    return new ConnectionError('Unable to connect to database')
+  }
+  if (msg.includes('ETIMEDOUT') || msg.includes('timeout expired')) {
+    return new TimeoutError('Database query timeout')
+  }
+
+  // Deadlock error (PostgreSQL error code 40P01)
+  if (msg.includes('40P01') || msg.includes('deadlock detected')) {
+    return new DeadlockError()
+  }
+
+  // Constraint violations
+  if (msg.includes('duplicate key value violates unique constraint')) {
+    // Try to extract field name
+    const match = msg.match(/Key \("([^"]+)"\)/)
+    const field = match ? match[1] : undefined
+    return new ConstraintViolationError(
+      field ? `${field} already exists` : 'Value already exists',
+      field === 'email' ? 'DUPLICATE_EMAIL' : 'DUPLICATE_VALUE'
+    )
+  }
+
+  if (msg.includes('violates foreign key constraint')) {
+    return new ConstraintViolationError(
+      'Referenced record does not exist',
+      'INVALID_REFERENCE'
+    )
+  }
+
+  if (msg.includes('violates check constraint')) {
+    const match = msg.match(/violates check constraint "([^"]+)"/)
+    const field = match ? match[1] : undefined
+    return new ConstraintViolationError(
+      field ? `Invalid value for ${field}` : 'Invalid constraint value',
+      'INVALID_VALUE'
+    )
+  }
+
+  if (msg.includes('null value in column') || msg.includes('NOT NULL constraint failed')) {
+    const match = msg.match(/column "([^"]+)"/)
+    const field = match ? match[1] : undefined
+    return new ConstraintViolationError(
+      field ? `${field} is required` : 'Required field is missing',
+      'REQUIRED_FIELD'
+    )
+  }
+
+  return err
+}
 
 export interface AppDependencies {
   db: Pool
@@ -54,6 +116,12 @@ export function createApp(deps: AppDependencies): Express {
   app.use('/api/analytics', analyticsRouter(appDeps))
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    // Parse PostgreSQL errors first
+    if (err instanceof Error && !('statusCode' in err)) {
+      err = parsePostgresError(err)
+    }
+
+    // Auth errors
     if (err instanceof ForbiddenError) {
       httpLog.warn('forbidden', { code: err.code })
       return res.status(403).json({ code: err.code, message: err.message })
@@ -63,14 +131,17 @@ export function createApp(deps: AppDependencies): Express {
       return res.status(401).json({ code: 'UNAUTHORIZED', message: err.message })
     }
 
-    if (err instanceof Error && err.message.includes('validation')) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', message: err.message })
+    // Database errors
+    if (err instanceof DatabaseError) {
+      const logLevel = err.statusCode >= 500 ? 'error' : 'warn'
+      httpLog[logLevel as 'error' | 'warn']('database', { code: err.code, statusCode: err.statusCode })
+      return res.status(err.statusCode).json({ code: err.code, message: err.message })
     }
 
-    if (err instanceof Error) {
-      if (err.message.includes('UNIQUE constraint failed') || err.message.includes('duplicate')) {
-        return res.status(400).json({ code: 'DUPLICATE_NAME', message: 'Tournament name already exists' })
-      }
+    // Validation errors
+    if (err instanceof Error && err.message.includes('validation')) {
+      httpLog.warn('validation', { message: err.message })
+      return res.status(400).json({ code: 'VALIDATION_ERROR', message: err.message })
     }
 
     httpLog.error('unhandled', {

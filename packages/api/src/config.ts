@@ -117,6 +117,57 @@ export interface LimitsConfig {
 }
 
 /**
+ * Database connection and query configuration.
+ */
+export interface DatabaseConfig {
+  /**
+   * Maximum time to wait for a query to complete, in milliseconds.
+   * Default: 30000 (30 seconds)
+   *
+   * Usage: Prevents slow queries from blocking indefinitely.
+   * - Applied to all repository queries
+   * - If exceeded, query is cancelled and error returned
+   * - Lower = fail fast (good for responsive APIs, bad for slow operations)
+   * - Higher = allow slow operations (good for batch jobs, bad for user-facing endpoints)
+   */
+  queryTimeoutMs: number
+
+  /**
+   * Maximum attempts to retry a failed database operation.
+   * Default: 3
+   *
+   * Usage: Retry transient failures like deadlocks and connection timeouts.
+   * - Applied to transaction-based operations (createGroups, setSeeds)
+   * - After max attempts exhausted, error is returned to caller
+   * - Only retries on specific error codes (deadlock, timeout)
+   */
+  retryMaxAttempts: number
+
+  /**
+   * Base delay in milliseconds for exponential backoff between retries.
+   * Default: 1000 (1 second)
+   *
+   * Usage: How long to wait between retry attempts.
+   * - Retry delay = backoffBase * (2 ^ attempt)
+   * - Attempt 1: 1000 * 2^1 = 2000ms
+   * - Attempt 2: 1000 * 2^2 = 4000ms
+   * - Attempt 3: 1000 * 2^3 = 8000ms
+   */
+  retryBackoffBaseMs: number
+
+  /**
+   * Maximum time to wait when acquiring a connection from the pool, in milliseconds.
+   * Default: 5000 (5 seconds)
+   *
+   * Usage: Prevents requests from waiting indefinitely for an available connection.
+   * - If pool is exhausted and no connections available after this timeout, error returned
+   * - Lower = fail fast (good for detecting pool exhaustion early)
+   * - Higher = wait longer (good for high-concurrency scenarios with temporary spikes)
+   */
+  connectionTimeoutMs: number
+}
+
+/**
  * Job queue and async processing configuration.
  */
 export interface JobsConfig extends RetryConfig {
@@ -158,6 +209,7 @@ export interface JobsConfig extends RetryConfig {
  */
 export interface AppConfig {
   auth: AuthConfig
+  database: DatabaseConfig
   limits: LimitsConfig
   jobs: JobsConfig
 }
@@ -179,6 +231,12 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     magicLinkTtlSeconds: 86400, // 24 hours - allow plenty of time to click email link
     sessionTtlSeconds: 86400, // 24 hours - balance convenience and security
     tokenBlocklistTtlSeconds: 86400, // Match sessionTtlSeconds to catch all revoked tokens
+  },
+  database: {
+    queryTimeoutMs: 30000, // 30 seconds - reasonable for most queries
+    retryMaxAttempts: 3, // Retry up to 3 times for transient failures
+    retryBackoffBaseMs: 1000, // 1 second base for exponential backoff
+    connectionTimeoutMs: 5000, // 5 seconds - timeout acquiring connection from pool
   },
   limits: {
     emailRecipientsPerJob: 1000, // Reasonable batch size for email providers
@@ -207,6 +265,9 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
  *
  * Examples:
  *   APP_AUTH_MAGIC_LINK_TTL_SECONDS=3600
+ *   APP_DATABASE_QUERY_TIMEOUT_MS=30000
+ *   APP_DATABASE_RETRY_MAX_ATTEMPTS=3
+ *   APP_DATABASE_CONNECTION_TIMEOUT_MS=5000
  *   APP_LIMITS_EMAIL_RECIPIENTS_PER_JOB=500
  *   APP_LIMITS_SSE_MAX_CONNECTIONS_PER_USER=10
  *   APP_LIMITS_PAGINATION_TOURNAMENTS=20
@@ -227,6 +288,24 @@ export function getAppConfig(): AppConfig {
       tokenBlocklistTtlSeconds: parseInt(
         process.env.APP_AUTH_TOKEN_BLOCKLIST_TTL_SECONDS ??
           String(DEFAULT_APP_CONFIG.auth.tokenBlocklistTtlSeconds),
+        10
+      ),
+    },
+    database: {
+      queryTimeoutMs: parseInt(
+        process.env.APP_DATABASE_QUERY_TIMEOUT_MS ?? String(DEFAULT_APP_CONFIG.database.queryTimeoutMs),
+        10
+      ),
+      retryMaxAttempts: parseInt(
+        process.env.APP_DATABASE_RETRY_MAX_ATTEMPTS ?? String(DEFAULT_APP_CONFIG.database.retryMaxAttempts),
+        10
+      ),
+      retryBackoffBaseMs: parseInt(
+        process.env.APP_DATABASE_RETRY_BACKOFF_BASE_MS ?? String(DEFAULT_APP_CONFIG.database.retryBackoffBaseMs),
+        10
+      ),
+      connectionTimeoutMs: parseInt(
+        process.env.APP_DATABASE_CONNECTION_TIMEOUT_MS ?? String(DEFAULT_APP_CONFIG.database.connectionTimeoutMs),
         10
       ),
     },

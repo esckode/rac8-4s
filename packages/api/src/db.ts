@@ -1,4 +1,25 @@
 import { Pool } from 'pg'
+import { NotFoundError, DeadlockError, CheckConstraintError } from './db/errors'
+import { getLogger } from './logger'
+
+const log = getLogger('db')
+
+async function retryOnDeadlock<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      const isDeadlock = err instanceof Error && (err.message.includes('40P01') || err.message.includes('deadlock'))
+      if (!isDeadlock || attempt === maxAttempts) {
+        throw err
+      }
+      const delayMs = 1000 * Math.pow(2, attempt - 1)
+      log.warn('deadlock.retry', { attempt, delayMs, message: err instanceof Error ? err.message : String(err) })
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+    }
+  }
+  return fn()
+}
 
 export interface TournamentRow {
   id: string
@@ -105,6 +126,11 @@ export class TournamentRepository {
     const id = `tournament_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const now = new Date().toISOString()
 
+    // Validate enum values
+    if (!['singles', 'doubles'].includes(input.matchFormat)) {
+      throw new CheckConstraintError('matchFormat')
+    }
+
     await this.pool.query(
       `INSERT INTO public.tournaments (
         id, name, sport, match_format, creator_id, status,
@@ -129,7 +155,9 @@ export class TournamentRepository {
       ]
     )
 
-    return (await this.findById(id))!
+    const tournament = await this.findById(id)
+    if (!tournament) throw new NotFoundError('Tournament')
+    return tournament
   }
 
   async findById(id: string): Promise<TournamentRow | undefined> {
@@ -271,15 +299,25 @@ export class TournamentRepository {
       values
     )
 
-    return (await this.findById(id))!
+    const tournament = await this.findById(id)
+    if (!tournament) throw new NotFoundError('Tournament')
+    return tournament
   }
 
   async updateStatus(id: string, status: string): Promise<TournamentRow> {
+    // Validate status enum
+    const validStatuses = ['draft', 'registration_open', 'registration_closed', 'group_stage_active', 'group_stage_complete', 'knockout_active', 'knockout_complete', 'completed']
+    if (!validStatuses.includes(status)) {
+      throw new CheckConstraintError('status')
+    }
+
     await this.pool.query(
       'UPDATE public.tournaments SET status = $1, updated_at = $2 WHERE id = $3',
       [status, new Date().toISOString(), id]
     )
-    return (await this.findById(id))!
+    const tournament = await this.findById(id)
+    if (!tournament) throw new NotFoundError('Tournament')
+    return tournament
   }
 
   async softDelete(id: string): Promise<void> {
@@ -313,7 +351,9 @@ export class PlayerRepository {
       [id, email, name, phone || null, preferredContact || null, now, now]
     )
 
-    return (await this.findById(id))!
+    const player = await this.findById(id)
+    if (!player) throw new NotFoundError('Player')
+    return player
   }
 
   async findByEmail(email: string): Promise<PlayerRow | undefined> {
@@ -333,7 +373,9 @@ export class PlayerRepository {
       [id, playerId, tournamentId, now]
     )
 
-    return (await this.findRegistration(playerId, tournamentId))!
+    const registration = await this.findRegistration(playerId, tournamentId)
+    if (!registration) throw new NotFoundError('Registration')
+    return registration
   }
 
   async findRegistration(playerId: string, tournamentId: string): Promise<RegistrationRow | undefined> {
@@ -417,7 +459,9 @@ export class PlayerRepository {
        WHERE id = $4`,
       [partnerId, 'pending_partner_confirm', now, registrationId]
     )
-    return (await this.findRegistrationById(registrationId))!
+    const registration = await this.findRegistrationById(registrationId)
+    if (!registration) throw new NotFoundError('Registration')
+    return registration
   }
 
   async confirmPartner(registrationId: string): Promise<RegistrationRow> {
@@ -428,15 +472,24 @@ export class PlayerRepository {
        WHERE id = $4`,
       [true, 'registered', now, registrationId]
     )
-    return (await this.findRegistrationById(registrationId))!
+    const registration = await this.findRegistrationById(registrationId)
+    if (!registration) throw new NotFoundError('Registration')
+    return registration
   }
 
   async updateRegistrationStatus(registrationId: string, status: string): Promise<RegistrationRow> {
+    const validStatuses = ['registered', 'pending_partner_confirm', 'withdrawn', 'withdrawal_pending']
+    if (!validStatuses.includes(status)) {
+      throw new CheckConstraintError('status')
+    }
+
     await this.pool.query(
       `UPDATE public.player_registrations SET status = $1 WHERE id = $2`,
       [status, registrationId]
     )
-    return (await this.findRegistrationById(registrationId))!
+    const registration = await this.findRegistrationById(registrationId)
+    if (!registration) throw new NotFoundError('Registration')
+    return registration
   }
 
   async withdrawRegistration(registrationId: string, isBeforeDeadline: boolean): Promise<RegistrationRow> {
@@ -448,7 +501,9 @@ export class PlayerRepository {
        WHERE id = $3`,
       [status, now, registrationId]
     )
-    return (await this.findRegistrationById(registrationId))!
+    const registration = await this.findRegistrationById(registrationId)
+    if (!registration) throw new NotFoundError('Registration')
+    return registration
   }
 
   async findById(playerId: string): Promise<PlayerRow | undefined> {
@@ -464,7 +519,9 @@ export class PlayerRepository {
       `UPDATE public.players SET share_contact = $1, updated_at = $2 WHERE id = $3`,
       [shareContact, now, playerId]
     )
-    return (await this.findById(playerId))!
+    const player = await this.findById(playerId)
+    if (!player) throw new NotFoundError('Player')
+    return player
   }
 }
 
@@ -472,66 +529,67 @@ export class GroupRepository {
   constructor(private pool: Pool) {}
 
   async createGroups(tournamentId: string, numGroups: number, advancingCount: number, playerIds: string[]): Promise<GroupRow[]> {
-    const client = await this.pool.connect()
-    try {
-      await client.query('BEGIN')
+    return retryOnDeadlock(async () => {
+      const client = await this.pool.connect()
+      try {
+        await client.query('BEGIN')
 
-      const groupIds: string[] = []
-      const now = new Date().toISOString()
+        const groupIds: string[] = []
+        const now = new Date().toISOString()
 
-      // Create groups
-      for (let i = 1; i <= numGroups; i++) {
-        const groupId = `group_${Date.now()}_${Math.random().toString(36).slice(2)}`
-        groupIds.push(groupId)
+        // Create groups
+        for (let i = 1; i <= numGroups; i++) {
+          const groupId = `group_${Date.now()}_${Math.random().toString(36).slice(2)}`
+          groupIds.push(groupId)
 
-        await client.query(
-          `INSERT INTO public.groups (id, tournament_id, name, advancing_count, created_at)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [groupId, tournamentId, `Group ${String.fromCharCode(64 + i)}`, advancingCount, now]
-        )
-      }
-
-      // Shuffle and distribute players evenly
-      const shuffled = [...playerIds].sort(() => Math.random() - 0.5)
-      const playersPerGroup = Math.ceil(shuffled.length / numGroups)
-
-      for (let i = 0; i < numGroups; i++) {
-        const groupId = groupIds[i]
-        const start = i * playersPerGroup
-        const end = Math.min(start + playersPerGroup, shuffled.length)
-        const groupPlayers = shuffled.slice(start, end)
-
-        // Add members and generate matches
-        for (const playerId of groupPlayers) {
           await client.query(
-            `INSERT INTO public.group_memberships (group_id, player_id)
-             VALUES ($1, $2)`,
-            [groupId, playerId]
+            `INSERT INTO public.groups (id, tournament_id, name, advancing_count, created_at)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [groupId, tournamentId, `Group ${String.fromCharCode(64 + i)}`, advancingCount, now]
           )
         }
 
-        // Generate round-robin: each player plays every other player once
-        for (let j = 0; j < groupPlayers.length; j++) {
-          for (let k = j + 1; k < groupPlayers.length; k++) {
-            const matchId = `match_${Date.now()}_${Math.random().toString(36).slice(2)}`
+        // Shuffle and distribute players evenly
+        const shuffled = [...playerIds].sort(() => Math.random() - 0.5)
+        const playersPerGroup = Math.ceil(shuffled.length / numGroups)
+
+        for (let i = 0; i < numGroups; i++) {
+          const groupId = groupIds[i]
+          const start = i * playersPerGroup
+          const end = Math.min(start + playersPerGroup, shuffled.length)
+          const groupPlayers = shuffled.slice(start, end)
+
+          // Add members and generate matches
+          for (const playerId of groupPlayers) {
             await client.query(
-              `INSERT INTO public.group_matches (id, group_id, tournament_id, player1_id, player2_id, status, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-              [matchId, groupId, tournamentId, groupPlayers[j], groupPlayers[k], 'pending', now, now]
+              `INSERT INTO public.group_memberships (group_id, player_id)
+               VALUES ($1, $2)`,
+              [groupId, playerId]
             )
           }
+
+          // Generate round-robin: each player plays every other player once
+          for (let j = 0; j < groupPlayers.length; j++) {
+            for (let k = j + 1; k < groupPlayers.length; k++) {
+              const matchId = `match_${Date.now()}_${Math.random().toString(36).slice(2)}`
+              await client.query(
+                `INSERT INTO public.group_matches (id, group_id, tournament_id, player1_id, player2_id, status, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [matchId, groupId, tournamentId, groupPlayers[j], groupPlayers[k], 'pending', now, now]
+              )
+            }
+          }
         }
+
+        await client.query('COMMIT')
+        return this.findGroupsByTournament(tournamentId)
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      } finally {
+        client.release()
       }
-
-      await client.query('COMMIT')
-    } catch (error) {
-      await client.query('ROLLBACK')
-      throw error
-    } finally {
-      client.release()
-    }
-
-    return this.findGroupsByTournament(tournamentId)
+    })
   }
 
   async findGroupsByTournament(tournamentId: string): Promise<GroupRow[]> {
@@ -591,7 +649,9 @@ export class GroupRepository {
       `UPDATE public.group_matches SET winner_id = $1, score = $2, status = $3, updated_at = $4 WHERE id = $5`,
       [winnerId, score, 'completed', now, matchId]
     )
-    return (await this.findMatchById(matchId))!
+    const match = await this.findMatchById(matchId)
+    if (!match) throw new NotFoundError('Match')
+    return match
   }
 
   async findMatchByIdWithPlayers(matchId: string): Promise<GroupMatchWithPlayers | undefined> {
@@ -646,7 +706,9 @@ export class GroupRepository {
         [true, now, now, matchId]
       )
     }
-    return (await this.findMatchById(matchId))!
+    const match = await this.findMatchById(matchId)
+    if (!match) throw new NotFoundError('Match')
+    return match
   }
 }
 
@@ -703,25 +765,27 @@ export class KnockoutRepository {
   constructor(private pool: Pool) {}
 
   async setSeeds(tournamentId: string, seeds: Array<{ playerId: string; seedPosition: number }>): Promise<void> {
-    const client = await this.pool.connect()
-    try {
-      await client.query('BEGIN')
-      await client.query('DELETE FROM public.bracket_seeds WHERE tournament_id = $1', [tournamentId])
+    return retryOnDeadlock(async () => {
+      const client = await this.pool.connect()
+      try {
+        await client.query('BEGIN')
+        await client.query('DELETE FROM public.bracket_seeds WHERE tournament_id = $1', [tournamentId])
 
-      for (const seed of seeds) {
-        await client.query(
-          'INSERT INTO public.bracket_seeds (tournament_id, seed_position, player_id) VALUES ($1, $2, $3)',
-          [tournamentId, seed.seedPosition, seed.playerId]
-        )
+        for (const seed of seeds) {
+          await client.query(
+            'INSERT INTO public.bracket_seeds (tournament_id, seed_position, player_id) VALUES ($1, $2, $3)',
+            [tournamentId, seed.seedPosition, seed.playerId]
+          )
+        }
+
+        await client.query('COMMIT')
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      } finally {
+        client.release()
       }
-
-      await client.query('COMMIT')
-    } catch (error) {
-      await client.query('ROLLBACK')
-      throw error
-    } finally {
-      client.release()
-    }
+    })
   }
 
   async getSeeds(tournamentId: string): Promise<Array<{ playerId: string; seedPosition: number }>> {
@@ -736,35 +800,36 @@ export class KnockoutRepository {
   }
 
   async createKnockoutMatches(tournamentId: string, bracket: any, seedMap: Map<number, string>): Promise<KnockoutMatchRow[]> {
-    const client = await this.pool.connect()
-    try {
-      await client.query('BEGIN')
+    return retryOnDeadlock(async () => {
+      const client = await this.pool.connect()
+      try {
+        await client.query('BEGIN')
 
-      const now = new Date().toISOString()
+        const now = new Date().toISOString()
 
-      for (const round of bracket.rounds) {
-        for (const match of round.matches) {
-          const id = `km_${Date.now()}_${Math.random().toString(36).slice(2)}`
-          const player1Id = match.player1 ? seedMap.get(parseInt(match.player1.replace('seed_', ''))) ?? null : null
-          const player2Id = match.player2 ? seedMap.get(parseInt(match.player2.replace('seed_', ''))) ?? null : null
-          const status = player2Id === null && player1Id !== null ? 'bye' : 'pending'
-          await client.query(
-            `INSERT INTO public.knockout_matches (id, tournament_id, round, position, player1_id, player2_id, status, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [id, tournamentId, match.round, match.position, player1Id, player2Id, status, now, now]
-          )
+        for (const round of bracket.rounds) {
+          for (const match of round.matches) {
+            const id = `km_${Date.now()}_${Math.random().toString(36).slice(2)}`
+            const player1Id = match.player1 ? seedMap.get(parseInt(match.player1.replace('seed_', ''))) ?? null : null
+            const player2Id = match.player2 ? seedMap.get(parseInt(match.player2.replace('seed_', ''))) ?? null : null
+            const status = player2Id === null && player1Id !== null ? 'bye' : 'pending'
+            await client.query(
+              `INSERT INTO public.knockout_matches (id, tournament_id, round, position, player1_id, player2_id, status, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+              [id, tournamentId, match.round, match.position, player1Id, player2Id, status, now, now]
+            )
+          }
         }
+
+        await client.query('COMMIT')
+        return this.findKnockoutMatchesByTournament(tournamentId)
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      } finally {
+        client.release()
       }
-
-      await client.query('COMMIT')
-    } catch (error) {
-      await client.query('ROLLBACK')
-      throw error
-    } finally {
-      client.release()
-    }
-
-    return this.findKnockoutMatchesByTournament(tournamentId)
+    })
   }
 
   async findKnockoutMatchesByTournament(tournamentId: string): Promise<KnockoutMatchRow[]> {
@@ -788,7 +853,9 @@ export class KnockoutRepository {
       'UPDATE public.knockout_matches SET winner_id = $1, score = $2, status = $3, updated_at = $4 WHERE id = $5',
       [winnerId, score, 'completed', now, matchId]
     )
-    return (await this.findKnockoutMatchById(matchId))!
+    const match = await this.findKnockoutMatchById(matchId)
+    if (!match) throw new NotFoundError('Match')
+    return match
   }
 
   async findKnockoutMatchByIdWithPlayers(matchId: string): Promise<KnockoutMatchWithPlayers | undefined> {
@@ -843,7 +910,9 @@ export class KnockoutRepository {
         [true, now, now, matchId]
       )
     }
-    return (await this.findKnockoutMatchById(matchId))!
+    const match = await this.findKnockoutMatchById(matchId)
+    if (!match) throw new NotFoundError('Match')
+    return match
   }
 }
 
@@ -890,7 +959,9 @@ export class LocationRepository {
       ]
     )
 
-    return (await this.findById(id))!
+    const location = await this.findById(id)
+    if (!location) throw new NotFoundError('Location')
+    return location
   }
 
   async findById(id: string): Promise<LocationRow | undefined> {
@@ -978,7 +1049,9 @@ export class LocationRepository {
       values
     )
 
-    return (await this.findById(id))!
+    const location = await this.findById(id)
+    if (!location) throw new NotFoundError('Location')
+    return location
   }
 
   async calculateCapacity(locationId: string): Promise<number> {
@@ -1028,13 +1101,22 @@ export class CourtRepository {
     const id = `court_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const now = new Date().toISOString()
 
+    // Validate status enum
+    const validStatuses = ['available', 'unavailable', 'maintenance']
+    const status = input.status || 'available'
+    if (!validStatuses.includes(status)) {
+      throw new CheckConstraintError('status')
+    }
+
     await this.pool.query(
       `INSERT INTO public.courts (id, location_id, status, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5)`,
-      [id, input.locationId, input.status || 'available', now, now]
+      [id, input.locationId, status, now, now]
     )
 
-    return (await this.findById(id))!
+    const court = await this.findById(id)
+    if (!court) throw new NotFoundError('Court')
+    return court
   }
 
   async findById(id: string): Promise<CourtRow | undefined> {
@@ -1051,13 +1133,20 @@ export class CourtRepository {
   }
 
   async updateStatus(id: string, status: 'available' | 'unavailable' | 'maintenance'): Promise<CourtRow> {
+    const validStatuses = ['available', 'unavailable', 'maintenance']
+    if (!validStatuses.includes(status)) {
+      throw new CheckConstraintError('status')
+    }
+
     const now = new Date().toISOString()
     await this.pool.query(
       'UPDATE public.courts SET status = $1, updated_at = $2 WHERE id = $3',
       [status, now, id]
     )
 
-    return (await this.findById(id))!
+    const court = await this.findById(id)
+    if (!court) throw new NotFoundError('Court')
+    return court
   }
 
   async countByLocation(locationId: string): Promise<number> {
