@@ -141,11 +141,15 @@ export function Signup() {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        width: 390,
+        height: 844,
         background: 'linear-gradient(180deg, #1F2D4E 0%, #0F1B2E 100%)',
         display: 'flex',
         flexDirection: 'column',
         padding: '16px',
+        margin: '0 auto',
+        overflow: 'hidden',
+        position: 'relative',
       }}
     >
       {/* Status Bar Simulation */}
