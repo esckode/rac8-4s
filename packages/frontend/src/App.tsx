@@ -4,6 +4,7 @@ import { ResponsiveLayout } from './components/shared'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
 import { Signup } from './pages/Signup'
+import { ForgotPassword } from './pages/ForgotPassword'
 import { BrowseTournaments } from './pages/BrowseTournaments'
 import { Matches } from './pages/Matches'
 import { TournamentDetail } from './pages/TournamentDetail'
@@ -140,6 +141,7 @@ export const App: React.FC = () => {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route
           path="/browse"
           element={
