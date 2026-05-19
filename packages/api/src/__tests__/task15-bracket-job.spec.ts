@@ -1,10 +1,12 @@
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
+import { Pool } from 'pg'
+import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { BroadcastBus } from '../broadcast-bus'
 import { processBracketGenerate } from '../workers/bracket-processor'
+import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
 
 describe('Task #15: Bracket Generation Job', () => {
-  let db: any
+  let db: Pool
   let tournamentRepo: TournamentRepository
   let playerRepo: PlayerRepository
   let groupRepo: GroupRepository
@@ -21,8 +23,12 @@ describe('Task #15: Bracket Generation Job', () => {
   let match1Id: string
   let match2Id: string
 
-  beforeEach(() => {
-    db = openDatabase(':memory:')
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
+  beforeEach(async () => {
+    await resetTestDb(db)
     tournamentRepo = new TournamentRepository(db)
     playerRepo = new PlayerRepository(db)
     groupRepo = new GroupRepository(db)
@@ -33,7 +39,7 @@ describe('Task #15: Bracket Generation Job', () => {
     const pastDeadline = new Date(now.getTime() - 86400000).toISOString()
     const futureDeadline = new Date(now.getTime() + 259200000).toISOString()
 
-    const tournament = tournamentRepo.create({
+    const tournament = await tournamentRepo.create({
       name: `Bracket Test ${Date.now()}`,
       sport: 'tennis',
       matchFormat: 'singles',
@@ -45,7 +51,7 @@ describe('Task #15: Bracket Generation Job', () => {
     })
     tournamentId = tournament.id
 
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     const testTimestamp = Date.now()
     const emails = [
@@ -56,40 +62,40 @@ describe('Task #15: Bracket Generation Job', () => {
     ]
 
     for (const email of emails) {
-      playerRepo.findOrCreatePlayerByEmail(email, email.split('@')[0])
+      await playerRepo.findOrCreatePlayerByEmail(email, email.split('@')[0])
     }
 
-    const p1 = playerRepo.findByEmail(emails[0])!
-    const p2 = playerRepo.findByEmail(emails[1])!
-    const p3 = playerRepo.findByEmail(emails[2])!
-    const p4 = playerRepo.findByEmail(emails[3])!
+    const p1 = (await playerRepo.findByEmail(emails[0]))!
+    const p2 = (await playerRepo.findByEmail(emails[1]))!
+    const p3 = (await playerRepo.findByEmail(emails[2]))!
+    const p4 = (await playerRepo.findByEmail(emails[3]))!
 
     player1Id = p1.id
     player2Id = p2.id
     player3Id = p3.id
     player4Id = p4.id
 
-    tournamentRepo.updateStatus(tournamentId, 'registration_closed')
-    tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+    await tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
 
-    const groups = groupRepo.createGroups(tournamentId, 2, 1, [player1Id, player2Id, player3Id, player4Id])
+    const groups = await groupRepo.createGroups(tournamentId, 2, 1, [player1Id, player2Id, player3Id, player4Id])
     group1Id = groups[0].id
     group2Id = groups[1].id
 
-    const matches1 = groupRepo.findMatchesByGroup(group1Id)
-    const matches2 = groupRepo.findMatchesByGroup(group2Id)
+    const matches1 = await groupRepo.findMatchesByGroup(group1Id)
+    const matches2 = await groupRepo.findMatchesByGroup(group2Id)
     match1Id = matches1[0].id
     match2Id = matches2[0].id
   })
 
-  afterEach(() => {
-    db.close()
+  afterAll(async () => {
+    await closeTestDb()
   })
 
   describe('Job execution', () => {
     it('should generate bracket and return non-empty matches array', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
       const matches = await processBracketGenerate(
         { tournamentId },
@@ -105,15 +111,15 @@ describe('Task #15: Bracket Generation Job', () => {
 
   describe('Result consistency', () => {
     it('should match knockout matches in database exactly', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
       const result = await processBracketGenerate(
         { tournamentId },
         { groupRepo, knockoutRepo, jobQueue }
       )
 
-      const dbMatches = knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
+      const dbMatches = await knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
 
       expect(result).toHaveLength(dbMatches.length)
       expect(result.map(m => m.id).sort()).toEqual(dbMatches.map(m => m.id).sort())
@@ -122,21 +128,21 @@ describe('Task #15: Bracket Generation Job', () => {
 
   describe('Match creation', () => {
     it('should create knockout matches with correct advancing players', async () => {
-      const match1 = groupRepo.findMatchById(match1Id)!
-      const match2 = groupRepo.findMatchById(match2Id)!
+      const match1 = (await groupRepo.findMatchById(match1Id))!
+      const match2 = (await groupRepo.findMatchById(match2Id))!
 
       const expectedWinner1 = match1.player1_id
       const expectedWinner2 = match2.player1_id
 
-      groupRepo.updateMatch(match1Id, expectedWinner1, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, expectedWinner2, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, expectedWinner1, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, expectedWinner2, '6-4, 6-2')
 
       await processBracketGenerate(
         { tournamentId },
         { groupRepo, knockoutRepo, jobQueue }
       )
 
-      const matches = knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
+      const matches = await knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
       expect(matches).toHaveLength(1)
 
       const finalMatch = matches[0]
@@ -147,18 +153,18 @@ describe('Task #15: Bracket Generation Job', () => {
     })
 
     it('should correctly seed advancing players in bracket', async () => {
-      const match1 = groupRepo.findMatchById(match1Id)!
-      const match2 = groupRepo.findMatchById(match2Id)!
+      const match1 = (await groupRepo.findMatchById(match1Id))!
+      const match2 = (await groupRepo.findMatchById(match2Id))!
 
-      groupRepo.updateMatch(match1Id, match1.player1_id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, match2.player1_id, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, match1.player1_id, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, match2.player1_id, '6-4, 6-2')
 
       const result = await processBracketGenerate(
         { tournamentId },
         { groupRepo, knockoutRepo, jobQueue }
       )
 
-      const seeds = knockoutRepo.getSeeds(tournamentId)
+      const seeds = await knockoutRepo.getSeeds(tournamentId)
       expect(seeds).toHaveLength(2)
       expect(seeds.map(s => s.playerId)).toHaveLength(2)
       expect(result).toHaveLength(1)
@@ -169,8 +175,8 @@ describe('Task #15: Bracket Generation Job', () => {
 
   describe('Idempotent execution', () => {
     it('should return same matches when run twice without re-creating', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
       const first = await processBracketGenerate(
         { tournamentId },
@@ -187,13 +193,13 @@ describe('Task #15: Bracket Generation Job', () => {
       expect(first).toHaveLength(second.length)
       expect(first.map(m => m.id).sort()).toEqual(second.map(m => m.id).sort())
 
-      const allMatches = knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
+      const allMatches = await knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
       expect(allMatches).toHaveLength(1)
     })
 
     it('should not enqueue any broadcast job on either run', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
       await processBracketGenerate(
         { tournamentId },
@@ -224,8 +230,8 @@ describe('Task #15: Bracket Generation Job', () => {
     })
 
     it('should succeed after all group matches are complete', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
       const matches = await processBracketGenerate(
         { tournamentId },
@@ -269,13 +275,13 @@ describe('Task #15: Bracket Generation Job', () => {
         creatorId: 'org_123',
       })
 
-      tournamentRepo.updateStatus(zeroAdvancingTournament.id, 'registration_closed')
-      tournamentRepo.updateStatus(zeroAdvancingTournament.id, 'group_stage_active')
+      await tournamentRepo.updateStatus(zeroAdvancingTournament.id, 'registration_closed')
+      await tournamentRepo.updateStatus(zeroAdvancingTournament.id, 'group_stage_active')
 
-      groupRepo.createGroups(zeroAdvancingTournament.id, 1, 0, [player1Id, player2Id])
+      await groupRepo.createGroups(zeroAdvancingTournament.id, 1, 0, [player1Id, player2Id])
 
-      const matches = groupRepo.findMatchesByGroup(groupRepo.findGroupsByTournament(zeroAdvancingTournament.id)[0].id)
-      groupRepo.updateMatch(matches[0].id, player1Id, '6-4, 6-3')
+      const matches = await groupRepo.findMatchesByGroup((await groupRepo.findGroupsByTournament(zeroAdvancingTournament.id))[0].id)
+      await groupRepo.updateMatch(matches[0].id, player1Id, '6-4, 6-3')
 
       await expect(
         processBracketGenerate(
@@ -288,8 +294,8 @@ describe('Task #15: Bracket Generation Job', () => {
 
   describe('DLQ retry', () => {
     it('should move to failed jobs after max retries', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
       const jobId = 'bracket_test_job'
       const job = await jobQueue.add('bracket.generate', { tournamentId }, { jobId })
@@ -319,8 +325,8 @@ describe('Task #15: Bracket Generation Job', () => {
 
   describe('SSE broadcast trigger', () => {
     it('should emit bracket.published to BroadcastBus with correct payload', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
       const broadcastBus = new BroadcastBus()
       const received: Array<{ event: string; data: unknown }> = []
@@ -339,8 +345,8 @@ describe('Task #15: Bracket Generation Job', () => {
     })
 
     it('should not throw when broadcastBus is not provided', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
       await expect(
         processBracketGenerate(
@@ -353,8 +359,8 @@ describe('Task #15: Bracket Generation Job', () => {
 
   describe('Consolidation', () => {
     it('should handle deduplicated jobs correctly', async () => {
-      groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
-      groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
+      await groupRepo.updateMatch(match1Id, player1Id, '6-4, 6-3')
+      await groupRepo.updateMatch(match2Id, player3Id, '6-4, 6-2')
 
       const jobId = `bracket.generate:${tournamentId}`
 
@@ -369,7 +375,7 @@ describe('Task #15: Bracket Generation Job', () => {
       )
 
       expect(matches).toHaveLength(1)
-      expect(knockoutRepo.findKnockoutMatchesByTournament(tournamentId)).toHaveLength(1)
+      expect(await knockoutRepo.findKnockoutMatchesByTournament(tournamentId)).toHaveLength(1)
     })
   })
 })

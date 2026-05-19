@@ -1,10 +1,10 @@
 import request from 'supertest'
 import http from 'node:http'
 import type { Express } from 'express'
-import Database from 'better-sqlite3'
+import { Pool } from 'pg'
 import { AddressInfo } from 'node:net'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { BroadcastBus } from '../broadcast-bus'
@@ -14,11 +14,12 @@ import { processStandingsRecalculate } from '../workers/standings-processor'
 import { processBracketGenerate } from '../workers/bracket-processor'
 import { processEmailSend } from '../workers/email-processor'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 const ORGANIZER_ID = 'org_test'
 
-let db: Database.Database
+let db: Pool
 let app: Express
 let server: http.Server
 let tokenStore: InMemoryTokenStore
@@ -61,8 +62,12 @@ function connectSSE(server: http.Server, tournamentId: string, token: string) {
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
 
+beforeAll(async () => {
+  db = await initializeTestDb()
+})
+
 beforeEach(async () => {
-  db = openDatabase(':memory:')
+  await resetTestDb(db)
   tokenStore = new InMemoryTokenStore()
   jobQueue = new InMemoryJobQueue()
   broadcastBus = new BroadcastBus()
@@ -99,6 +104,10 @@ afterEach(async () => {
   await jobQueue.close()
 })
 
+afterAll(async () => {
+  await closeTestDb()
+})
+
 describe('Full Tournament Lifecycle', () => {
   it('completes a tournament from creation to final results', async () => {
     // Step 1: Create tournament (starts in draft status)
@@ -125,7 +134,7 @@ describe('Full Tournament Lifecycle', () => {
     expect(createRes.body.status).toBe('draft')
 
     // Step 2: Open registration (bypass draft → registration_open)
-    const updated = tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    const updated = await tournamentRepo.updateStatus(tournamentId, 'registration_open')
     expect(updated.status).toBe('registration_open')
 
     // Step 3: Register 4 players
@@ -280,7 +289,7 @@ describe('Real-Time SSE Events', () => {
       })
 
     const tournamentId = createRes.body.id
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     const player1 = await registerPlayer(tournamentId, 'sse_player1@test.com', 'SSE Player 1')
     const player2 = await registerPlayer(tournamentId, 'sse_player2@test.com', 'SSE Player 2')
@@ -370,7 +379,7 @@ describe('Real-Time SSE Events', () => {
       })
 
     const tournamentId = createRes.body.id
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     const player1 = await registerPlayer(tournamentId, 'bracket_sse1@test.com', 'Bracket SSE 1')
     const player2 = await registerPlayer(tournamentId, 'bracket_sse2@test.com', 'Bracket SSE 2')
@@ -480,7 +489,7 @@ describe('Email Notifications', () => {
 
     expect(createRes.status).toBe(201)
     const tournamentId = createRes.body.id
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     const playerEmail = 'email_test@test.com'
     const playerName = 'Email Test Player'
@@ -509,7 +518,7 @@ describe('Email Notifications', () => {
 
     expect(createRes.status).toBe(201)
     const tournamentId = createRes.body.id
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     const player1 = await registerPlayer(tournamentId, 'bracket_email1@test.com', 'Bracket Email 1')
     const player2 = await registerPlayer(tournamentId, 'bracket_email2@test.com', 'Bracket Email 2')
@@ -554,7 +563,7 @@ describe('Error Scenarios', () => {
 
     expect(createRes.status).toBe(201)
     const tournamentId = createRes.body.id
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     const player1 = await registerPlayer(tournamentId, 'deadline1@test.com', 'Deadline 1')
     const player2 = await registerPlayer(tournamentId, 'deadline2@test.com', 'Deadline 2')
@@ -612,7 +621,7 @@ describe('Error Scenarios', () => {
       })
 
     const tournamentId = createRes.body.id
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     const player1 = await registerPlayer(tournamentId, 'nonpart1@test.com', 'NonPart 1')
     const player2 = await registerPlayer(tournamentId, 'nonpart2@test.com', 'NonPart 2')
@@ -675,7 +684,7 @@ describe('Error Scenarios', () => {
       })
 
     const tournamentId = createRes.body.id
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     const player1 = await registerPlayer(tournamentId, 'incomplete1@test.com', 'Incomplete 1')
     const player2 = await registerPlayer(tournamentId, 'incomplete2@test.com', 'Incomplete 2')
@@ -734,7 +743,7 @@ describe('Error Scenarios', () => {
       })
 
     const tournamentId = createRes.body.id
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     // Try to transition directly from registration_open to COMPLETE_TOURNAMENT
     const advanceRes = await request(app)

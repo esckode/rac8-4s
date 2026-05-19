@@ -1,8 +1,7 @@
 import request from 'supertest'
-import Database from 'better-sqlite3'
+import { Pool } from 'pg'
 import { createApp } from '../app'
 import {
-  openDatabase,
   TournamentRepository,
   PlayerRepository,
   GroupRepository,
@@ -11,11 +10,12 @@ import {
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('GET /tournaments/:id/bundle - Consolidation Endpoint', () => {
-  let db: Database.Database
+  let db: Pool
   let app: any
   let tournamentsRepo: TournamentRepository
   let playerRepo: PlayerRepository
@@ -28,9 +28,13 @@ describe('GET /tournaments/:id/bundle - Consolidation Endpoint', () => {
   let playerToken: string
   let playerId: string
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
+    await resetTestDb(db)
     tokenStore = new InMemoryTokenStore()
-    db = openDatabase(':memory:')
     app = createApp({
       config: DEFAULT_APP_CONFIG,
       db,
@@ -52,7 +56,7 @@ describe('GET /tournaments/:id/bundle - Consolidation Endpoint', () => {
     organizerToken = tokenPair.accessToken
 
     // Create tournament
-    const tournament = tournamentsRepo.create({
+    const tournament = await tournamentsRepo.create({
       name: 'Test Tournament',
       sport: 'Pickleball',
       matchFormat: 'doubles',
@@ -63,7 +67,7 @@ describe('GET /tournaments/:id/bundle - Consolidation Endpoint', () => {
       creatorId: organizerId,
     })
     tournamentId = tournament.id
-    tournamentsRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentsRepo.updateStatus(tournamentId, 'registration_open')
 
     // Register a player via magic link
     const registerRes = await request(app)
@@ -75,15 +79,15 @@ describe('GET /tournaments/:id/bundle - Consolidation Endpoint', () => {
     )
 
     playerToken = verifyRes.body.playerToken
-    const player = playerRepo.findByEmail('player1@test.com')!
+    const player = (await playerRepo.findByEmail('player1@test.com'))!
     playerId = player.id
 
     // Set tournament to group_stage_active
-    tournamentsRepo.updateStatus(tournamentId, 'group_stage_active')
+    await tournamentsRepo.updateStatus(tournamentId, 'group_stage_active')
   })
 
-  afterEach(() => {
-    db.close()
+  afterAll(async () => {
+    await closeTestDb()
   })
 
   describe('Authorization', () => {

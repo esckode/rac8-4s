@@ -1,14 +1,16 @@
 import request from 'supertest'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Bracket Management', () => {
-  let db: any
+  let db: Pool
   let app: any
   let tokenStore: InMemoryTokenStore
   let tournamentRepo: TournamentRepository
@@ -21,8 +23,12 @@ describe('Bracket Management', () => {
   let firstKnockoutMatchId: string
   let players: any[] = []
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
-    db = openDatabase(':memory:')
+    await resetTestDb(db)
     tokenStore = new InMemoryTokenStore()
     app = createApp({ config: DEFAULT_APP_CONFIG, db, tokenStore, jwtConfig: STANDARD_CONFIG })
 
@@ -40,7 +46,7 @@ describe('Bracket Management', () => {
     const pastDeadline = new Date(now.getTime() - 1000 * 60 * 60).toISOString()
     const futureDeadline = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7).toISOString()
 
-    const tournament = tournamentRepo.create({
+    const tournament = await tournamentRepo.create({
       name: `Test Bracket ${Date.now()}`,
       sport: 'tennis',
       matchFormat: 'singles',
@@ -56,28 +62,32 @@ describe('Bracket Management', () => {
     // Create 4 players and register them
     players = []
     for (let i = 1; i <= 4; i++) {
-      const player = playerRepo.findOrCreatePlayerByEmail(`player${i}@test.com`, `Player ${i}`)
+      const player = await playerRepo.findOrCreatePlayerByEmail(`player${i}@test.com`, `Player ${i}`)
       players.push(player)
-      playerRepo.createRegistration(player.id, tournamentId)
+      await playerRepo.createRegistration(player.id, tournamentId)
     }
 
     // Transition tournament states properly
-    tournamentRepo.updateStatus(tournamentId, 'registration_closed')
-    tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+    await tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
 
     // Create groups and generate matches
-    const groups = groupRepo.createGroups(tournamentId, 2, 2, players.map(p => p.id))
+    const groups = await groupRepo.createGroups(tournamentId, 2, 2, players.map(p => p.id))
 
     // Submit scores for all group matches
     for (const group of groups) {
-      const matches = groupRepo.findMatchesByGroup(group.id)
+      const matches = await groupRepo.findMatchesByGroup(group.id)
       for (const match of matches) {
-        groupRepo.updateMatch(match.id, match.player1_id!, '6-4, 6-3')
+        await groupRepo.updateMatch(match.id, match.player1_id!, '6-4, 6-3')
       }
     }
 
     // Transition to group_stage_complete for bracket testing
-    tournamentRepo.updateStatus(tournamentId, 'group_stage_complete')
+    await tournamentRepo.updateStatus(tournamentId, 'group_stage_complete')
+  })
+
+  afterAll(async () => {
+    await closeTestDb()
   })
 
   describe('POST /:id/bracket/generate', () => {
@@ -95,7 +105,7 @@ describe('Bracket Management', () => {
 
     it('should fail if tournament not in group_stage_complete', async () => {
       // Create a new tournament in draft state
-      const newTournament = tournamentRepo.create({
+      const newTournament = await tournamentRepo.create({
         name: `Other Tournament ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',
@@ -168,7 +178,7 @@ describe('Bracket Management', () => {
     })
 
     it('should fail if not in group_stage_complete', async () => {
-      const newTournament = tournamentRepo.create({
+      const newTournament = await tournamentRepo.create({
         name: `Other Tournament ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',
@@ -265,7 +275,7 @@ describe('Bracket Management', () => {
       expect(publishRes.body.matches).toBeDefined()
       expect(publishRes.body.matches.length).toBeGreaterThan(0)
 
-      const updated = tournamentRepo.findById(tournamentId)!
+      const updated = (await tournamentRepo.findById(tournamentId))!
       expect(updated.status).toBe('knockout_active')
 
       firstKnockoutMatchId = publishRes.body.matches[0].id
@@ -432,7 +442,7 @@ describe('Bracket Management', () => {
 
     it('should reject when match missing players', async () => {
       // Create a bye match (no player2)
-      const byeMatch = knockoutRepo.findKnockoutMatchesByTournament(tournamentId).find(m => !m.player2_id)
+      const byeMatch = (await knockoutRepo.findKnockoutMatchesByTournament(tournamentId)).find(m => !m.player2_id)
       if (byeMatch) {
         const res = await request(app)
           .patch(`/tournaments/${tournamentId}/knockout/${byeMatch.id}/score`)
