@@ -1,5 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express'
-import Database from 'better-sqlite3'
+import { Pool } from 'pg'
 import { randomUUID } from 'node:crypto'
 import { JwtConfig, TokenStore } from './auth'
 import { AuthError, ForbiddenError, MissingTokenError } from './auth/errors'
@@ -16,7 +16,7 @@ import { QueueMonitor } from './queue-monitor'
 const httpLog = getLogger('http')
 
 export interface AppDependencies {
-  db: Database.Database
+  db: Pool
   jwtConfig: JwtConfig
   tokenStore: TokenStore
   config: AppConfig

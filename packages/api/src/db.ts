@@ -1,6 +1,4 @@
-import Database from 'better-sqlite3'
-import * as fs from 'fs'
-import * as path from 'path'
+import { Pool } from 'pg'
 
 export interface TournamentRow {
   id: string
@@ -76,68 +74,6 @@ export interface GroupMatchWithPlayers extends GroupMatchRow {
   player2_share_contact: boolean
 }
 
-export function openDatabase(filename?: string): Database.Database {
-  const db = new Database(filename)
-
-  // Create migrations tracking table if it doesn't exist
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      version TEXT UNIQUE NOT NULL,
-      executed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `)
-
-  // List of migrations to run (in order)
-  const migrations = [
-    '001_create_tournaments.sql',
-    '002_create_players.sql',
-    '003_create_groups.sql',
-    '004_create_knockout.sql',
-    '005_create_locations.sql',
-    '006_create_courts.sql',
-    '007_extend_registrations.sql',
-    '008_match_coordination.sql',
-    '009_create_user_events.sql',
-  ]
-
-  // Run migrations that haven't been executed yet
-  const migrationsDir = path.join(__dirname, '../../..', 'db', 'migrations')
-  for (const migration of migrations) {
-    // Check if migration has already been run
-    const exists = db
-      .prepare('SELECT 1 FROM schema_migrations WHERE version = ?')
-      .get(migration)
-
-    if (!exists) {
-      try {
-        const filePath = path.join(migrationsDir, migration)
-        const sql = fs.readFileSync(filePath, 'utf-8')
-
-        // Try to run the migration; if it fails due to duplicate columns, that's ok
-        try {
-          db.exec(sql)
-        } catch (execError: any) {
-          // If it's a duplicate column error, it means the column already exists
-          // This can happen if migrations were re-applied or the schema was manually modified
-          if (execError.message && execError.message.includes('duplicate column')) {
-            console.warn(`Migration ${migration} skipped - columns already exist`)
-          } else {
-            throw execError
-          }
-        }
-
-        // Record that this migration has been run
-        db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(migration)
-      } catch (error) {
-        console.error(`Failed to run migration ${migration}:`, error)
-        throw error
-      }
-    }
-  }
-
-  return db
-}
 
 export interface CreateTournamentInput {
   name: string
@@ -163,172 +99,207 @@ export interface ListOptions {
 }
 
 export class TournamentRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private pool: Pool) {}
 
-  create(input: CreateTournamentInput): TournamentRow {
+  async create(input: CreateTournamentInput): Promise<TournamentRow> {
     const id = `tournament_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const now = new Date().toISOString()
 
-    const stmt = this.db.prepare(`
-      INSERT INTO tournaments (
+    await this.pool.query(
+      `INSERT INTO public.tournaments (
         id, name, sport, match_format, creator_id, status,
         max_players, description, registration_deadline,
         group_stage_deadline, knockout_stage_deadline,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-
-    stmt.run(
-      id,
-      input.name,
-      input.sport,
-      input.matchFormat,
-      input.creatorId,
-      'draft',
-      input.maxPlayers,
-      input.description || null,
-      input.registrationDeadline,
-      input.groupStageDeadline,
-      input.knockoutStageDeadline,
-      now,
-      now
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        id,
+        input.name,
+        input.sport,
+        input.matchFormat,
+        input.creatorId,
+        'draft',
+        input.maxPlayers,
+        input.description || null,
+        input.registrationDeadline,
+        input.groupStageDeadline,
+        input.knockoutStageDeadline,
+        now,
+        now,
+      ]
     )
 
-    return this.findById(id)!
+    return (await this.findById(id))!
   }
 
-  findById(id: string): TournamentRow | undefined {
-    const stmt = this.db.prepare('SELECT * FROM tournaments WHERE id = ?')
-    return stmt.get(id) as TournamentRow | undefined
+  async findById(id: string): Promise<TournamentRow | undefined> {
+    const result = await this.pool.query('SELECT * FROM public.tournaments WHERE id = $1', [id])
+    return result.rows[0] as TournamentRow | undefined
   }
 
-  findByName(name: string): TournamentRow | undefined {
-    const stmt = this.db.prepare('SELECT * FROM tournaments WHERE name = ? AND deleted_at IS NULL')
-    return stmt.get(name) as TournamentRow | undefined
+  async findByName(name: string): Promise<TournamentRow | undefined> {
+    const result = await this.pool.query('SELECT * FROM public.tournaments WHERE name = $1 AND deleted_at IS NULL', [name])
+    return result.rows[0] as TournamentRow | undefined
   }
 
-  listByOrganizer(creatorId: string, opts: ListOptions & { status?: string } = {}): { rows: TournamentRow[]; total: number } {
+  async listByOrganizer(
+    creatorId: string,
+    opts: ListOptions & { status?: string } = {}
+  ): Promise<{ rows: TournamentRow[]; total: number }> {
     const offset = opts.offset || 0
     const limit = opts.limit || 10
 
-    let query = 'SELECT * FROM tournaments WHERE creator_id = ? AND deleted_at IS NULL'
-    const params: unknown[] = [creatorId]
+    const countParams = [creatorId]
+    let countQuery = 'SELECT COUNT(*) as count FROM public.tournaments WHERE creator_id = $1 AND deleted_at IS NULL'
 
     if (opts.status) {
-      query += ' AND status = ?'
-      params.push(opts.status)
+      countParams.push(opts.status)
+      countQuery += ` AND status = $${countParams.length}`
     }
 
-    const countStmt = this.db.prepare(query.replace('SELECT *', 'SELECT COUNT(*) as count'))
-    const countResult = countStmt.get(...params) as { count: number }
+    const countResult = await this.pool.query(countQuery, countParams)
+    const total = Number((countResult.rows[0] as { count: any }).count)
 
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    const params = [creatorId]
+    let query = 'SELECT * FROM public.tournaments WHERE creator_id = $1 AND deleted_at IS NULL'
+
+    if (opts.status) {
+      params.push(opts.status)
+      query += ` AND status = $${params.length}`
+    }
+
     params.push(limit, offset)
+    query += ` ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`
 
-    const stmt = this.db.prepare(query)
-    const rows = stmt.all(...params) as TournamentRow[]
+    const result = await this.pool.query(query, params)
+    const rows = result.rows as TournamentRow[]
 
-    return { rows, total: countResult.count }
+    return { rows, total }
   }
 
-  listPublic(opts: ListOptions & { sport?: string } = {}): { rows: TournamentRow[]; total: number } {
+  async listPublic(
+    opts: ListOptions & { sport?: string } = {}
+  ): Promise<{ rows: TournamentRow[]; total: number }> {
     const offset = opts.offset || 0
     const limit = opts.limit || 10
     const publishedStatuses = ['registration_open', 'group_stage_active', 'group_stage_complete', 'knockout_active']
 
-    let query = `SELECT * FROM tournaments WHERE status IN (${publishedStatuses.map(() => '?').join(',')}) AND deleted_at IS NULL`
-    const params: unknown[] = publishedStatuses
+    const params = [...publishedStatuses]
+    const placeholders = publishedStatuses.map((_, i) => `$${i + 1}`).join(',')
+    let query = `SELECT * FROM public.tournaments WHERE status IN (${placeholders}) AND deleted_at IS NULL`
 
     if (opts.sport) {
-      query += ' AND sport = ?'
       params.push(opts.sport)
+      query += ` AND sport = $${params.length}`
     }
 
-    const countStmt = this.db.prepare(query.replace('SELECT *', 'SELECT COUNT(*) as count'))
-    const countResult = countStmt.get(...params) as { count: number }
+    const countParams = [...params]
+    const countResult = await this.pool.query(
+      query.replace('SELECT *', 'SELECT COUNT(*) as count'),
+      countParams
+    )
+    const total = parseInt((countResult.rows[0] as { count: string }).count)
 
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
     params.push(limit, offset)
+    query += ` ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`
 
-    const stmt = this.db.prepare(query)
-    const rows = stmt.all(...params) as TournamentRow[]
+    const result = await this.pool.query(query, params)
+    const rows = result.rows as TournamentRow[]
 
-    return { rows, total: countResult.count }
+    return { rows, total }
   }
 
-  listAvailable(opts: ListOptions & { sport?: string } = {}): { rows: TournamentRow[]; total: number } {
+  async listAvailable(
+    opts: ListOptions & { sport?: string } = {}
+  ): Promise<{ rows: TournamentRow[]; total: number }> {
     const offset = opts.offset || 0
     const limit = opts.limit || 20
 
-    let query = `SELECT * FROM tournaments WHERE status = 'registration_open' AND deleted_at IS NULL`
-    const params: unknown[] = []
+    const params = ['registration_open']
+    let query = `SELECT * FROM public.tournaments WHERE status = $1 AND deleted_at IS NULL`
 
     if (opts.sport) {
-      query += ' AND sport = ?'
       params.push(opts.sport)
+      query += ` AND sport = $${params.length}`
     }
 
-    const countStmt = this.db.prepare(query.replace('SELECT *', 'SELECT COUNT(*) as count'))
-    const countResult = countStmt.get(...params) as { count: number }
+    const countParams = [...params]
+    const countResult = await this.pool.query(
+      query.replace('SELECT *', 'SELECT COUNT(*) as count'),
+      countParams
+    )
+    const total = parseInt((countResult.rows[0] as { count: string }).count)
 
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
     params.push(limit, offset)
+    query += ` ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`
 
-    const stmt = this.db.prepare(query)
-    const rows = stmt.all(...params) as TournamentRow[]
+    const result = await this.pool.query(query, params)
+    const rows = result.rows as TournamentRow[]
 
-    return { rows, total: countResult.count }
+    return { rows, total }
   }
 
-  update(id: string, input: UpdateTournamentInput): TournamentRow {
+  async update(id: string, input: UpdateTournamentInput): Promise<TournamentRow> {
     const updates: string[] = []
     const values: unknown[] = []
+    let paramIndex = 1
 
     if (input.name !== undefined) {
-      updates.push('name = ?')
+      updates.push(`name = $${paramIndex}`)
       values.push(input.name)
+      paramIndex++
     }
     if (input.maxPlayers !== undefined) {
-      updates.push('max_players = ?')
+      updates.push(`max_players = $${paramIndex}`)
       values.push(input.maxPlayers)
+      paramIndex++
     }
     if (input.description !== undefined) {
-      updates.push('description = ?')
+      updates.push(`description = $${paramIndex}`)
       values.push(input.description)
+      paramIndex++
     }
 
-    updates.push('updated_at = ?')
+    updates.push(`updated_at = $${paramIndex}`)
     values.push(new Date().toISOString())
+    paramIndex++
+
     values.push(id)
 
-    const stmt = this.db.prepare(`UPDATE tournaments SET ${updates.join(', ')} WHERE id = ?`)
-    stmt.run(...values)
+    await this.pool.query(
+      `UPDATE public.tournaments SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+      values
+    )
 
-    return this.findById(id)!
+    return (await this.findById(id))!
   }
 
-  updateStatus(id: string, status: string): TournamentRow {
-    const stmt = this.db.prepare('UPDATE tournaments SET status = ?, updated_at = ? WHERE id = ?')
-    stmt.run(status, new Date().toISOString(), id)
-    return this.findById(id)!
+  async updateStatus(id: string, status: string): Promise<TournamentRow> {
+    await this.pool.query(
+      'UPDATE public.tournaments SET status = $1, updated_at = $2 WHERE id = $3',
+      [status, new Date().toISOString(), id]
+    )
+    return (await this.findById(id))!
   }
 
-  softDelete(id: string): void {
-    const stmt = this.db.prepare('UPDATE tournaments SET deleted_at = ? WHERE id = ?')
-    stmt.run(new Date().toISOString(), id)
+  async softDelete(id: string): Promise<void> {
+    await this.pool.query(
+      'UPDATE public.tournaments SET deleted_at = $1 WHERE id = $2',
+      [new Date().toISOString(), id]
+    )
   }
 }
 
 export class PlayerRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private pool: Pool) {}
 
-  findOrCreatePlayerByEmail(
+  async findOrCreatePlayerByEmail(
     email: string,
     name: string,
     phone?: string,
     preferredContact?: string
-  ): PlayerRow {
-    const existing = this.findByEmail(email)
+  ): Promise<PlayerRow> {
+    const existing = await this.findByEmail(email)
     if (existing) {
       return existing
     }
@@ -336,285 +307,276 @@ export class PlayerRepository {
     const id = `player_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const now = new Date().toISOString()
 
-    this.db
-      .prepare(
-        `
-      INSERT INTO players (id, email, name, phone, preferred_contact, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `
-      )
-      .run(id, email, name, phone || null, preferredContact || null, now, now)
+    await this.pool.query(
+      `INSERT INTO public.players (id, email, name, phone, preferred_contact, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, email, name, phone || null, preferredContact || null, now, now]
+    )
 
-    return this.findById(id)!
+    return (await this.findById(id))!
   }
 
-  findByEmail(email: string): PlayerRow | undefined {
-    const stmt = this.db.prepare('SELECT * FROM players WHERE email = ?')
-    const row = stmt.get(email) as any
+  async findByEmail(email: string): Promise<PlayerRow | undefined> {
+    const result = await this.pool.query('SELECT * FROM public.players WHERE email = $1', [email])
+    const row = result.rows[0] as any
     if (!row) return undefined
     return { ...row, share_contact: !!row.share_contact }
   }
 
-  createRegistration(playerId: string, tournamentId: string): RegistrationRow {
+  async createRegistration(playerId: string, tournamentId: string): Promise<RegistrationRow> {
     const id = `reg_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const now = new Date().toISOString()
 
-    this.db
-      .prepare(
-        `
-      INSERT INTO player_registrations (id, player_id, tournament_id, registered_at)
-      VALUES (?, ?, ?, ?)
-    `
-      )
-      .run(id, playerId, tournamentId, now)
-
-    return this.findRegistration(playerId, tournamentId)!
-  }
-
-  findRegistration(playerId: string, tournamentId: string): RegistrationRow | undefined {
-    const stmt = this.db.prepare(
-      'SELECT * FROM player_registrations WHERE player_id = ? AND tournament_id = ?'
+    await this.pool.query(
+      `INSERT INTO public.player_registrations (id, player_id, tournament_id, registered_at)
+       VALUES ($1, $2, $3, $4)`,
+      [id, playerId, tournamentId, now]
     )
-    return stmt.get(playerId, tournamentId) as RegistrationRow | undefined
+
+    return (await this.findRegistration(playerId, tournamentId))!
   }
 
-  countRegistrationsForTournament(tournamentId: string): number {
-    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM player_registrations WHERE tournament_id = ?')
-    const result = stmt.get(tournamentId) as { count: number }
-    return result.count
+  async findRegistration(playerId: string, tournamentId: string): Promise<RegistrationRow | undefined> {
+    const result = await this.pool.query(
+      'SELECT * FROM public.player_registrations WHERE player_id = $1 AND tournament_id = $2',
+      [playerId, tournamentId]
+    )
+    return result.rows[0] as RegistrationRow | undefined
   }
 
-  listTournamentsByPlayer(playerId: string, opts: ListOptions = {}): { rows: TournamentRow[]; total: number } {
+  async countRegistrationsForTournament(tournamentId: string): Promise<number> {
+    const result = await this.pool.query(
+      'SELECT COUNT(*) as count FROM public.player_registrations WHERE tournament_id = $1',
+      [tournamentId]
+    )
+    return Number((result.rows[0] as { count: any }).count)
+  }
+
+  async listTournamentsByPlayer(playerId: string, opts: ListOptions = {}): Promise<{ rows: TournamentRow[]; total: number }> {
     const offset = opts.offset || 0
     const limit = opts.limit || 10
 
-    const query = `
-      SELECT DISTINCT t.* FROM tournaments t
-      JOIN player_registrations pr ON pr.tournament_id = t.id
-      WHERE pr.player_id = ? AND t.deleted_at IS NULL
-      ORDER BY t.created_at DESC
-      LIMIT ? OFFSET ?
-    `
-
-    const countStmt = this.db.prepare(
-      `
-      SELECT COUNT(DISTINCT t.id) as count FROM tournaments t
-      JOIN player_registrations pr ON pr.tournament_id = t.id
-      WHERE pr.player_id = ? AND t.deleted_at IS NULL
-    `
+    const countResult = await this.pool.query(
+      `SELECT COUNT(DISTINCT t.id) as count FROM public.tournaments t
+       JOIN public.player_registrations pr ON pr.tournament_id = t.id
+       WHERE pr.player_id = $1 AND t.deleted_at IS NULL`,
+      [playerId]
     )
-    const countResult = countStmt.get(playerId) as { count: number }
+    const total = Number((countResult.rows[0] as { count: any }).count)
 
-    const stmt = this.db.prepare(query)
-    const rows = stmt.all(playerId, limit, offset) as TournamentRow[]
+    const result = await this.pool.query(
+      `SELECT DISTINCT t.* FROM public.tournaments t
+       JOIN public.player_registrations pr ON pr.tournament_id = t.id
+       WHERE pr.player_id = $1 AND t.deleted_at IS NULL
+       ORDER BY t.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [playerId, limit, offset]
+    )
+    const rows = result.rows as TournamentRow[]
 
-    return { rows, total: countResult.count }
+    return { rows, total }
   }
 
-  findRegistrationById(registrationId: string): RegistrationRow | undefined {
-    const stmt = this.db.prepare('SELECT * FROM player_registrations WHERE id = ?')
-    const row = stmt.get(registrationId) as any
+  async findRegistrationById(registrationId: string): Promise<RegistrationRow | undefined> {
+    const result = await this.pool.query(
+      'SELECT * FROM public.player_registrations WHERE id = $1',
+      [registrationId]
+    )
+    const row = result.rows[0] as any
     if (!row) return undefined
     return { ...row, partner_confirmed: !!row.partner_confirmed } as RegistrationRow
   }
 
-  findRegistrationsByTournament(tournamentId: string, opts: ListOptions = {}): { rows: RegistrationRow[]; total: number } {
+  async findRegistrationsByTournament(tournamentId: string, opts: ListOptions = {}): Promise<{ rows: RegistrationRow[]; total: number }> {
     const offset = opts.offset || 0
     const limit = opts.limit || 50
 
-    const countStmt = this.db.prepare('SELECT COUNT(*) as count FROM player_registrations WHERE tournament_id = ?')
-    const countResult = countStmt.get(tournamentId) as { count: number }
+    const countResult = await this.pool.query(
+      'SELECT COUNT(*) as count FROM public.player_registrations WHERE tournament_id = $1',
+      [tournamentId]
+    )
+    const total = Number((countResult.rows[0] as { count: any }).count)
 
-    const stmt = this.db.prepare(`
-      SELECT * FROM player_registrations
-      WHERE tournament_id = ?
-      ORDER BY registered_at DESC
-      LIMIT ? OFFSET ?
-    `)
-    const rows = (stmt.all(tournamentId, limit, offset) as any[]).map(r => ({ ...r, partner_confirmed: !!r.partner_confirmed })) as RegistrationRow[]
+    const result = await this.pool.query(
+      `SELECT * FROM public.player_registrations
+       WHERE tournament_id = $1
+       ORDER BY registered_at DESC
+       LIMIT $2 OFFSET $3`,
+      [tournamentId, limit, offset]
+    )
+    const rows = (result.rows as any[]).map(r => ({ ...r, partner_confirmed: !!r.partner_confirmed })) as RegistrationRow[]
 
-    return { rows, total: countResult.count }
+    return { rows, total }
   }
 
-  updateRegistrationWithPartner(registrationId: string, partnerId: string): RegistrationRow {
-    const stmt = this.db.prepare(`
-      UPDATE player_registrations
-      SET partner_id = ?, status = ?, registered_at = ?
-      WHERE id = ?
-    `)
+  async updateRegistrationWithPartner(registrationId: string, partnerId: string): Promise<RegistrationRow> {
     const now = new Date().toISOString()
-    stmt.run(partnerId, 'pending_partner_confirm', now, registrationId)
-    return this.findRegistrationById(registrationId)!
+    await this.pool.query(
+      `UPDATE public.player_registrations
+       SET partner_id = $1, status = $2, registered_at = $3
+       WHERE id = $4`,
+      [partnerId, 'pending_partner_confirm', now, registrationId]
+    )
+    return (await this.findRegistrationById(registrationId))!
   }
 
-  confirmPartner(registrationId: string): RegistrationRow {
-    const stmt = this.db.prepare(`
-      UPDATE player_registrations
-      SET partner_confirmed = ?, status = ?, confirmed_at = ?
-      WHERE id = ?
-    `)
+  async confirmPartner(registrationId: string): Promise<RegistrationRow> {
     const now = new Date().toISOString()
-    stmt.run(1, 'registered', now, registrationId)
-    return this.findRegistrationById(registrationId)!
+    await this.pool.query(
+      `UPDATE public.player_registrations
+       SET partner_confirmed = $1, status = $2, confirmed_at = $3
+       WHERE id = $4`,
+      [true, 'registered', now, registrationId]
+    )
+    return (await this.findRegistrationById(registrationId))!
   }
 
-  updateRegistrationStatus(registrationId: string, status: string): RegistrationRow {
-    const stmt = this.db.prepare(`
-      UPDATE player_registrations SET status = ? WHERE id = ?
-    `)
-    stmt.run(status, registrationId)
-    return this.findRegistrationById(registrationId)!
+  async updateRegistrationStatus(registrationId: string, status: string): Promise<RegistrationRow> {
+    await this.pool.query(
+      `UPDATE public.player_registrations SET status = $1 WHERE id = $2`,
+      [status, registrationId]
+    )
+    return (await this.findRegistrationById(registrationId))!
   }
 
-  withdrawRegistration(registrationId: string, isBeforeDeadline: boolean): RegistrationRow {
+  async withdrawRegistration(registrationId: string, isBeforeDeadline: boolean): Promise<RegistrationRow> {
     const now = new Date().toISOString()
     const status = isBeforeDeadline ? 'withdrawn' : 'withdrawal_pending'
-    const stmt = this.db.prepare(`
-      UPDATE player_registrations
-      SET status = ?, withdrawal_requested_at = ?
-      WHERE id = ?
-    `)
-    stmt.run(status, now, registrationId)
-    return this.findRegistrationById(registrationId)!
+    await this.pool.query(
+      `UPDATE public.player_registrations
+       SET status = $1, withdrawal_requested_at = $2
+       WHERE id = $3`,
+      [status, now, registrationId]
+    )
+    return (await this.findRegistrationById(registrationId))!
   }
 
-  findById(playerId: string): PlayerRow | undefined {
-    const stmt = this.db.prepare('SELECT * FROM players WHERE id = ?')
-    const row = stmt.get(playerId) as any
+  async findById(playerId: string): Promise<PlayerRow | undefined> {
+    const result = await this.pool.query('SELECT * FROM public.players WHERE id = $1', [playerId])
+    const row = result.rows[0] as any
     if (!row) return undefined
     return { ...row, share_contact: !!row.share_contact }
   }
 
-  updateShareContact(playerId: string, shareContact: boolean): PlayerRow {
+  async updateShareContact(playerId: string, shareContact: boolean): Promise<PlayerRow> {
     const now = new Date().toISOString()
-    const stmt = this.db.prepare(`
-      UPDATE players SET share_contact = ?, updated_at = ? WHERE id = ?
-    `)
-    stmt.run(shareContact ? 1 : 0, now, playerId)
-    return this.findById(playerId)!
+    await this.pool.query(
+      `UPDATE public.players SET share_contact = $1, updated_at = $2 WHERE id = $3`,
+      [shareContact, now, playerId]
+    )
+    return (await this.findById(playerId))!
   }
 }
 
 export class GroupRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private pool: Pool) {}
 
-  createGroups(tournamentId: string, numGroups: number, advancingCount: number, playerIds: string[]): GroupRow[] {
-    const groupIds: string[] = []
-    const now = new Date().toISOString()
+  async createGroups(tournamentId: string, numGroups: number, advancingCount: number, playerIds: string[]): Promise<GroupRow[]> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
 
-    // Create groups
-    for (let i = 1; i <= numGroups; i++) {
-      const groupId = `group_${Date.now()}_${Math.random().toString(36).slice(2)}`
-      groupIds.push(groupId)
+      const groupIds: string[] = []
+      const now = new Date().toISOString()
 
-      const stmt = this.db.prepare(`
-        INSERT INTO groups (id, tournament_id, name, advancing_count, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      `)
-      stmt.run(groupId, tournamentId, `Group ${String.fromCharCode(64 + i)}`, advancingCount, now)
-    }
+      // Create groups
+      for (let i = 1; i <= numGroups; i++) {
+        const groupId = `group_${Date.now()}_${Math.random().toString(36).slice(2)}`
+        groupIds.push(groupId)
 
-    // Shuffle and distribute players evenly
-    const shuffled = [...playerIds].sort(() => Math.random() - 0.5)
-    const playersPerGroup = Math.ceil(shuffled.length / numGroups)
-
-    for (let i = 0; i < numGroups; i++) {
-      const groupId = groupIds[i]
-      const start = i * playersPerGroup
-      const end = Math.min(start + playersPerGroup, shuffled.length)
-      const groupPlayers = shuffled.slice(start, end)
-
-      // Add players to group
-      const memberStmt = this.db.prepare(`
-        INSERT INTO group_memberships (group_id, player_id)
-        VALUES (?, ?)
-      `)
-
-      // Generate round-robin matches for this group
-      const matchStmt = this.db.prepare(`
-        INSERT INTO group_matches (id, group_id, tournament_id, player1_id, player2_id, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-
-      // Add members and generate matches
-      for (const playerId of groupPlayers) {
-        memberStmt.run(groupId, playerId)
+        await client.query(
+          `INSERT INTO public.groups (id, tournament_id, name, advancing_count, created_at)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [groupId, tournamentId, `Group ${String.fromCharCode(64 + i)}`, advancingCount, now]
+        )
       }
 
-      // Generate round-robin: each player plays every other player once
-      for (let j = 0; j < groupPlayers.length; j++) {
-        for (let k = j + 1; k < groupPlayers.length; k++) {
-          const matchId = `match_${Date.now()}_${Math.random().toString(36).slice(2)}`
-          matchStmt.run(matchId, groupId, tournamentId, groupPlayers[j], groupPlayers[k], 'pending', now, now)
+      // Shuffle and distribute players evenly
+      const shuffled = [...playerIds].sort(() => Math.random() - 0.5)
+      const playersPerGroup = Math.ceil(shuffled.length / numGroups)
+
+      for (let i = 0; i < numGroups; i++) {
+        const groupId = groupIds[i]
+        const start = i * playersPerGroup
+        const end = Math.min(start + playersPerGroup, shuffled.length)
+        const groupPlayers = shuffled.slice(start, end)
+
+        // Add members and generate matches
+        for (const playerId of groupPlayers) {
+          await client.query(
+            `INSERT INTO public.group_memberships (group_id, player_id)
+             VALUES ($1, $2)`,
+            [groupId, playerId]
+          )
+        }
+
+        // Generate round-robin: each player plays every other player once
+        for (let j = 0; j < groupPlayers.length; j++) {
+          for (let k = j + 1; k < groupPlayers.length; k++) {
+            const matchId = `match_${Date.now()}_${Math.random().toString(36).slice(2)}`
+            await client.query(
+              `INSERT INTO public.group_matches (id, group_id, tournament_id, player1_id, player2_id, status, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+              [matchId, groupId, tournamentId, groupPlayers[j], groupPlayers[k], 'pending', now, now]
+            )
+          }
         }
       }
+
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
     }
 
     return this.findGroupsByTournament(tournamentId)
   }
 
-  findGroupsByTournament(tournamentId: string): GroupRow[] {
-    const stmt = this.db.prepare('SELECT * FROM groups WHERE tournament_id = ? ORDER BY name')
-    return stmt.all(tournamentId) as GroupRow[]
+  async findGroupsByTournament(tournamentId: string): Promise<GroupRow[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM public.groups WHERE tournament_id = $1 ORDER BY name',
+      [tournamentId]
+    )
+    return result.rows as GroupRow[]
   }
 
-  findGroupById(groupId: string): GroupRow | undefined {
-    const stmt = this.db.prepare('SELECT * FROM groups WHERE id = ?')
-    return stmt.get(groupId) as GroupRow | undefined
+  async findGroupById(groupId: string): Promise<GroupRow | undefined> {
+    const result = await this.pool.query('SELECT * FROM public.groups WHERE id = $1', [groupId])
+    return result.rows[0] as GroupRow | undefined
   }
 
-  findMatchesByGroup(groupId: string): GroupMatchRow[] {
-    const stmt = this.db.prepare('SELECT * FROM group_matches WHERE group_id = ? ORDER BY created_at')
-    return stmt.all(groupId) as GroupMatchRow[]
+  async findMatchesByGroup(groupId: string): Promise<GroupMatchRow[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM public.group_matches WHERE group_id = $1 ORDER BY created_at',
+      [groupId]
+    )
+    return result.rows as GroupMatchRow[]
   }
 
-  countPendingMatchesByTournament(tournamentId: string): number {
-    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM group_matches WHERE tournament_id = ? AND status = ?')
-    const result = stmt.get(tournamentId, 'pending') as { count: number }
-    return result.count
+  async countPendingMatchesByTournament(tournamentId: string): Promise<number> {
+    const result = await this.pool.query(
+      'SELECT COUNT(*) as count FROM public.group_matches WHERE tournament_id = $1 AND status = $2',
+      [tournamentId, 'pending']
+    )
+    return Number((result.rows[0] as { count: any }).count)
   }
 
-  findMembersByGroup(groupId: string): PlayerRow[] {
-    const stmt = this.db.prepare(`
-      SELECT p.* FROM players p
-      JOIN group_memberships gm ON gm.player_id = p.id
-      WHERE gm.group_id = ?
-      ORDER BY p.name
-    `)
-    return stmt.all(groupId) as PlayerRow[]
+  async findMembersByGroup(groupId: string): Promise<PlayerRow[]> {
+    const result = await this.pool.query(
+      `SELECT p.* FROM public.players p
+       JOIN public.group_memberships gm ON gm.player_id = p.id
+       WHERE gm.group_id = $1
+       ORDER BY p.name`,
+      [groupId]
+    )
+    return result.rows as PlayerRow[]
   }
 
-  findMatchById(matchId: string): GroupMatchRow | undefined {
-    const stmt = this.db.prepare('SELECT * FROM group_matches WHERE id = ?')
-    const row = stmt.get(matchId) as any
-    if (!row) return undefined
-    return {
-      ...row,
-      player1_confirmed: row.player1_confirmed === 1 || row.player1_confirmed === true,
-      player2_confirmed: row.player2_confirmed === 1 || row.player2_confirmed === true,
-    }
-  }
-
-  updateMatch(matchId: string, winnerId: string, score: string): GroupMatchRow {
-    const now = new Date().toISOString()
-    const stmt = this.db.prepare(`
-      UPDATE group_matches SET winner_id = ?, score = ?, status = 'completed', updated_at = ? WHERE id = ?
-    `)
-    stmt.run(winnerId, score, now, matchId)
-    return this.findMatchById(matchId)!
-  }
-
-  findMatchByIdWithPlayers(matchId: string): GroupMatchWithPlayers | undefined {
-    const stmt = this.db.prepare(`
-      SELECT gm.*,
-             p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
-             p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
-      FROM group_matches gm
-      JOIN players p1 ON gm.player1_id = p1.id
-      JOIN players p2 ON gm.player2_id = p2.id
-      WHERE gm.id = ?
-    `)
-    const row = stmt.get(matchId) as any
+  async findMatchById(matchId: string): Promise<GroupMatchRow | undefined> {
+    const result = await this.pool.query('SELECT * FROM public.group_matches WHERE id = $1', [matchId])
+    const row = result.rows[0] as any
     if (!row) return undefined
     return {
       ...row,
@@ -623,37 +585,68 @@ export class GroupRepository {
     }
   }
 
-  findMatchesByPlayer(tournamentId: string, playerId: string): GroupMatchWithPlayers[] {
-    const stmt = this.db.prepare(`
-      SELECT gm.*,
-             p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
-             p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
-      FROM group_matches gm
-      JOIN players p1 ON gm.player1_id = p1.id
-      JOIN players p2 ON gm.player2_id = p2.id
-      WHERE gm.tournament_id = ? AND (gm.player1_id = ? OR gm.player2_id = ?)
-      ORDER BY gm.created_at
-    `)
-    const rows = stmt.all(tournamentId, playerId, playerId) as any[]
-    return rows.map(row => ({
+  async updateMatch(matchId: string, winnerId: string, score: string): Promise<GroupMatchRow> {
+    const now = new Date().toISOString()
+    await this.pool.query(
+      `UPDATE public.group_matches SET winner_id = $1, score = $2, status = $3, updated_at = $4 WHERE id = $5`,
+      [winnerId, score, 'completed', now, matchId]
+    )
+    return (await this.findMatchById(matchId))!
+  }
+
+  async findMatchByIdWithPlayers(matchId: string): Promise<GroupMatchWithPlayers | undefined> {
+    const result = await this.pool.query(
+      `SELECT gm.*,
+              p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
+              p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
+       FROM public.group_matches gm
+       JOIN public.players p1 ON gm.player1_id = p1.id
+       JOIN public.players p2 ON gm.player2_id = p2.id
+       WHERE gm.id = $1`,
+      [matchId]
+    )
+    const row = result.rows[0] as any
+    if (!row) return undefined
+    return {
+      ...row,
+      player1_confirmed: !!row.player1_confirmed,
+      player2_confirmed: !!row.player2_confirmed,
+    }
+  }
+
+  async findMatchesByPlayer(tournamentId: string, playerId: string): Promise<GroupMatchWithPlayers[]> {
+    const result = await this.pool.query(
+      `SELECT gm.*,
+              p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
+              p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
+       FROM public.group_matches gm
+       JOIN public.players p1 ON gm.player1_id = p1.id
+       JOIN public.players p2 ON gm.player2_id = p2.id
+       WHERE gm.tournament_id = $1 AND (gm.player1_id = $2 OR gm.player2_id = $3)
+       ORDER BY gm.created_at`,
+      [tournamentId, playerId, playerId]
+    )
+    return (result.rows as any[]).map(row => ({
       ...row,
       player1_confirmed: !!row.player1_confirmed,
       player2_confirmed: !!row.player2_confirmed,
     }))
   }
 
-  confirmMatch(matchId: string, position: 'player1' | 'player2'): GroupMatchRow {
+  async confirmMatch(matchId: string, position: 'player1' | 'player2'): Promise<GroupMatchRow> {
     const now = new Date().toISOString()
     if (position === 'player1') {
-      this.db
-        .prepare('UPDATE group_matches SET player1_confirmed = 1, player1_confirmed_at = ?, updated_at = ? WHERE id = ?')
-        .run(now, now, matchId)
+      await this.pool.query(
+        'UPDATE public.group_matches SET player1_confirmed = $1, player1_confirmed_at = $2, updated_at = $3 WHERE id = $4',
+        [true, now, now, matchId]
+      )
     } else {
-      this.db
-        .prepare('UPDATE group_matches SET player2_confirmed = 1, player2_confirmed_at = ?, updated_at = ? WHERE id = ?')
-        .run(now, now, matchId)
+      await this.pool.query(
+        'UPDATE public.group_matches SET player2_confirmed = $1, player2_confirmed_at = $2, updated_at = $3 WHERE id = $4',
+        [true, now, now, matchId]
+      )
     }
-    return this.findMatchById(matchId)!
+    return (await this.findMatchById(matchId))!
   }
 }
 
@@ -707,80 +700,109 @@ export interface CourtRow {
 }
 
 export class KnockoutRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private pool: Pool) {}
 
-  setSeeds(tournamentId: string, seeds: Array<{ playerId: string; seedPosition: number }>): void {
-    const deleteStmt = this.db.prepare('DELETE FROM bracket_seeds WHERE tournament_id = ?')
-    deleteStmt.run(tournamentId)
+  async setSeeds(tournamentId: string, seeds: Array<{ playerId: string; seedPosition: number }>): Promise<void> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query('DELETE FROM public.bracket_seeds WHERE tournament_id = $1', [tournamentId])
 
-    const insertStmt = this.db.prepare('INSERT INTO bracket_seeds (tournament_id, seed_position, player_id) VALUES (?, ?, ?)')
-    for (const seed of seeds) {
-      insertStmt.run(tournamentId, seed.seedPosition, seed.playerId)
+      for (const seed of seeds) {
+        await client.query(
+          'INSERT INTO public.bracket_seeds (tournament_id, seed_position, player_id) VALUES ($1, $2, $3)',
+          [tournamentId, seed.seedPosition, seed.playerId]
+        )
+      }
+
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
     }
   }
 
-  getSeeds(tournamentId: string): Array<{ playerId: string; seedPosition: number }> {
-    const rows = this.db.prepare('SELECT * FROM bracket_seeds WHERE tournament_id = ? ORDER BY seed_position').all(tournamentId) as Array<{
-      tournament_id: string
-      seed_position: number
-      player_id: string
-    }>
-    return rows.map((r) => ({ playerId: r.player_id, seedPosition: r.seed_position }))
+  async getSeeds(tournamentId: string): Promise<Array<{ playerId: string; seedPosition: number }>> {
+    const result = await this.pool.query(
+      'SELECT * FROM public.bracket_seeds WHERE tournament_id = $1 ORDER BY seed_position',
+      [tournamentId]
+    )
+    return (result.rows as Array<{ tournament_id: string; seed_position: number; player_id: string }>).map((r) => ({
+      playerId: r.player_id,
+      seedPosition: r.seed_position,
+    }))
   }
 
-  createKnockoutMatches(tournamentId: string, bracket: any, seedMap: Map<number, string>): KnockoutMatchRow[] {
-    const now = new Date().toISOString()
-    const insertStmt = this.db.prepare(`
-      INSERT INTO knockout_matches (id, tournament_id, round, position, player1_id, player2_id, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
+  async createKnockoutMatches(tournamentId: string, bracket: any, seedMap: Map<number, string>): Promise<KnockoutMatchRow[]> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
 
-    for (const round of bracket.rounds) {
-      for (const match of round.matches) {
-        const id = `km_${Date.now()}_${Math.random().toString(36).slice(2)}`
-        const player1Id = match.player1 ? seedMap.get(parseInt(match.player1.replace('seed_', ''))) ?? null : null
-        const player2Id = match.player2 ? seedMap.get(parseInt(match.player2.replace('seed_', ''))) ?? null : null
-        const status = player2Id === null && player1Id !== null ? 'bye' : 'pending'
-        insertStmt.run(id, tournamentId, match.round, match.position, player1Id, player2Id, status, now, now)
+      const now = new Date().toISOString()
+
+      for (const round of bracket.rounds) {
+        for (const match of round.matches) {
+          const id = `km_${Date.now()}_${Math.random().toString(36).slice(2)}`
+          const player1Id = match.player1 ? seedMap.get(parseInt(match.player1.replace('seed_', ''))) ?? null : null
+          const player2Id = match.player2 ? seedMap.get(parseInt(match.player2.replace('seed_', ''))) ?? null : null
+          const status = player2Id === null && player1Id !== null ? 'bye' : 'pending'
+          await client.query(
+            `INSERT INTO public.knockout_matches (id, tournament_id, round, position, player1_id, player2_id, status, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [id, tournamentId, match.round, match.position, player1Id, player2Id, status, now, now]
+          )
+        }
       }
+
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
     }
 
     return this.findKnockoutMatchesByTournament(tournamentId)
   }
 
-  findKnockoutMatchesByTournament(tournamentId: string): KnockoutMatchRow[] {
-    const rows = this.db.prepare('SELECT * FROM knockout_matches WHERE tournament_id = ? ORDER BY round, position').all(tournamentId)
-    return rows as KnockoutMatchRow[]
+  async findKnockoutMatchesByTournament(tournamentId: string): Promise<KnockoutMatchRow[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM public.knockout_matches WHERE tournament_id = $1 ORDER BY round, position',
+      [tournamentId]
+    )
+    return result.rows as KnockoutMatchRow[]
   }
 
-  findKnockoutMatchById(matchId: string): KnockoutMatchRow | undefined {
-    const row = this.db.prepare('SELECT * FROM knockout_matches WHERE id = ?').get(matchId) as any
+  async findKnockoutMatchById(matchId: string): Promise<KnockoutMatchRow | undefined> {
+    const result = await this.pool.query('SELECT * FROM public.knockout_matches WHERE id = $1', [matchId])
+    const row = result.rows[0] as any
     if (!row) return undefined
     return { ...row, player1_confirmed: !!row.player1_confirmed, player2_confirmed: !!row.player2_confirmed }
   }
 
-  updateKnockoutMatch(matchId: string, winnerId: string, score: string): KnockoutMatchRow {
+  async updateKnockoutMatch(matchId: string, winnerId: string, score: string): Promise<KnockoutMatchRow> {
     const now = new Date().toISOString()
-    this.db.prepare(`UPDATE knockout_matches SET winner_id = ?, score = ?, status = 'completed', updated_at = ? WHERE id = ?`).run(
-      winnerId,
-      score,
-      now,
-      matchId
+    await this.pool.query(
+      'UPDATE public.knockout_matches SET winner_id = $1, score = $2, status = $3, updated_at = $4 WHERE id = $5',
+      [winnerId, score, 'completed', now, matchId]
     )
-    return this.findKnockoutMatchById(matchId)!
+    return (await this.findKnockoutMatchById(matchId))!
   }
 
-  findKnockoutMatchByIdWithPlayers(matchId: string): KnockoutMatchWithPlayers | undefined {
-    const stmt = this.db.prepare(`
-      SELECT km.*,
-             p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
-             p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
-      FROM knockout_matches km
-      LEFT JOIN players p1 ON km.player1_id = p1.id
-      LEFT JOIN players p2 ON km.player2_id = p2.id
-      WHERE km.id = ?
-    `)
-    const row = stmt.get(matchId) as any
+  async findKnockoutMatchByIdWithPlayers(matchId: string): Promise<KnockoutMatchWithPlayers | undefined> {
+    const result = await this.pool.query(
+      `SELECT km.*,
+              p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
+              p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
+       FROM public.knockout_matches km
+       LEFT JOIN public.players p1 ON km.player1_id = p1.id
+       LEFT JOIN public.players p2 ON km.player2_id = p2.id
+       WHERE km.id = $1`,
+      [matchId]
+    )
+    const row = result.rows[0] as any
     if (!row) return undefined
     return {
       ...row,
@@ -789,37 +811,39 @@ export class KnockoutRepository {
     }
   }
 
-  findKnockoutMatchesByPlayer(tournamentId: string, playerId: string): KnockoutMatchWithPlayers[] {
-    const stmt = this.db.prepare(`
-      SELECT km.*,
-             p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
-             p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
-      FROM knockout_matches km
-      LEFT JOIN players p1 ON km.player1_id = p1.id
-      LEFT JOIN players p2 ON km.player2_id = p2.id
-      WHERE km.tournament_id = ? AND (km.player1_id = ? OR km.player2_id = ?)
-      ORDER BY km.round, km.position
-    `)
-    const rows = stmt.all(tournamentId, playerId, playerId) as any[]
-    return rows.map(row => ({
+  async findKnockoutMatchesByPlayer(tournamentId: string, playerId: string): Promise<KnockoutMatchWithPlayers[]> {
+    const result = await this.pool.query(
+      `SELECT km.*,
+              p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
+              p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact
+       FROM public.knockout_matches km
+       LEFT JOIN public.players p1 ON km.player1_id = p1.id
+       LEFT JOIN public.players p2 ON km.player2_id = p2.id
+       WHERE km.tournament_id = $1 AND (km.player1_id = $2 OR km.player2_id = $3)
+       ORDER BY km.round, km.position`,
+      [tournamentId, playerId, playerId]
+    )
+    return (result.rows as any[]).map(row => ({
       ...row,
       player1_confirmed: !!row.player1_confirmed,
       player2_confirmed: !!row.player2_confirmed,
     }))
   }
 
-  confirmKnockoutMatch(matchId: string, position: 'player1' | 'player2'): KnockoutMatchRow {
+  async confirmKnockoutMatch(matchId: string, position: 'player1' | 'player2'): Promise<KnockoutMatchRow> {
     const now = new Date().toISOString()
     if (position === 'player1') {
-      this.db
-        .prepare('UPDATE knockout_matches SET player1_confirmed = 1, player1_confirmed_at = ?, updated_at = ? WHERE id = ?')
-        .run(now, now, matchId)
+      await this.pool.query(
+        'UPDATE public.knockout_matches SET player1_confirmed = $1, player1_confirmed_at = $2, updated_at = $3 WHERE id = $4',
+        [true, now, now, matchId]
+      )
     } else {
-      this.db
-        .prepare('UPDATE knockout_matches SET player2_confirmed = 1, player2_confirmed_at = ?, updated_at = ? WHERE id = ?')
-        .run(now, now, matchId)
+      await this.pool.query(
+        'UPDATE public.knockout_matches SET player2_confirmed = $1, player2_confirmed_at = $2, updated_at = $3 WHERE id = $4',
+        [true, now, now, matchId]
+      )
     }
-    return this.findKnockoutMatchById(matchId)!
+    return (await this.findKnockoutMatchById(matchId))!
   }
 }
 
@@ -841,142 +865,154 @@ export interface UpdateLocationInput {
 }
 
 export class LocationRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private pool: Pool) {}
 
-  create(input: CreateLocationInput): LocationRow {
+  async create(input: CreateLocationInput): Promise<LocationRow> {
     const id = `location_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const now = new Date().toISOString()
 
-    const stmt = this.db.prepare(`
-      INSERT INTO locations (
+    await this.pool.query(
+      `INSERT INTO public.locations (
         id, name, sport, latitude, longitude, total_courts,
         restricted, entry_conditions, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-
-    stmt.run(
-      id,
-      input.name,
-      input.sport,
-      input.latitude,
-      input.longitude,
-      input.totalCourts,
-      (input.restricted ?? false) ? 1 : 0,
-      input.entryConditions || null,
-      now,
-      now
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        id,
+        input.name,
+        input.sport,
+        input.latitude,
+        input.longitude,
+        input.totalCourts,
+        input.restricted ?? false,
+        input.entryConditions || null,
+        now,
+        now,
+      ]
     )
 
-    return this.findById(id)!
+    return (await this.findById(id))!
   }
 
-  findById(id: string): LocationRow | undefined {
-    const stmt = this.db.prepare('SELECT * FROM locations WHERE id = ? AND deleted_at IS NULL')
-    const row = stmt.get(id) as any
+  async findById(id: string): Promise<LocationRow | undefined> {
+    const result = await this.pool.query(
+      'SELECT * FROM public.locations WHERE id = $1 AND deleted_at IS NULL',
+      [id]
+    )
+    const row = result.rows[0] as any
     if (!row) return undefined
-    const result = { ...row, restricted: !!row.restricted } as LocationRow
-    delete (result as any).deleted_at
-    return result
+    const { deleted_at, ...rest } = row
+    return { ...rest, restricted: !!rest.restricted } as LocationRow
   }
 
-  findBySport(sport: string, opts: ListOptions = {}): { rows: LocationRow[]; total: number } {
+  async findBySport(sport: string, opts: ListOptions = {}): Promise<{ rows: LocationRow[]; total: number }> {
     const offset = opts.offset || 0
     const limit = opts.limit || 10
 
-    const countStmt = this.db.prepare('SELECT COUNT(*) as count FROM locations WHERE sport = ? AND deleted_at IS NULL')
-    const countResult = countStmt.get(sport) as { count: number }
+    const countResult = await this.pool.query(
+      'SELECT COUNT(*) as count FROM public.locations WHERE sport = $1 AND deleted_at IS NULL',
+      [sport]
+    )
+    const total = Number((countResult.rows[0] as { count: any }).count)
 
-    const stmt = this.db.prepare(`
-      SELECT * FROM locations WHERE sport = ? AND deleted_at IS NULL
-      ORDER BY created_at DESC LIMIT ? OFFSET ?
-    `)
-    const rows = (stmt.all(sport, limit, offset) as any[]).map(r => ({ ...r, restricted: !!r.restricted })) as LocationRow[]
+    const result = await this.pool.query(
+      `SELECT * FROM public.locations WHERE sport = $1 AND deleted_at IS NULL
+       ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+      [sport, limit, offset]
+    )
+    const rows = (result.rows as any[]).map(r => ({ ...r, restricted: !!r.restricted })) as LocationRow[]
 
-    return { rows, total: countResult.count }
+    return { rows, total }
   }
 
-  listAll(opts: ListOptions = {}): { rows: LocationRow[]; total: number } {
+  async listAll(opts: ListOptions = {}): Promise<{ rows: LocationRow[]; total: number }> {
     const offset = opts.offset || 0
     const limit = opts.limit || 10
 
-    const countStmt = this.db.prepare('SELECT COUNT(*) as count FROM locations WHERE deleted_at IS NULL')
-    const countResult = countStmt.get() as { count: number }
+    const countResult = await this.pool.query('SELECT COUNT(*) as count FROM public.locations WHERE deleted_at IS NULL')
+    const total = Number((countResult.rows[0] as { count: any }).count)
 
-    const stmt = this.db.prepare(`
-      SELECT * FROM locations WHERE deleted_at IS NULL
-      ORDER BY created_at DESC LIMIT ? OFFSET ?
-    `)
-    const rows = (stmt.all(limit, offset) as any[]).map(r => ({ ...r, restricted: !!r.restricted })) as LocationRow[]
+    const result = await this.pool.query(
+      `SELECT * FROM public.locations WHERE deleted_at IS NULL
+       ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    )
+    const rows = (result.rows as any[]).map(r => ({ ...r, restricted: !!r.restricted })) as LocationRow[]
 
-    return { rows, total: countResult.count }
+    return { rows, total }
   }
 
-  update(id: string, input: UpdateLocationInput): LocationRow {
+  async update(id: string, input: UpdateLocationInput): Promise<LocationRow> {
     const updates: string[] = []
     const values: unknown[] = []
+    let paramIndex = 1
 
     if (input.name !== undefined) {
-      updates.push('name = ?')
+      updates.push(`name = $${paramIndex}`)
       values.push(input.name)
+      paramIndex++
     }
     if (input.totalCourts !== undefined) {
-      updates.push('total_courts = ?')
+      updates.push(`total_courts = $${paramIndex}`)
       values.push(input.totalCourts)
+      paramIndex++
     }
     if (input.restricted !== undefined) {
-      updates.push('restricted = ?')
-      values.push(input.restricted ? 1 : 0)
+      updates.push(`restricted = $${paramIndex}`)
+      values.push(input.restricted)
+      paramIndex++
     }
     if (input.entryConditions !== undefined) {
-      updates.push('entry_conditions = ?')
+      updates.push(`entry_conditions = $${paramIndex}`)
       values.push(input.entryConditions || null)
+      paramIndex++
     }
 
-    updates.push('updated_at = ?')
+    updates.push(`updated_at = $${paramIndex}`)
     values.push(new Date().toISOString())
+    paramIndex++
+
     values.push(id)
 
-    const stmt = this.db.prepare(`UPDATE locations SET ${updates.join(', ')} WHERE id = ?`)
-    stmt.run(...values)
+    await this.pool.query(
+      `UPDATE public.locations SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+      values
+    )
 
-    return this.findById(id)!
+    return (await this.findById(id))!
   }
 
-  calculateCapacity(locationId: string): number {
-    const location = this.findById(locationId)
+  async calculateCapacity(locationId: string): Promise<number> {
+    const location = await this.findById(locationId)
     if (!location) return 0
 
-    const stmt = this.db.prepare(`
-      SELECT COUNT(*) as unavailable_count FROM courts
-      WHERE location_id = ? AND status != 'available'
-    `)
-    const result = stmt.get(locationId) as { unavailable_count: number }
+    const result = await this.pool.query(
+      `SELECT COUNT(*) as unavailable_count FROM public.courts
+       WHERE location_id = $1 AND status != $2`,
+      [locationId, 'available']
+    )
+    const unavailableCount = Number((result.rows[0] as { unavailable_count: any }).unavailable_count)
 
-    return location.total_courts - result.unavailable_count
+    return location.total_courts - unavailableCount
   }
 
-  findNearby(latitude: number, longitude: number, radiusKm: number = 0.025): LocationRow[] {
-    const stmt = this.db.prepare(`
-      SELECT * FROM locations
-      WHERE deleted_at IS NULL
-        AND (latitude BETWEEN ? AND ?)
-        AND (longitude BETWEEN ? AND ?)
-      ORDER BY created_at DESC
-    `)
+  async findNearby(latitude: number, longitude: number, radiusKm: number = 0.025): Promise<LocationRow[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM public.locations
+       WHERE deleted_at IS NULL
+         AND (latitude BETWEEN $1 AND $2)
+         AND (longitude BETWEEN $3 AND $4)
+       ORDER BY created_at DESC`,
+      [latitude - radiusKm, latitude + radiusKm, longitude - radiusKm, longitude + radiusKm]
+    )
 
-    const rows = stmt.all(
-      latitude - radiusKm,
-      latitude + radiusKm,
-      longitude - radiusKm,
-      longitude + radiusKm
-    ) as any[]
-
-    return rows.map(r => ({ ...r, restricted: !!r.restricted })) as LocationRow[]
+    return (result.rows as any[]).map(r => ({ ...r, restricted: !!r.restricted })) as LocationRow[]
   }
 
-  softDelete(id: string): void {
-    const stmt = this.db.prepare('UPDATE locations SET deleted_at = ? WHERE id = ?')
-    stmt.run(new Date().toISOString(), id)
+  async softDelete(id: string): Promise<void> {
+    await this.pool.query(
+      'UPDATE public.locations SET deleted_at = $1 WHERE id = $2',
+      [new Date().toISOString(), id]
+    )
   }
 }
 
@@ -986,49 +1022,57 @@ export interface CreateCourtInput {
 }
 
 export class CourtRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private pool: Pool) {}
 
-  create(input: CreateCourtInput): CourtRow {
+  async create(input: CreateCourtInput): Promise<CourtRow> {
     const id = `court_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const now = new Date().toISOString()
 
-    const stmt = this.db.prepare(`
-      INSERT INTO courts (id, location_id, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `)
+    await this.pool.query(
+      `INSERT INTO public.courts (id, location_id, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, input.locationId, input.status || 'available', now, now]
+    )
 
-    stmt.run(id, input.locationId, input.status || 'available', now, now)
-
-    return this.findById(id)!
+    return (await this.findById(id))!
   }
 
-  findById(id: string): CourtRow | undefined {
-    const stmt = this.db.prepare('SELECT * FROM courts WHERE id = ?')
-    return stmt.get(id) as CourtRow | undefined
+  async findById(id: string): Promise<CourtRow | undefined> {
+    const result = await this.pool.query('SELECT * FROM public.courts WHERE id = $1', [id])
+    return result.rows[0] as CourtRow | undefined
   }
 
-  findByLocation(locationId: string): CourtRow[] {
-    const stmt = this.db.prepare('SELECT * FROM courts WHERE location_id = ? ORDER BY created_at')
-    return stmt.all(locationId) as CourtRow[]
+  async findByLocation(locationId: string): Promise<CourtRow[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM public.courts WHERE location_id = $1 ORDER BY created_at',
+      [locationId]
+    )
+    return result.rows as CourtRow[]
   }
 
-  updateStatus(id: string, status: 'available' | 'unavailable' | 'maintenance'): CourtRow {
+  async updateStatus(id: string, status: 'available' | 'unavailable' | 'maintenance'): Promise<CourtRow> {
     const now = new Date().toISOString()
-    const stmt = this.db.prepare('UPDATE courts SET status = ?, updated_at = ? WHERE id = ?')
-    stmt.run(status, now, id)
+    await this.pool.query(
+      'UPDATE public.courts SET status = $1, updated_at = $2 WHERE id = $3',
+      [status, now, id]
+    )
 
-    return this.findById(id)!
+    return (await this.findById(id))!
   }
 
-  countByLocation(locationId: string): number {
-    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM courts WHERE location_id = ?')
-    const result = stmt.get(locationId) as { count: number }
-    return result.count
+  async countByLocation(locationId: string): Promise<number> {
+    const result = await this.pool.query(
+      'SELECT COUNT(*) as count FROM public.courts WHERE location_id = $1',
+      [locationId]
+    )
+    return Number((result.rows[0] as { count: any }).count)
   }
 
-  countByLocationAndStatus(locationId: string, status: string): number {
-    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM courts WHERE location_id = ? AND status = ?')
-    const result = stmt.get(locationId, status) as { count: number }
-    return result.count
+  async countByLocationAndStatus(locationId: string, status: string): Promise<number> {
+    const result = await this.pool.query(
+      'SELECT COUNT(*) as count FROM public.courts WHERE location_id = $1 AND status = $2',
+      [locationId, status]
+    )
+    return Number((result.rows[0] as { count: any }).count)
   }
 }

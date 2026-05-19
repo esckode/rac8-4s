@@ -15,14 +15,74 @@ A modern, mobile-first web application for managing and participating in doubles
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+- **Node.js 18+** — Check with `node --version`
+- **Docker** (for PostgreSQL) — Check with `docker --version`
+- **npm 9+** — Check with `npm --version`
+
 ### Installation
 ```bash
 npm install
 ```
 
+### Database Setup (PostgreSQL)
+
+This project uses **PostgreSQL 15+** with two schemas (`public` and `auth`).
+
+**Option 1: Use Docker (Recommended for Development)**
+
+```bash
+# Start PostgreSQL in Docker
+docker-compose up -d
+
+# This creates:
+# - Database: tournament_app
+# - User: tournament_user (password: tournament_pass)
+# - Schemas: public, auth
+```
+
+**Option 2: Use Local PostgreSQL**
+
+Install PostgreSQL 15+, then create database and user:
+```sql
+CREATE DATABASE tournament_app;
+CREATE USER tournament_user WITH PASSWORD 'tournament_pass';
+GRANT ALL PRIVILEGES ON DATABASE tournament_app TO tournament_user;
+```
+
+**Verify Connection**
+
+```bash
+# Update DATABASE_URL in .env if needed, then test:
+npm run test  # Tests will verify database connectivity
+```
+
+### Environment Setup
+
+Copy the template and customize:
+```bash
+cp .env.example .env
+```
+
+Key variables:
+- `DATABASE_URL` — PostgreSQL connection string (required)
+- `PORT` — API server port (default: 3001)
+- `NODE_ENV` — Environment (development/production)
+
 ### Running Tests
 ```bash
+# Run all tests (API + frontend)
 npm test
+
+# Run API tests only
+cd packages/api && npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage
+npm run test:coverage
 ```
 
 ### Development
@@ -30,7 +90,7 @@ See [SETUP.md](./SETUP.md) for detailed setup instructions.
 
 ### Running the Application
 ```bash
-# Start the API server
+# Start the API server (migrations run automatically)
 cd packages/api
 npm start
 
@@ -38,6 +98,9 @@ npm start
 cd packages/frontend
 npm run dev
 ```
+
+The API will be available at `http://localhost:3001`
+The frontend will be available at `http://localhost:5173`
 
 ## 📚 Documentation
 
@@ -66,7 +129,7 @@ npm run dev
 
 ### Backend
 - **Node.js + Express 5** — REST API server
-- **Better SQLite3** — Embedded SQL database
+- **PostgreSQL 15+** — Relational database with connection pooling (pg)
 - **JWT** — Token-based authentication
 - **EventSource** — Server-Sent Events for real-time updates
 
