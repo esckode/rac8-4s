@@ -1,3 +1,9 @@
+---
+id: develop-frontend-page
+name: Develop Frontend Page
+description: Guided workflow for implementing new frontend pages in this React webapp
+---
+
 # Develop Frontend Page
 
 A guided workflow for developing new frontend pages in this React webapp. Follow this process to ensure pages are properly designed, implemented, and validated.
