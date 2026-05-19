@@ -1,16 +1,6 @@
 /* =========================================================
-   U AT COURT — Design Tokens (Pastel Flat 2.0)
-   Refined, disciplined, soft depth. Mobile-first design system.
-
-   ARCHITECTURE:
-   - Colors: Brand (Court Blue), Secondary (Lavender), Accents (4), Neutrals (10 steps)
-   - Spacing: 10-step 4px base scale (s-1 → s-16)
-   - Typography: Display (Fredoka), UI (Plus Jakarta Sans), Mono (JetBrains)
-   - Effects: Radius (8 steps), Shadows (6 + focus ring), Surfaces (5 variants)
-   - Motion: Durations (3), Easing (3)
-
-   SOURCE OF TRUTH: This file. All design decisions are CSS custom properties.
-   REFERENCE: TASK19_DESIGN_SPEC.md for complete design system documentation.
+   C U At Court — Design Tokens
+   Refined pastel system: disciplined, flat with soft depth.
    ========================================================= */
 
 @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -129,16 +119,6 @@
   --phase-group: var(--court-400);
   --phase-knockout: var(--lavender-400);
   --phase-complete: var(--gold-400);
-
-  /* ---------- Animation Durations ---------- */
-  --duration-fast: 100ms;
-  --duration-normal: 200ms;
-  --duration-slow: 300ms;
-
-  /* ---------- Animation Easing ---------- */
-  --easing-snap: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  --easing-smooth: cubic-bezier(0.4, 0, 0.2, 1);
-  --easing-ease-out: cubic-bezier(0, 0, 0.2, 1);
 }
 
 /* ---------- Base reset ---------- */
@@ -154,21 +134,3 @@ body, .uac {
 .uac-display { font-family: var(--font-display); letter-spacing: -0.01em; }
 .uac-mono    { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .uac-num     { font-variant-numeric: tabular-nums; }
-
-/* ---------- Animation Usage Guidelines ---------- */
-/*
-  DURATIONS:
-  - --duration-fast (100ms): Quick feedback, hover states, icon transitions
-  - --duration-normal (200ms): Standard transitions, page elements, button interactions
-  - --duration-slow (300ms): Page-level reveals, important state changes, modal/drawer opens
-
-  EASING:
-  - --easing-snap: Snappy, responsive interactions (bounce/spring feel)
-  - --easing-smooth: Smooth, natural transitions (content reveals, list updates)
-  - --easing-ease-out: Deceleration, dismissals (modals closing, items fading out)
-
-  EXAMPLE:
-    transition: opacity var(--duration-normal) var(--easing-smooth);
-    animation: slideIn var(--duration-slow) var(--easing-ease-out) forwards;
-*/
-

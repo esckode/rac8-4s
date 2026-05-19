@@ -51,7 +51,7 @@ export const Landing: React.FC = () => {
               variant="primary"
               size="lg"
               className="w-full"
-              onClick={() => navigate('/browse')}
+              onClick={() => navigate('/login')}
             >
               Continue with email
             </Button>

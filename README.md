@@ -50,6 +50,10 @@ npm run dev
 - **[PERFORMANCE_VERIFICATION.md](./PERFORMANCE_VERIFICATION.md)** — Performance targets and optimization strategy
 - **[SECURITY.md](./SECURITY.md)** — Security considerations, authentication, data protection
 
+## 🎯 Development Workflows
+
+- **[Develop Frontend Page](skills/engineering/SKILL.md)** — Guided workflow for implementing new frontend pages
+
 ## 🏗️ Tech Stack
 
 ### Frontend
