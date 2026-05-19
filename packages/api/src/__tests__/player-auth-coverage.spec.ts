@@ -1,14 +1,16 @@
 import request from 'supertest'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository } from '../db'
+import { TournamentRepository, PlayerRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Player Registration and Auth Coverage', () => {
-  let db: any
+  let db: Pool
   let app: any
   let tokenStore: InMemoryTokenStore
   let tournamentRepo: TournamentRepository
@@ -17,8 +19,12 @@ describe('Player Registration and Auth Coverage', () => {
   let tournamentId: string
   let organizerToken: string
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
-    db = openDatabase(':memory:')
+    await resetTestDb(db)
     tokenStore = new InMemoryTokenStore()
     app = createApp({ config: DEFAULT_APP_CONFIG, db, tokenStore, jwtConfig: STANDARD_CONFIG })
 
@@ -32,7 +38,7 @@ describe('Player Registration and Auth Coverage', () => {
     const now = new Date()
     const futureDeadline = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7).toISOString()
 
-    const tournament = tournamentRepo.create({
+    const tournament = await tournamentRepo.create({
       name: `Player Auth Test ${Date.now()}`,
       sport: 'tennis',
       matchFormat: 'singles',
@@ -44,6 +50,10 @@ describe('Player Registration and Auth Coverage', () => {
     })
 
     tournamentId = tournament.id
+  })
+
+  afterAll(async () => {
+    await closeTestDb()
   })
 
   describe('POST /:tournamentId/register - Player registration validation', () => {

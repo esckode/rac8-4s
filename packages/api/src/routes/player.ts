@@ -18,7 +18,7 @@ export default function playerRouter(deps: AppDependencies) {
       const offset = req.query.offset ? parseInt(req.query.offset as string) : 0
       const limit = req.query.limit ? parseInt(req.query.limit as string) : deps.config.limits.paginationDefaults.tournaments
 
-      const result = playerRepo.listTournamentsByPlayer(payload.playerId, { offset, limit })
+      const result = await playerRepo.listTournamentsByPlayer(payload.playerId, { offset, limit })
 
       res.json({
         tournaments: result.rows.map(row => ({
@@ -45,7 +45,7 @@ export default function playerRouter(deps: AppDependencies) {
     try {
       const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
 
-      const player = playerRepo.findById(payload.playerId)
+      const player = await playerRepo.findById(payload.playerId)
       if (!player) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Player not found' })
       }
@@ -65,7 +65,7 @@ export default function playerRouter(deps: AppDependencies) {
         return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'shareContact must be a boolean' })
       }
 
-      const updated = playerRepo.updateShareContact(payload.playerId, req.body.shareContact)
+      const updated = await playerRepo.updateShareContact(payload.playerId, req.body.shareContact)
 
       log.info('contact.preferences.updated', { playerId: payload.playerId, shareContact: req.body.shareContact })
 

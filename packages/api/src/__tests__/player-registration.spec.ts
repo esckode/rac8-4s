@@ -1,16 +1,17 @@
 import request from 'supertest'
-import Database from 'better-sqlite3'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository } from '../db'
+import { TournamentRepository, PlayerRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { generateMagicLinkToken, validatePlayerSession, TokenInvalidError } from '../auth'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Player Registration and Discovery', () => {
-  let db: Database.Database
+  let db: Pool
   let app: any
   let tokenStore: InMemoryTokenStore
   let tournamentRepo: TournamentRepository
@@ -19,9 +20,13 @@ describe('Player Registration and Discovery', () => {
   let organizerId: string
   let organizerToken: string
 
-  beforeEach(() => {
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
+  beforeEach(async () => {
+    await resetTestDb(db)
     tokenStore = new InMemoryTokenStore()
-    db = openDatabase(':memory:')
     app = createApp({ config: DEFAULT_APP_CONFIG, db, jwtConfig: STANDARD_CONFIG, tokenStore })
     tournamentRepo = new TournamentRepository(db)
     playerRepo = new PlayerRepository(db)
@@ -30,7 +35,7 @@ describe('Player Registration and Discovery', () => {
     const tokenPair = issueOrganizerToken({ sub: organizerId, email: 'org@test.com' }, STANDARD_CONFIG)
     organizerToken = tokenPair.accessToken
 
-    const tournament = tournamentRepo.create({
+    const tournament = await tournamentRepo.create({
       name: 'Test Tournament',
       sport: 'tennis',
       matchFormat: 'singles',
@@ -42,9 +47,11 @@ describe('Player Registration and Discovery', () => {
     })
     tournamentId = tournament.id
 
-    tournamentRepo.update(tournamentId, {})
-    const stmt = db.prepare('UPDATE tournaments SET status = ? WHERE id = ?')
-    stmt.run('registration_open', tournamentId)
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
+  })
+
+  afterAll(async () => {
+    await closeTestDb()
   })
 
   describe('POST /tournaments/:tournamentId/register', () => {
@@ -91,8 +98,7 @@ describe('Player Registration and Discovery', () => {
     })
 
     it('should return 409 if tournament registration is not open', async () => {
-      const stmt = db.prepare('UPDATE tournaments SET status = ? WHERE id = ?')
-      stmt.run('draft', tournamentId)
+      await tournamentRepo.updateStatus(tournamentId, 'draft')
 
       const res = await request(app).post(`/tournaments/${tournamentId}/register`).send({
         email: 'player@example.com',
@@ -104,8 +110,7 @@ describe('Player Registration and Discovery', () => {
     })
 
     it('should return 409 if tournament is at capacity', async () => {
-      const stmt = db.prepare('UPDATE tournaments SET max_players = ? WHERE id = ?')
-      stmt.run(1, tournamentId)
+      await db.query('UPDATE public.tournaments SET max_players = $1 WHERE id = $2', [1, tournamentId])
 
       await request(app).post(`/tournaments/${tournamentId}/register`).send({
         email: 'player1@example.com',
@@ -133,8 +138,9 @@ describe('Player Registration and Discovery', () => {
       const res2 = await request(app).post(`/tournaments/${tournamentId}/register`).send(registerReq)
       expect(res2.status).toBe(202)
 
-      const registrations = db.prepare('SELECT COUNT(*) as count FROM player_registrations').get() as any
-      expect(registrations.count).toBe(1)
+      const result = await db.query('SELECT COUNT(*) as count FROM public.player_registrations')
+      const registrations = result.rows[0] as any
+      expect(Number(registrations.count)).toBe(1)
     })
 
     it('should trim email and name whitespace', async () => {
@@ -144,7 +150,7 @@ describe('Player Registration and Discovery', () => {
       })
 
       expect(res.status).toBe(202)
-      const player = playerRepo.findByEmail('player@example.com')
+      const player = await playerRepo.findByEmail('player@example.com')
       expect(player).toBeDefined()
       expect(player?.name).toBe('John Player')
     })
@@ -198,7 +204,7 @@ describe('Player Registration and Discovery', () => {
     })
 
     it('should return 403 if token is scoped to different tournament', async () => {
-      const tournament2 = tournamentRepo.create({
+      const tournament2 = await tournamentRepo.create({
         name: 'Test Tournament 2',
         sport: 'badminton',
         matchFormat: 'singles',
@@ -319,7 +325,7 @@ describe('Player Registration and Discovery', () => {
       const verifyRes = await request(app).get(`/tournaments/${tournamentId}/auth/verify?token=${registerRes.body.magicLinkToken}`)
       const sessionToken = verifyRes.body.playerToken
 
-      const tournament2 = tournamentRepo.create({
+      const tournament2 = await tournamentRepo.create({
         name: 'Test Tournament 2',
         sport: 'badminton',
         matchFormat: 'singles',
@@ -330,8 +336,7 @@ describe('Player Registration and Discovery', () => {
         creatorId: organizerId,
       })
 
-      const stmt = db.prepare('UPDATE tournaments SET status = ? WHERE id = ?')
-      stmt.run('registration_open', tournament2.id)
+      await tournamentRepo.updateStatus(tournament2.id, 'registration_open')
 
       const res = await request(app)
         .get('/player/tournaments')
@@ -367,7 +372,7 @@ describe('Player Registration and Discovery', () => {
       const verifyRes = await request(app).get(`/tournaments/${tournamentId}/auth/verify?token=${registerRes.body.magicLinkToken}`)
       const sessionToken = verifyRes.body.playerToken
 
-      const tournament2 = tournamentRepo.create({
+      const tournament2 = await tournamentRepo.create({
         name: 'Test Tournament 2',
         sport: 'badminton',
         matchFormat: 'singles',
@@ -378,7 +383,7 @@ describe('Player Registration and Discovery', () => {
         creatorId: organizerId,
       })
 
-      tournamentRepo.softDelete(tournamentId)
+      await tournamentRepo.softDelete(tournamentId)
 
       const res = await request(app)
         .get('/player/tournaments')
@@ -488,13 +493,13 @@ describe('Player Registration and Discovery', () => {
 
   describe('Player repository functions', () => {
     it('should handle create registration with duplicate (UNIQUE constraint)', async () => {
-      const player = playerRepo.findOrCreatePlayerByEmail('player@example.com', 'John Player')
+      const player = await playerRepo.findOrCreatePlayerByEmail('player@example.com', 'John Player')
 
-      playerRepo.createRegistration(player.id, tournamentId)
+      await playerRepo.createRegistration(player.id, tournamentId)
 
-      const error = await new Promise(resolve => {
+      const error = await new Promise(async resolve => {
         try {
-          playerRepo.createRegistration(player.id, tournamentId)
+          await playerRepo.createRegistration(player.id, tournamentId)
           resolve(null)
         } catch (e) {
           resolve(e)
@@ -505,8 +510,8 @@ describe('Player Registration and Discovery', () => {
     })
 
     it('should find player by email', async () => {
-      const player = playerRepo.findOrCreatePlayerByEmail('player@example.com', 'John Player', '+1-555-0123', 'email')
-      const found = playerRepo.findByEmail('player@example.com')
+      const player = await playerRepo.findOrCreatePlayerByEmail('player@example.com', 'John Player', '+1-555-0123', 'email')
+      const found = await playerRepo.findByEmail('player@example.com')
 
       expect(found).toBeDefined()
       expect(found?.email).toBe('player@example.com')
@@ -515,24 +520,24 @@ describe('Player Registration and Discovery', () => {
     })
 
     it('should return undefined for non-existent player', async () => {
-      const found = playerRepo.findByEmail('nonexistent@example.com')
+      const found = await playerRepo.findByEmail('nonexistent@example.com')
       expect(found).toBeUndefined()
     })
 
     it('should count registrations for tournament', async () => {
-      const count1 = playerRepo.countRegistrationsForTournament(tournamentId)
+      const count1 = await playerRepo.countRegistrationsForTournament(tournamentId)
       expect(count1).toBe(0)
 
-      const player1 = playerRepo.findOrCreatePlayerByEmail('player1@example.com', 'Player 1')
-      playerRepo.createRegistration(player1.id, tournamentId)
+      const player1 = await playerRepo.findOrCreatePlayerByEmail('player1@example.com', 'Player 1')
+      await playerRepo.createRegistration(player1.id, tournamentId)
 
-      const count2 = playerRepo.countRegistrationsForTournament(tournamentId)
+      const count2 = await playerRepo.countRegistrationsForTournament(tournamentId)
       expect(count2).toBe(1)
 
-      const player2 = playerRepo.findOrCreatePlayerByEmail('player2@example.com', 'Player 2')
-      playerRepo.createRegistration(player2.id, tournamentId)
+      const player2 = await playerRepo.findOrCreatePlayerByEmail('player2@example.com', 'Player 2')
+      await playerRepo.createRegistration(player2.id, tournamentId)
 
-      const count3 = playerRepo.countRegistrationsForTournament(tournamentId)
+      const count3 = await playerRepo.countRegistrationsForTournament(tournamentId)
       expect(count3).toBe(2)
     })
   })
@@ -573,15 +578,16 @@ describe('Player Registration and Discovery', () => {
       const res1 = await request(app).post(`/tournaments/${tournamentId}/register`).send({ email, name })
       expect(res1.status).toBe(202)
 
-      const stmt = db.prepare('INSERT INTO players (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
       const error = await new Promise<Error | null>(resolve => {
-        try {
-          const now = new Date().toISOString()
-          stmt.run(`duplicate_player`, email, 'Another Player', now, now)
-          resolve(null)
-        } catch (e) {
-          resolve(e instanceof Error ? e : new Error(String(e)))
-        }
+        (async () => {
+          try {
+            const now = new Date().toISOString()
+            await db.query('INSERT INTO public.players (id, email, name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)', [`duplicate_player`, email, 'Another Player', now, now])
+            resolve(null)
+          } catch (e) {
+            resolve(e instanceof Error ? e : new Error(String(e)))
+          }
+        })()
       })
 
       expect(error).toBeDefined()
