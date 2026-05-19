@@ -54,3 +54,35 @@ export async function closeTestDb(): Promise<void> {
     testPool = null
   }
 }
+
+/**
+ * Error simulation helpers for testing error scenarios
+ */
+const originalQuery = Pool.prototype.query
+
+export function mockPoolQueryError(pool: Pool, error: Error): void {
+  ;(pool.query as any) = jest.fn(async () => {
+    throw error
+  })
+}
+
+export function mockPoolQueryTimeout(pool: Pool, delayMs: number = 100): void {
+  ;(pool.query as any) = jest.fn(async () => {
+    await new Promise(resolve => setTimeout(resolve, delayMs))
+    throw new Error('ETIMEDOUT')
+  })
+}
+
+export function mockPoolConnect(pool: Pool, error: Error): void {
+  ;(pool.connect as any) = jest.fn(async () => {
+    throw error
+  })
+}
+
+export function restorePoolQuery(pool: Pool): void {
+  ;(pool.query as any) = originalQuery
+}
+
+export function restorePoolConnect(pool: Pool): void {
+  ;(pool.connect as any) = (Pool.prototype as any).connect
+}
