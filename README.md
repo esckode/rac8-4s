@@ -52,7 +52,7 @@ npm run dev
 
 ## 🎯 Development Workflows
 
-- **[Develop Frontend Page](skills/engineering/SKILL.md)** — Guided workflow for implementing new frontend pages
+- **[Develop Frontend Page](skills/engineering/develop-frontend-page.md)** — Guided workflow for implementing new frontend pages
 
 ## 🏗️ Tech Stack
 

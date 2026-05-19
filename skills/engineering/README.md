@@ -2,4 +2,4 @@
 
 Daily code work and development tasks.
 
-- [Develop Frontend Page](SKILL.md) — Guided workflow for implementing new frontend pages
+- [Develop Frontend Page](develop-frontend-page.md) — Guided workflow for implementing new frontend pages
