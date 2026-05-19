@@ -1,15 +1,16 @@
 import request from 'supertest'
-import Database from 'better-sqlite3'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, PlayerRepository } from '../db'
+import { PlayerRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { generatePlayerSession, MagicLinkPayload } from '../auth'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Analytics Events', () => {
-  let db: Database.Database
+  let db: Pool
   let app: any
   let tokenStore: InMemoryTokenStore
   let playerRepo: PlayerRepository
@@ -26,15 +27,23 @@ describe('Analytics Events', () => {
     return result.token
   }
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
+    await resetTestDb(db)
     tokenStore = new InMemoryTokenStore()
-    db = openDatabase(':memory:')
     app = createApp({ config: DEFAULT_APP_CONFIG, db, jwtConfig: STANDARD_CONFIG, tokenStore })
     playerRepo = new PlayerRepository(db)
 
     // Create a test player
-    const player = playerRepo.findOrCreatePlayerByEmail('player@test.com', 'Test Player', '555-1234', 'email')
+    const player = await playerRepo.findOrCreatePlayerByEmail('player@test.com', 'Test Player', '555-1234', 'email')
     playerId = player.id
+  })
+
+  afterAll(async () => {
+    await closeTestDb()
   })
 
   describe('POST /api/analytics/events', () => {
@@ -66,7 +75,8 @@ describe('Analytics Events', () => {
       expect(res.status).toBe(204)
 
       // Verify events were stored in database
-      const storedEvents = db.prepare('SELECT * FROM user_events WHERE user_id = ?').all(playerId) as any[]
+      const result = await db.query('SELECT * FROM public.user_events WHERE user_id = $1', [playerId])
+      const storedEvents = result.rows as any[]
       expect(storedEvents).toHaveLength(2)
       expect(storedEvents[0].event_type).toBe('screen_view')
       expect(storedEvents[0].screen).toBe('standings')
@@ -153,9 +163,8 @@ describe('Analytics Events', () => {
 
       expect(res.status).toBe(204)
 
-      const storedEvent = db
-        .prepare('SELECT * FROM user_events WHERE user_id = ? AND event_type = ?')
-        .get(playerId, 'screen_view') as any
+      const result = await db.query('SELECT * FROM public.user_events WHERE user_id = $1 AND event_type = $2', [playerId, 'screen_view'])
+      const storedEvent = result.rows[0] as any
 
       expect(storedEvent.screen).toBeNull()
       expect(storedEvent.duration).toBeNull()
@@ -193,7 +202,8 @@ describe('Analytics Events', () => {
 
       expect(res.status).toBe(204)
 
-      const storedEvents = db.prepare('SELECT * FROM user_events WHERE user_id = ? ORDER BY rowid').all(playerId) as any[]
+      const result = await db.query('SELECT * FROM public.user_events WHERE user_id = $1 ORDER BY created_at', [playerId])
+      const storedEvents = result.rows as any[]
       expect(storedEvents).toHaveLength(3)
       expect(storedEvents.map((e) => e.event_type)).toEqual(['screen_view', 'screen_view', 'sse_update'])
       expect(storedEvents.map((e) => e.screen)).toEqual(['standings', 'matches', 'standings'])
@@ -228,9 +238,8 @@ describe('Analytics Events', () => {
 
       expect(res.status).toBe(204)
 
-      const storedEvent = db
-        .prepare('SELECT * FROM user_events WHERE user_id = ? AND event_type = ?')
-        .get(playerId, 'performance') as any
+      const result = await db.query('SELECT * FROM public.user_events WHERE user_id = $1 AND event_type = $2', [playerId, 'performance'])
+      const storedEvent = result.rows[0] as any
 
       expect(JSON.parse(storedEvent.data)).toEqual(complexData)
     })

@@ -1,14 +1,16 @@
 import request from 'supertest'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Coverage improvement tests - Group and Match Operations', () => {
-  let db: any
+  let db: Pool
   let app: any
   let tokenStore: InMemoryTokenStore
   let tournamentRepo: TournamentRepository
@@ -19,8 +21,12 @@ describe('Coverage improvement tests - Group and Match Operations', () => {
   let organizerToken: string
   let players: any[] = []
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
-    db = openDatabase(':memory:')
+    await resetTestDb(db)
     tokenStore = new InMemoryTokenStore()
     app = createApp({ config: DEFAULT_APP_CONFIG, db, tokenStore, jwtConfig: STANDARD_CONFIG })
 
@@ -36,7 +42,7 @@ describe('Coverage improvement tests - Group and Match Operations', () => {
     const pastDeadline = new Date(now.getTime() - 1000 * 60 * 60).toISOString()
     const futureDeadline = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7).toISOString()
 
-    const tournament = tournamentRepo.create({
+    const tournament = await tournamentRepo.create({
       name: `Coverage Test ${Date.now()}`,
       sport: 'tennis',
       matchFormat: 'singles',
@@ -52,12 +58,16 @@ describe('Coverage improvement tests - Group and Match Operations', () => {
     // Create 6 players for group testing
     players = []
     for (let i = 1; i <= 6; i++) {
-      const player = playerRepo.findOrCreatePlayerByEmail(`coverage_player${i}@test.com`, `Coverage Player ${i}`)
+      const player = await playerRepo.findOrCreatePlayerByEmail(`coverage_player${i}@test.com`, `Coverage Player ${i}`)
       players.push(player)
-      playerRepo.createRegistration(player.id, tournamentId)
+      await playerRepo.createRegistration(player.id, tournamentId)
     }
 
-    tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+  })
+
+  afterAll(async () => {
+    await closeTestDb()
   })
 
   describe('POST /:id/groups - Group creation validation', () => {
@@ -168,7 +178,7 @@ describe('Coverage improvement tests - Group and Match Operations', () => {
 
     it('should reject groups creation when tournament not in registration_closed', async () => {
       // Create a tournament in different state
-      const tournament2 = tournamentRepo.create({
+      const tournament2 = await tournamentRepo.create({
         name: `State Test ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',

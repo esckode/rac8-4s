@@ -28,11 +28,6 @@ export default function analyticsRouter(deps: AppDependencies) {
         return
       }
 
-      const insertStmt = deps.db.prepare(
-        `INSERT INTO user_events (user_id, event_type, screen, duration, data, created_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))`
-      )
-
       const eventTypes = new Set<string>()
 
       for (const event of events) {
@@ -45,12 +40,16 @@ export default function analyticsRouter(deps: AppDependencies) {
 
         eventTypes.add(typedEvent.eventType)
 
-        insertStmt.run(
-          payload.playerId,
-          typedEvent.eventType,
-          typedEvent.screen || null,
-          typedEvent.duration || null,
-          typedEvent.data ? JSON.stringify(typedEvent.data) : null
+        await deps.db.query(
+          `INSERT INTO public.user_events (user_id, event_type, screen, duration, data, created_at)
+           VALUES ($1, $2, $3, $4, $5, NOW())`,
+          [
+            payload.playerId,
+            typedEvent.eventType,
+            typedEvent.screen || null,
+            typedEvent.duration || null,
+            typedEvent.data ? JSON.stringify(typedEvent.data) : null,
+          ]
         )
       }
 
