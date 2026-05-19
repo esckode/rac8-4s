@@ -40,6 +40,31 @@ Thumbs.db
 # Temporary
 tmp/
 temp/
+.browser-data*/
+.browser-data/
+
+# Claude Code local config
+.claude/
 
 # Screenshots (for design reference, not versioned)
 screenshots/
+*.png
+*.jpg
+*.jpeg
+
+# Generated HTML files (testing artifacts)
+/landing-mobile-screenshot.html
+/view-landing-mobile.html
+/TASK*.html
+
+# Development/debugging scripts (root level only)
+/*.mjs
+/*.js
+
+# Database files (local instance, not versioned)
+packages/api/db/*.db
+!packages/api/db/migrations/
+
+# Backup files
+*_backup
+*.backup
