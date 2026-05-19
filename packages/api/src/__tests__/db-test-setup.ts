@@ -20,7 +20,7 @@ export async function initializeTestDb(): Promise<Pool> {
 
   try {
     // Run migrations
-    const migrationsDir = path.resolve(__dirname, '../../../db/migrations')
+    const migrationsDir = path.resolve(__dirname, '../../../../db/migrations')
     await runMigrations(testPool, migrationsDir)
   } catch (err) {
     await testPool.end()
@@ -40,7 +40,7 @@ export async function resetTestDb(pool: Pool): Promise<void> {
     await pool.query('CREATE SCHEMA auth')
 
     // Re-run migrations
-    const migrationsDir = path.resolve(__dirname, '../../../db/migrations')
+    const migrationsDir = path.resolve(__dirname, '../../../../db/migrations')
     await runMigrations(pool, migrationsDir)
   } catch (err) {
     console.error('Failed to reset test database:', err)

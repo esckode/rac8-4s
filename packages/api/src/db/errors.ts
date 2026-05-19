@@ -11,8 +11,8 @@ export class DatabaseError extends Error {
 }
 
 export class ConstraintViolationError extends DatabaseError {
-  constructor(message: string, code: string) {
-    super(message, code, 409)
+  constructor(message: string, code: string, statusCode: number = 409) {
+    super(message, code, statusCode)
     this.name = 'ConstraintViolationError'
   }
 }
@@ -30,9 +30,9 @@ export class ForeignKeyConstraintError extends ConstraintViolationError {
   constructor(field?: string) {
     super(
       field ? `Referenced ${field} does not exist` : 'Referenced record does not exist',
-      'INVALID_REFERENCE'
+      'INVALID_REFERENCE',
+      400
     )
-    this.statusCode = 400
   }
 }
 
@@ -40,9 +40,9 @@ export class CheckConstraintError extends ConstraintViolationError {
   constructor(field?: string) {
     super(
       field ? `Invalid value for ${field}` : 'Invalid constraint value',
-      'INVALID_VALUE'
+      'INVALID_VALUE',
+      400
     )
-    this.statusCode = 400
   }
 }
 
@@ -50,9 +50,9 @@ export class NotNullConstraintError extends ConstraintViolationError {
   constructor(field?: string) {
     super(
       field ? `${field} is required` : 'Required field is missing',
-      'REQUIRED_FIELD'
+      'REQUIRED_FIELD',
+      400
     )
-    this.statusCode = 400
   }
 }
 

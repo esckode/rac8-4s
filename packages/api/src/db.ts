@@ -196,7 +196,7 @@ export class TournamentRepository {
       query += ` AND status = $${params.length}`
     }
 
-    params.push(limit, offset)
+    params.push(String(limit), String(offset))
     query += ` ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`
 
     const result = await this.pool.query(query, params)
@@ -228,7 +228,7 @@ export class TournamentRepository {
     )
     const total = parseInt((countResult.rows[0] as { count: string }).count)
 
-    params.push(limit, offset)
+    params.push(String(limit), String(offset))
     query += ` ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`
 
     const result = await this.pool.query(query, params)
@@ -258,7 +258,7 @@ export class TournamentRepository {
     )
     const total = parseInt((countResult.rows[0] as { count: string }).count)
 
-    params.push(limit, offset)
+    params.push(String(limit), String(offset))
     query += ` ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`
 
     const result = await this.pool.query(query, params)
