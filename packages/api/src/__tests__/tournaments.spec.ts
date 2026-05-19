@@ -1,28 +1,33 @@
 import request from 'supertest'
-import Database from 'better-sqlite3'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository } from '../db'
+import { TournamentRepository } from '../db'
 import { InMemoryTokenStore, issueOrganizerToken } from '../auth'
 import type { JwtConfig } from '../auth'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
 
 const TEST_JWT_SECRET = 'test-secret-at-least-32-chars-long-for-testing!'
 const STANDARD_CONFIG: JwtConfig = { secret: TEST_JWT_SECRET, expiresInSeconds: 3600 }
 
 describe('Tournament CRUD Endpoints', () => {
-  let db: Database.Database
+  let db: Pool
   let tokenStore: InMemoryTokenStore
   let app: any
   let organizerToken: string
   const organizerId = 'org_test_001'
   const organizerEmail = 'organizer@test.com'
 
-  beforeEach(() => {
-    tokenStore = new InMemoryTokenStore()
-    db = openDatabase(':memory:')
-    app = createApp({
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
 
-      config: DEFAULT_APP_CONFIG,      db,
+  beforeEach(async () => {
+    await resetTestDb(db)
+    tokenStore = new InMemoryTokenStore()
+    app = createApp({
+      config: DEFAULT_APP_CONFIG,
+      db,
       jwtConfig: STANDARD_CONFIG,
       tokenStore,
     })
@@ -37,8 +42,8 @@ describe('Tournament CRUD Endpoints', () => {
     organizerToken = tokenPair.accessToken
   })
 
-  afterEach(() => {
-    if (db) db.close()
+  afterAll(async () => {
+    await closeTestDb()
   })
 
   describe('POST /tournaments', () => {
@@ -277,7 +282,7 @@ describe('Tournament CRUD Endpoints', () => {
     it('should filter by status', async () => {
       const repo = new TournamentRepository(db)
 
-      const t1 = repo.create({
+      const t1 = await repo.create({
         name: 'Draft Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -288,7 +293,7 @@ describe('Tournament CRUD Endpoints', () => {
         creatorId: organizerId,
       })
 
-      const t2 = repo.create({
+      const t2 = await repo.create({
         name: 'Open Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -300,7 +305,7 @@ describe('Tournament CRUD Endpoints', () => {
       })
 
       // Manually update status
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', t2.id)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', t2.id])
 
       const response = await request(app)
         .get('/tournaments/organizer')
@@ -322,7 +327,7 @@ describe('Tournament CRUD Endpoints', () => {
     it('should exclude soft-deleted tournaments', async () => {
       const repo = new TournamentRepository(db)
 
-      const t1 = repo.create({
+      const t1 = await repo.create({
         name: 'Active Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -333,7 +338,7 @@ describe('Tournament CRUD Endpoints', () => {
         creatorId: organizerId,
       })
 
-      const t2 = repo.create({
+      const t2 = await repo.create({
         name: 'Deleted Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -344,7 +349,7 @@ describe('Tournament CRUD Endpoints', () => {
         creatorId: organizerId,
       })
 
-      repo.softDelete(t2.id)
+      await repo.softDelete(t2.id)
 
       const response = await request(app)
         .get('/tournaments/organizer')
@@ -360,7 +365,7 @@ describe('Tournament CRUD Endpoints', () => {
     it('should list public tournaments', async () => {
       const repo = new TournamentRepository(db)
 
-      const draft = repo.create({
+      const draft = await repo.create({
         name: 'Draft Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -371,7 +376,7 @@ describe('Tournament CRUD Endpoints', () => {
         creatorId: organizerId,
       })
 
-      const open = repo.create({
+      const open = await repo.create({
         name: 'Open Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -382,7 +387,7 @@ describe('Tournament CRUD Endpoints', () => {
         creatorId: organizerId,
       })
 
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', open.id)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', open.id])
 
       const response = await request(app)
         .get('/tournaments/public')
@@ -397,7 +402,7 @@ describe('Tournament CRUD Endpoints', () => {
 
       const statuses = ['registration_open', 'group_stage_active', 'knockout_active']
       for (const status of statuses) {
-        const t = repo.create({
+        const t = await repo.create({
           name: `Tournament ${status}`,
           sport: 'tennis',
           matchFormat: 'singles',
@@ -407,7 +412,7 @@ describe('Tournament CRUD Endpoints', () => {
           knockoutStageDeadline: '2026-06-30T00:00:00Z',
           creatorId: organizerId,
         })
-        db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run(status, t.id)
+        await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', [status, t.id])
       }
 
       const response = await request(app)
@@ -420,7 +425,7 @@ describe('Tournament CRUD Endpoints', () => {
     it('should filter by sport', async () => {
       const repo = new TournamentRepository(db)
 
-      const tennis = repo.create({
+      const tennis = await repo.create({
         name: 'Tennis Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -430,9 +435,9 @@ describe('Tournament CRUD Endpoints', () => {
         knockoutStageDeadline: '2026-06-30T00:00:00Z',
         creatorId: organizerId,
       })
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', tennis.id)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', tennis.id])
 
-      const pickle = repo.create({
+      const pickle = await repo.create({
         name: 'Pickleball Tournament',
         sport: 'pickleball',
         matchFormat: 'singles',
@@ -442,7 +447,7 @@ describe('Tournament CRUD Endpoints', () => {
         knockoutStageDeadline: '2026-06-30T00:00:00Z',
         creatorId: organizerId,
       })
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', pickle.id)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', pickle.id])
 
       const response = await request(app)
         .get('/tournaments/public')
@@ -456,7 +461,7 @@ describe('Tournament CRUD Endpoints', () => {
     it('should exclude soft-deleted tournaments', async () => {
       const repo = new TournamentRepository(db)
 
-      const t1 = repo.create({
+      const t1 = await repo.create({
         name: 'Active Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -466,9 +471,9 @@ describe('Tournament CRUD Endpoints', () => {
         knockoutStageDeadline: '2026-06-30T00:00:00Z',
         creatorId: organizerId,
       })
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', t1.id)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', t1.id])
 
-      const t2 = repo.create({
+      const t2 = await repo.create({
         name: 'Deleted Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -478,9 +483,9 @@ describe('Tournament CRUD Endpoints', () => {
         knockoutStageDeadline: '2026-06-30T00:00:00Z',
         creatorId: organizerId,
       })
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', t2.id)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', t2.id])
 
-      repo.softDelete(t2.id)
+      await repo.softDelete(t2.id)
 
       const response = await request(app)
         .get('/tournaments/public')
@@ -492,7 +497,7 @@ describe('Tournament CRUD Endpoints', () => {
 
     it('should not require auth', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Public Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -502,7 +507,7 @@ describe('Tournament CRUD Endpoints', () => {
         knockoutStageDeadline: '2026-06-30T00:00:00Z',
         creatorId: organizerId,
       })
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', t.id)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', t.id])
 
       const response = await request(app)
         .get('/tournaments/public')
@@ -515,7 +520,7 @@ describe('Tournament CRUD Endpoints', () => {
   describe('PATCH /tournaments/:id', () => {
     it('should update tournament details', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Original Name',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -541,7 +546,7 @@ describe('Tournament CRUD Endpoints', () => {
 
     it('should reject invalid name', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Test Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -562,7 +567,7 @@ describe('Tournament CRUD Endpoints', () => {
 
     it('should reject invalid maxPlayers', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Test Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -583,7 +588,7 @@ describe('Tournament CRUD Endpoints', () => {
 
     it('should reject duplicate name', async () => {
       const repo = new TournamentRepository(db)
-      const t1 = repo.create({
+      const t1 = await repo.create({
         name: 'Tournament A',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -594,7 +599,7 @@ describe('Tournament CRUD Endpoints', () => {
         creatorId: organizerId,
       })
 
-      const t2 = repo.create({
+      const t2 = await repo.create({
         name: 'Tournament B',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -616,7 +621,7 @@ describe('Tournament CRUD Endpoints', () => {
 
     it('should return 403 for non-creator organizer', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Test Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -646,7 +651,7 @@ describe('Tournament CRUD Endpoints', () => {
 
     it('should reject missing auth token', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Test Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -666,7 +671,7 @@ describe('Tournament CRUD Endpoints', () => {
 
     it('should update only provided fields', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Test Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -693,7 +698,7 @@ describe('Tournament CRUD Endpoints', () => {
   describe('DELETE /tournaments/:id', () => {
     it('should soft delete tournament', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Test Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -711,13 +716,13 @@ describe('Tournament CRUD Endpoints', () => {
       expect(response.status).toBe(204)
 
       // Verify soft delete
-      const deleted = repo.findById(t.id)!
+      const deleted = (await repo.findById(t.id))!
       expect(deleted.deleted_at).toBeDefined()
     })
 
     it('should exclude soft-deleted from public listing', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Test Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -727,7 +732,7 @@ describe('Tournament CRUD Endpoints', () => {
         knockoutStageDeadline: '2026-06-30T00:00:00Z',
         creatorId: organizerId,
       })
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', t.id)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', t.id])
 
       await request(app)
         .delete(`/tournaments/${t.id}`)
@@ -742,7 +747,7 @@ describe('Tournament CRUD Endpoints', () => {
 
     it('should return 403 for non-creator organizer', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Test Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
@@ -770,7 +775,7 @@ describe('Tournament CRUD Endpoints', () => {
 
     it('should reject missing auth token', async () => {
       const repo = new TournamentRepository(db)
-      const t = repo.create({
+      const t = await repo.create({
         name: 'Test Tournament',
         sport: 'tennis',
         matchFormat: 'singles',
