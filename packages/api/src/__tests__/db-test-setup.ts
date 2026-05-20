@@ -33,13 +33,13 @@ export async function initializeTestDb(): Promise<Pool> {
 
 export async function resetTestDb(pool: Pool): Promise<void> {
   try {
-    // Drop all objects in public schema (except schema_migrations table)
+    // Drop all objects in public schema
     await pool.query(`
       DO $$ DECLARE
         r RECORD;
       BEGIN
-        -- Drop all tables except schema_migrations
-        FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename != 'schema_migrations') LOOP
+        -- Drop all tables
+        FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
           EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
         END LOOP;
 
@@ -54,9 +54,6 @@ export async function resetTestDb(pool: Pool): Promise<void> {
         END LOOP;
       END $$;
     `)
-
-    // Clear migrations tracking to re-run them
-    await pool.query('DELETE FROM public.schema_migrations')
 
     // Drop and recreate auth schema
     await pool.query('DROP SCHEMA IF EXISTS auth CASCADE')
