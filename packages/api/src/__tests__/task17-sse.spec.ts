@@ -168,8 +168,8 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
         await playerRepo.findOrCreatePlayerByEmail(email, email.split('@')[0])
       }
 
-      const p1 = await playerRepo.findByEmail(emails[0])!
-      const p2 = await playerRepo.findByEmail(emails[1])!
+      const p1 = (await playerRepo.findByEmail(emails[0]))!
+      const p2 = (await playerRepo.findByEmail(emails[1]))!
 
       await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
       await tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
@@ -180,7 +180,7 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
       // Register player via API to get a valid player token
       const appForReg = createApp({ config: DEFAULT_APP_CONFIG, db, jwtConfig: STANDARD_CONFIG, tokenStore, jobQueue, broadcastBus })
       const tournamentRepo2 = new TournamentRepository(db)
-      tournamentRepo2.updateStatus(tournamentId, 'registration_open')
+      await tournamentRepo2.updateStatus(tournamentId, 'registration_open')
 
       const registerRes = await (await import('supertest')).default(appForReg)
         .post(`/tournaments/${tournamentId}/register`)
@@ -191,8 +191,8 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
 
       player1Token = verifyRes.body.playerToken
 
-      tournamentRepo2.updateStatus(tournamentId, 'registration_closed')
-      tournamentRepo2.updateStatus(tournamentId, 'group_stage_active')
+      await tournamentRepo2.updateStatus(tournamentId, 'registration_closed')
+      await tournamentRepo2.updateStatus(tournamentId, 'group_stage_active')
     })
 
     afterEach(async () => {

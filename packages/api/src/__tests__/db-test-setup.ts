@@ -33,27 +33,9 @@ export async function initializeTestDb(): Promise<Pool> {
 
 export async function resetTestDb(pool: Pool): Promise<void> {
   try {
-    // Drop all objects in public schema
-    await pool.query(`
-      DO $$ DECLARE
-        r RECORD;
-      BEGIN
-        -- Drop all tables
-        FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-          EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
-        END LOOP;
-
-        -- Drop all sequences
-        FOR r IN (SELECT sequencename FROM pg_sequences WHERE schemaname = 'public') LOOP
-          EXECUTE 'DROP SEQUENCE IF EXISTS public.' || quote_ident(r.sequencename) || ' CASCADE';
-        END LOOP;
-
-        -- Drop all types (except built-in ones)
-        FOR r IN (SELECT typname FROM pg_type WHERE typnamespace = 'public'::regnamespace AND typtype IN ('c', 'e')) LOOP
-          EXECUTE 'DROP TYPE IF EXISTS public.' || quote_ident(r.typname) || ' CASCADE';
-        END LOOP;
-      END $$;
-    `)
+    // Drop and recreate public schema
+    await pool.query('DROP SCHEMA IF EXISTS public CASCADE')
+    await pool.query('CREATE SCHEMA public')
 
     // Drop and recreate auth schema
     await pool.query('DROP SCHEMA IF EXISTS auth CASCADE')
