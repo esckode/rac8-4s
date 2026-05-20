@@ -144,7 +144,7 @@ describe('Group Stage Management', () => {
       expect(res.body.groups[1].name).toBe('Group B')
 
       // Verify tournament status is updated
-      const updated = tournamentsRepo.findById(tournamentId)
+      const updated = await tournamentsRepo.findById(tournamentId)
       expect(updated!.status).toBe('group_stage_active')
     })
 
@@ -278,7 +278,7 @@ describe('Group Stage Management', () => {
 
     beforeEach(async () => {
       // Create a fresh tournament for standings tests to avoid state conflicts
-      const standingsTournament = tournamentsRepo.create({
+      const standingsTournament = await tournamentsRepo.create({
         name: 'Standings Test Tournament',
         sport: 'Tennis',
         matchFormat: 'singles',
@@ -291,7 +291,7 @@ describe('Group Stage Management', () => {
       standingsTournamentId = standingsTournament.id
 
       // Set status to registration_open
-      tournamentsRepo.updateStatus(standingsTournamentId, 'registration_open')
+      await tournamentsRepo.updateStatus(standingsTournamentId, 'registration_open')
 
       // Create 6 players for this tournament (use timestamp to ensure uniqueness across tests)
       standingsPlayerIds = []

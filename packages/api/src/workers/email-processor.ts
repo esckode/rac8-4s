@@ -59,7 +59,7 @@ export async function processEmailSend(
 
   try {
     for (const recipientId of distinctIds) {
-      const player = deps.playerRepo.findById(recipientId)
+      const player = await deps.playerRepo.findById(recipientId)
       if (!player) {
         log.warn('email.recipient.not_found', { recipientId, ...(tournamentId && { tournamentId }) })
         skipped++
