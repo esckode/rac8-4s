@@ -63,7 +63,7 @@ describe('Score Submission Endpoints', () => {
     const groupStageDeadline = new Date(now.getTime() + 172800000).toISOString()
     const knockoutDeadline = new Date(now.getTime() + 259200000).toISOString()
 
-    const tournament = tournamentRepo.create({
+    const tournament = await tournamentRepo.create({
       name: `Score Test ${Date.now()}`,
       sport: 'tennis',
       matchFormat: 'singles',
@@ -77,7 +77,7 @@ describe('Score Submission Endpoints', () => {
     tournamentId = tournament.id
 
     // Set tournament to registration_open for player registration
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     // Register 6 players through the API
     const testTimestamp = Date.now()
@@ -121,12 +121,12 @@ describe('Score Submission Endpoints', () => {
     player6Token = playerTokens[5]
 
     // Get all player IDs
-    const p1 = playerRepo.findByEmail(playerEmails[0])!
-    const p2 = playerRepo.findByEmail(playerEmails[1])!
-    const p3 = playerRepo.findByEmail(playerEmails[2])!
-    const p4 = playerRepo.findByEmail(playerEmails[3])!
-    const p5 = playerRepo.findByEmail(playerEmails[4])!
-    const p6 = playerRepo.findByEmail(playerEmails[5])!
+    const p1 = await playerRepo.findByEmail(playerEmails[0])!
+    const p2 = await playerRepo.findByEmail(playerEmails[1])!
+    const p3 = await playerRepo.findByEmail(playerEmails[2])!
+    const p4 = await playerRepo.findByEmail(playerEmails[3])!
+    const p5 = await playerRepo.findByEmail(playerEmails[4])!
+    const p6 = await playerRepo.findByEmail(playerEmails[5])!
 
     player1Id = p1.id
     player2Id = p2.id
@@ -138,12 +138,12 @@ describe('Score Submission Endpoints', () => {
     const allPlayerIds = [player1Id, player2Id, player3Id, player4Id, player5Id, player6Id]
 
     // Create groups
-    tournamentRepo.updateStatus(tournamentId, 'registration_closed')
-    const groups = groupRepo.createGroups(tournamentId, 2, 2, allPlayerIds)
+    await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+    const groups = await groupRepo.createGroups(tournamentId, 2, 2, allPlayerIds)
     groupId = groups[0].id
 
     // Get the first match and get its players
-    const matches = groupRepo.findMatchesByGroup(groupId)
+    const matches = await groupRepo.findMatchesByGroup(groupId)
     const targetMatch = matches[0]
     matchId = targetMatch.id
     matchPlayer1Id = targetMatch.player1_id
@@ -210,7 +210,7 @@ describe('Score Submission Endpoints', () => {
       expect(res.body.match.status).toBe('completed')
       expect(res.body.match.winnerId).toBeDefined()
 
-      const updated = groupRepo.findMatchById(matchId)
+      const updated = await groupRepo.findMatchById(matchId)
       expect(updated?.score).toBe('6-3, 6-2')
       expect(updated?.status).toBe('completed')
     })
@@ -229,7 +229,7 @@ describe('Score Submission Endpoints', () => {
       expect(res.status).toBe(200)
       expect(res.body.match.score).toBe('3-6, 2-6')
 
-      const updated = groupRepo.findMatchById(matchId)
+      const updated = await groupRepo.findMatchById(matchId)
       expect(updated?.score).toBe('3-6, 2-6')
     })
 
@@ -262,7 +262,7 @@ describe('Score Submission Endpoints', () => {
     })
 
     test('should reject player not in tournament', async () => {
-      const otherTournament = tournamentRepo.create({
+      const otherTournament = await tournamentRepo.create({
         name: `Other Tournament ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',
@@ -274,7 +274,7 @@ describe('Score Submission Endpoints', () => {
       })
 
       // Set status to registration_open for this tournament
-      tournamentRepo.updateStatus(otherTournament.id, 'registration_open')
+      await tournamentRepo.updateStatus(otherTournament.id, 'registration_open')
 
       const otherEmail = `other_player_${Date.now()}@test.com`
       const registerRes = await request(app)
@@ -330,7 +330,7 @@ describe('Score Submission Endpoints', () => {
       const pastDeadline = new Date(Date.now() - 3600000).toISOString()
       const futureDeadline = new Date(Date.now() + 3600000).toISOString()
 
-      const pastTournament = tournamentRepo.create({
+      const pastTournament = await tournamentRepo.create({
         name: `Past Deadline Tournament ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',
@@ -342,7 +342,7 @@ describe('Score Submission Endpoints', () => {
       })
 
       // Set status to registration_open
-      tournamentRepo.updateStatus(pastTournament.id, 'registration_open')
+      await tournamentRepo.updateStatus(pastTournament.id, 'registration_open')
 
       const email = `past_deadline_${Date.now()}@test.com`
       const registerRes = await request(app)
@@ -359,12 +359,12 @@ describe('Score Submission Endpoints', () => {
         .post(`/tournaments/${pastTournament.id}/register`)
         .send({ email: email2, name: 'Test Player 2' })
 
-      const player1 = playerRepo.findByEmail(email)!
-      const player2 = playerRepo.findByEmail(email2)!
+      const player1 = await playerRepo.findByEmail(email)!
+      const player2 = await playerRepo.findByEmail(email2)!
 
-      tournamentRepo.updateStatus(pastTournament.id, 'registration_closed')
-      const groups = groupRepo.createGroups(pastTournament.id, 1, 1, [player1.id, player2.id])
-      const matches = groupRepo.findMatchesByGroup(groups[0].id)
+      await tournamentRepo.updateStatus(pastTournament.id, 'registration_closed')
+      const groups = await groupRepo.createGroups(pastTournament.id, 1, 1, [player1.id, player2.id])
+      const matches = await groupRepo.findMatchesByGroup(groups[0].id)
 
       const res = await request(app)
         .post(`/tournaments/${pastTournament.id}/matches/${matches[0].id}/score`)
@@ -388,7 +388,7 @@ describe('Score Submission Endpoints', () => {
       expect(res.body.match.score).toBe('7-5, 6-4')
       expect(res.body.match.status).toBe('completed')
 
-      const updated = groupRepo.findMatchById(matchId)
+      const updated = await groupRepo.findMatchById(matchId)
       expect(updated?.score).toBe('7-5, 6-4')
     })
 
@@ -396,7 +396,7 @@ describe('Score Submission Endpoints', () => {
       const pastDeadline = new Date(Date.now() - 3600000).toISOString()
       const futureDeadline = new Date(Date.now() + 3600000).toISOString()
 
-      const pastTournament = tournamentRepo.create({
+      const pastTournament = await tournamentRepo.create({
         name: `Past Deadline Org ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',
@@ -408,7 +408,7 @@ describe('Score Submission Endpoints', () => {
       })
 
       // Set status to registration_open
-      tournamentRepo.updateStatus(pastTournament.id, 'registration_open')
+      await tournamentRepo.updateStatus(pastTournament.id, 'registration_open')
 
       const email1 = `org_deadline_1_${Date.now()}@test.com`
       const email2 = `org_deadline_2_${Date.now()}@test.com`
@@ -421,16 +421,16 @@ describe('Score Submission Endpoints', () => {
         .post(`/tournaments/${pastTournament.id}/register`)
         .send({ email: email2, name: 'Player 2' })
 
-      const player1 = playerRepo.findByEmail(email1)
-      const player2 = playerRepo.findByEmail(email2)
+      const player1 = await playerRepo.findByEmail(email1)
+      const player2 = await playerRepo.findByEmail(email2)
 
       if (!player1 || !player2) {
         throw new Error('Failed to find registered players')
       }
 
-      tournamentRepo.updateStatus(pastTournament.id, 'registration_closed')
-      const groups = groupRepo.createGroups(pastTournament.id, 1, 1, [player1.id, player2.id])
-      const matches = groupRepo.findMatchesByGroup(groups[0].id)
+      await tournamentRepo.updateStatus(pastTournament.id, 'registration_closed')
+      const groups = await groupRepo.createGroups(pastTournament.id, 1, 1, [player1.id, player2.id])
+      const matches = await groupRepo.findMatchesByGroup(groups[0].id)
 
       const res = await request(app)
         .patch(`/tournaments/${pastTournament.id}/matches/${matches[0].id}/score`)
@@ -511,7 +511,7 @@ describe('Score Submission Endpoints', () => {
         .set('Authorization', `Bearer ${matchPlayer1Token}`)
         .send({ score: '6-3, 6-2' })
 
-      const updated = groupRepo.findMatchById(matchId)!
+      const updated = await groupRepo.findMatchById(matchId)!
       expect(updated.winner_id).toBe(matchPlayer1Id)
     })
 
@@ -521,7 +521,7 @@ describe('Score Submission Endpoints', () => {
         .set('Authorization', `Bearer ${matchPlayer1Token}`)
         .send({ score: '3-6, 2-6' })
 
-      const updated = groupRepo.findMatchById(matchId)!
+      const updated = await groupRepo.findMatchById(matchId)!
       expect(updated.winner_id).toBe(matchPlayer2Id)
     })
   })

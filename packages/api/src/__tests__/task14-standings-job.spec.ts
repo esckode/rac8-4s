@@ -31,7 +31,7 @@ describe('Task #14: Standings Recalculation Job', () => {
     const pastDeadline = new Date(now.getTime() - 86400000).toISOString()
     const futureDeadline = new Date(now.getTime() + 259200000).toISOString()
 
-    const tournament = tournamentRepo.create({
+    const tournament = await tournamentRepo.create({
       name: `Standings Test ${Date.now()}`,
       sport: 'tennis',
       matchFormat: 'singles',
@@ -43,7 +43,7 @@ describe('Task #14: Standings Recalculation Job', () => {
     })
     tournamentId = tournament.id
 
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
     const testTimestamp = Date.now()
     const emails = [
@@ -54,23 +54,23 @@ describe('Task #14: Standings Recalculation Job', () => {
     ]
 
     for (const email of emails) {
-      playerRepo.findOrCreatePlayerByEmail(email, email.split('@')[0])
+      await playerRepo.findOrCreatePlayerByEmail(email, email.split('@')[0])
     }
 
-    const p1 = playerRepo.findByEmail(emails[0])!
-    const p2 = playerRepo.findByEmail(emails[1])!
-    const p3 = playerRepo.findByEmail(emails[2])!
-    const p4 = playerRepo.findByEmail(emails[3])!
+    const p1 = await playerRepo.findByEmail(emails[0])!
+    const p2 = await playerRepo.findByEmail(emails[1])!
+    const p3 = await playerRepo.findByEmail(emails[2])!
+    const p4 = await playerRepo.findByEmail(emails[3])!
 
     player1Id = p1.id
     player2Id = p2.id
     player3Id = p3.id
     player4Id = p4.id
 
-    tournamentRepo.updateStatus(tournamentId, 'registration_closed')
-    tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+    await tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
 
-    const groups = groupRepo.createGroups(tournamentId, 1, 2, [p1.id, p2.id, p3.id, p4.id])
+    const groups = await groupRepo.createGroups(tournamentId, 1, 2, [p1.id, p2.id, p3.id, p4.id])
     groupId = groups[0].id
   })
 
@@ -95,8 +95,8 @@ describe('Task #14: Standings Recalculation Job', () => {
   describe('Result consistency', () => {
     it('should have same players as direct calculateStandings call', async () => {
       const { calculateStandings } = await import('@core/index')
-      const members = groupRepo.findMembersByGroup(groupId)
-      const matches = groupRepo.findMatchesByGroup(groupId)
+      const members = await groupRepo.findMembersByGroup(groupId)
+      const matches = await groupRepo.findMatchesByGroup(groupId)
 
       const players = members.map(m => ({ id: m.id, name: m.name }))
       const matchData = matches.map(m => ({

@@ -56,9 +56,9 @@ describe('Group Stage Management', () => {
 
     // Create and register 6 players
     for (let i = 1; i <= 6; i++) {
-      const player = playerRepo.findOrCreatePlayerByEmail(`player${i}@test.com`, `Player ${i}`)
+      const player = await playerRepo.findOrCreatePlayerByEmail(`player${i}@test.com`, `Player ${i}`)
       playerIds.push(player.id)
-      playerRepo.createRegistration(player.id, tournamentId)
+      await playerRepo.createRegistration(player.id, tournamentId)
     }
 
     // Set status to registration_closed
@@ -154,12 +154,12 @@ describe('Group Stage Management', () => {
         .set('Authorization', `Bearer ${organizerToken}`)
         .send({ numGroups: 2, advancingPerGroup: 1 })
 
-      const groups = groupRepo.findGroupsByTournament(tournamentId)
+      const groups = await groupRepo.findGroupsByTournament(tournamentId)
       expect(groups).toHaveLength(2)
 
       for (const group of groups) {
-        const matches = groupRepo.findMatchesByGroup(group.id)
-        const members = groupRepo.findMembersByGroup(group.id)
+        const matches = await groupRepo.findMatchesByGroup(group.id)
+        const members = await groupRepo.findMembersByGroup(group.id)
         const expectedMatches = (members.length * (members.length - 1)) / 2
 
         expect(matches.length).toBe(expectedMatches)
@@ -299,9 +299,9 @@ describe('Group Stage Management', () => {
       const testTimestamp = Date.now()
       for (let i = 1; i <= 6; i++) {
         const email = `standings_player${i}_${testTimestamp}@test.com` // Include timestamp to ensure uniqueness across tests
-        const player = playerRepo.findOrCreatePlayerByEmail(email, `Standings Player ${i}`)
+        const player = await playerRepo.findOrCreatePlayerByEmail(email, `Standings Player ${i}`)
         standingsPlayerIds.push(player.id)
-        playerRepo.createRegistration(player.id, standingsTournamentId)
+        await playerRepo.createRegistration(player.id, standingsTournamentId)
         if (i === 1) {
           player1Email = email
         }

@@ -51,7 +51,7 @@ describe('Task #13: Job Queue Integration', () => {
     const pastDeadline = new Date(now.getTime() - 86400000).toISOString()
     const futureDeadline = new Date(now.getTime() + 259200000).toISOString()
 
-    const tournament = tournamentRepo.create({
+    const tournament = await tournamentRepo.create({
       name: `Job Queue Test ${Date.now()}`,
       sport: 'tennis',
       matchFormat: 'singles',
@@ -64,7 +64,7 @@ describe('Task #13: Job Queue Integration', () => {
     tournamentId = tournament.id
 
     // Register 4 players
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
     const testTimestamp = Date.now()
 
     const emails = [
@@ -92,19 +92,19 @@ describe('Task #13: Job Queue Integration', () => {
     player3Token = tokens[2]
     player4Token = tokens[3]
 
-    const p1 = playerRepo.findByEmail(emails[0])!
-    const p2 = playerRepo.findByEmail(emails[1])!
-    const p3 = playerRepo.findByEmail(emails[2])!
-    const p4 = playerRepo.findByEmail(emails[3])!
+    const p1 = (await playerRepo.findByEmail(emails[0]))!
+    const p2 = (await playerRepo.findByEmail(emails[1]))!
+    const p3 = (await playerRepo.findByEmail(emails[2]))!
+    const p4 = (await playerRepo.findByEmail(emails[3]))!
 
     // Create groups and matches
-    tournamentRepo.updateStatus(tournamentId, 'registration_closed')
-    tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
-    const groups = groupRepo.createGroups(tournamentId, 1, 2, [p1.id, p2.id, p3.id, p4.id])
+    await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+    await tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
+    const groups = await groupRepo.createGroups(tournamentId, 1, 2, [p1.id, p2.id, p3.id, p4.id])
     groupId = groups[0].id
 
     // Find a match between player1 and player2
-    const allMatches = groupRepo.findMatchesByGroup(groupId)
+    const allMatches = await groupRepo.findMatchesByGroup(groupId)
     const player1vs2Match = allMatches.find(m =>
       (m.player1_id === p1.id && m.player2_id === p2.id) ||
       (m.player1_id === p2.id && m.player2_id === p1.id)

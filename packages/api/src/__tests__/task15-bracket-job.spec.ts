@@ -244,7 +244,7 @@ describe('Task #15: Bracket Generation Job', () => {
     })
 
     it('should reject if no groups exist for tournament', async () => {
-      const emptyTournament = tournamentRepo.create({
+      const emptyTournament = await tournamentRepo.create({
         name: `Empty Bracket Test ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',
@@ -264,7 +264,7 @@ describe('Task #15: Bracket Generation Job', () => {
     })
 
     it('should reject if no players are advancing from groups', async () => {
-      const zeroAdvancingTournament = tournamentRepo.create({
+      const zeroAdvancingTournament = await tournamentRepo.create({
         name: `Zero Advancing Test ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',

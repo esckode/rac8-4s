@@ -37,7 +37,7 @@ describe('Match Scoring Coverage Tests', () => {
     const pastDeadline = new Date(now.getTime() - 1000 * 60 * 60).toISOString()
     const futureDeadline = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7).toISOString()
 
-    const tournament = tournamentRepo.create({
+    const tournament = await tournamentRepo.create({
       name: `Match Scoring Test ${Date.now()}`,
       sport: 'tennis',
       matchFormat: 'singles',
@@ -53,17 +53,17 @@ describe('Match Scoring Coverage Tests', () => {
     // Create 4 players for group testing
     players = []
     for (let i = 1; i <= 4; i++) {
-      const player = playerRepo.findOrCreatePlayerByEmail(`match_player${i}@test.com`, `Match Player ${i}`)
+      const player = await playerRepo.findOrCreatePlayerByEmail(`match_player${i}@test.com`, `Match Player ${i}`)
       players.push(player)
-      playerRepo.createRegistration(player.id, tournamentId)
+      await playerRepo.createRegistration(player.id, tournamentId)
     }
 
     // Transition to group_stage_active and create groups
-    tournamentRepo.updateStatus(tournamentId, 'registration_closed')
-    tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+    await tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
     
-    const groups = groupRepo.createGroups(tournamentId, 2, 1, players.map(p => p.id))
-    const matches = groupRepo.findMatchesByGroup(groups[0].id)
+    const groups = await groupRepo.createGroups(tournamentId, 2, 1, players.map(p => p.id))
+    const matches = await groupRepo.findMatchesByGroup(groups[0].id)
     if (matches.length > 0) {
       matchId = matches[0].id
     }

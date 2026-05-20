@@ -53,7 +53,7 @@ describe('Match Coordination Endpoints', () => {
     const pastDeadline = new Date(now.getTime() - 86400000).toISOString()
     const futureDeadline = new Date(now.getTime() + 259200000).toISOString()
 
-    const tournament = tournamentRepo.create({
+    const tournament = await tournamentRepo.create({
       name: `Match Coordination Test ${Date.now()}`,
       sport: 'tennis',
       matchFormat: 'singles',
@@ -66,7 +66,7 @@ describe('Match Coordination Endpoints', () => {
     tournamentId = tournament.id
 
     // Register 4 players
-    tournamentRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentRepo.updateStatus(tournamentId, 'registration_open')
     const testTimestamp = Date.now()
 
     const emails = [
@@ -94,10 +94,10 @@ describe('Match Coordination Endpoints', () => {
     player3Token = tokens[2]
     player4Token = tokens[3]
 
-    const p1 = playerRepo.findByEmail(emails[0])!
-    const p2 = playerRepo.findByEmail(emails[1])!
-    const p3 = playerRepo.findByEmail(emails[2])!
-    const p4 = playerRepo.findByEmail(emails[3])!
+    const p1 = await playerRepo.findByEmail(emails[0])!
+    const p2 = await playerRepo.findByEmail(emails[1])!
+    const p3 = await playerRepo.findByEmail(emails[2])!
+    const p4 = await playerRepo.findByEmail(emails[3])!
 
     player1Id = p1.id
     player2Id = p2.id
@@ -105,12 +105,12 @@ describe('Match Coordination Endpoints', () => {
     player4Id = p4.id
 
     // Create groups and matches (single group to keep things simple)
-    tournamentRepo.updateStatus(tournamentId, 'registration_closed')
-    tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
-    const groups = groupRepo.createGroups(tournamentId, 1, 2, [player1Id, player2Id, player3Id, player4Id])
+    await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+    await tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
+    const groups = await groupRepo.createGroups(tournamentId, 1, 2, [player1Id, player2Id, player3Id, player4Id])
 
     // Find a match between player1 and player2 specifically
-    const allMatches = groupRepo.findMatchesByGroup(groups[0].id)
+    const allMatches = await groupRepo.findMatchesByGroup(groups[0].id)
     const player1vs2Match = allMatches.find(m =>
       (m.player1_id === player1Id && m.player2_id === player2Id) ||
       (m.player1_id === player2Id && m.player2_id === player1Id)
@@ -122,7 +122,7 @@ describe('Match Coordination Endpoints', () => {
     matchId = player1vs2Match.id
 
     // Create knockout tournament for knockout tests
-    tournamentRepo.updateStatus(tournamentId, 'group_stage_complete')
+    await tournamentRepo.updateStatus(tournamentId, 'group_stage_complete')
     await request(app)
       .post(`/tournaments/${tournamentId}/bracket/generate`)
       .set('Authorization', `Bearer ${organizerToken}`)
@@ -205,7 +205,7 @@ describe('Match Coordination Endpoints', () => {
       const org2 = `org_${Date.now()}_diff`
       const token2 = issueOrganizerToken({ sub: org2, email: `org${Date.now()}@test.com` }, STANDARD_CONFIG).accessToken
 
-      const newTournament = tournamentRepo.create({
+      const newTournament = await tournamentRepo.create({
         name: `Other Tournament ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',
@@ -335,7 +335,7 @@ describe('Match Coordination Endpoints', () => {
       const org2 = 'org_notinmatch'
       const token2 = issueOrganizerToken({ sub: org2, email: 'org2@test.com' }, STANDARD_CONFIG).accessToken
 
-      const otherTournament = tournamentRepo.create({
+      const otherTournament = await tournamentRepo.create({
         name: `Other Tournament ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',
@@ -346,7 +346,7 @@ describe('Match Coordination Endpoints', () => {
         creatorId: org2,
       })
 
-      tournamentRepo.updateStatus(otherTournament.id, 'registration_open')
+      await tournamentRepo.updateStatus(otherTournament.id, 'registration_open')
 
       const otherEmail1 = `other_1_${Date.now()}@test.com`
       const otherEmail2 = `other_2_${Date.now()}@test.com`
@@ -359,14 +359,14 @@ describe('Match Coordination Endpoints', () => {
         .post(`/tournaments/${otherTournament.id}/register`)
         .send({ email: otherEmail2, name: 'Other Player 2' })
 
-      tournamentRepo.updateStatus(otherTournament.id, 'registration_closed')
-      tournamentRepo.updateStatus(otherTournament.id, 'group_stage_active')
+      await tournamentRepo.updateStatus(otherTournament.id, 'registration_closed')
+      await tournamentRepo.updateStatus(otherTournament.id, 'group_stage_active')
 
-      const otherP1 = playerRepo.findByEmail(otherEmail1)!
-      const otherP2 = playerRepo.findByEmail(otherEmail2)!
+      const otherP1 = await playerRepo.findByEmail(otherEmail1)!
+      const otherP2 = await playerRepo.findByEmail(otherEmail2)!
 
-      const otherGroups = groupRepo.createGroups(otherTournament.id, 1, 1, [otherP1.id, otherP2.id])
-      const otherMatches = groupRepo.findMatchesByGroup(otherGroups[0].id)
+      const otherGroups = await groupRepo.createGroups(otherTournament.id, 1, 1, [otherP1.id, otherP2.id])
+      const otherMatches = await groupRepo.findMatchesByGroup(otherGroups[0].id)
       const otherMatchId = otherMatches[0].id
 
       // Try to confirm player3 (from original tournament) in this match (from other tournament)
@@ -399,7 +399,7 @@ describe('Match Coordination Endpoints', () => {
         return
       }
 
-      const knockoutMatch = knockoutRepo.findKnockoutMatchById(knockoutMatchId)
+      const knockoutMatch = await knockoutRepo.findKnockoutMatchById(knockoutMatchId)
       if (!knockoutMatch || !knockoutMatch.player1_id || !knockoutMatch.player2_id) {
         // Skip if match doesn't have both players (e.g., bye match)
         return

@@ -142,7 +142,7 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
       const past = new Date(now.getTime() - 86400000).toISOString()
       const future = new Date(now.getTime() + 259200000).toISOString()
 
-      const tournament = tournamentRepo.create({
+      const tournament = await tournamentRepo.create({
         name: `SSE Test ${Date.now()}`,
         sport: 'tennis',
         matchFormat: 'singles',
@@ -154,21 +154,21 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
       })
       tournamentId = tournament.id
 
-      tournamentRepo.updateStatus(tournamentId, 'registration_open')
+      await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
       const ts = Date.now()
       const emails = [`sse1_${ts}@test.com`, `sse2_${ts}@test.com`]
       for (const email of emails) {
-        playerRepo.findOrCreatePlayerByEmail(email, email.split('@')[0])
+        await playerRepo.findOrCreatePlayerByEmail(email, email.split('@')[0])
       }
 
-      const p1 = playerRepo.findByEmail(emails[0])!
-      const p2 = playerRepo.findByEmail(emails[1])!
+      const p1 = await playerRepo.findByEmail(emails[0])!
+      const p2 = await playerRepo.findByEmail(emails[1])!
 
-      tournamentRepo.updateStatus(tournamentId, 'registration_closed')
-      tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
+      await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
+      await tournamentRepo.updateStatus(tournamentId, 'group_stage_active')
 
-      const groups = groupRepo.createGroups(tournamentId, 1, 1, [p1.id, p2.id])
+      const groups = await groupRepo.createGroups(tournamentId, 1, 1, [p1.id, p2.id])
       groupId = groups[0].id
 
       // Register player via API to get a valid player token
@@ -219,7 +219,7 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
       it('should return 403 when organizer does not own the tournament', async () => {
         const tournamentRepo = new TournamentRepository(db)
         const now = new Date()
-        const otherTournament = tournamentRepo.create({
+        const otherTournament = await tournamentRepo.create({
           name: `Other Organizer Tournament ${Date.now()}`,
           sport: 'tennis',
           matchFormat: 'singles',
@@ -386,9 +386,9 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
       })
 
       it('should deliver bracket.published with correct shape from processor', async () => {
-        const matches = groupRepo.findMatchesByGroup(groupId)
-        const players = groupRepo.findMembersByGroup(groupId)
-        groupRepo.updateMatch(matches[0].id, players[0].id, '6-4, 6-3')
+        const matches = await groupRepo.findMatchesByGroup(groupId)
+        const players = await groupRepo.findMembersByGroup(groupId)
+        await groupRepo.updateMatch(matches[0].id, players[0].id, '6-4, 6-3')
 
         const { chunks, req } = await connectSSE(
           server,
@@ -414,7 +414,7 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
       it('should not deliver events for tournament A to a client subscribed to B', async () => {
         const tournamentRepo = new TournamentRepository(db)
         const now = new Date()
-        const tournamentB = tournamentRepo.create({
+        const tournamentB = await tournamentRepo.create({
           name: `SSE Scoping Test B ${Date.now()}`,
           sport: 'tennis',
           matchFormat: 'singles',

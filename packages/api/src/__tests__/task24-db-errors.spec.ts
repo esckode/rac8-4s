@@ -289,8 +289,8 @@ describe('Task 2.4: Async Error Handling & Edge Cases', () => {
 
       // Simulate two concurrent registration attempts with same email
       const promises = [
-        playerRepo.findOrCreatePlayerByEmail(email, name),
-        playerRepo.findOrCreatePlayerByEmail(email, name),
+        await playerRepo.findOrCreatePlayerByEmail(email, name),
+        await playerRepo.findOrCreatePlayerByEmail(email, name),
       ]
 
       const results = await Promise.all(promises)
@@ -307,8 +307,8 @@ describe('Task 2.4: Async Error Handling & Edge Cases', () => {
 
       // Try to update registration status concurrently
       const promises = [
-        playerRepo.updateRegistrationStatus(registration.id, 'registered'),
-        playerRepo.updateRegistrationStatus(registration.id, 'registered'),
+        await playerRepo.updateRegistrationStatus(registration.id, 'registered'),
+        await playerRepo.updateRegistrationStatus(registration.id, 'registered'),
       ]
 
       const results = await Promise.all(promises)
@@ -321,8 +321,8 @@ describe('Task 2.4: Async Error Handling & Edge Cases', () => {
 
     it('should handle concurrent tournament updates safely', async () => {
       const updates = [
-        tournamentRepo.update(tournamentId, { name: 'Updated Name 1' }),
-        tournamentRepo.update(tournamentId, { name: 'Updated Name 2' }),
+        await tournamentRepo.update(tournamentId, { name: 'Updated Name 1' }),
+        await tournamentRepo.update(tournamentId, { name: 'Updated Name 2' }),
       ]
 
       const results = await Promise.all(updates)

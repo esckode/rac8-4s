@@ -573,7 +573,7 @@ describe('Error Scenarios', () => {
       .set('Authorization', `Bearer ${organizerToken}`)
       .send({ action: 'CLOSE_REGISTRATION' })
 
-    groupRepo.createGroups(tournamentId, 1, 1, [
+    await groupRepo.createGroups(tournamentId, 1, 1, [
       player1.playerId,
       player2.playerId,
     ])
