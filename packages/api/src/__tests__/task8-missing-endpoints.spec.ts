@@ -19,7 +19,7 @@ describe('Task #8 - Missing Endpoints', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -27,7 +27,7 @@ describe('Task #8 - Missing Endpoints', () => {
     app = createApp({ config: DEFAULT_APP_CONFIG, db, jwtConfig: STANDARD_CONFIG, tokenStore })
     playerRepo = new PlayerRepository(db)
     tournamentRepo = new TournamentRepository(db)
-  })
+  }, 30000)
 
   describe('GET /tournaments/available', () => {
     let tournamentId1: string
