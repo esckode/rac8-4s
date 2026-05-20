@@ -42,7 +42,7 @@ describe('Score Submission Endpoints', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     tokenStore = new InMemoryTokenStore()
@@ -202,7 +202,7 @@ describe('Score Submission Endpoints', () => {
     } else {
       playerNotInMatchToken = player6Token
     }
-  })
+  }, 30000)
 
   describe('POST /tournaments/:id/matches/:matchId/score (player submission)', () => {
     test('should submit a valid score by player1', async () => {

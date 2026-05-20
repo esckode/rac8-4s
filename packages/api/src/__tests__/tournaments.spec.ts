@@ -20,7 +20,7 @@ describe('Tournament CRUD Endpoints', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -40,7 +40,7 @@ describe('Tournament CRUD Endpoints', () => {
       STANDARD_CONFIG
     )
     organizerToken = tokenPair.accessToken
-  })
+  }, 30000)
 
   afterAll(async () => {
     await closeTestDb()

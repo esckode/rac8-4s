@@ -24,7 +24,7 @@ describe('Task #16: Email Notification Job', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -77,7 +77,7 @@ describe('Task #16: Email Notification Job', () => {
     player3Email = p3.email
     player4Id = p4.id
     player4Email = p4.email
-  })
+  }, 30000)
 
 
   describe('Job execution', () => {

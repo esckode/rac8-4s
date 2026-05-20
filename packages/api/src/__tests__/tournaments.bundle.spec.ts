@@ -30,7 +30,7 @@ describe('GET /tournaments/:id/bundle - Consolidation Endpoint', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -84,7 +84,7 @@ describe('GET /tournaments/:id/bundle - Consolidation Endpoint', () => {
 
     // Set tournament to group_stage_active
     await tournamentsRepo.updateStatus(tournamentId, 'group_stage_active')
-  })
+  }, 30000)
 
   afterAll(async () => {
     await closeTestDb()

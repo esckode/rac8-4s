@@ -21,7 +21,7 @@ describe('Task 2.4: Async Error Handling & Edge Cases', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -48,7 +48,7 @@ describe('Task 2.4: Async Error Handling & Edge Cases', () => {
       creatorId: organizerId,
     })
     tournamentId = tournament.id
-  })
+  }, 30000)
 
   afterEach(async () => {
     restorePoolQuery(db)

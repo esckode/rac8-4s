@@ -14,8 +14,8 @@ export async function initializeTestDb(): Promise<Pool> {
 
   testPool = new Pool({
     connectionString,
-    min: 1,
-    max: 2,
+    min: 0,
+    max: 10,
   })
 
   try {

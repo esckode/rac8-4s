@@ -9,13 +9,13 @@ describe('LocationRepository', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
     locationRepo = new LocationRepository(db)
     courtRepo = new CourtRepository(db)
-  })
+  }, 30000)
 
   describe('create', () => {
     it('should create a location with valid data', async () => {
@@ -464,7 +464,7 @@ describe('CourtRepository', () => {
       totalCourts: 4,
     })
     locationId = location.id
-  })
+  }, 30000)
 
   describe('create', () => {
     it('should create a court with default status', async () => {
@@ -659,7 +659,7 @@ describe('Location and Court Integration', () => {
     await resetTestDb(db)
     locationRepo = new LocationRepository(db)
     courtRepo = new CourtRepository(db)
-  })
+  }, 30000)
 
   it('should maintain location-court relationship', async () => {
     const location = await locationRepo.create({

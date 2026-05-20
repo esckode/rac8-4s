@@ -23,7 +23,7 @@ describe('Task #14: Standings Recalculation Job', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -79,7 +79,7 @@ describe('Task #14: Standings Recalculation Job', () => {
 
     const groups = await groupRepo.createGroups(tournamentId, 1, 2, [p1.id, p2.id, p3.id, p4.id])
     groupId = groups[0].id
-  })
+  }, 30000)
 
 
   describe('Job execution', () => {

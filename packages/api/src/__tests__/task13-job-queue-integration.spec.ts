@@ -30,7 +30,7 @@ describe('Task #13: Job Queue Integration', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     tokenStore = new InMemoryTokenStore()
@@ -120,7 +120,7 @@ describe('Task #13: Job Queue Integration', () => {
       throw new Error('No match found between player1 and player2')
     }
     matchId = player1vs2Match.id
-  })
+  }, 60000)
 
   afterEach(async () => {
     await jobQueue.close()

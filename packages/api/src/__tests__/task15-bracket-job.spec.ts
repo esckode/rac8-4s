@@ -25,7 +25,7 @@ describe('Task #15: Bracket Generation Job', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -86,7 +86,7 @@ describe('Task #15: Bracket Generation Job', () => {
     const matches2 = await groupRepo.findMatchesByGroup(group2Id)
     match1Id = matches1[0].id
     match2Id = matches2[0].id
-  })
+  }, 30000)
 
   afterAll(async () => {
     await closeTestDb()

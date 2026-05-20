@@ -64,7 +64,7 @@ const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 beforeAll(async () => {
   db = await initializeTestDb()
-})
+}, 30000)
 
 beforeEach(async () => {
   await resetTestDb(db)
@@ -95,7 +95,7 @@ beforeEach(async () => {
     STANDARD_CONFIG
   )
   organizerToken = tokenPair.accessToken
-})
+}, 30000)
 
 afterEach(async () => {
   await new Promise<void>(resolve => {

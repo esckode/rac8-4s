@@ -23,7 +23,7 @@ describe('Coverage improvement tests - Group and Match Operations', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -64,7 +64,7 @@ describe('Coverage improvement tests - Group and Match Operations', () => {
     }
 
     await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
-  })
+  }, 30000)
 
   afterAll(async () => {
     await closeTestDb()

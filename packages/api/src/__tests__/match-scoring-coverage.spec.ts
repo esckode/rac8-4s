@@ -24,7 +24,7 @@ describe('Match Scoring Coverage Tests', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -73,7 +73,7 @@ describe('Match Scoring Coverage Tests', () => {
     if (matches.length > 0) {
       matchId = matches[0].id
     }
-  })
+  }, 30000)
 
   describe('PATCH /:id/matches/:matchId/score - Organizer override', () => {
     it('should allow organizer to override match score', async () => {

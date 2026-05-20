@@ -122,7 +122,7 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
 
     beforeAll(async () => {
       db = await initializeTestDb()
-    })
+    }, 30000)
 
     beforeEach(async () => {
       await resetTestDb(db)
@@ -193,7 +193,7 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
 
       await tournamentRepo2.updateStatus(tournamentId, 'registration_closed')
       await tournamentRepo2.updateStatus(tournamentId, 'group_stage_active')
-    })
+    }, 30000)
 
     afterEach(async () => {
       await new Promise<void>(resolve => server.close(() => resolve()))

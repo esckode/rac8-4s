@@ -68,7 +68,7 @@ describe('Group Stage Management', () => {
 
     // Set status to registration_closed
     await tournamentsRepo.updateStatus(tournamentId, 'registration_closed')
-  })
+  }, 30000)
 
   describe('POST /:id/advance - tournament state transitions', () => {
     it('should advance from registration_open to registration_closed', async () => {

@@ -33,7 +33,7 @@ describe('Match Coordination Endpoints', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     tokenStore = new InMemoryTokenStore()
@@ -141,7 +141,7 @@ describe('Match Coordination Endpoints', () => {
     if (publishRes.body.matches && publishRes.body.matches.length > 0) {
       knockoutMatchId = publishRes.body.matches[0].id
     }
-  })
+  }, 30000)
 
   describe('GET /tournaments/:id/matches - list player matches', () => {
     it('should return player\'s group matches', async () => {

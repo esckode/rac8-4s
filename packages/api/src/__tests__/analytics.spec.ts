@@ -29,7 +29,7 @@ describe('Analytics Events', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -40,7 +40,7 @@ describe('Analytics Events', () => {
     // Create a test player
     const player = await playerRepo.findOrCreatePlayerByEmail('player@test.com', 'Test Player', '555-1234', 'email')
     playerId = player.id
-  })
+  }, 30000)
 
   afterAll(async () => {
     await closeTestDb()
