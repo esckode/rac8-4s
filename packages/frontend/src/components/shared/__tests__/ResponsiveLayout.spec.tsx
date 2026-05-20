@@ -26,7 +26,7 @@ describe('ResponsiveLayout', () => {
       </ResponsiveLayout>
     )
 
-    expect(screen.getByText('Doubles Pickleball')).toBeInTheDocument()
+    expect(screen.getByText('C.U.At.Court')).toBeInTheDocument()
   })
 
   it('does not render header when showHeader is false', () => {
@@ -36,7 +36,7 @@ describe('ResponsiveLayout', () => {
       </ResponsiveLayout>
     )
 
-    expect(screen.queryByText('Doubles Pickleball')).not.toBeInTheDocument()
+    expect(screen.queryByText('C.U.At.Court')).not.toBeInTheDocument()
   })
 
   it('renders navigation tabs when showNav is true', () => {
