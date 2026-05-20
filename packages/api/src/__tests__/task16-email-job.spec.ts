@@ -1,10 +1,12 @@
-import { openDatabase, TournamentRepository, PlayerRepository } from '../db'
+import { Pool } from 'pg'
+import { TournamentRepository, PlayerRepository } from '../db'
 import { InMemoryEmailAdapter } from '../email-adapter'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { processEmailSend } from '../workers/email-processor'
+import { initializeTestDb, resetTestDb } from './db-test-setup'
 
 describe('Task #16: Email Notification Job', () => {
-  let db: any
+  let db: Pool
   let tournamentRepo: TournamentRepository
   let playerRepo: PlayerRepository
   let emailAdapter: InMemoryEmailAdapter
@@ -20,8 +22,12 @@ describe('Task #16: Email Notification Job', () => {
   let player4Id: string
   let player4Email: string
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
-    db = openDatabase(':memory:')
+    await resetTestDb(db)
     tournamentRepo = new TournamentRepository(db)
     playerRepo = new PlayerRepository(db)
     emailAdapter = new InMemoryEmailAdapter()
@@ -57,11 +63,12 @@ describe('Task #16: Email Notification Job', () => {
       await playerRepo.findOrCreatePlayerByEmail(email, email.split('@')[0])
     }
 
-    const p1 = await playerRepo.findByEmail(emails[0])!
-    const p2 = await playerRepo.findByEmail(emails[1])!
-    const p3 = await playerRepo.findByEmail(emails[2])!
-    const p4 = await playerRepo.findByEmail(emails[3])!
+    const p1 = await playerRepo.findByEmail(emails[0])
+    const p2 = await playerRepo.findByEmail(emails[1])
+    const p3 = await playerRepo.findByEmail(emails[2])
+    const p4 = await playerRepo.findByEmail(emails[3])
 
+    if (!p1 || !p2 || !p3 || !p4) throw new Error('Failed to create players')
     player1Id = p1.id
     player1Email = p1.email
     player2Id = p2.id
@@ -72,9 +79,6 @@ describe('Task #16: Email Notification Job', () => {
     player4Email = p4.email
   })
 
-  afterEach(async () => {
-    db.close()
-  })
 
   describe('Job execution', () => {
     it('should call processor and return sent/skipped counts', async () => {

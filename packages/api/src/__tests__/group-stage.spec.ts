@@ -1,15 +1,16 @@
 import request from 'supertest'
-import Database from 'better-sqlite3'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Group Stage Management', () => {
-  let db: Database.Database
+  let db: Pool
   let app: any
   let tournamentsRepo: TournamentRepository
   let playerRepo: PlayerRepository
@@ -20,9 +21,13 @@ describe('Group Stage Management', () => {
   let tournamentId: string
   let playerIds: string[] = []
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
     tokenStore = new InMemoryTokenStore()
-    db = openDatabase(':memory:')
+    await resetTestDb(db)
     app = createApp({
 
       config: DEFAULT_APP_CONFIG,      db,
@@ -62,13 +67,13 @@ describe('Group Stage Management', () => {
     }
 
     // Set status to registration_closed
-    tournamentsRepo.updateStatus(tournamentId, 'registration_closed')
+    await tournamentsRepo.updateStatus(tournamentId, 'registration_closed')
   })
 
   describe('POST /:id/advance - tournament state transitions', () => {
     it('should advance from registration_open to registration_closed', async () => {
       // Reset tournament to registration_open
-      tournamentsRepo.updateStatus(tournamentId, 'registration_open')
+      await tournamentsRepo.updateStatus(tournamentId, 'registration_open')
 
       const res = await request(app)
         .post(`/tournaments/${tournamentId}/advance`)
@@ -197,7 +202,7 @@ describe('Group Stage Management', () => {
     })
 
     it('should return 409 if tournament is not in registration_closed status', async () => {
-      tournamentsRepo.updateStatus(tournamentId, 'registration_open')
+      await tournamentsRepo.updateStatus(tournamentId, 'registration_open')
 
       const res = await request(app)
         .post(`/tournaments/${tournamentId}/groups`)
@@ -308,10 +313,10 @@ describe('Group Stage Management', () => {
       }
 
       // Set status to registration_closed
-      tournamentsRepo.updateStatus(standingsTournamentId, 'registration_closed')
+      await tournamentsRepo.updateStatus(standingsTournamentId, 'registration_closed')
 
       // Temporarily set back to registration_open to get a session token for player 1
-      tournamentsRepo.updateStatus(standingsTournamentId, 'registration_open')
+      await tournamentsRepo.updateStatus(standingsTournamentId, 'registration_open')
 
       // Re-register player 1 to get their session token (idempotent)
       const registerRes = await request(app)
@@ -322,7 +327,7 @@ describe('Group Stage Management', () => {
         })
 
       // Now set it back to registration_closed for group creation
-      tournamentsRepo.updateStatus(standingsTournamentId, 'registration_closed')
+      await tournamentsRepo.updateStatus(standingsTournamentId, 'registration_closed')
 
       if (!registerRes.body.magicLinkToken) {
         throw new Error(`No magic link token in register response: ${registerRes.status} ${JSON.stringify(registerRes.body)}`)
@@ -452,7 +457,7 @@ describe('Group Stage Management', () => {
     it('should return 403 if player is not in the group', async () => {
       // Register a 7th player for the same tournament AFTER groups are created
       // This player is registered but not in any group
-      tournamentsRepo.updateStatus(standingsTournamentId, 'registration_open')
+      await tournamentsRepo.updateStatus(standingsTournamentId, 'registration_open')
 
       const otherPlayerRegisterRes = await request(app)
         .post(`/tournaments/${standingsTournamentId}/register`)
@@ -465,7 +470,7 @@ describe('Group Stage Management', () => {
         `/tournaments/${standingsTournamentId}/auth/verify?token=${otherPlayerRegisterRes.body.magicLinkToken}`
       )
 
-      tournamentsRepo.updateStatus(standingsTournamentId, 'registration_closed')
+      await tournamentsRepo.updateStatus(standingsTournamentId, 'registration_closed')
       const otherPlayerToken = otherPlayerVerifyRes.body.playerToken
 
       // This player is registered for the tournament but not in any group

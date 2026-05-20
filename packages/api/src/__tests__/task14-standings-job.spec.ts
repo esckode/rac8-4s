@@ -1,11 +1,13 @@
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository } from '../db'
+import { Pool } from 'pg'
+import { TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { InMemoryStandingsCache } from '../standings-cache'
 import { BroadcastBus } from '../broadcast-bus'
 import { processStandingsRecalculate } from '../workers/standings-processor'
+import { initializeTestDb, resetTestDb } from './db-test-setup'
 
 describe('Task #14: Standings Recalculation Job', () => {
-  let db: any
+  let db: Pool
   let tournamentRepo: TournamentRepository
   let playerRepo: PlayerRepository
   let groupRepo: GroupRepository
@@ -19,8 +21,12 @@ describe('Task #14: Standings Recalculation Job', () => {
   let player3Id: string
   let player4Id: string
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
-    db = openDatabase(':memory:')
+    await resetTestDb(db)
     tournamentRepo = new TournamentRepository(db)
     playerRepo = new PlayerRepository(db)
     groupRepo = new GroupRepository(db)
@@ -57,11 +63,12 @@ describe('Task #14: Standings Recalculation Job', () => {
       await playerRepo.findOrCreatePlayerByEmail(email, email.split('@')[0])
     }
 
-    const p1 = await playerRepo.findByEmail(emails[0])!
-    const p2 = await playerRepo.findByEmail(emails[1])!
-    const p3 = await playerRepo.findByEmail(emails[2])!
-    const p4 = await playerRepo.findByEmail(emails[3])!
+    const p1 = await playerRepo.findByEmail(emails[0])
+    const p2 = await playerRepo.findByEmail(emails[1])
+    const p3 = await playerRepo.findByEmail(emails[2])
+    const p4 = await playerRepo.findByEmail(emails[3])
 
+    if (!p1 || !p2 || !p3 || !p4) throw new Error('Failed to create players')
     player1Id = p1.id
     player2Id = p2.id
     player3Id = p3.id
@@ -74,9 +81,6 @@ describe('Task #14: Standings Recalculation Job', () => {
     groupId = groups[0].id
   })
 
-  afterEach(async () => {
-    db.close()
-  })
 
   describe('Job execution', () => {
     it('should call processor and return non-empty standings', async () => {

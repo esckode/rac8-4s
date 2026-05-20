@@ -1,8 +1,9 @@
 import http from 'node:http'
 import { AddressInfo } from 'node:net'
 import request from 'supertest'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { BroadcastBus } from '../broadcast-bus'
@@ -10,6 +11,7 @@ import { issueOrganizerToken } from '../auth/tokens'
 import { processStandingsRecalculate } from '../workers/standings-processor'
 import { processBracketGenerate } from '../workers/bracket-processor'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
@@ -105,7 +107,7 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
   })
 
   describe('GET /tournaments/:id/events', () => {
-    let db: any
+    let db: Pool
     let app: any
     let server: http.Server
     let broadcastBus: BroadcastBus
@@ -118,8 +120,12 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
     let organizerToken: string
     let player1Token: string
 
+    beforeAll(async () => {
+      db = await initializeTestDb()
+    })
+
     beforeEach(async () => {
-      db = openDatabase(':memory:')
+      await resetTestDb(db)
       tokenStore = new InMemoryTokenStore()
       jobQueue = new InMemoryJobQueue()
       broadcastBus = new BroadcastBus()
@@ -192,7 +198,6 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
     afterEach(async () => {
       await new Promise<void>(resolve => server.close(() => resolve()))
       await jobQueue.close()
-      db.close()
     })
 
     describe('Auth enforcement', () => {

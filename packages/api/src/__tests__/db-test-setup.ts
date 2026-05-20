@@ -33,13 +33,36 @@ export async function initializeTestDb(): Promise<Pool> {
 
 export async function resetTestDb(pool: Pool): Promise<void> {
   try {
-    // Drop and recreate schemas for clean test state
-    await pool.query('DROP SCHEMA IF EXISTS public CASCADE')
+    // Drop all objects in public schema (except schema_migrations table)
+    await pool.query(`
+      DO $$ DECLARE
+        r RECORD;
+      BEGIN
+        -- Drop all tables except schema_migrations
+        FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename != 'schema_migrations') LOOP
+          EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
+        END LOOP;
+
+        -- Drop all sequences
+        FOR r IN (SELECT sequencename FROM pg_sequences WHERE schemaname = 'public') LOOP
+          EXECUTE 'DROP SEQUENCE IF EXISTS public.' || quote_ident(r.sequencename) || ' CASCADE';
+        END LOOP;
+
+        -- Drop all types (except built-in ones)
+        FOR r IN (SELECT typname FROM pg_type WHERE typnamespace = 'public'::regnamespace AND typtype IN ('c', 'e')) LOOP
+          EXECUTE 'DROP TYPE IF EXISTS public.' || quote_ident(r.typname) || ' CASCADE';
+        END LOOP;
+      END $$;
+    `)
+
+    // Clear migrations tracking to re-run them
+    await pool.query('DELETE FROM public.schema_migrations')
+
+    -- Drop and recreate auth schema
     await pool.query('DROP SCHEMA IF EXISTS auth CASCADE')
-    await pool.query('CREATE SCHEMA public')
     await pool.query('CREATE SCHEMA auth')
 
-    // Re-run migrations
+    -- Re-run migrations
     const migrationsDir = path.resolve(__dirname, '../../../../db/migrations')
     await runMigrations(pool, migrationsDir)
   } catch (err) {

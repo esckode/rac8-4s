@@ -1,14 +1,16 @@
 import request from 'supertest'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Match Coordination Endpoints', () => {
-  let db: any
+  let db: Pool
   let app: any
   let tournamentRepo: TournamentRepository
   let playerRepo: PlayerRepository
@@ -29,9 +31,13 @@ describe('Match Coordination Endpoints', () => {
   let matchId: string
   let knockoutMatchId: string
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
     tokenStore = new InMemoryTokenStore()
-    db = openDatabase(':memory:')
+    await resetTestDb(db)
     app = createApp({
 
       config: DEFAULT_APP_CONFIG,      db,
@@ -94,11 +100,12 @@ describe('Match Coordination Endpoints', () => {
     player3Token = tokens[2]
     player4Token = tokens[3]
 
-    const p1 = await playerRepo.findByEmail(emails[0])!
-    const p2 = await playerRepo.findByEmail(emails[1])!
-    const p3 = await playerRepo.findByEmail(emails[2])!
-    const p4 = await playerRepo.findByEmail(emails[3])!
+    const p1 = await playerRepo.findByEmail(emails[0])
+    const p2 = await playerRepo.findByEmail(emails[1])
+    const p3 = await playerRepo.findByEmail(emails[2])
+    const p4 = await playerRepo.findByEmail(emails[3])
 
+    if (!p1 || !p2 || !p3 || !p4) throw new Error('Failed to create players')
     player1Id = p1.id
     player2Id = p2.id
     player3Id = p3.id
@@ -362,9 +369,10 @@ describe('Match Coordination Endpoints', () => {
       await tournamentRepo.updateStatus(otherTournament.id, 'registration_closed')
       await tournamentRepo.updateStatus(otherTournament.id, 'group_stage_active')
 
-      const otherP1 = await playerRepo.findByEmail(otherEmail1)!
-      const otherP2 = await playerRepo.findByEmail(otherEmail2)!
+      const otherP1 = await playerRepo.findByEmail(otherEmail1)
+      const otherP2 = await playerRepo.findByEmail(otherEmail2)
 
+      if (!otherP1 || !otherP2) throw new Error('Failed to create other tournament players')
       const otherGroups = await groupRepo.createGroups(otherTournament.id, 1, 1, [otherP1.id, otherP2.id])
       const otherMatches = await groupRepo.findMatchesByGroup(otherGroups[0].id)
       const otherMatchId = otherMatches[0].id

@@ -1,14 +1,16 @@
 import request from 'supertest'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Score Submission Endpoints', () => {
-  let db: any
+  let db: Pool
   let app: any
   let tournamentRepo: TournamentRepository
   let playerRepo: PlayerRepository
@@ -38,9 +40,13 @@ describe('Score Submission Endpoints', () => {
   let playerNotInMatchToken: string
   let organizerToken: string
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
     tokenStore = new InMemoryTokenStore()
-    db = openDatabase(':memory:')
+    await resetTestDb(db)
     app = createApp({
 
       config: DEFAULT_APP_CONFIG,      db,
@@ -121,13 +127,14 @@ describe('Score Submission Endpoints', () => {
     player6Token = playerTokens[5]
 
     // Get all player IDs
-    const p1 = await playerRepo.findByEmail(playerEmails[0])!
-    const p2 = await playerRepo.findByEmail(playerEmails[1])!
-    const p3 = await playerRepo.findByEmail(playerEmails[2])!
-    const p4 = await playerRepo.findByEmail(playerEmails[3])!
-    const p5 = await playerRepo.findByEmail(playerEmails[4])!
-    const p6 = await playerRepo.findByEmail(playerEmails[5])!
+    const p1 = await playerRepo.findByEmail(playerEmails[0])
+    const p2 = await playerRepo.findByEmail(playerEmails[1])
+    const p3 = await playerRepo.findByEmail(playerEmails[2])
+    const p4 = await playerRepo.findByEmail(playerEmails[3])
+    const p5 = await playerRepo.findByEmail(playerEmails[4])
+    const p6 = await playerRepo.findByEmail(playerEmails[5])
 
+    if (!p1 || !p2 || !p3 || !p4 || !p5 || !p6) throw new Error('Failed to create players')
     player1Id = p1.id
     player2Id = p2.id
     player3Id = p3.id
@@ -359,9 +366,10 @@ describe('Score Submission Endpoints', () => {
         .post(`/tournaments/${pastTournament.id}/register`)
         .send({ email: email2, name: 'Test Player 2' })
 
-      const player1 = await playerRepo.findByEmail(email)!
-      const player2 = await playerRepo.findByEmail(email2)!
+      const player1 = await playerRepo.findByEmail(email)
+      const player2 = await playerRepo.findByEmail(email2)
 
+      if (!player1 || !player2) throw new Error('Failed to create players')
       await tournamentRepo.updateStatus(pastTournament.id, 'registration_closed')
       const groups = await groupRepo.createGroups(pastTournament.id, 1, 1, [player1.id, player2.id])
       const matches = await groupRepo.findMatchesByGroup(groups[0].id)
@@ -511,7 +519,8 @@ describe('Score Submission Endpoints', () => {
         .set('Authorization', `Bearer ${matchPlayer1Token}`)
         .send({ score: '6-3, 6-2' })
 
-      const updated = await groupRepo.findMatchById(matchId)!
+      const updated = await groupRepo.findMatchById(matchId)
+      if (!updated) throw new Error('Match not found')
       expect(updated.winner_id).toBe(matchPlayer1Id)
     })
 
@@ -521,7 +530,8 @@ describe('Score Submission Endpoints', () => {
         .set('Authorization', `Bearer ${matchPlayer1Token}`)
         .send({ score: '3-6, 2-6' })
 
-      const updated = await groupRepo.findMatchById(matchId)!
+      const updated = await groupRepo.findMatchById(matchId)
+      if (!updated) throw new Error('Match not found')
       expect(updated.winner_id).toBe(matchPlayer2Id)
     })
   })

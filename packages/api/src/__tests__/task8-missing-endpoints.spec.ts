@@ -1,32 +1,32 @@
 import request from 'supertest'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, PlayerRepository, TournamentRepository } from '../db'
+import { PlayerRepository, TournamentRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
-import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
-import Database from 'better-sqlite3'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Task #8 - Missing Endpoints', () => {
-  let db: Database.Database
+  let db: Pool
   let tokenStore: InMemoryTokenStore
   let playerRepo: PlayerRepository
   let tournamentRepo: TournamentRepository
   let app: any
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
+    await resetTestDb(db)
     tokenStore = new InMemoryTokenStore()
-    db = openDatabase(':memory:')
     app = createApp({ config: DEFAULT_APP_CONFIG, db, jwtConfig: STANDARD_CONFIG, tokenStore })
     playerRepo = new PlayerRepository(db)
     tournamentRepo = new TournamentRepository(db)
-  })
-
-  afterEach(async () => {
-    db.close()
   })
 
   describe('GET /tournaments/available', () => {
@@ -52,7 +52,7 @@ describe('Task #8 - Missing Endpoints', () => {
       tournamentId1 = tour1.id
 
       // Transition to registration_open
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', tournamentId1)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', tournamentId1])
 
       // Create tournament 2
       const tour2 = await tournamentRepo.create({
@@ -67,7 +67,7 @@ describe('Task #8 - Missing Endpoints', () => {
       })
       tournamentId2 = tour2.id
 
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', tournamentId2)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', tournamentId2])
     })
 
     it('should list available tournaments without auth', async () => {
@@ -165,7 +165,7 @@ describe('Task #8 - Missing Endpoints', () => {
       tournamentId = tour.id
 
       // Open registration
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', tournamentId)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', tournamentId])
 
       // Register player 1
       const reg1 = await request(app)
@@ -291,7 +291,7 @@ describe('Task #8 - Missing Endpoints', () => {
       tournamentId = tour.id
 
       // Open registration
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', tournamentId)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', tournamentId])
 
       // Register player 1
       const reg1 = await request(app)
@@ -317,14 +317,14 @@ describe('Task #8 - Missing Endpoints', () => {
       player2Token = verify2.body.playerToken
 
       // Set player2 as partner to player1's registration
-      const regs = db
-        .prepare('SELECT * FROM player_registrations WHERE player_id = ? AND tournament_id = ?')
-        .all(player1Id, tournamentId) as any[]
-      registrationId = regs[0].id
-      db.prepare('UPDATE player_registrations SET partner_id = ?, status = ? WHERE id = ?').run(
-        player2Id,
-        'pending_partner_confirm',
-        registrationId
+      const regs = await db.query(
+        'SELECT * FROM public.player_registrations WHERE player_id = $1 AND tournament_id = $2',
+        [player1Id, tournamentId]
+      )
+      registrationId = regs.rows[0].id
+      await db.query(
+        'UPDATE public.player_registrations SET partner_id = $1, status = $2 WHERE id = $3',
+        [player2Id, 'pending_partner_confirm', registrationId]
       )
     })
 
@@ -383,10 +383,11 @@ describe('Task #8 - Missing Endpoints', () => {
 
       const verifySingle = await request(app).get(`/tournaments/${tournamentId}/auth/verify?token=${regSingle.body.magicLinkToken}`)
 
-      const regs = db
-        .prepare('SELECT * FROM player_registrations WHERE player_id = ? AND tournament_id = ?')
-        .all(verifySingle.body.playerId, tournamentId) as any[]
-      const singleRegId = regs[0].id
+      const regs = await db.query(
+        'SELECT * FROM public.player_registrations WHERE player_id = $1 AND tournament_id = $2',
+        [verifySingle.body.playerId, tournamentId]
+      )
+      const singleRegId = regs.rows[0].id
 
       const res = await request(app)
         .patch(`/tournaments/registrations/${singleRegId}/confirm`)
@@ -432,7 +433,7 @@ describe('Task #8 - Missing Endpoints', () => {
       tournamentId = tour.id
 
       // Open registration
-      db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run('registration_open', tournamentId)
+      await db.query('UPDATE public.tournaments SET status = $1 WHERE id = $2', ['registration_open', tournamentId])
 
       // Register player
       const reg = await request(app)
@@ -447,10 +448,11 @@ describe('Task #8 - Missing Endpoints', () => {
       playerToken = verify.body.playerToken
 
       // Get registration ID
-      const regs = db
-        .prepare('SELECT * FROM player_registrations WHERE player_id = ? AND tournament_id = ?')
-        .all(verify.body.playerId, tournamentId) as any[]
-      registrationId = regs[0].id
+      const regs = await db.query(
+        'SELECT * FROM public.player_registrations WHERE player_id = $1 AND tournament_id = $2',
+        [verify.body.playerId, tournamentId]
+      )
+      registrationId = regs.rows[0].id
     })
 
     it('should withdraw registration before deadline', async () => {
@@ -489,10 +491,11 @@ describe('Task #8 - Missing Endpoints', () => {
 
       const verify2 = await request(app).get(`/tournaments/${tournamentId}/auth/verify?token=${reg2.body.magicLinkToken}`)
 
-      const regs = db
-        .prepare('SELECT * FROM player_registrations WHERE player_id = ?')
-        .all(verify1.body.playerId) as any[]
-      const reg1Id = regs[0].id
+      const regs = await db.query(
+        'SELECT * FROM public.player_registrations WHERE player_id = $1',
+        [verify1.body.playerId]
+      )
+      const reg1Id = regs.rows[0].id
 
       const res = await request(app)
         .delete(`/tournaments/registrations/${reg1Id}`)
@@ -519,10 +522,11 @@ describe('Task #8 - Missing Endpoints', () => {
 
       const verify = await request(app).get(`/tournaments/${tournamentId}/auth/verify?token=${reg.body.magicLinkToken}`)
 
-      const regs = db
-        .prepare('SELECT * FROM player_registrations WHERE player_id = ? AND tournament_id = ?')
-        .all(verify.body.playerId, tournamentId) as any[]
-      const regId = regs[0].id
+      const regs = await db.query(
+        'SELECT * FROM public.player_registrations WHERE player_id = $1 AND tournament_id = $2',
+        [verify.body.playerId, tournamentId]
+      )
+      const regId = regs.rows[0].id
 
       // First withdrawal
       await request(app)
@@ -557,13 +561,16 @@ describe('Task #8 - Missing Endpoints', () => {
 
       // Manually insert a registration
       const playerId = 'player_test_' + Date.now()
-      db.prepare('INSERT INTO players (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-        .run(playerId, `test${Date.now()}@test.com`, 'Test Player', new Date().toISOString(), new Date().toISOString())
+      await db.query(
+        'INSERT INTO public.players (id, email, name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)',
+        [playerId, `test${Date.now()}@test.com`, 'Test Player', new Date().toISOString(), new Date().toISOString()]
+      )
 
       const regId = 'reg_test_' + Date.now()
-      db.prepare(
-        'INSERT INTO player_registrations (id, player_id, tournament_id, registered_at, partner_confirmed, status) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(regId, playerId, pastTournamentId, new Date().toISOString(), 0, 'registered')
+      await db.query(
+        'INSERT INTO public.player_registrations (id, player_id, tournament_id, registered_at, partner_confirmed, status) VALUES ($1, $2, $3, $4, $5, $6)',
+        [regId, playerId, pastTournamentId, new Date().toISOString(), false, 'registered']
+      )
 
       // Create session token for player
       const sessionToken = crypto.randomBytes(32).toString('hex')

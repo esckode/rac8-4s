@@ -1,14 +1,16 @@
 import request from 'supertest'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Match Scoring Coverage Tests', () => {
-  let db: any
+  let db: Pool
   let app: any
   let tokenStore: InMemoryTokenStore
   let tournamentRepo: TournamentRepository
@@ -20,8 +22,12 @@ describe('Match Scoring Coverage Tests', () => {
   let players: any[] = []
   let matchId: string
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
-    db = openDatabase(':memory:')
+    await resetTestDb(db)
     tokenStore = new InMemoryTokenStore()
     app = createApp({ config: DEFAULT_APP_CONFIG, db, tokenStore, jwtConfig: STANDARD_CONFIG })
 

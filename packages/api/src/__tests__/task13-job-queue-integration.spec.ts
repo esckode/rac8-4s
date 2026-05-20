@@ -1,15 +1,17 @@
 import request from 'supertest'
+import { Pool } from 'pg'
 import { createApp } from '../app'
-import { openDatabase, TournamentRepository, PlayerRepository, GroupRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
+import { initializeTestDb, resetTestDb } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
 describe('Task #13: Job Queue Integration', () => {
-  let db: any
+  let db: Pool
   let app: any
   let tournamentRepo: TournamentRepository
   let playerRepo: PlayerRepository
@@ -26,10 +28,14 @@ describe('Task #13: Job Queue Integration', () => {
   let groupId: string
   let matchId: string
 
+  beforeAll(async () => {
+    db = await initializeTestDb()
+  })
+
   beforeEach(async () => {
     tokenStore = new InMemoryTokenStore()
     jobQueue = new InMemoryJobQueue()
-    db = openDatabase(':memory:')
+    await resetTestDb(db)
     app = createApp({
 
       config: DEFAULT_APP_CONFIG,      db,
@@ -118,7 +124,6 @@ describe('Task #13: Job Queue Integration', () => {
 
   afterEach(async () => {
     await jobQueue.close()
-    db.close()
   })
 
   describe('Score submission enqueues standings.recalculate job', () => {
