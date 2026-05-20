@@ -20,6 +20,12 @@ const testConfig: AppConfig = {
     sessionTtlSeconds: 86400,
     tokenBlocklistTtlSeconds: 86400,
   },
+  database: {
+    queryTimeoutMs: 30000,
+    retryMaxAttempts: 3,
+    retryBackoffBaseMs: 1000,
+    connectionTimeoutMs: 5000,
+  },
   limits: {
     emailRecipientsPerJob: 1000,
     playerQueryLimit: 10000,
