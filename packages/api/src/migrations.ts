@@ -6,6 +6,9 @@ export async function runMigrations(pool: Pool, migrationsDir: string): Promise<
   const client = await pool.connect()
 
   try {
+    // Ensure public schema exists
+    await client.query('CREATE SCHEMA IF NOT EXISTS public')
+
     // Create migrations tracking table if it doesn't exist
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.schema_migrations (
