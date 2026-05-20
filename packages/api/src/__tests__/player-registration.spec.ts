@@ -591,7 +591,7 @@ describe('Player Registration and Discovery', () => {
       })
 
       expect(error).toBeDefined()
-      expect(error?.message).toContain('UNIQUE')
+      expect(error?.message).toContain('unique constraint')
     })
 
     it('should handle missing Bearer token format', async () => {

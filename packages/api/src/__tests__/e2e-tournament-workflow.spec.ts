@@ -598,7 +598,7 @@ describe('Error Scenarios', () => {
       const scoreRes = await request(app)
         .post(`/tournaments/${tournamentId}/matches/${match.id}/score`)
         .set('Authorization', `Bearer ${player1.token}`)
-        .send({ score: '2-1' })
+        .send({ score: '11-9' })
 
       // Deadline has passed, so score submission should be rejected with 409
       expect(scoreRes.status).toBe(409)

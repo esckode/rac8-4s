@@ -40,10 +40,12 @@ export default function analyticsRouter(deps: AppDependencies) {
 
         eventTypes.add(typedEvent.eventType)
 
+        const eventId = `event_${Date.now()}_${Math.random().toString(36).slice(2)}`
         await deps.db.query(
-          `INSERT INTO public.user_events (user_id, event_type, screen, duration, data, created_at)
-           VALUES ($1, $2, $3, $4, $5, NOW())`,
+          `INSERT INTO public.user_events (id, user_id, event_type, screen, duration, data, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
           [
+            eventId,
             payload.playerId,
             typedEvent.eventType,
             typedEvent.screen || null,
