@@ -39,7 +39,7 @@ describe('Group Stage Management', () => {
     organizerToken = tokenPair.accessToken
 
     // Create tournament
-    const tournament = tournamentsRepo.create({
+    const tournament = await tournamentsRepo.create({
       name: 'Test Tournament',
       sport: 'Tennis',
       matchFormat: 'singles',
@@ -52,7 +52,7 @@ describe('Group Stage Management', () => {
     tournamentId = tournament.id
 
     // Set status to registration_open
-    tournamentsRepo.updateStatus(tournamentId, 'registration_open')
+    await tournamentsRepo.updateStatus(tournamentId, 'registration_open')
 
     // Create and register 6 players
     for (let i = 1; i <= 6; i++) {
