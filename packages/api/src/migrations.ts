@@ -35,8 +35,8 @@ export async function runMigrations(pool: Pool, migrationsDir: string): Promise<
           console.log(`Running migration: ${migrationFile}`)
           await client.query(sql)
 
-          // Record that this migration has been run
-          await client.query('INSERT INTO public.schema_migrations (version) VALUES ($1)', [migrationFile])
+          // Record that this migration has been run (use upsert to handle concurrent resets)
+          await client.query('INSERT INTO public.schema_migrations (version) VALUES ($1) ON CONFLICT (version) DO NOTHING', [migrationFile])
           console.log(`✅ Completed migration: ${migrationFile}`)
         } catch (error) {
           console.error(`❌ Failed to run migration ${migrationFile}:`, error)

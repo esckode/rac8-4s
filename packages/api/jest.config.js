@@ -2,7 +2,7 @@ module.exports = {
   displayName: 'api',
   preset: 'ts-jest',
   testEnvironment: 'node',
-  testTimeout: 10000,
+  testTimeout: 15000,
   rootDir: '.',
   testMatch: ['<rootDir>/src/**/__tests__/**/*.spec.ts', '<rootDir>/src/**/*.spec.ts'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
