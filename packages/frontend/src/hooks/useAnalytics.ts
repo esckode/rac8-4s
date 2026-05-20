@@ -32,7 +32,7 @@ function flushEvents(): void {
     return
   }
 
-  const apiBase = import.meta.env.REACT_APP_API_BASE || 'http://localhost:3000'
+  const apiBase = process.env.REACT_APP_API_BASE || 'http://localhost:3000'
   const endpoint = `${apiBase}/api/analytics/events`
   const payload = JSON.stringify({ events: eventBuffer })
 
@@ -53,7 +53,7 @@ function flushEvents(): void {
     }
   } catch (error) {
     // Silent fail - debug log only in dev
-    if (import.meta.env.DEV) {
+    if (process.env.NODE_ENV === 'development') {
       console.debug('Analytics flush failed', error)
     }
   }

@@ -37,7 +37,7 @@ export function useSSE(tournamentId: string): SSEState {
       return
     }
 
-    const apiBase = import.meta.env.REACT_APP_API_BASE || 'http://localhost:3000'
+    const apiBase = process.env.REACT_APP_API_BASE || 'http://localhost:3000'
     const eventSourceUrl = `${apiBase}/tournaments/${tournamentId}/events`
 
     try {
