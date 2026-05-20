@@ -33,6 +33,14 @@ export async function initializeTestDb(): Promise<Pool> {
 
 export async function resetTestDb(pool: Pool): Promise<void> {
   try {
+    // Terminate other connections to avoid conflicts when dropping schemas
+    await pool.query(`
+      SELECT pg_terminate_backend(pid)
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+        AND pid != pg_backend_pid()
+    `)
+
     // Drop and recreate public schema
     await pool.query('DROP SCHEMA IF EXISTS public CASCADE')
     await pool.query('CREATE SCHEMA public')
