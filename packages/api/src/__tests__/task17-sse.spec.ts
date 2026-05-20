@@ -37,7 +37,7 @@ describe('Task #17: SSE endpoint and BroadcastBus', () => {
   describe('BroadcastBus unit tests', () => {
     let bus: BroadcastBus
 
-    beforeEach(() => {
+    beforeEach(async () => {
       bus = new BroadcastBus()
     })
 

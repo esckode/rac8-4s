@@ -19,7 +19,7 @@ describe('Task #14: Standings Recalculation Job', () => {
   let player3Id: string
   let player4Id: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = openDatabase(':memory:')
     tournamentRepo = new TournamentRepository(db)
     playerRepo = new PlayerRepository(db)
@@ -74,7 +74,7 @@ describe('Task #14: Standings Recalculation Job', () => {
     groupId = groups[0].id
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     db.close()
   })
 

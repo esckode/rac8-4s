@@ -20,7 +20,7 @@ describe('Task #16: Email Notification Job', () => {
   let player4Id: string
   let player4Email: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = openDatabase(':memory:')
     tournamentRepo = new TournamentRepository(db)
     playerRepo = new PlayerRepository(db)
@@ -72,7 +72,7 @@ describe('Task #16: Email Notification Job', () => {
     player4Email = p4.email
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     db.close()
   })
 

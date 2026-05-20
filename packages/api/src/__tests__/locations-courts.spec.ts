@@ -6,7 +6,7 @@ describe('LocationRepository', () => {
   let locationRepo: LocationRepository
   let courtRepo: CourtRepository
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = openDatabase(':memory:')
     locationRepo = new LocationRepository(db)
     courtRepo = new CourtRepository(db)
@@ -110,7 +110,7 @@ describe('LocationRepository', () => {
   })
 
   describe('findBySport', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       locationRepo.create({
         name: 'Pickleball Court 1',
         sport: 'pickleball',
@@ -170,7 +170,7 @@ describe('LocationRepository', () => {
   })
 
   describe('listAll', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       locationRepo.create({
         name: 'Location 1',
         sport: 'pickleball',
@@ -351,7 +351,7 @@ describe('LocationRepository', () => {
   })
 
   describe('findNearby', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       // Create locations at various coordinates
       locationRepo.create({
         name: 'Center',
@@ -442,7 +442,7 @@ describe('CourtRepository', () => {
   let courtRepo: CourtRepository
   let locationId: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = openDatabase(':memory:')
     locationRepo = new LocationRepository(db)
     courtRepo = new CourtRepository(db)
@@ -642,7 +642,7 @@ describe('Location and Court Integration', () => {
   let locationRepo: LocationRepository
   let courtRepo: CourtRepository
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = openDatabase(':memory:')
     locationRepo = new LocationRepository(db)
     courtRepo = new CourtRepository(db)

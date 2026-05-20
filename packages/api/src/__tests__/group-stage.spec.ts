@@ -20,7 +20,7 @@ describe('Group Stage Management', () => {
   let tournamentId: string
   let playerIds: string[] = []
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tokenStore = new InMemoryTokenStore()
     db = openDatabase(':memory:')
     app = createApp({

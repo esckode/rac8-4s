@@ -43,7 +43,7 @@ const testConfig: AppConfig = {
 const MAX_EMAIL_RECIPIENTS_PER_JOB = testConfig.limits.emailRecipientsPerJob
 
 describe('Task #7: Email Job Validation', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks()
   })
   describe('Valid cases', () => {

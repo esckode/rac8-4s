@@ -17,7 +17,7 @@ describe('Task #8 - Missing Endpoints', () => {
   let tournamentRepo: TournamentRepository
   let app: any
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tokenStore = new InMemoryTokenStore()
     db = openDatabase(':memory:')
     app = createApp({ config: DEFAULT_APP_CONFIG, db, jwtConfig: STANDARD_CONFIG, tokenStore })
@@ -25,7 +25,7 @@ describe('Task #8 - Missing Endpoints', () => {
     tournamentRepo = new TournamentRepository(db)
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     db.close()
   })
 

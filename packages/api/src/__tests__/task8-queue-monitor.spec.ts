@@ -45,7 +45,7 @@ describe('Task #8: Queue Monitoring', () => {
   let queue: InMemoryJobQueue
   let monitor: QueueMonitor
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks()
     queue = new InMemoryJobQueue()
     monitor = new QueueMonitor(queue, testConfig)
