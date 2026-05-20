@@ -25,7 +25,7 @@ describe('Bracket Management', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -84,11 +84,11 @@ describe('Bracket Management', () => {
 
     // Transition to group_stage_complete for bracket testing
     await tournamentRepo.updateStatus(tournamentId, 'group_stage_complete')
-  })
+  }, 30000)
 
   afterAll(async () => {
     await closeTestDb()
-  })
+  }, 30000)
 
   describe('POST /:id/bracket/generate', () => {
     it('should generate bracket with correct seeding from standings', async () => {

@@ -22,7 +22,7 @@ describe('Player Registration and Discovery', () => {
 
   beforeAll(async () => {
     db = await initializeTestDb()
-  })
+  }, 30000)
 
   beforeEach(async () => {
     await resetTestDb(db)
@@ -48,11 +48,11 @@ describe('Player Registration and Discovery', () => {
     tournamentId = tournament.id
 
     await tournamentRepo.updateStatus(tournamentId, 'registration_open')
-  })
+  }, 30000)
 
   afterAll(async () => {
     await closeTestDb()
-  })
+  }, 30000)
 
   describe('POST /tournaments/:tournamentId/register', () => {
     it('should return 202 on valid registration', async () => {
