@@ -5,12 +5,15 @@ import type { Match } from '@shared/types'
 import { Matches } from '../Matches'
 import * as TournamentHook from '../../../hooks/useTournament'
 import * as PermissionsHook from '../../../hooks/usePermissions'
+import * as AuthHook from '../../../hooks/useAuth'
 
 jest.mock('../../../hooks/useTournament')
 jest.mock('../../../hooks/usePermissions')
+jest.mock('../../../hooks/useAuth')
 
 const mockUseTournament = TournamentHook.useTournament as jest.MockedFunction<typeof TournamentHook.useTournament>
 const mockUsePermissions = PermissionsHook.usePermissions as jest.MockedFunction<typeof PermissionsHook.usePermissions>
+const mockUseAuth = AuthHook.useAuth as jest.MockedFunction<typeof AuthHook.useAuth>
 
 const createMockMatch = (overrides?: Partial<Match>): Match => ({
   id: 'm1',
@@ -24,6 +27,11 @@ const createMockMatch = (overrides?: Partial<Match>): Match => ({
 describe('Matches', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockUseAuth.mockReturnValue({
+      user: { id: '1', email: 'test@example.com', role: 'player' },
+      isAuthenticated: true,
+      loading: false,
+    })
   })
 
   it('renders matches with data', () => {

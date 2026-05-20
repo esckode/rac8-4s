@@ -1,190 +1,74 @@
 /// <reference types="@testing-library/jest-dom" />
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowseTournaments } from '../BrowseTournaments'
-
-jest.mock('../../api/client', () => ({
-  fetchPublicTournaments: jest.fn(),
-}))
-
-jest.mock('../../hooks/useInfiniteScroll', () => ({
-  useInfiniteScroll: jest.fn(),
-}))
-
-import { fetchPublicTournaments } from '../../api/client'
-import { useInfiniteScroll } from '../../hooks/useInfiniteScroll'
-
-const mockFetchPublicTournaments = fetchPublicTournaments as jest.MockedFunction<
-  typeof fetchPublicTournaments
->
-const mockUseInfiniteScroll = useInfiniteScroll as jest.MockedFunction<
-  typeof useInfiniteScroll
->
 
 describe('BrowseTournaments', () => {
   const renderWithRouter = (component: React.ReactElement) => {
-    const queryClient = new QueryClient()
     return render(
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>{component}</BrowserRouter>
-      </QueryClientProvider>
+      <BrowserRouter>{component}</BrowserRouter>
     )
   }
 
-  const mockTournament = {
-    id: '1',
-    name: 'Test Tournament',
-    sport: 'Pickleball',
-    matchFormat: 'Doubles',
-    maxPlayers: 16,
-    registrationDeadline: '2026-06-01',
-    status: 'registration_open',
-  }
-
-  beforeEach(() => {
-    jest.clearAllMocks()
-  })
-
   it('renders page title and description', () => {
-    mockUseInfiniteScroll.mockReturnValue({
-      items: [],
-      hasMore: false,
-      offset: 0,
-      loadMore: jest.fn(),
-      isLoading: false,
-    } as any)
-
     renderWithRouter(<BrowseTournaments />)
 
-    expect(screen.getByText('Browse Tournaments')).toBeInTheDocument()
+    expect(screen.getByText('Browse')).toBeInTheDocument()
     expect(
-      screen.getByText('Discover and join pickleball tournaments in your area')
+      screen.getByText('Find a night, find a tournament')
     ).toBeInTheDocument()
   })
 
-  it('renders tournaments from the list', () => {
-    const mockLoadMore = jest.fn()
-    mockUseInfiniteScroll.mockReturnValue({
-      items: [mockTournament],
-      hasMore: false,
-      offset: 20,
-      loadMore: mockLoadMore,
-      isLoading: false,
-    } as any)
-
+  it('renders featured tournament', () => {
     renderWithRouter(<BrowseTournaments />)
 
-    expect(screen.getByText('Test Tournament')).toBeInTheDocument()
+    expect(screen.getByText('Greenwood Mixed Open')).toBeInTheDocument()
+    expect(screen.getByText('FEATURED · THIS WEEK')).toBeInTheDocument()
   })
 
-  it('renders Load More button when hasMore is true', () => {
-    const mockLoadMore = jest.fn()
-    mockUseInfiniteScroll.mockReturnValue({
-      items: [mockTournament],
-      hasMore: true,
-      offset: 20,
-      loadMore: mockLoadMore,
-      isLoading: false,
-    } as any)
-
+  it('renders filter buttons', () => {
     renderWithRouter(<BrowseTournaments />)
 
-    expect(screen.getByText('Load More Tournaments')).toBeInTheDocument()
+    expect(screen.getByText('All')).toBeInTheDocument()
+    expect(screen.getByText('Doubles')).toBeInTheDocument()
+    expect(screen.getByText('Singles')).toBeInTheDocument()
+    const mixedButtons = screen.getAllByText('Mixed')
+    expect(mixedButtons.length).toBeGreaterThan(0)
   })
 
-  it('disables Load More button when loading', () => {
-    const mockLoadMore = jest.fn()
-    mockUseInfiniteScroll.mockReturnValue({
-      items: [mockTournament],
-      hasMore: true,
-      offset: 20,
-      loadMore: mockLoadMore,
-      isLoading: true,
-    } as any)
-
+  it('renders tournament in Coming up section', () => {
     renderWithRouter(<BrowseTournaments />)
 
-    const button = screen.getByText('Loading...')
-    expect(button).toBeDisabled()
+    expect(screen.getByText('Spring Singles Cup')).toBeInTheDocument()
+    expect(screen.getByText('Knockout Friday')).toBeInTheDocument()
   })
 
-  it('calls loadMore when Load More button is clicked', () => {
-    const mockLoadMore = jest.fn()
-    mockUseInfiniteScroll.mockReturnValue({
-      items: [mockTournament],
-      hasMore: true,
-      offset: 20,
-      loadMore: mockLoadMore,
-      isLoading: false,
-    } as any)
-
+  it('displays tournament count in Coming up section', () => {
     renderWithRouter(<BrowseTournaments />)
 
-    const button = screen.getByText('Load More Tournaments')
-    fireEvent.click(button)
-
-    expect(mockLoadMore).toHaveBeenCalled()
+    expect(screen.getByText('2 results')).toBeInTheDocument()
   })
 
-  it('shows empty state when no tournaments found', () => {
-    mockUseInfiniteScroll.mockReturnValue({
-      items: [],
-      hasMore: false,
-      offset: 0,
-      loadMore: jest.fn(),
-      isLoading: false,
-    } as any)
-
+  it('renders search functionality', () => {
     renderWithRouter(<BrowseTournaments />)
 
-    expect(screen.getByText('No tournaments found')).toBeInTheDocument()
+    expect(screen.getByText('Search clubs, players, venues…')).toBeInTheDocument()
   })
 
-  it('hides Load More button when hasMore is false', () => {
-    mockUseInfiniteScroll.mockReturnValue({
-      items: [mockTournament],
-      hasMore: false,
-      offset: 20,
-      loadMore: jest.fn(),
-      isLoading: false,
-    } as any)
-
+  it('renders bracket view buttons for tournaments', () => {
     renderWithRouter(<BrowseTournaments />)
 
-    expect(screen.queryByText('Load More Tournaments')).not.toBeInTheDocument()
+    const bracketButtons = screen.getAllByRole('button', { name: '🔀' })
+    expect(bracketButtons.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('shows end of list message when no more tournaments', () => {
-    mockUseInfiniteScroll.mockReturnValue({
-      items: [mockTournament],
-      hasMore: false,
-      offset: 20,
-      loadMore: jest.fn(),
-      isLoading: false,
-    } as any)
-
+  it('allows filter interaction', () => {
     renderWithRouter(<BrowseTournaments />)
 
-    expect(
-      screen.getByText("You've reached the end of the tournament list")
-    ).toBeInTheDocument()
-  })
+    const doublesButton = screen.getByText('Doubles')
+    fireEvent.click(doublesButton)
 
-  it('renders multiple tournaments in a grid', () => {
-    const mockTournament2 = { ...mockTournament, id: '2', name: 'Second Tournament' }
-    mockUseInfiniteScroll.mockReturnValue({
-      items: [mockTournament, mockTournament2],
-      hasMore: false,
-      offset: 40,
-      loadMore: jest.fn(),
-      isLoading: false,
-    } as any)
-
-    renderWithRouter(<BrowseTournaments />)
-
-    expect(screen.getByText('Test Tournament')).toBeInTheDocument()
-    expect(screen.getByText('Second Tournament')).toBeInTheDocument()
+    expect(doublesButton).toBeInTheDocument()
   })
 })

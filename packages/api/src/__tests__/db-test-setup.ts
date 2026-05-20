@@ -58,11 +58,11 @@ export async function resetTestDb(pool: Pool): Promise<void> {
     // Clear migrations tracking to re-run them
     await pool.query('DELETE FROM public.schema_migrations')
 
-    -- Drop and recreate auth schema
+    // Drop and recreate auth schema
     await pool.query('DROP SCHEMA IF EXISTS auth CASCADE')
     await pool.query('CREATE SCHEMA auth')
 
-    -- Re-run migrations
+    // Re-run migrations
     const migrationsDir = path.resolve(__dirname, '../../../../db/migrations')
     await runMigrations(pool, migrationsDir)
   } catch (err) {

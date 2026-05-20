@@ -21,19 +21,6 @@ describe('Landing', () => {
     jest.clearAllMocks()
   })
 
-  it('renders app title', () => {
-    mockUseAuth.mockReturnValue({
-      user: null,
-      isAuthenticated: false,
-      loading: false,
-    })
-
-    renderWithRouter(<Landing />)
-
-    const titles = screen.getAllByText(/Doubles Pickleball Cup/)
-    expect(titles.length).toBeGreaterThan(0)
-  })
-
   it('renders hero heading', () => {
     mockUseAuth.mockReturnValue({
       user: null,
@@ -43,10 +30,10 @@ describe('Landing', () => {
 
     renderWithRouter(<Landing />)
 
-    expect(screen.getByText('Tournament Management Made Simple')).toBeInTheDocument()
+    expect(screen.getByText('See you at the court.')).toBeInTheDocument()
   })
 
-  it('renders Browse Tournaments button', () => {
+  it('renders subtitle', () => {
     mockUseAuth.mockReturnValue({
       user: null,
       isAuthenticated: false,
@@ -55,10 +42,10 @@ describe('Landing', () => {
 
     renderWithRouter(<Landing />)
 
-    expect(screen.getByText('Browse Tournaments')).toBeInTheDocument()
+    expect(screen.getByText(/Find drop-in nights/)).toBeInTheDocument()
   })
 
-  it('renders feature highlights', () => {
+  it('renders Browse tournaments button', () => {
     mockUseAuth.mockReturnValue({
       user: null,
       isAuthenticated: false,
@@ -67,12 +54,10 @@ describe('Landing', () => {
 
     renderWithRouter(<Landing />)
 
-    expect(screen.getByText('Live Standings')).toBeInTheDocument()
-    expect(screen.getByText('Bracket View')).toBeInTheDocument()
-    expect(screen.getByText('Match Info')).toBeInTheDocument()
+    expect(screen.getByText('Browse tournaments')).toBeInTheDocument()
   })
 
-  it('renders login button when not authenticated', () => {
+  it('renders sign up prompt', () => {
     mockUseAuth.mockReturnValue({
       user: null,
       isAuthenticated: false,
@@ -81,10 +66,22 @@ describe('Landing', () => {
 
     renderWithRouter(<Landing />)
 
-    expect(screen.getByText('Login')).toBeInTheDocument()
+    expect(screen.getByText(/An account creates itself when you join your first night/)).toBeInTheDocument()
   })
 
-  it('renders user email and logout button when authenticated', () => {
+  it('renders continue with email button when not authenticated', () => {
+    mockUseAuth.mockReturnValue({
+      user: null,
+      isAuthenticated: false,
+      loading: false,
+    })
+
+    renderWithRouter(<Landing />)
+
+    expect(screen.getByText('Continue with email')).toBeInTheDocument()
+  })
+
+  it('renders continue with email button regardless of auth state', () => {
     mockUseAuth.mockReturnValue({
       user: {
         id: '123',
@@ -97,11 +94,10 @@ describe('Landing', () => {
 
     renderWithRouter(<Landing />)
 
-    expect(screen.getByText('test@example.com')).toBeInTheDocument()
-    expect(screen.getByText('Logout')).toBeInTheDocument()
+    expect(screen.getByText('Continue with email')).toBeInTheDocument()
   })
 
-  it('renders My Tournaments button when authenticated', () => {
+  it('renders the same content when authenticated', () => {
     mockUseAuth.mockReturnValue({
       user: {
         id: '123',
@@ -114,10 +110,10 @@ describe('Landing', () => {
 
     renderWithRouter(<Landing />)
 
-    expect(screen.getByText('My Tournaments')).toBeInTheDocument()
+    expect(screen.getByText('See you at the court.')).toBeInTheDocument()
   })
 
-  it('does not render My Tournaments button when not authenticated', () => {
+  it('renders navigation buttons for both authenticated and unauthenticated users', () => {
     mockUseAuth.mockReturnValue({
       user: null,
       isAuthenticated: false,
@@ -126,18 +122,7 @@ describe('Landing', () => {
 
     renderWithRouter(<Landing />)
 
-    expect(screen.queryByText('My Tournaments')).not.toBeInTheDocument()
-  })
-
-  it('renders footer', () => {
-    mockUseAuth.mockReturnValue({
-      user: null,
-      isAuthenticated: false,
-      loading: false,
-    })
-
-    renderWithRouter(<Landing />)
-
-    expect(screen.getByText(/2026 Doubles Pickleball Cup/)).toBeInTheDocument()
+    expect(screen.getByText('Continue with email')).toBeInTheDocument()
+    expect(screen.getByText('Browse tournaments')).toBeInTheDocument()
   })
 })

@@ -4,16 +4,24 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { Standings } from '../Standings'
 import * as TournamentHook from '../../../hooks/useTournament'
 import * as PermissionsHook from '../../../hooks/usePermissions'
+import * as AuthHook from '../../../hooks/useAuth'
 
 jest.mock('../../../hooks/useTournament')
 jest.mock('../../../hooks/usePermissions')
+jest.mock('../../../hooks/useAuth')
 
 const mockUseTournament = TournamentHook.useTournament as jest.MockedFunction<typeof TournamentHook.useTournament>
 const mockUsePermissions = PermissionsHook.usePermissions as jest.MockedFunction<typeof PermissionsHook.usePermissions>
+const mockUseAuth = AuthHook.useAuth as jest.MockedFunction<typeof AuthHook.useAuth>
 
 describe('Standings', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockUseAuth.mockReturnValue({
+      user: { id: '1', email: 'test@example.com', role: 'player' },
+      isAuthenticated: true,
+      loading: false,
+    })
   })
 
   it('renders standings table with data', () => {
