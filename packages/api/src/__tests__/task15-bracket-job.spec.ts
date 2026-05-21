@@ -3,7 +3,7 @@ import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutReposi
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { BroadcastBus } from '../broadcast-bus'
 import { processBracketGenerate } from '../workers/bracket-processor'
-import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
+import { initializeTestDb, resetTestDb, closeTestDb, cleanupTransaction } from './db-test-setup'
 
 describe('Task #15: Bracket Generation Job', () => {
   let db: Pool
@@ -87,6 +87,10 @@ describe('Task #15: Bracket Generation Job', () => {
     match1Id = matches1[0].id
     match2Id = matches2[0].id
   }, 30000)
+
+  afterEach(async () => {
+    await cleanupTransaction()
+  })
 
   afterAll(async () => {
     await closeTestDb()

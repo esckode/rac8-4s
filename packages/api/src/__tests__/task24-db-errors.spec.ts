@@ -5,7 +5,7 @@ import { TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
-import { initializeTestDb, resetTestDb, closeTestDb, mockPoolQueryError, restorePoolQuery } from './db-test-setup'
+import { initializeTestDb, resetTestDb, closeTestDb, cleanupTransaction, mockPoolQueryError, restorePoolQuery } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
@@ -52,6 +52,10 @@ describe('Task 2.4: Async Error Handling & Edge Cases', () => {
 
   afterEach(async () => {
     restorePoolQuery(db)
+  })
+
+  afterEach(async () => {
+    await cleanupTransaction()
   })
 
   afterAll(async () => {

@@ -14,7 +14,7 @@ import { processStandingsRecalculate } from '../workers/standings-processor'
 import { processBracketGenerate } from '../workers/bracket-processor'
 import { processEmailSend } from '../workers/email-processor'
 import { DEFAULT_APP_CONFIG } from '../config'
-import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
+import { initializeTestDb, resetTestDb, closeTestDb, cleanupTransaction } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 const ORGANIZER_ID = 'org_test'

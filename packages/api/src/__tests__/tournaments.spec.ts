@@ -5,7 +5,7 @@ import { TournamentRepository } from '../db'
 import { InMemoryTokenStore, issueOrganizerToken } from '../auth'
 import type { JwtConfig } from '../auth'
 import { DEFAULT_APP_CONFIG } from '../config'
-import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
+import { initializeTestDb, resetTestDb, closeTestDb, cleanupTransaction } from './db-test-setup'
 
 const TEST_JWT_SECRET = 'test-secret-at-least-32-chars-long-for-testing!'
 const STANDARD_CONFIG: JwtConfig = { secret: TEST_JWT_SECRET, expiresInSeconds: 3600 }
@@ -41,6 +41,10 @@ describe('Tournament CRUD Endpoints', () => {
     )
     organizerToken = tokenPair.accessToken
   }, 30000)
+
+  afterEach(async () => {
+    await cleanupTransaction()
+  })
 
   afterAll(async () => {
     await closeTestDb()

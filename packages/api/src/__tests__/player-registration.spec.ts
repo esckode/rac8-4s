@@ -6,7 +6,7 @@ import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { generateMagicLinkToken, validatePlayerSession, TokenInvalidError } from '../auth'
 import { DEFAULT_APP_CONFIG } from '../config'
-import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
+import { initializeTestDb, resetTestDb, closeTestDb, cleanupTransaction } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
@@ -49,6 +49,10 @@ describe('Player Registration and Discovery', () => {
 
     await tournamentRepo.updateStatus(tournamentId, 'registration_open')
   }, 30000)
+
+  afterEach(async () => {
+    await cleanupTransaction()
+  })
 
   afterAll(async () => {
     await closeTestDb()

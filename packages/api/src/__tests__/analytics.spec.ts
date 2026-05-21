@@ -5,7 +5,7 @@ import { PlayerRepository } from '../db'
 import { InMemoryTokenStore } from '../auth/token-store'
 import { generatePlayerSession, MagicLinkPayload } from '../auth'
 import { DEFAULT_APP_CONFIG } from '../config'
-import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
+import { initializeTestDb, resetTestDb, closeTestDb, cleanupTransaction } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
@@ -41,6 +41,10 @@ describe('Analytics Events', () => {
     const player = await playerRepo.findOrCreatePlayerByEmail('player@test.com', 'Test Player', '555-1234', 'email')
     playerId = player.id
   }, 30000)
+
+  afterEach(async () => {
+    await cleanupTransaction()
+  })
 
   afterAll(async () => {
     await closeTestDb()

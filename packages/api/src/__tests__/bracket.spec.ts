@@ -5,7 +5,7 @@ import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutReposi
 import { InMemoryTokenStore } from '../auth/token-store'
 import { issueOrganizerToken } from '../auth/tokens'
 import { DEFAULT_APP_CONFIG } from '../config'
-import { initializeTestDb, resetTestDb, closeTestDb } from './db-test-setup'
+import { initializeTestDb, resetTestDb, closeTestDb, cleanupTransaction } from './db-test-setup'
 
 const STANDARD_CONFIG = { secret: 'test-secret', expiresInSeconds: 3600 }
 
@@ -85,6 +85,10 @@ describe('Bracket Management', () => {
     // Transition to group_stage_complete for bracket testing
     await tournamentRepo.updateStatus(tournamentId, 'group_stage_complete')
   }, 30000)
+
+  afterEach(async () => {
+    await cleanupTransaction()
+  })
 
   afterAll(async () => {
     await closeTestDb()

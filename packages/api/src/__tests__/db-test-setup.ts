@@ -38,7 +38,6 @@ export async function resetTestDb(pool: Pool): Promise<void> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const client = await pool.connect()
     try {
-      // Use TRUNCATE CASCADE to automatically handle all foreign key constraints
       // Query for all tables in both auth and public schemas and truncate them
       const allTables = await client.query(`
         SELECT schemaname, tablename FROM pg_tables
@@ -86,6 +85,11 @@ export async function resetTestDb(pool: Pool): Promise<void> {
   // If we got here, all retries failed
   console.error('Failed to reset test database after retries:', lastError)
   throw lastError
+}
+
+// Cleanup transaction is no longer needed
+export async function cleanupTransaction(): Promise<void> {
+  // No-op - kept for compatibility with test files
 }
 
 export async function closeTestDb(): Promise<void> {
