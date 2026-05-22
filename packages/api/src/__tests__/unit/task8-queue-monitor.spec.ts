@@ -1,4 +1,4 @@
-import type { AppConfig } from '../config'
+import type { AppConfig } from '../../config'
 
 const mockLog = {
   warn: jest.fn(),
@@ -7,12 +7,12 @@ const mockLog = {
   error: jest.fn(),
 }
 
-jest.mock('../logger', () => ({
+jest.mock('../../logger', () => ({
   getLogger: jest.fn(() => mockLog),
 }))
 
 import { InMemoryJobQueue } from '@worker/job-queue'
-import { QueueMonitor } from '../queue-monitor'
+import { QueueMonitor } from '../../queue-monitor'
 
 const testConfig: AppConfig = {
   auth: {

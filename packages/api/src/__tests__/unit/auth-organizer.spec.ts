@@ -1,5 +1,5 @@
-import { hashPassword, verifyPassword } from '../auth/password'
-import { DEFAULT_APP_CONFIG } from '../config'
+import { hashPassword, verifyPassword } from '../../auth/password'
+import { DEFAULT_APP_CONFIG } from '../../config'
 import {
   issueOrganizerToken,
   verifyOrganizerToken,
@@ -8,9 +8,9 @@ import {
   refreshOrganizerToken,
   OrganizerPayload,
   JwtConfig,
-} from '../auth/tokens'
-import { TokenExpiredError, TokenInvalidError, InvalidCredentialsError, UserNotFoundError } from '../auth/errors'
-import { InMemoryTokenStore } from '../auth/token-store'
+} from '../../auth/tokens'
+import { TokenExpiredError, TokenInvalidError, InvalidCredentialsError, UserNotFoundError } from '../../auth/errors'
+import { InMemoryTokenStore } from '../../auth/token-store'
 import jwt from 'jsonwebtoken'
 
 const TEST_JWT_SECRET = 'test-secret-at-least-32-chars-long-for-testing!'

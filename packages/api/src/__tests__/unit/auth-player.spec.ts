@@ -3,9 +3,9 @@ import {
   validateMagicLinkToken,
   invalidateMagicLinkToken,
   MagicLinkPayload,
-} from '../auth/magic-link'
-import { TokenInvalidError } from '../auth/errors'
-import { InMemoryTokenStore } from '../auth/token-store'
+} from '../../auth/magic-link'
+import { TokenInvalidError } from '../../auth/errors'
+import { InMemoryTokenStore } from '../../auth/token-store'
 
 const PLAYER_PAYLOAD: MagicLinkPayload = {
   playerId: 'player_001',

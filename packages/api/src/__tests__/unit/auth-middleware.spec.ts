@@ -4,16 +4,16 @@ import {
   requirePlayerAuth,
   assertOrganizerOwnsTournament,
   assertPlayerInTournament,
-} from '../auth/middleware'
-import { issueOrganizerToken, JwtConfig } from '../auth/tokens'
-import { generateMagicLinkToken } from '../auth/magic-link'
+} from '../../auth/middleware'
+import { issueOrganizerToken, JwtConfig } from '../../auth/tokens'
+import { generateMagicLinkToken } from '../../auth/magic-link'
 import {
   MissingTokenError,
   TokenInvalidError,
   ForbiddenError,
   TokenExpiredError,
-} from '../auth/errors'
-import { InMemoryTokenStore } from '../auth/token-store'
+} from '../../auth/errors'
+import { InMemoryTokenStore } from '../../auth/token-store'
 
 const TEST_JWT_SECRET = 'test-secret-at-least-32-chars-long-for-testing!'
 const STANDARD_CONFIG: JwtConfig = {
@@ -148,7 +148,7 @@ describe('requireOrganizerAuth', () => {
       STANDARD_CONFIG
     )
     // Manually mark as invalidated
-    const { invalidateOrganizerToken } = await import('../auth/tokens')
+    const { invalidateOrganizerToken } = await import('../../auth/tokens')
     await invalidateOrganizerToken(tokenPair.accessToken, STANDARD_CONFIG, store, 3600)
     await expect(
       requireOrganizerAuth(

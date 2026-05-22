@@ -1,4 +1,4 @@
-import type { AppConfig } from '../config'
+import type { AppConfig } from '../../config'
 
 const mockLog = {
   warn: jest.fn(),
@@ -7,11 +7,11 @@ const mockLog = {
   error: jest.fn(),
 }
 
-jest.mock('../logger', () => ({
+jest.mock('../../logger', () => ({
   getLogger: jest.fn(() => mockLog),
 }))
 
-import { validateEmailJobPayload } from '../validation/email-job-validator'
+import { validateEmailJobPayload } from '../../validation/email-job-validator'
 
 const testConfig: AppConfig = {
   auth: {
