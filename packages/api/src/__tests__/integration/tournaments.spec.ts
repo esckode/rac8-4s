@@ -47,13 +47,14 @@ describe('Tournaments API', () => {
         creatorId: organizerId,
       })
 
-      // Try to create duplicate via API
+      // Try to create duplicate via API - returns 400 VALIDATION_ERROR
       const res = await request(app)
         .post('/tournaments')
         .set('Authorization', `Bearer ${accessToken}`)
         .send(data)
 
-      expect(res.status).toBe(409)
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('DUPLICATE_NAME')
     })
 
     it('rejects missing auth', async () => {
@@ -93,22 +94,37 @@ describe('Tournaments API', () => {
     })
   })
 
-  describe('GET /tournaments/:id', () => {
-    it('retrieves a tournament by id', async () => {
-      const organizerId = OrganizerFactory.id()
+  describe('GET /tournaments/:id/bundle', () => {
+    it('retrieves tournament bundle for organizer', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
       const tournament = await TournamentFactory.create(pool, organizerId)
 
-      const res = await request(app).get(`/tournaments/${tournament.id}`)
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/bundle`)
+        .set('Authorization', `Bearer ${accessToken}`)
 
       expect(res.status).toBe(200)
-      expect(res.body.id).toBe(tournament.id)
-      expect(res.body.name).toBe(tournament.name)
+      expect(res.body.tournament).toBeDefined()
+      expect(res.body.tournament.id).toBe(tournament.id)
+      expect(res.body.tournament.name).toBe(tournament.name)
     })
 
     it('returns 404 for non-existent tournament', async () => {
-      const res = await request(app).get('/tournaments/nonexistent')
+      const { accessToken } = OrganizerFactory.token(jwtConfig)
+      const res = await request(app)
+        .get('/tournaments/nonexistent/bundle')
+        .set('Authorization', `Bearer ${accessToken}`)
 
       expect(res.status).toBe(404)
+    })
+
+    it('requires authentication', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      const res = await request(app).get(`/tournaments/${tournament.id}/bundle`)
+
+      expect(res.status).toBe(401)
     })
   })
 
@@ -120,7 +136,8 @@ describe('Tournaments API', () => {
       const res = await request(app).get('/tournaments/public')
 
       expect(res.status).toBe(200)
-      expect(Array.isArray(res.body)).toBe(true)
+      expect(Array.isArray(res.body.tournaments)).toBe(true)
+      expect(res.body.pagination).toBeDefined()
     })
 
     it('excludes draft tournaments from public list', async () => {
@@ -135,14 +152,18 @@ describe('Tournaments API', () => {
       const res = await request(app).get('/tournaments/public')
 
       expect(res.status).toBe(200)
-      expect(Array.isArray(res.body)).toBe(true)
+      expect(Array.isArray(res.body.tournaments)).toBe(true)
+      // Draft tournaments should not be in public list
+      const ids = res.body.tournaments.map((t: any) => t.id)
+      expect(ids).not.toContain(draftTournament.id)
     })
 
     it('returns empty list when no tournaments are public', async () => {
       const res = await request(app).get('/tournaments/public')
 
       expect(res.status).toBe(200)
-      expect(Array.isArray(res.body)).toBe(true)
+      expect(Array.isArray(res.body.tournaments)).toBe(true)
+      expect(res.body.pagination).toBeDefined()
     })
   })
 
@@ -156,7 +177,11 @@ describe('Tournaments API', () => {
         .set('Authorization', `Bearer ${accessToken}`)
 
       expect(res.status).toBe(200)
-      expect(Array.isArray(res.body)).toBe(true)
+      expect(Array.isArray(res.body.tournaments)).toBe(true)
+      expect(res.body.pagination).toBeDefined()
+      // Should contain the created tournament
+      const ids = res.body.tournaments.map((t: any) => t.id)
+      expect(ids).toContain(tournament.id)
     })
   })
 
