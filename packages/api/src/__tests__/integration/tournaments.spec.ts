@@ -4,7 +4,7 @@ import { Pool } from 'pg'
 import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { TournamentFactory, OrganizerFactory, PlayerFactory } from '../factories'
-import { TournamentRepository } from '../../db'
+import { TournamentRepository, PlayerRepository } from '../../db'
 
 describe('Tournaments API', () => {
   let pool: Pool
@@ -513,6 +513,455 @@ describe('Tournaments API', () => {
         .send({ action: 'START_GROUP_STAGE', forceAdvance: false })
 
       expect(res.status).toBe(409)
+    })
+  })
+
+  describe('GET /tournaments/:id/bracket', () => {
+    it('returns 404 if tournament not found', async () => {
+      const res = await request(app)
+        .get('/tournaments/nonexistent/bracket')
+
+      expect(res.status).toBe(404)
+      expect(res.body.code).toBe('NOT_FOUND')
+    })
+
+    it('returns 404 if bracket not generated yet', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/bracket`)
+
+      expect(res.status).toBe(404)
+      expect(res.body.code).toBe('BRACKET_NOT_GENERATED')
+    })
+
+    it('returns bracket structure after generation', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+
+      // Set up tournament with groups and players
+      await repo.updateStatus(tournament.id, 'registration_closed')
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      // Create groups (while still in registration_closed status)
+      await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ numGroups: 2, advancingPerGroup: 1 })
+
+      // Advance to group_stage_complete
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+
+      // Generate bracket
+      await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      // Fetch bracket
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/bracket`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.bracket).toBeDefined()
+      expect(res.body.bracket.rounds).toBeDefined()
+      expect(Array.isArray(res.body.bracket.rounds)).toBe(true)
+      expect(res.body.bracket.totalPlayers).toBe(2)
+    })
+  })
+
+  describe('POST /tournaments/:id/bracket/generate', () => {
+    it('requires organizer authentication', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+
+      expect(res.status).toBe(401)
+    })
+
+    it('rejects non-owner organizer', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+
+      const { accessToken: otherToken } = OrganizerFactory.token(jwtConfig)
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${otherToken}`)
+
+      expect(res.status).toBe(403)
+    })
+
+    it('returns 404 if tournament not found', async () => {
+      const { accessToken } = OrganizerFactory.token(jwtConfig)
+
+      const res = await request(app)
+        .post('/tournaments/nonexistent/bracket/generate')
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      expect(res.status).toBe(404)
+      expect(res.body.code).toBe('NOT_FOUND')
+    })
+
+    it('requires group_stage_complete status', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      expect(res.status).toBe(409)
+      expect(res.body.code).toBe('INVALID_STATE')
+    })
+
+    it('requires groups to exist', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      expect(res.status).toBe(409)
+      expect(res.body.code).toBe('INVALID_STATE')
+    })
+
+    it('generates bracket from group standings', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+
+      // Register 4 players
+      await repo.updateStatus(tournament.id, 'registration_closed')
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      // Create groups (while still in registration_closed status)
+      await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ numGroups: 2, advancingPerGroup: 1 })
+
+      // Advance to group_stage_complete
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+
+      // Generate bracket
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.bracket).toBeDefined()
+      expect(res.body.bracket.rounds).toBeDefined()
+      expect(res.body.bracket.totalPlayers).toBe(2)
+      expect(Array.isArray(res.body.bracket.rounds)).toBe(true)
+    })
+
+    it('interleaves seeds by rank across groups', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+
+      // Register 6 players for 3 groups with 2 advancing each
+      await repo.updateStatus(tournament.id, 'registration_closed')
+      const players = await Promise.all(
+        Array(6).fill(null).map(() => PlayerFactory.create(pool))
+      )
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      // Create groups (while still in registration_closed status)
+      await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ numGroups: 3, advancingPerGroup: 2 })
+
+      // Advance to group_stage_complete
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.bracket.totalPlayers).toBe(6)
+    })
+  })
+
+  describe('PATCH /tournaments/:id/bracket', () => {
+    it('requires organizer authentication', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+
+      const res = await request(app)
+        .patch(`/tournaments/${tournament.id}/bracket`)
+        .send({ seeds: [] })
+
+      expect(res.status).toBe(401)
+    })
+
+    it('rejects non-owner organizer', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+
+      const { accessToken: otherToken } = OrganizerFactory.token(jwtConfig)
+
+      const res = await request(app)
+        .patch(`/tournaments/${tournament.id}/bracket`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ seeds: [] })
+
+      expect(res.status).toBe(403)
+    })
+
+    it('returns 404 if tournament not found', async () => {
+      const { accessToken } = OrganizerFactory.token(jwtConfig)
+
+      const res = await request(app)
+        .patch('/tournaments/nonexistent/bracket')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ seeds: [] })
+
+      expect(res.status).toBe(404)
+      expect(res.body.code).toBe('NOT_FOUND')
+    })
+
+    it('requires group_stage_complete status', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      const res = await request(app)
+        .patch(`/tournaments/${tournament.id}/bracket`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ seeds: [] })
+
+      expect(res.status).toBe(409)
+      expect(res.body.code).toBe('INVALID_STATE')
+    })
+
+    it('requires bracket to be generated first', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+
+      const res = await request(app)
+        .patch(`/tournaments/${tournament.id}/bracket`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ seeds: [] })
+
+      expect(res.status).toBe(404)
+      expect(res.body.code).toBe('BRACKET_NOT_GENERATED')
+    })
+
+    it('validates seeds is an array', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+
+      // Generate bracket first
+      await repo.updateStatus(tournament.id, 'registration_closed')
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      // Create groups (while still in registration_closed status)
+      await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ numGroups: 2, advancingPerGroup: 1 })
+
+      // Advance to group_stage_complete
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+      await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      // Try to patch with non-array seeds
+      const res = await request(app)
+        .patch(`/tournaments/${tournament.id}/bracket`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ seeds: 'not-an-array' })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('validates seed structure (playerId and seedPosition)', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+
+      // Generate bracket first
+      await repo.updateStatus(tournament.id, 'registration_closed')
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      // Create groups (while still in registration_closed status)
+      await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ numGroups: 2, advancingPerGroup: 1 })
+
+      // Advance to group_stage_complete
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+      await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      // Try to patch with invalid seed structure
+      const res = await request(app)
+        .patch(`/tournaments/${tournament.id}/bracket`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ seeds: [{ playerId: 'player1' }] }) // missing seedPosition
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('updates bracket with valid seeds', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+
+      // Generate bracket first
+      await repo.updateStatus(tournament.id, 'registration_closed')
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      // Create groups (while still in registration_closed status)
+      await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ numGroups: 2, advancingPerGroup: 1 })
+
+      // Advance to group_stage_complete
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+      await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      // Update seeding with reversed order
+      const res = await request(app)
+        .patch(`/tournaments/${tournament.id}/bracket`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          seeds: [
+            { playerId: players[3].id, seedPosition: 1 },
+            { playerId: players[2].id, seedPosition: 2 },
+          ],
+        })
+
+      expect(res.status).toBe(200)
+      expect(res.body.bracket).toBeDefined()
+      expect(res.body.bracket.rounds).toBeDefined()
+    })
+
+    it('validates seedPosition is a number', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+
+      // Generate bracket first
+      await repo.updateStatus(tournament.id, 'registration_closed')
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      // Create groups (while still in registration_closed status)
+      await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ numGroups: 2, advancingPerGroup: 1 })
+
+      // Advance to group_stage_complete
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+      await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      // Try invalid seedPosition (string instead of number)
+      const res = await request(app)
+        .patch(`/tournaments/${tournament.id}/bracket`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          seeds: [
+            { playerId: players[0].id, seedPosition: '1' },
+          ],
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('VALIDATION_ERROR')
     })
   })
 })
