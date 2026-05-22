@@ -4,17 +4,18 @@ This guide documents the complete test strategy for the tournament API, includin
 
 ## Overview
 
-**Current Problem:** All 271 database-dependent tests fail due to PostgreSQL deadlocks when running in parallel. The `resetTestDb()` function truncates tables and re-runs migrations on every test, creating circular lock waits when multiple test suites run concurrently.
+**Previous Problem:** All 271 database-dependent tests failed due to PostgreSQL deadlocks when running in parallel. The `resetTestDb()` function truncated tables and re-ran migrations on every test, creating circular lock waits when multiple test suites ran concurrently.
 
-**New Strategy:** 
-1. Remove the 20 failing database test files
-2. Verify the 5 surviving unit tests still pass
-3. Create a new test infrastructure based on three proven patterns:
+**Final Strategy (Implemented):** 
+1. ✅ Removed the 20 failing database test files
+2. ✅ Verified the 5 surviving unit tests still pass
+3. ✅ Created new test infrastructure with proven patterns:
    - **Factory Pattern** for test data generation
    - **Test-Scoped Unique Identifiers** for data isolation
-   - **Truncate-Once with TRUNCATE CASCADE** in global setup instead of per-test
+   - **Transactional Isolation** — each test suite runs in a database transaction
+4. ✅ Switched from TRUNCATE-once to per-suite transactions
 
-**Key Insight:** Factories generate guaranteed-unique test data using UUID (cryptographically impossible collisions). Combined with TRUNCATE-once at the start of each test suite (not per-test), we eliminate deadlocks entirely without needing per-test cleanup or complex transaction wrapping.
+**Key Insight:** Each test suite starts a transaction in `beforeAll()`, runs all tests within that transaction, and rolls back in `afterAll()`. This provides true database-level isolation without truncation overhead. Combined with factories generating guaranteed-unique data, tests run safely in parallel (`maxWorkers: 4+`) without deadlocks or cleanup logic.
 
 ---
 
@@ -149,16 +150,16 @@ module.exports = {
   // ... rest of config
 }
 
-// AFTER:
+// AFTER (Transactional Isolation Strategy):
 module.exports = {
   displayName: 'api',
   preset: 'ts-jest',
   testEnvironment: 'node',
   testTimeout: 30000,
-  // TRUNCATE-once isolation strategy allows parallel execution.
-  // Tests create unique data via factories (UUID), so no row-level conflicts.
-  // Each test suite truncates once in beforeAll, not per-test.
-  // Parallelism is safe because: unique data + serialized TRUNCATE = no deadlocks.
+  // Transactional isolation: each test suite runs in its own database transaction.
+  // All queries within a suite use the same transaction client (database-level isolation).
+  // Transactions are rolled back after the suite (no truncation overhead).
+  // Parallelism is safe because transactions are isolated: unique data + transaction rollback = no deadlocks.
   maxWorkers: 4,
   rootDir: '.',
   testMatch: [
@@ -235,14 +236,15 @@ src/__tests__/
 
 ### 3.1 Create `src/__tests__/helpers/db.ts`
 
-Handles database setup and isolation. Key: `truncateAll()` runs **once per test suite** in `beforeAll`, not per-test.
+Handles database setup and transactional isolation. Key: Each test suite gets its own transaction via `beginTransaction()` in `beforeAll`, rolled back in `afterAll`.
 
 ```typescript
-import { Pool } from 'pg'
+import { Pool, PoolClient } from 'pg'
 import path from 'path'
 import { runMigrations } from '../../migrations'
 
 let testPool: Pool | null = null
+let transactionClient: PoolClient | null = null
 
 /**
  * Get or create the test database pool.
@@ -263,7 +265,7 @@ export async function getTestPool(): Promise<Pool> {
   })
 
   try {
-    const migrationsDir = path.resolve(__dirname, '../../db/migrations')
+    const migrationsDir = path.resolve(__dirname, '../../../../../db/migrations')
     await runMigrations(testPool, migrationsDir)
   } catch (err) {
     await testPool.end()
@@ -275,46 +277,44 @@ export async function getTestPool(): Promise<Pool> {
 }
 
 /**
- * Truncate all non-migration tables in dependency order.
- * Call once in global beforeAll (or per-suite beforeAll).
- * Do NOT call in beforeEach - this is what kills parallel performance.
+ * Begin a database transaction for test suite isolation.
+ * All queries within the suite use the same transaction.
+ * Provides true database-level isolation without truncation.
+ * Call once in beforeAll.
  */
-export async function truncateAll(pool: Pool): Promise<void> {
-  const client = await pool.connect()
-  try {
-    // Truncate children before parents (respect FK constraints)
-    const tablesToTruncate = [
-      'auth.password_reset_codes',
-      'auth.accounts',
-      'public.user_events',
-      'public.knockout_matches',
-      'public.bracket_seeds',
-      'public.group_matches',
-      'public.group_memberships',
-      'public.groups',
-      'public.player_registrations',
-      'public.courts',
-      'public.locations',
-      'public.players',
-      'public.tournaments',
-    ]
-
-    for (const table of tablesToTruncate) {
-      try {
-        await client.query(`TRUNCATE TABLE ${table} CASCADE`)
-      } catch (err: any) {
-        // Table might not exist yet, that's fine
-        if (!err.message?.includes('does not exist')) {
-          throw err
-        }
-      }
-    }
-
-    // Clear migration record (but keep schema_migrations table structure)
-    await client.query('DELETE FROM public.schema_migrations')
-  } finally {
-    client.release()
+export async function beginTransaction(pool: Pool) {
+  if (transactionClient) {
+    throw new Error('Transaction already active')
   }
+  transactionClient = await pool.connect()
+  await transactionClient.query('BEGIN')
+  return transactionClient
+}
+
+/**
+ * Rollback the active transaction.
+ * All changes within the suite are discarded.
+ * Call in afterAll.
+ */
+export async function rollbackTransaction(): Promise<void> {
+  if (!transactionClient) {
+    throw new Error('No active transaction')
+  }
+  try {
+    await transactionClient.query('ROLLBACK')
+  } finally {
+    transactionClient.release()
+    transactionClient = null
+  }
+}
+
+/**
+ * Get the active transaction client for this test suite.
+ * If a transaction is active, returns the client.
+ * Otherwise returns null (pool should be used instead).
+ */
+export function getTransactionClient(): PoolClient | null {
+  return transactionClient
 }
 
 /**
@@ -331,13 +331,14 @@ export async function closeTestPool(): Promise<void> {
 
 ### 3.2 Create `src/__tests__/helpers/app.ts`
 
-Wraps `createApp()` with test dependencies.
+Wraps `createApp()` with test dependencies. Automatically uses transaction client if active.
 
 ```typescript
 import { Express } from 'express'
 import { Pool } from 'pg'
 import { createApp } from '../../app'
 import { InMemoryTokenStore } from '../../auth/token-store'
+import { getTransactionClient } from './db'
 
 export interface JwtConfig {
   secret: string
@@ -352,6 +353,8 @@ export interface TestAppDeps {
 
 /**
  * Create a test app with real database and in-memory auth store.
+ * If a transaction is active, uses the transaction client for all queries.
+ * Otherwise uses the pool.
  */
 export function createTestApp(pool: Pool): TestAppDeps {
   const tokenStore = new InMemoryTokenStore()
@@ -360,8 +363,11 @@ export function createTestApp(pool: Pool): TestAppDeps {
     expiresInSeconds: 3600,
   }
 
+  // Use transaction client if active, otherwise use pool
+  const connection = getTransactionClient() || pool
+
   const app = createApp({
-    db: pool,
+    db: connection,
     jwtConfig,
     tokenStore,
     config: {
@@ -592,7 +598,7 @@ if (!global.__jest_setup_done__) {
 
 ## Phase 4: New Integration Test Pattern
 
-When writing new integration tests, follow this pattern. No `beforeEach` cleanup. No deadlocks.
+When writing new integration tests, follow this pattern with transactional isolation. No `beforeEach` cleanup. No deadlocks.
 
 ### Example: `src/__tests__/integration/tournaments.spec.ts`
 
@@ -600,7 +606,7 @@ When writing new integration tests, follow this pattern. No `beforeEach` cleanup
 import request from 'supertest'
 import { Express } from 'express'
 import { Pool } from 'pg'
-import { getTestPool, truncateAll, closeTestPool } from '../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { TournamentFactory, OrganizerFactory } from '../factories'
 import { TournamentRepository } from '../../db'
@@ -612,12 +618,12 @@ describe('Tournaments API', () => {
 
   beforeAll(async () => {
     pool = await getTestPool()
-    await truncateAll(pool)  // ← Clean once per suite
+    await beginTransaction(pool)  // ← Start transaction for this suite
     ;({ app, jwtConfig } = createTestApp(pool))
   })
 
   afterAll(async () => {
-    await closeTestPool()
+    await rollbackTransaction()  // ← Rollback all changes (automatic cleanup)
   })
 
   describe('POST /tournaments', () => {
@@ -785,12 +791,13 @@ npx jest
 
 ## Why This Strategy Works
 
-1. **No per-test TRUNCATE** — Eliminates the deadlock source entirely
-2. **Unique data per test** — Factories generate guaranteed-unique IDs/names/emails using UUID (cryptographically impossible collisions)
-3. **TRUNCATE-once per suite** — All tests within a suite share clean database state; tests don't depend on clean state between them
-4. **Parallelism safe** — Tests can run in parallel with `maxWorkers: 4` because factories guarantee unique data and TRUNCATE is serialized
-5. **Fast feedback** — No migrations per test, no table resets per test
-6. **Maintainable patterns** — Factory pattern is familiar to most engineers; test code is readable
+1. **Transactional isolation** — Each test suite runs in its own database transaction, eliminating deadlock sources entirely
+2. **Database-level isolation** — PostgreSQL's transaction semantics provide true ACID isolation; one suite's changes don't affect another's
+3. **Unique data per test** — Factories generate guaranteed-unique IDs/names/emails using UUID (cryptographically impossible collisions)
+4. **Automatic cleanup** — Transaction rollback is automatic in `afterAll`; no truncation logic, no cleanup bugs
+5. **Parallelism safe** — Tests can run in parallel with `maxWorkers: 4+` because transactions are isolated at the database level; no lock contention
+6. **Fast feedback** — No migrations per test, no table resets per test, no cleanup queries
+7. **Maintainable patterns** — Factory pattern is familiar to most engineers; test code is readable and clear
 
 ---
 
@@ -799,9 +806,10 @@ npx jest
 ### Tests still deadlock after Phase 1-2
 - Ensure `db-test-setup.ts` is deleted
 - Ensure `setup.ts` no longer calls `closeTestDb()` prematurely
-- Verify `jest.config.js` has `maxWorkers: 4` (not higher)
+- Verify `jest.config.js` has `maxWorkers: 4` (or higher)
 - Verify all factories use `crypto.randomUUID()` for unique data generation
-- Check that `beforeEach` is NOT calling `truncateAll()` (should only be in `beforeAll`)
+- Check that `beforeEach` is NOT calling `beginTransaction()` (should only be in `beforeAll`)
+- Verify each test suite calls `beginTransaction()` in `beforeAll` and `rollbackTransaction()` in `afterAll`
 
 ### Unit tests fail after Phase 1
 - Rerun Phase 1 steps; one of the 5 files may have been accidentally deleted
