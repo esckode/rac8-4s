@@ -3,11 +3,10 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   testTimeout: 30000,
-  // TRUNCATE-once isolation strategy allows parallel execution.
-  // Tests create unique data via factories (UUID), so no row-level conflicts.
-  // Each test suite truncates once in beforeAll, not per-test.
-  // Parallelism is safe because: unique data + serialized TRUNCATE = no deadlocks.
-  maxWorkers: 4,
+  // TRUNCATE-once isolation strategy requires serialized worker execution.
+  // Global setup.ts truncates database once before any tests run.
+  // With maxWorkers: 1, all tests share the same pool and truncation is synchronized.
+  maxWorkers: 1,
   rootDir: '.',
   testMatch: [
     '<rootDir>/src/__tests__/unit/**/*.spec.ts',
