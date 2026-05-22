@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { Express } from 'express'
 import { Pool } from 'pg'
-import { getTestPool, closeTestPool } from '../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { TournamentFactory, PlayerFactory, OrganizerFactory } from '../factories'
 import { InMemoryTokenStore } from '../../auth/token-store'
@@ -15,6 +15,7 @@ describe('Groups API', () => {
 
   beforeAll(async () => {
     pool = await getTestPool()
+    await beginTransaction(pool)
     const deps = createTestApp(pool)
     app = deps.app
     tokenStore = deps.tokenStore
@@ -41,7 +42,7 @@ describe('Groups API', () => {
   }
 
   afterAll(async () => {
-    await closeTestPool()
+    await rollbackTransaction()
   })
 
   describe('POST /tournaments/:id/groups', () => {

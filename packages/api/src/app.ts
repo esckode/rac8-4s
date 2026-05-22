@@ -1,5 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express'
-import { Pool } from 'pg'
+import { Pool, PoolClient } from 'pg'
 import { randomUUID } from 'node:crypto'
 import { JwtConfig, TokenStore } from './auth'
 import { AuthError, ForbiddenError, MissingTokenError } from './auth/errors'
@@ -78,7 +78,7 @@ function parsePostgresError(err: Error): Error {
 }
 
 export interface AppDependencies {
-  db: Pool
+  db: Pool | PoolClient
   jwtConfig: JwtConfig
   tokenStore: TokenStore
   config: AppConfig

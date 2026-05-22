@@ -1,8 +1,9 @@
-import { Pool } from 'pg'
+import { Pool, PoolClient } from 'pg'
 import path from 'path'
 import { runMigrations } from '../../migrations'
 
 let testPool: Pool | null = null
+let transactionClient: PoolClient | null = null
 
 /**
  * Get or create the test database pool.
@@ -35,46 +36,44 @@ export async function getTestPool(): Promise<Pool> {
 }
 
 /**
- * Truncate all non-migration tables in dependency order.
- * Call once in global beforeAll (or per-suite beforeAll).
- * Do NOT call in beforeEach - this is what kills parallel performance.
+ * Begin a database transaction for test suite isolation.
+ * All queries within the suite use the same transaction.
+ * Provides true database-level isolation without truncation.
+ * Call once in beforeAll.
  */
-export async function truncateAll(pool: Pool): Promise<void> {
-  const client = await pool.connect()
-  try {
-    // Truncate children before parents (respect FK constraints)
-    const tablesToTruncate = [
-      'auth.password_reset_codes',
-      'auth.accounts',
-      'public.user_events',
-      'public.knockout_matches',
-      'public.bracket_seeds',
-      'public.group_matches',
-      'public.group_memberships',
-      'public.groups',
-      'public.player_registrations',
-      'public.courts',
-      'public.locations',
-      'public.players',
-      'public.tournaments',
-    ]
-
-    for (const table of tablesToTruncate) {
-      try {
-        await client.query(`TRUNCATE TABLE ${table} CASCADE`)
-      } catch (err: any) {
-        // Table might not exist yet, that's fine
-        if (!err.message?.includes('does not exist')) {
-          throw err
-        }
-      }
-    }
-
-    // Clear migration record (but keep schema_migrations table structure)
-    await client.query('DELETE FROM public.schema_migrations')
-  } finally {
-    client.release()
+export async function beginTransaction(pool: Pool) {
+  if (transactionClient) {
+    throw new Error('Transaction already active')
   }
+  transactionClient = await pool.connect()
+  await transactionClient.query('BEGIN')
+  return transactionClient
+}
+
+/**
+ * Rollback the active transaction.
+ * All changes within the suite are discarded.
+ * Call in afterAll.
+ */
+export async function rollbackTransaction(): Promise<void> {
+  if (!transactionClient) {
+    throw new Error('No active transaction')
+  }
+  try {
+    await transactionClient.query('ROLLBACK')
+  } finally {
+    transactionClient.release()
+    transactionClient = null
+  }
+}
+
+/**
+ * Get the active transaction client for this test suite.
+ * If a transaction is active, returns the client.
+ * Otherwise returns null (pool should be used instead).
+ */
+export function getTransactionClient(): PoolClient | null {
+  return transactionClient
 }
 
 /**

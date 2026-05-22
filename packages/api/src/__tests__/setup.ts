@@ -1,4 +1,4 @@
-import { getTestPool, truncateAll, closeTestPool } from './helpers/db'
+import { closeTestPool } from './helpers/db'
 
 declare global {
   var __jest_setup_done__: boolean
@@ -6,11 +6,13 @@ declare global {
 
 // Only register global hooks once, not per test file
 if (!(global as any).__jest_setup_done__) {
+  // Initialize test pool (runs migrations on first call)
   beforeAll(async () => {
-    const pool = await getTestPool()
-    await truncateAll(pool)
+    const { getTestPool } = await import('./helpers/db')
+    await getTestPool()
   })
 
+  // Cleanup global resources
   afterAll(async () => {
     await closeTestPool()
   })

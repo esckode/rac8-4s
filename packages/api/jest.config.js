@@ -3,10 +3,11 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   testTimeout: 30000,
-  // TRUNCATE-once isolation strategy requires serialized worker execution.
-  // Global setup.ts truncates database once before any tests run.
-  // With maxWorkers: 1, all tests share the same pool and truncation is synchronized.
-  maxWorkers: 1,
+  // Transactional isolation strategy: each test suite runs in its own transaction.
+  // All queries within a suite use the same transaction client (database-level isolation).
+  // Transactions are rolled back after the suite, avoiding deadlocks and cleanup issues.
+  // With maxWorkers: 4+, suites run in parallel safely because transactions don't conflict.
+  maxWorkers: 4,
   rootDir: '.',
   testMatch: [
     '<rootDir>/src/__tests__/unit/**/*.spec.ts',

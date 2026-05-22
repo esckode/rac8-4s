@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { Express } from 'express'
 import { Pool } from 'pg'
-import { getTestPool, closeTestPool } from '../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { PlayerFactory, TournamentFactory, OrganizerFactory } from '../factories'
 import { generatePlayerSession } from '../../auth/magic-link'
@@ -14,6 +14,7 @@ describe('Bracket API', () => {
 
   beforeAll(async () => {
     pool = await getTestPool()
+    await beginTransaction(pool)
     const deps = createTestApp(pool)
     app = deps.app
     tokenStore = deps.tokenStore
@@ -21,7 +22,7 @@ describe('Bracket API', () => {
   })
 
   afterAll(async () => {
-    await closeTestPool()
+    await rollbackTransaction()
   })
 
   // Helper: Create tournament and advance through group stage

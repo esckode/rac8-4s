@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { Express } from 'express'
 import { Pool } from 'pg'
-import { getTestPool, closeTestPool } from '../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { TournamentFactory, OrganizerFactory } from '../factories'
 import { TournamentRepository } from '../../db'
@@ -13,11 +13,12 @@ describe('Tournaments API', () => {
 
   beforeAll(async () => {
     pool = await getTestPool()
+    await beginTransaction(pool)
     ;({ app, jwtConfig } = createTestApp(pool))
   })
 
   afterAll(async () => {
-    await closeTestPool()
+    await rollbackTransaction()
   })
 
   describe('POST /tournaments', () => {
