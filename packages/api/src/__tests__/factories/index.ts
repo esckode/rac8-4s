@@ -1,3 +1,5 @@
 export { TournamentFactory } from './tournament.factory'
 export { PlayerFactory } from './player.factory'
 export { OrganizerFactory } from './organizer.factory'
+export { LocationFactory } from './location.factory'
+export { CourtFactory } from './court.factory'
