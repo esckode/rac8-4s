@@ -213,4 +213,142 @@ describe('Tournaments API', () => {
       expect(res.status).toBe(403)
     })
   })
+
+  describe('POST /tournaments/:id/advance', () => {
+    it('transitions from draft to registration_open', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/advance`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ action: 'OPEN_REGISTRATION' })
+
+      expect(res.status).toBe(200)
+      expect(res.body.status).toBe('registration_open')
+      expect(res.body.previousStatus).toBe('draft')
+    })
+
+    it('transitions from registration_open to registration_closed', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/advance`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ action: 'CLOSE_REGISTRATION' })
+
+      expect(res.status).toBe(200)
+      expect(res.body.status).toBe('registration_closed')
+    })
+
+    it('rejects invalid action format', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/advance`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ action: 123 })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('rejects missing action', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/advance`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({})
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('rejects non-existent tournament', async () => {
+      const { accessToken } = OrganizerFactory.token(jwtConfig)
+
+      const res = await request(app)
+        .post('/tournaments/nonexistent/advance')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ action: 'OPEN_REGISTRATION' })
+
+      expect(res.status).toBe(404)
+      expect(res.body.code).toBe('NOT_FOUND')
+    })
+
+    it('requires organizer authentication', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/advance`)
+        .send({ action: 'OPEN_REGISTRATION' })
+
+      expect(res.status).toBe(401)
+    })
+
+    it('rejects transition from different organizer', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      // Different organizer's token
+      const { accessToken: otherToken } = OrganizerFactory.token(jwtConfig)
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/advance`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ action: 'OPEN_REGISTRATION' })
+
+      expect(res.status).toBe(403)
+    })
+
+    it('rejects invalid state transition', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'knockout_active')
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/advance`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ action: 'OPEN_REGISTRATION' })
+
+      expect(res.status).toBe(409)
+    })
+
+    it('allows forced advance from registration_closed to group_stage_active', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/advance`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ action: 'START_GROUP_STAGE', forceAdvance: true })
+
+      expect(res.status).toBe(200)
+      expect(res.body.status).toBe('group_stage_active')
+    })
+
+    it('requires players before starting group stage without force', async () => {
+      const { sub: organizerId, accessToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/advance`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ action: 'START_GROUP_STAGE', forceAdvance: false })
+
+      expect(res.status).toBe(409)
+    })
+  })
 })
