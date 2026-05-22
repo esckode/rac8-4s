@@ -4,6 +4,48 @@ This document breaks down Authentication_Planning.md into 30 actionable tasks or
 
 ---
 
+## Token Architecture Decision
+
+**Context:** The tournament management app is being split into a mobile-specific app and a backend system (distributed architecture).
+
+**Architecture:** JWT tokens for sessions + Opaque tokens for magic links
+
+### Magic Link Tokens (One-Time, Email-Based)
+- **Type:** Opaque tokens stored in Redis
+- **Lifecycle:** Sent via email → User clicks → Exchanged for session JWT → Deleted
+- **Why opaque:** Single-use is non-negotiable; need server-side tracking of which links have been used
+- **TTL:** ~15 minutes
+
+### Session Tokens (After Authentication)
+- **Type:** JWT (signed, stateless)
+- **Lifecycle:** Issued after magic link consumed → Sent with every request → Expires
+- **Payload:** `{ sub, email, tournamentId, type: 'player'|'organizer', iat, exp }`
+- **Why JWT:** Stateless validation enables horizontal scaling; each backend server validates independently without needing shared session storage
+- **TTL:** 7 days (players), 30 days (organizers)
+
+### Revocation (Optional)
+- **Explicit logout:** Add JWT ID (JTI) to Redis blocklist (lightweight, optional)
+- **Why optional:** Can rely on short TTL instead; blocklist only needed for immediate revocation after logout
+
+### Redis Requirements
+- **Required:** Magic link tokens (one-time)
+- **Optional:** JWT blocklist for explicit logout
+- **Not needed:** Session storage (handled by JWT)
+
+### Why This Works for Distributed Architecture
+| Aspect | Single-Server (Opaque) | Distributed (JWT + Opaque) |
+|--------|------------------------|---------------------------|
+| Session validation | TokenStore lookup | Crypto signature (stateless) |
+| Horizontal scaling | Shared Redis contention | Independent validation |
+| Token revocation | Instant (delete) | Hybrid (blocklist + TTL) |
+| Magic links | One-time storage | One-time storage |
+
+**Key insight:** Distributed systems strongly prefer stateless validation (JWT) because multiple servers need to validate tokens independently without shared state. Opaque tokens everywhere would require every server to hit shared Redis for every request.
+
+See [Token Architecture memory](/memory/token_architecture.md) for full specification.
+
+---
+
 ## Phase 1: Foundation - Database & Auth Infrastructure (6 tasks)
 
 ### Task 1.1: Create `accounts` Table Migration
@@ -142,68 +184,112 @@ This document breaks down Authentication_Planning.md into 30 actionable tasks or
 
 ---
 
-### Task 1.5: Implement Token Generation and Storage (TokenStore)
+### Task 1.5: Implement Token Generation (JWT Sessions + Opaque Magic Links)
 
 **Prerequisites:**
 - `packages/api/src/auth/token-store.ts` exists and has `TokenStore` interface
 - Review existing `InMemoryTokenStore` implementation
+- `jsonwebtoken` library available in dependencies
 
 **Implementation Criteria:**
-- Verify `TokenStore` interface exists with methods: `set(key, value, ttlSeconds)`, `get(key)`, `del(key)`
-- Extend `InMemoryTokenStore` to support TTL with millisecond precision
-- Create `generateSessionToken(): string` function that:
-  - Uses `crypto.randomBytes(32)` for 256-bit secure random value
+
+**Part 1: JWT Session Token Generation**
+- Create/enhance `issueSessionToken(payload, config): TokenPair` function that:
+  - Accepts payload: `{ sub: string, email: string, tournamentId?: string, type: 'player'|'organizer', role?: string }`
+  - Signs with `jwt.sign()` using `config.secret`
+  - Sets expiration: 7 days for players, 30 days for organizers (configurable)
+  - Includes optional JTI (JWT ID) for revocation tracking
+  - Returns `{ accessToken, expiresAt }`
+- Create `verifySessionToken(token, config): Payload` that:
+  - Validates signature and expiration
+  - Throws `TokenExpiredError` if expired
+  - Throws `TokenInvalidError` if invalid/tampered
+
+**Part 2: Opaque Magic Link Token Generation**
+- Keep existing `generateMagicLinkToken()` function (opaque, one-time)
+  - Uses `crypto.randomBytes(32)` for 256-bit random value
+  - Stores in TokenStore with short TTL (~15 minutes)
   - Returns hex-encoded token (64 characters)
-  - Does not use JWT (per Authentication_Planning.md, opaque tokens preferred)
-- Token generation should use config for TTL values (30-day session), not hardcoded
-- Add logging: `log.debug('token.generated', { ttl: ttlSeconds })`
+
+**Part 3: Token Revocation (Optional)**
+- Create `invalidateSessionToken(token, store): Promise<void>` that:
+  - Decodes JWT to extract JTI
+  - Adds JTI to Redis blocklist with remaining TTL
+  - Enables explicit logout without waiting for expiration
+- Create `isSessionTokenRevoked(token, store): Promise<boolean>` that:
+  - Checks if JTI is in blocklist
+  - Returns false if JTI not present or doesn't exist (safe default)
+
+**General Requirements:**
+- Use config for TTL values, secret, algorithms — no hardcoded values
+- Add logging: `log.debug('token.issued', { type: 'session'|'magic_link', expiresAt, ttl })`
 - Use TypeScript strictly; no `any` types
-- Ensure tokens are cryptographically secure (use Node.js crypto module)
+- Ensure all tokens use Node.js crypto (secure randomness)
+- Never log full token values (log only first 8 characters)
 
 **Success Criteria:**
-- Code coverage ≥ 90% (token generation and storage)
-- Generated tokens are unique (no collisions in test suite)
-- Tokens are 64 characters (hex-encoded 32 bytes)
-- TTL is respected (expired tokens return null)
-- Can delete tokens before expiration
-- No hardcoded values; all config comes from `AppDependencies.config`
-- Tokens are never logged in full (log only first 8 characters)
+- Code coverage ≥ 90% (token generation and validation)
+- JWT tokens are correctly signed and verifiable
+- Magic link tokens are unique (no collisions in test suite)
+- TTL is respected (expired tokens rejected)
+- Can delete/blocklist tokens before expiration
+- No hardcoded values; all config from `AppDependencies.config`
 - Type safety: no `any` types
-- No security vulnerabilities (tokens are cryptographically random)
-- Integration test verifies token lifecycle (create → use → expire)
+- No security vulnerabilities (cryptographically secure randomness)
+- Integration test verifies JWT token lifecycle (issue → validate → verify expiration)
+- Integration test verifies magic link lifecycle (create → use once → delete)
 
 ---
 
-### Task 1.6: Implement Auth Middleware (Session/Token Validation)
+### Task 1.6: Implement Auth Middleware (JWT Session Validation + Magic Link Validation)
 
 **Prerequisites:**
-- Task 1.5 complete (token generation/storage)
+- Task 1.5 complete (token generation and validation)
 - Review existing middleware in `packages/api/src/auth/middleware.ts`
 
 **Implementation Criteria:**
-- Create or enhance `requirePlayerSessionAuth(authHeader: string, tokenStore: TokenStore): Promise<{ playerId: string, accountId: string }>`
+
+**Part 1: JWT Session Validation Middleware**
+- Create `requireSessionAuth(authHeader: string, config: JwtConfig, tokenStore?: TokenStore): Promise<SessionPayload>`
 - Logic:
   1. Extract token from `Authorization: Bearer <token>` header
-  2. If header missing or malformed, throw `MissingTokenError`
-  3. Lookup token in `tokenStore.get(token)`
-  4. If token not found or expired, throw `AuthError`
-  5. Decode token payload (if JWT, validate claims; if opaque, lookup in database)
-  6. Return decoded payload: `{ accountId, playerId, role, email }`
-- Use config for token validation settings, not hardcoded values
-- Add structured logging: `log.debug('auth.middleware', { accountId, status: 'valid'|'expired'|'invalid' })`
+  2. If header missing or malformed, throw `MissingTokenError` (401)
+  3. Call `verifySessionToken(token, config)` to validate JWT signature + expiration
+  4. If `TokenExpiredError`, throw (401)
+  5. If `TokenInvalidError`, throw (401)
+  6. **Optional:** If revocation enabled, check `isSessionTokenRevoked(token, tokenStore)` and throw if revoked (401)
+  7. Return decoded payload: `{ sub, email, tournamentId, type, iat, exp }`
+- This is stateless (no database lookup unless revocation is enabled)
+
+**Part 2: Magic Link Validation**
+- Enhance existing `requireMagicLinkAuth(token: string, tokenStore: TokenStore): Promise<MagicLinkPayload>`
+- Logic:
+  1. Call `validateMagicLinkToken(token, tokenStore)` (existing function)
+  2. If token not found or expired, throw `TokenInvalidError` (401)
+  3. Return payload: `{ playerId, tournamentId, email, createdAt }`
+  4. Token is deleted after validation (single-use)
+
+**General Requirements:**
+- Use config from `AppDependencies` for JWT validation, not hardcoded
+- Add structured logging: `log.debug('auth.middleware', { type: 'jwt'|'magic_link', status: 'valid'|'expired'|'invalid', sub })`
 - Use TypeScript strictly; no `any` types
 - Follow error handling pattern in `packages/api/src/auth/errors.ts`
+- Never log full tokens (log only first 8 characters if needed)
 
 **Success Criteria:**
 - Code coverage ≥ 85% (middleware logic)
-- Valid tokens pass through middleware
-- Expired tokens are rejected with 401
-- Malformed/missing tokens are rejected with 401
+- Valid JWT tokens pass through middleware (stateless validation)
+- Expired JWT tokens are rejected with 401
+- Invalid/malformed JWT tokens are rejected with 401
+- Valid magic link tokens pass through (one-time validation)
+- Expired magic link tokens are rejected with 401
+- Already-used magic link tokens are rejected with 401
 - Error messages don't leak token information
-- Type safety: return type properly defined, no `any`
-- Logging doesn't include full token (security)
+- Type safety: return types properly defined, no `any`
+- Logging follows standards (no full tokens, no secrets)
 - No vulnerabilities in token validation
-- Integration test verifies all token scenarios (valid, expired, malformed, missing)
+- Integration test verifies JWT scenarios (valid, expired, tampered, revoked if enabled)
+- Integration test verifies magic link scenarios (valid, expired, reuse attempts)
 
 ---
 
