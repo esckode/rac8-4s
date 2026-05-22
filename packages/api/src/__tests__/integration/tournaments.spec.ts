@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { Express } from 'express'
 import { Pool } from 'pg'
-import { getTestPool, truncateAll, closeTestPool } from '../helpers/db'
+import { getTestPool, closeTestPool } from '../helpers/db'
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { TournamentFactory, OrganizerFactory } from '../factories'
 import { TournamentRepository } from '../../db'
@@ -13,7 +13,6 @@ describe('Tournaments API', () => {
 
   beforeAll(async () => {
     pool = await getTestPool()
-    await truncateAll(pool)
     ;({ app, jwtConfig } = createTestApp(pool))
   })
 

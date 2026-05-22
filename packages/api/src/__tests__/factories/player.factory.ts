@@ -1,6 +1,8 @@
 import crypto from 'crypto'
 import { PlayerRepository } from '../../db'
 import { Pool } from 'pg'
+import { generatePlayerSession } from '../../auth/magic-link'
+import { TokenStore } from '../../auth/token-store'
 
 export interface PlayerData {
   email: string
@@ -50,5 +52,31 @@ export const PlayerFactory = {
     const player = await this.create(pool, overrides)
     await repo.createRegistration(player.id, tournamentId)
     return player
+  },
+
+  /**
+   * Generate a player session token for authentication testing.
+   */
+  async token(
+    pool: Pool,
+    tokenStore: TokenStore,
+    tournamentId: string,
+    overrides: Partial<PlayerData> = {}
+  ) {
+    const player = await this.create(pool, overrides)
+    const session = await generatePlayerSession(
+      {
+        playerId: player.id,
+        tournamentId,
+        email: player.email,
+        createdAt: Date.now(),
+      },
+      3600,
+      tokenStore
+    )
+    return {
+      ...player,
+      sessionToken: session.token,
+    }
   },
 }
