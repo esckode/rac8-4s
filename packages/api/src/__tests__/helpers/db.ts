@@ -23,7 +23,7 @@ export async function getTestPool(): Promise<Pool> {
   })
 
   try {
-    const migrationsDir = path.resolve(__dirname, '../../db/migrations')
+    const migrationsDir = path.resolve(__dirname, '../../../../../db/migrations')
     await runMigrations(testPool, migrationsDir)
   } catch (err) {
     await testPool.end()

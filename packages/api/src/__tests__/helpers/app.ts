@@ -2,6 +2,7 @@ import { Express } from 'express'
 import { Pool } from 'pg'
 import { createApp } from '../../app'
 import { InMemoryTokenStore } from '../../auth/token-store'
+import { DEFAULT_APP_CONFIG } from '../../config'
 
 export interface JwtConfig {
   secret: string
@@ -28,11 +29,7 @@ export function createTestApp(pool: Pool): TestAppDeps {
     db: pool,
     jwtConfig,
     tokenStore,
-    config: {
-      nodeEnv: 'test',
-      port: 3000,
-      databaseUrl: process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || '',
-    },
+    config: DEFAULT_APP_CONFIG,
   })
 
   return { app, tokenStore, jwtConfig }

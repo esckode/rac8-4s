@@ -5,7 +5,7 @@ import { Pool } from 'pg'
 export interface TournamentData {
   name: string
   sport: string
-  matchFormat: string
+  matchFormat: 'singles' | 'doubles'
   maxPlayers: number
   registrationDeadline: string
   groupStageDeadline: string
