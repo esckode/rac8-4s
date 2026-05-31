@@ -12,6 +12,8 @@
  */
 
 import { renderHook, waitFor } from '@testing-library/react'
+import React from 'react'
+import { AuthProvider } from '../useAuth'
 import { useSSE } from '../useSSE'
 import { useTournament } from '../useTournament'
 import * as stores from '../../state'
@@ -75,6 +77,10 @@ jest.mock('../../state', () => ({
 
 const mockUseTournament = useTournament as jest.MockedFunction<typeof useTournament>
 
+const Wrapper = ({ children }: { children: React.ReactNode }) => (
+  <AuthProvider>{children}</AuthProvider>
+)
+
 describe('useSSE', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -103,7 +109,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      renderHook(() => useSSE(tournamentId))
+      renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       expect(mockEventSourceInstance).not.toBeNull()
       expect(mockEventSourceInstance?.url).toContain(`/tournaments/${tournamentId}/events`)
@@ -124,7 +130,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      const { unmount } = renderHook(() => useSSE(tournamentId))
+      const { unmount } = renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       expect(mockEventSourceInstance?.closed).toBe(false)
 
@@ -146,7 +152,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      renderHook(() => useSSE(''))
+      renderHook(() => useSSE(''), { wrapper: Wrapper })
 
       expect(mockEventSourceInstance).toBeNull()
     })
@@ -168,7 +174,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      renderHook(() => useSSE(tournamentId))
+      renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       const standingsPayload = {
         groupId: 'group_1',
@@ -207,7 +213,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      renderHook(() => useSSE(tournamentId))
+      renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       const bracketPayload = {
         matchCount: 8,
@@ -237,7 +243,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      const { result } = renderHook(() => useSSE(tournamentId))
+      const { result } = renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       expect(result.current.connected).toBe(false)
 
@@ -263,7 +269,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      const { result } = renderHook(() => useSSE(tournamentId))
+      const { result } = renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       mockEventSourceInstance?.emitEvent('error')
 
@@ -288,7 +294,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      const { result } = renderHook(() => useSSE(tournamentId))
+      const { result } = renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       // Open connection successfully
       mockEventSourceInstance?.emitEvent('open')
@@ -330,7 +336,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      const { result } = renderHook(() => useSSE(tournamentId))
+      const { result } = renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       // Emit malformed event
       const malformedEvent = new MessageEvent('standings.updated', {
@@ -360,7 +366,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      const { result } = renderHook(() => useSSE(tournamentId))
+      const { result } = renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       // Emit malformed event
       const malformedEvent = new MessageEvent('bracket.published', {
@@ -393,7 +399,7 @@ describe('useSSE', () => {
         cancelAutoRetry: jest.fn(),
       })
 
-      renderHook(() => useSSE(tournamentId))
+      renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       // Open connection
       mockEventSourceInstance?.emitEvent('open')
@@ -430,7 +436,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      renderHook(() => useSSE(tournamentId))
+      renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       expect(mockEventSourceInstance?.options?.maxReconnectionDelay).toBe(8000)
     })
@@ -452,7 +458,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      const { unmount } = renderHook(() => useSSE(tournamentId))
+      const { unmount } = renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       const initialListeners = Object.keys(mockEventSourceInstance?.listeners || {})
         .map(k => mockEventSourceInstance?.listeners[k].length)
@@ -478,7 +484,7 @@ describe('useSSE', () => {
       cancelAutoRetry: jest.fn(),
       })
 
-      const { unmount } = renderHook(() => useSSE(tournamentId))
+      const { unmount } = renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
 
       expect(mockEventSourceInstance?.listeners['open']?.length).toBeGreaterThan(0)
 

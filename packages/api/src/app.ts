@@ -2,7 +2,7 @@ import express, { Express, Request, Response, NextFunction } from 'express'
 import { Pool, PoolClient } from 'pg'
 import { randomUUID } from 'node:crypto'
 import { JwtConfig, TokenStore } from './auth'
-import { AuthError, ForbiddenError, MissingTokenError } from './auth/errors'
+import { AuthError, ForbiddenError, MissingTokenError, TokenExpiredError } from './auth/errors'
 import {
   DatabaseError,
   ConstraintViolationError,
@@ -14,10 +14,12 @@ import { getLogger, runWithRequestId } from './logger'
 import tournamentsRouter from './routes/tournaments'
 import playerRouter from './routes/player'
 import analyticsRouter from './routes/analytics'
+import authRouter from './routes/auth'
 import type { JobQueue } from '@worker/job-queue'
 import type { StandingsCache } from './standings-cache'
 import type { BroadcastBus } from './broadcast-bus'
 import type { AppConfig } from './config'
+import type { EmailAdapter } from './email-adapter'
 import { QueueMonitor } from './queue-monitor'
 
 const httpLog = getLogger('http')
@@ -82,6 +84,7 @@ export interface AppDependencies {
   jwtConfig: JwtConfig
   tokenStore: TokenStore
   config: AppConfig
+  emailAdapter?: EmailAdapter
   jobQueue?: JobQueue
   standingsCache?: StandingsCache
   broadcastBus?: BroadcastBus
@@ -114,6 +117,7 @@ export function createApp(deps: AppDependencies): Express {
   app.use('/tournaments', tournamentsRouter(appDeps))
   app.use('/player', playerRouter(appDeps))
   app.use('/api/analytics', analyticsRouter(appDeps))
+  app.use('/api/auth', authRouter(appDeps))
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     // Parse PostgreSQL errors first
@@ -126,9 +130,13 @@ export function createApp(deps: AppDependencies): Express {
       httpLog.warn('forbidden', { code: err.code })
       return res.status(403).json({ code: err.code, message: err.message })
     }
+    if (err instanceof TokenExpiredError) {
+      httpLog.warn('unauthorized', { code: 'TOKEN_INVALID', message: err.message })
+      return res.status(401).json({ code: 'TOKEN_INVALID', message: err.message })
+    }
     if (err instanceof MissingTokenError || err instanceof AuthError) {
-      httpLog.warn('unauthorized', { message: err.message })
-      return res.status(401).json({ code: 'UNAUTHORIZED', message: err.message })
+      httpLog.warn('unauthorized', { code: err.code, message: err.message })
+      return res.status(401).json({ code: err.code, message: err.message })
     }
 
     // Database errors

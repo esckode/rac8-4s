@@ -1,5 +1,6 @@
 import { Pool, PoolClient } from 'pg'
-import { NotFoundError, DeadlockError, CheckConstraintError } from './db/errors'
+import { randomInt } from 'crypto'
+import { NotFoundError, DeadlockError, CheckConstraintError, UniqueConstraintError } from './db/errors'
 import { getLogger } from './logger'
 
 const log = getLogger('db')
@@ -124,6 +125,17 @@ export interface GroupMatchWithPlayers extends GroupMatchRow {
   player2_name: string
   player2_email: string
   player2_share_contact: boolean
+}
+
+export interface AccountRow {
+  id: string
+  email: string
+  password_hash: string | null
+  role: string
+  status: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
 }
 
 
@@ -1194,5 +1206,226 @@ export class CourtRepository {
       [locationId, status]
     )
     return Number((result.rows[0] as { count: any }).count)
+  }
+}
+
+export class AccountRepository {
+  constructor(private pool: DbConnection) {}
+
+  async create(email: string, role: string, status: string = 'active'): Promise<AccountRow> {
+    const id = `account_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const now = new Date().toISOString()
+
+    log.debug('account.query', { method: 'create', email })
+
+    try {
+      await this.pool.query(
+        `INSERT INTO auth.accounts (id, email, password_hash, role, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [id, email.toLowerCase(), '', role, status, now, now]
+      )
+    } catch (err) {
+      if (err instanceof Error && (err.message.includes('unique violation') || err.message.includes('duplicate key'))) {
+        throw new UniqueConstraintError('email')
+      }
+      throw err
+    }
+
+    const account = await this.findById(id)
+    if (!account) throw new NotFoundError('Account')
+    return account
+  }
+
+  async findByEmail(email: string): Promise<AccountRow | null> {
+    log.debug('account.query', { method: 'findByEmail' })
+
+    const result = await this.pool.query(
+      'SELECT * FROM auth.accounts WHERE LOWER(email) = LOWER($1)',
+      [email]
+    )
+    const row = result.rows[0] as any
+    if (!row) return null
+    return this.formatAccountRow(row)
+  }
+
+  async findById(id: string): Promise<AccountRow | null> {
+    log.debug('account.query', { method: 'findById' })
+
+    const result = await this.pool.query(
+      'SELECT * FROM auth.accounts WHERE id = $1',
+      [id]
+    )
+    const row = result.rows[0] as any
+    if (!row) return null
+    return this.formatAccountRow(row)
+  }
+
+  private formatAccountRow(row: any): AccountRow {
+    return {
+      id: row.id,
+      email: row.email,
+      password_hash: row.password_hash,
+      role: row.role,
+      status: row.status,
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+      updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+      deleted_at: row.deleted_at instanceof Date ? row.deleted_at.toISOString() : row.deleted_at,
+    }
+  }
+
+  async updatePasswordHash(id: string, hash: string): Promise<void> {
+    const now = new Date().toISOString()
+
+    log.debug('account.query', { method: 'updatePasswordHash' })
+
+    await this.pool.query(
+      'UPDATE auth.accounts SET password_hash = $1, updated_at = $2 WHERE id = $3',
+      [hash, now, id]
+    )
+  }
+
+  async getAttempts(id: string): Promise<number> {
+    log.debug('account.query', { method: 'getAttempts' })
+
+    const result = await this.pool.query(
+      `SELECT COALESCE(SUM(attempts), 0) as total_attempts
+       FROM auth.password_reset_codes
+       WHERE account_id = $1`,
+      [id]
+    )
+    return Number((result.rows[0] as { total_attempts: any }).total_attempts)
+  }
+}
+
+export interface PasswordResetCodeRow {
+  id: string
+  account_id: string
+  code: string
+  attempts: number
+  expires_at: string
+  used_at: string | null
+  created_at: string
+}
+
+export class PasswordResetCodeRepository {
+  constructor(private pool: DbConnection) {}
+
+  /**
+   * Generate a cryptographically secure random 6-digit code.
+   */
+  static generateCode(): string {
+    const code = randomInt(0, 1000000)
+    return String(code).padStart(6, '0')
+  }
+
+  /**
+   * Check if a password reset code has expired.
+   */
+  static isExpired(row: PasswordResetCodeRow): boolean {
+    return new Date() > new Date(row.expires_at)
+  }
+
+  /**
+   * Check if a password reset code has been used.
+   */
+  static isUsed(row: PasswordResetCodeRow): boolean {
+    return row.used_at !== null
+  }
+
+  /**
+   * Create a new password reset code for an account.
+   * @param accountId The account ID
+   * @param code The 6-digit reset code
+   * @param expirationMinutes Number of minutes until the code expires
+   * @returns The created PasswordResetCodeRow
+   */
+  async create(accountId: string, code: string, expirationMinutes: number): Promise<PasswordResetCodeRow> {
+    const id = `prc_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + expirationMinutes * 60 * 1000)
+
+    await this.pool.query(
+      `INSERT INTO auth.password_reset_codes (id, account_id, code, attempts, expires_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id, accountId, code, 0, expiresAt.toISOString(), now.toISOString()]
+    )
+
+    log.info('reset_code.created', { accountId, expiresAt: expiresAt.toISOString() })
+
+    const row = await this.findById(id)
+    if (!row) throw new NotFoundError('PasswordResetCode')
+    return row
+  }
+
+  /**
+   * Find a password reset code by its ID.
+   */
+  private async findById(id: string): Promise<PasswordResetCodeRow | null> {
+    const result = await this.pool.query(
+      'SELECT * FROM auth.password_reset_codes WHERE id = $1',
+      [id]
+    )
+    return (result.rows[0] as PasswordResetCodeRow | undefined) ?? null
+  }
+
+  /**
+   * Find a password reset code by its 6-digit code.
+   * Returns null if not found or if expired.
+   */
+  async findByCode(code: string): Promise<PasswordResetCodeRow | null> {
+    const result = await this.pool.query(
+      'SELECT * FROM auth.password_reset_codes WHERE code = $1',
+      [code]
+    )
+    const row = (result.rows[0] as PasswordResetCodeRow | undefined) ?? null
+    return row
+  }
+
+  /**
+   * Find the latest password reset code for an account.
+   * Returns null if no codes exist for the account.
+   */
+  async findByAccountId(accountId: string): Promise<PasswordResetCodeRow | null> {
+    const result = await this.pool.query(
+      'SELECT * FROM auth.password_reset_codes WHERE account_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [accountId]
+    )
+    return (result.rows[0] as PasswordResetCodeRow | undefined) ?? null
+  }
+
+  /**
+   * Increment the attempt counter for a password reset code.
+   * @param id The password reset code ID
+   * @returns The new attempt count (0 if code not found)
+   */
+  async incrementAttempts(id: string): Promise<number> {
+    const result = await this.pool.query(
+      'UPDATE auth.password_reset_codes SET attempts = attempts + 1 WHERE id = $1 RETURNING attempts',
+      [id]
+    )
+    return result.rows.length > 0 ? Number(result.rows[0].attempts) : 0
+  }
+
+  /**
+   * Mark a password reset code as used.
+   * @param id The password reset code ID
+   */
+  async markAsUsed(id: string): Promise<void> {
+    const now = new Date().toISOString()
+    await this.pool.query(
+      'UPDATE auth.password_reset_codes SET used_at = $1 WHERE id = $2',
+      [now, id]
+    )
+  }
+
+  /**
+   * Delete all expired password reset codes.
+   * @returns The number of codes deleted
+   */
+  async deleteExpired(): Promise<number> {
+    const result = await this.pool.query(
+      'DELETE FROM auth.password_reset_codes WHERE expires_at < NOW()'
+    )
+    return result.rowCount || 0
   }
 }

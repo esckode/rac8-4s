@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth'
+import { ProtectedRoute } from './components/ProtectedRoute'
+import { PublicRoute } from './components/PublicRoute'
 import { ResponsiveLayout } from './components/shared'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
@@ -10,6 +12,7 @@ import { ResetPassword } from './pages/ResetPassword'
 import { BrowseTournaments } from './pages/BrowseTournaments'
 import { Matches } from './pages/Matches'
 import { TournamentDetail } from './pages/TournamentDetail'
+import { ROUTES } from './constants/routes'
 import './styles/globals.css'
 
 const MOCK_USER_TOURNAMENTS = [
@@ -141,49 +144,62 @@ export const App: React.FC = () => {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route
-          path="/browse"
-          element={
-            <ResponsiveLayout showHeader showNav>
-              <BrowseTournaments />
-            </ResponsiveLayout>
-          }
-        />
-        <Route
-          path="/matches"
-          element={
-            <ResponsiveLayout showHeader showNav>
-              <Matches />
-            </ResponsiveLayout>
-          }
-        />
-        <Route
-          path="/tournament/:tournamentId/:tab"
-          element={
-            <ResponsiveLayout showHeader showNav>
-              <TournamentDetail />
-            </ResponsiveLayout>
-          }
-        />
-        <Route
-          path="/tournament/:tournamentId"
-          element={
-            <Navigate to={`/tournament/:tournamentId/standings`} replace />
-          }
-        />
-        <Route
-          path="/standings"
-          element={
-            <ResponsiveLayout showHeader showNav>
-              <Standings />
-            </ResponsiveLayout>
-          }
-        />
+          {/* Public routes (no auth required) */}
+          <Route path={ROUTES.HOME} element={<Landing />} />
+
+          {/* Auth routes (public, but redirected if already authenticated) */}
+          <Route path={ROUTES.LOGIN} element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path={ROUTES.SIGNUP} element={<PublicRoute><Signup /></PublicRoute>} />
+          <Route path={ROUTES.FORGOT_PASSWORD} element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+          <Route path={ROUTES.RESET_PASSWORD} element={<PublicRoute><ResetPassword /></PublicRoute>} />
+
+          {/* Protected routes (require authentication) */}
+          <Route
+            path={ROUTES.BROWSE}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <BrowseTournaments />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.MATCHES}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <Matches />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.TOURNAMENT_TAB}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <TournamentDetail />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.TOURNAMENT_DETAIL}
+            element={
+              <Navigate to={`/tournament/:tournamentId/standings`} replace />
+            }
+          />
+          <Route
+            path={ROUTES.STANDINGS}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <Standings />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

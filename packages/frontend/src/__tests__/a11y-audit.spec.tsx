@@ -1,6 +1,7 @@
 import { axe } from 'jest-axe'
 import { render } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
+import { AuthProvider } from '../hooks/useAuth'
 import { Landing } from '../pages/Landing'
 import { ResponsiveLayout } from '../components/shared/ResponsiveLayout'
 
@@ -9,7 +10,9 @@ describe('Accessibility Audit - WCAG AA Compliance', () => {
     it('should have no accessibility violations', async () => {
       const { container } = render(
         <BrowserRouter>
-          <Landing />
+          <AuthProvider>
+            <Landing />
+          </AuthProvider>
         </BrowserRouter>
       )
       const results = await axe(container)
@@ -19,7 +22,9 @@ describe('Accessibility Audit - WCAG AA Compliance', () => {
     it('should have proper heading hierarchy', () => {
       const { container } = render(
         <BrowserRouter>
-          <Landing />
+          <AuthProvider>
+            <Landing />
+          </AuthProvider>
         </BrowserRouter>
       )
       const h1s = container.querySelectorAll('h1')
@@ -30,7 +35,9 @@ describe('Accessibility Audit - WCAG AA Compliance', () => {
     it('should have sufficient color contrast', async () => {
       const { container } = render(
         <BrowserRouter>
-          <Landing />
+          <AuthProvider>
+            <Landing />
+          </AuthProvider>
         </BrowserRouter>
       )
       const results = await axe(container, {
@@ -46,9 +53,11 @@ describe('Accessibility Audit - WCAG AA Compliance', () => {
     it('should have keyboard accessible navigation', () => {
       const { container } = render(
         <BrowserRouter>
-          <ResponsiveLayout>
-            <div>Test content</div>
-          </ResponsiveLayout>
+          <AuthProvider>
+            <ResponsiveLayout>
+              <div>Test content</div>
+            </ResponsiveLayout>
+          </AuthProvider>
         </BrowserRouter>
       )
       const navLinks = container.querySelectorAll('a')
@@ -58,9 +67,11 @@ describe('Accessibility Audit - WCAG AA Compliance', () => {
     it('should have aria-label on navigation landmarks', () => {
       const { container } = render(
         <BrowserRouter>
-          <ResponsiveLayout>
-            <div>Test</div>
-          </ResponsiveLayout>
+          <AuthProvider>
+            <ResponsiveLayout>
+              <div>Test</div>
+            </ResponsiveLayout>
+          </AuthProvider>
         </BrowserRouter>
       )
       const navs = container.querySelectorAll('nav')
@@ -75,7 +86,9 @@ describe('Accessibility Audit - WCAG AA Compliance', () => {
     it('should have accessible button text', () => {
       const { container } = render(
         <BrowserRouter>
-          <Landing />
+          <AuthProvider>
+            <Landing />
+          </AuthProvider>
         </BrowserRouter>
       )
       const buttons = container.querySelectorAll('button')
@@ -91,9 +104,11 @@ describe('Accessibility Audit - WCAG AA Compliance', () => {
     it('should use semantic elements', () => {
       const { container } = render(
         <BrowserRouter>
-          <ResponsiveLayout>
-            <div>Content</div>
-          </ResponsiveLayout>
+          <AuthProvider>
+            <ResponsiveLayout>
+              <div>Content</div>
+            </ResponsiveLayout>
+          </AuthProvider>
         </BrowserRouter>
       )
       expect(container.querySelector('header')).toBeTruthy()
@@ -106,9 +121,11 @@ describe('Accessibility Audit - WCAG AA Compliance', () => {
     it('should have proper aria-hidden on decorative icons', async () => {
       const { container } = render(
         <BrowserRouter>
-          <ResponsiveLayout>
-            <div>Test</div>
-          </ResponsiveLayout>
+          <AuthProvider>
+            <ResponsiveLayout>
+              <div>Test</div>
+            </ResponsiveLayout>
+          </AuthProvider>
         </BrowserRouter>
       )
       const icons = container.querySelectorAll('[aria-hidden="true"]')
@@ -120,7 +137,9 @@ describe('Accessibility Audit - WCAG AA Compliance', () => {
     it('should allow focus on interactive elements', () => {
       const { container } = render(
         <BrowserRouter>
-          <Landing />
+          <AuthProvider>
+            <Landing />
+          </AuthProvider>
         </BrowserRouter>
       )
       const button = container.querySelector('button')

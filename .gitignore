@@ -68,3 +68,10 @@ packages/api/db/*.db
 # Backup files
 *_backup
 *.backup
+
+# Playwright test artifacts
+playwright-report/
+test-results/
+/test-results/
+/playwright-report/
+.browser-data/

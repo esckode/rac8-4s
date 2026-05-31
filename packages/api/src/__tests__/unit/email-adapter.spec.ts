@@ -1,4 +1,4 @@
-import { InMemoryEmailAdapter } from '../../email-adapter'
+import { InMemoryEmailAdapter, sendPasswordResetEmail, EmailConfig } from '../../email-adapter'
 
 describe('InMemoryEmailAdapter', () => {
   let adapter: InMemoryEmailAdapter
@@ -146,6 +146,283 @@ describe('InMemoryEmailAdapter', () => {
 
     it('has getSentTo method', () => {
       expect(typeof adapter.getSentTo).toBe('function')
+    })
+  })
+})
+
+describe('sendPasswordResetEmail', () => {
+  let adapter: InMemoryEmailAdapter
+  let config: EmailConfig
+
+  beforeEach(() => {
+    adapter = new InMemoryEmailAdapter()
+    config = {
+      fromAddress: 'noreply@test.local',
+      frontendUrl: 'https://app.test.local',
+    }
+  })
+
+  describe('Email formatting and content', () => {
+    it('formats code as "12 34 56" (groups of 2)', async () => {
+      const code = '123456'
+      const email = 'user@example.com'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      expect(adapter.sent).toHaveLength(1)
+      const sent = adapter.sent[0]
+      expect(sent.body).toContain('12 34 56')
+    })
+
+    it('includes reset link with email and code as query parameters', async () => {
+      const code = '654321'
+      const email = 'test@example.com'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      expect(adapter.sent).toHaveLength(1)
+      const sent = adapter.sent[0]
+      expect(sent.body).toContain('reset-password')
+      expect(sent.body).toContain(`email=${encodeURIComponent(email)}`)
+      expect(sent.body).toContain(`code=${code}`)
+    })
+
+    it('uses frontendUrl from config in reset link', async () => {
+      const customUrl = 'https://custom.example.com'
+      config.frontendUrl = customUrl
+      const code = '111111'
+      const email = 'user@test.com'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      const sent = adapter.sent[0]
+      expect(sent.body).toContain(`${customUrl}/reset-password`)
+    })
+
+    it('includes expiration time in email body', async () => {
+      const code = '222222'
+      const email = 'user@example.com'
+      const expirationMinutes = 15
+
+      await sendPasswordResetEmail(adapter, config, email, code, expirationMinutes)
+
+      const sent = adapter.sent[0]
+      expect(sent.body).toContain(`${expirationMinutes} minutes`)
+    })
+
+    it('includes security note about ignoring email', async () => {
+      const code = '333333'
+      const email = 'user@example.com'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      const sent = adapter.sent[0]
+      expect(sent.body).toContain("Didn't request this")
+      expect(sent.body).toContain('Ignore this email')
+    })
+
+    it('includes greeting with "Hi" in email body', async () => {
+      const code = '444444'
+      const email = 'user@example.com'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      const sent = adapter.sent[0]
+      expect(sent.body).toContain('Hi')
+    })
+
+    it('sets subject to "Reset Your Password"', async () => {
+      const code = '555555'
+      const email = 'user@example.com'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      const sent = adapter.sent[0]
+      expect(sent.subject).toBe('Reset Your Password')
+    })
+
+    it('sends HTML email with proper formatting', async () => {
+      const code = '666666'
+      const email = 'user@example.com'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      const sent = adapter.sent[0]
+      expect(sent.body).toContain('<h1>')
+      expect(sent.body).toContain('<h2')
+      expect(sent.body).toContain('<p>')
+      expect(sent.body).toContain('<a')
+    })
+  })
+
+  describe('Different code formats', () => {
+    it('formats code 000000 as "00 00 00"', async () => {
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '000000', 15)
+      expect(adapter.sent[0].body).toContain('00 00 00')
+    })
+
+    it('formats code 999999 as "99 99 99"', async () => {
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '999999', 15)
+      expect(adapter.sent[0].body).toContain('99 99 99')
+    })
+
+    it('formats code 101010 as "10 10 10"', async () => {
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '101010', 15)
+      expect(adapter.sent[0].body).toContain('10 10 10')
+    })
+  })
+
+  describe('Different expiration times', () => {
+    it('includes custom expiration time of 20 minutes', async () => {
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '123456', 20)
+      expect(adapter.sent[0].body).toContain('20 minutes')
+    })
+
+    it('includes custom expiration time of 5 minutes', async () => {
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '123456', 5)
+      expect(adapter.sent[0].body).toContain('5 minutes')
+    })
+
+    it('uses default 15 minutes when not specified', async () => {
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '123456')
+      expect(adapter.sent[0].body).toContain('15 minutes')
+    })
+  })
+
+  describe('Email sending', () => {
+    it('sends email via adapter', async () => {
+      const email = 'test@example.com'
+      const code = '123456'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      expect(adapter.sent).toHaveLength(1)
+      expect(adapter.sent[0].to).toBe(email)
+    })
+
+    it('uses correct recipient email', async () => {
+      const email = 'user+test@example.com'
+      const code = '123456'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      expect(adapter.sent[0].to).toBe(email)
+    })
+  })
+
+  describe('Graceful error handling', () => {
+    it('does not throw on adapter error', async () => {
+      const failingAdapter = {
+        send: jest.fn().mockRejectedValue(new Error('SMTP connection failed')),
+      }
+
+      // Should not throw - function completes silently
+      await expect(
+        sendPasswordResetEmail(failingAdapter as any, config, 'test@example.com', '123456', 15)
+      ).resolves.toBeUndefined()
+    })
+
+    it('catches error when adapter.send rejects', async () => {
+      const failingAdapter = {
+        send: jest.fn().mockRejectedValue(new Error('Email service unavailable')),
+      }
+
+      // Should not throw even with rejection
+      await sendPasswordResetEmail(failingAdapter as any, config, 'test@example.com', '123456', 15)
+
+      // Verify adapter was called
+      expect(failingAdapter.send).toHaveBeenCalled()
+    })
+
+    it('handles non-Error rejection values', async () => {
+      const failingAdapter = {
+        send: jest.fn().mockRejectedValue('Unknown error string'),
+      }
+
+      // Should not throw
+      await sendPasswordResetEmail(failingAdapter as any, config, 'test@example.com', '123456', 15)
+
+      expect(failingAdapter.send).toHaveBeenCalled()
+    })
+  })
+
+  describe('URL encoding', () => {
+    it('properly encodes email with special characters in reset link', async () => {
+      const email = 'user+test@example.com'
+      const code = '123456'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      const sent = adapter.sent[0]
+      expect(sent.body).toContain(encodeURIComponent(email))
+    })
+
+    it('includes unencoded code in reset link', async () => {
+      const code = '123456'
+      const email = 'test@example.com'
+
+      await sendPasswordResetEmail(adapter, config, email, code, 15)
+
+      const sent = adapter.sent[0]
+      // Code should be plain (not encoded, since it's just digits)
+      expect(sent.body).toContain(`code=${code}`)
+    })
+  })
+
+  describe('Multiple emails', () => {
+    it('can send multiple emails independently', async () => {
+      const email1 = 'user1@example.com'
+      const email2 = 'user2@example.com'
+      const code1 = '111111'
+      const code2 = '222222'
+
+      await sendPasswordResetEmail(adapter, config, email1, code1, 15)
+      await sendPasswordResetEmail(adapter, config, email2, code2, 15)
+
+      expect(adapter.sent).toHaveLength(2)
+      expect(adapter.sent[0].to).toBe(email1)
+      expect(adapter.sent[1].to).toBe(email2)
+      expect(adapter.sent[0].body).toContain('11 11 11')
+      expect(adapter.sent[1].body).toContain('22 22 22')
+    })
+
+    it('sends email with correct code for each recipient', async () => {
+      const code = '333333'
+
+      await sendPasswordResetEmail(adapter, config, 'alice@example.com', code, 15)
+      await sendPasswordResetEmail(adapter, config, 'bob@example.com', code, 15)
+
+      expect(adapter.sent[0].body).toContain('33 33 33')
+      expect(adapter.sent[1].body).toContain('33 33 33')
+    })
+  })
+
+  describe('Edge cases', () => {
+    it('handles code with leading zeros', async () => {
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '001234', 15)
+      expect(adapter.sent[0].body).toContain('00 12 34')
+    })
+
+    it('handles very short expiration time', async () => {
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '123456', 1)
+      expect(adapter.sent[0].body).toContain('1 minutes')
+    })
+
+    it('handles very long expiration time', async () => {
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '123456', 1440)
+      expect(adapter.sent[0].body).toContain('1440 minutes')
+    })
+
+    it('handles reset link with localhost frontend URL', async () => {
+      config.frontendUrl = 'http://localhost:3000'
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '123456', 15)
+      expect(adapter.sent[0].body).toContain('http://localhost:3000/reset-password')
+    })
+
+    it('handles reset link with port in frontend URL', async () => {
+      config.frontendUrl = 'https://app.example.com:8443'
+      await sendPasswordResetEmail(adapter, config, 'test@example.com', '123456', 15)
+      expect(adapter.sent[0].body).toContain('https://app.example.com:8443/reset-password')
     })
   })
 })

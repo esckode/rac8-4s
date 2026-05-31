@@ -2,11 +2,18 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
+import { AuthProvider } from '../../../hooks/useAuth'
 import { ResponsiveLayout } from '../ResponsiveLayout'
 
 describe('ResponsiveLayout', () => {
   const renderWithRouter = (component: React.ReactElement) => {
-    return render(<BrowserRouter>{component}</BrowserRouter>)
+    return render(
+      <BrowserRouter>
+        <AuthProvider>
+          {component}
+        </AuthProvider>
+      </BrowserRouter>
+    )
   }
 
   it('renders children content', () => {

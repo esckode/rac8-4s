@@ -3,6 +3,7 @@ import { Pool } from 'pg'
 import { createApp } from '../../app'
 import { InMemoryTokenStore } from '../../auth/token-store'
 import { DEFAULT_APP_CONFIG } from '../../config'
+import { InMemoryEmailAdapter } from '../../email-adapter'
 import { getTransactionClient } from './db'
 
 export interface JwtConfig {
@@ -13,6 +14,7 @@ export interface JwtConfig {
 export interface TestAppDeps {
   app: Express
   tokenStore: InMemoryTokenStore
+  emailAdapter: InMemoryEmailAdapter
   jwtConfig: JwtConfig
 }
 
@@ -23,6 +25,7 @@ export interface TestAppDeps {
  */
 export function createTestApp(pool: Pool): TestAppDeps {
   const tokenStore = new InMemoryTokenStore()
+  const emailAdapter = new InMemoryEmailAdapter()
   const jwtConfig = {
     secret: 'test-secret-key-at-least-32-chars-long-for-testing-purposes!',
     expiresInSeconds: 3600,
@@ -36,7 +39,8 @@ export function createTestApp(pool: Pool): TestAppDeps {
     jwtConfig,
     tokenStore,
     config: DEFAULT_APP_CONFIG,
+    emailAdapter,
   })
 
-  return { app, tokenStore, jwtConfig }
+  return { app, tokenStore, emailAdapter, jwtConfig }
 }

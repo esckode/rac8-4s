@@ -44,3 +44,9 @@ export type { LogoProps } from './Logo'
 
 export { LogoMark } from './LogoMark'
 export type { LogoMarkProps } from './LogoMark'
+
+export { ProtectedRoute } from '../ProtectedRoute'
+export type { ProtectedRouteProps } from '../ProtectedRoute'
+
+export { PublicRoute } from '../PublicRoute'
+export type { PublicRouteProps } from '../PublicRoute'
