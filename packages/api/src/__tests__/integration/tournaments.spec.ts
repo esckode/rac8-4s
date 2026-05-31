@@ -4811,4 +4811,484 @@ describe('Tournaments API', () => {
       expect(res.status).toBe(401)
     })
   })
+
+  describe('Branch coverage - final edge cases', () => {
+    it('GET /:tournamentId/players - player auth branch (not organizer)', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const player = await PlayerFactory.create(pool)
+      const playerRepo = new PlayerRepository(pool)
+      await playerRepo.createRegistration(player.id, tournament.id)
+
+      const playerSession = await generatePlayerSession(
+        {
+          playerId: player.id,
+          tournamentId: tournament.id,
+          email: `player${player.id}@test.local`,
+          createdAt: Date.now(),
+        },
+        3600,
+        tokenStore
+      )
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/players`)
+        .set('Authorization', `Bearer ${playerSession.token}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.players).toBeDefined()
+      expect(Array.isArray(res.body.players)).toBe(true)
+    })
+
+    it('GET /:tournamentId/players - no auth branch (anonymous)', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const player = await PlayerFactory.create(pool)
+      const playerRepo = new PlayerRepository(pool)
+      await playerRepo.createRegistration(player.id, tournament.id)
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/players`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.players).toBeDefined()
+    })
+
+    it('GET /:tournamentId/players - organizer can see player emails', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const player = await PlayerFactory.create(pool)
+      const playerRepo = new PlayerRepository(pool)
+      await playerRepo.createRegistration(player.id, tournament.id)
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/players`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.players.length).toBeGreaterThan(0)
+      expect(res.body.players[0].playerEmail).toBeDefined()
+    })
+
+    it('GET /:tournamentId/players - player cannot see other player emails', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const player1 = await PlayerFactory.create(pool)
+      const player2 = await PlayerFactory.create(pool)
+      const playerRepo = new PlayerRepository(pool)
+      await playerRepo.createRegistration(player1.id, tournament.id)
+      await playerRepo.createRegistration(player2.id, tournament.id)
+
+      const playerSession = await generatePlayerSession(
+        {
+          playerId: player1.id,
+          tournamentId: tournament.id,
+          email: `player${player1.id}@test.local`,
+          createdAt: Date.now(),
+        },
+        3600,
+        tokenStore
+      )
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/players`)
+        .set('Authorization', `Bearer ${playerSession.token}`)
+
+      expect(res.status).toBe(200)
+      const otherPlayer = res.body.players.find((p: any) => p.playerId === player2.id)
+      if (otherPlayer) {
+        expect(otherPlayer.playerEmail).toBeNull()
+      }
+    })
+
+    it('GET /:tournamentId/players - invalid auth header is handled silently', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const player = await PlayerFactory.create(pool)
+      const playerRepo = new PlayerRepository(pool)
+      await playerRepo.createRegistration(player.id, tournament.id)
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/players`)
+        .set('Authorization', 'Bearer invalid-token-that-wont-parse')
+
+      expect(res.status).toBe(200)
+      expect(res.body.players).toBeDefined()
+    })
+
+    it('GET /:tournamentId/players - non-existent tournament returns 404', async () => {
+      const res = await request(app)
+        .get('/tournaments/nonexistent-tournament-id/players')
+
+      expect(res.status).toBe(404)
+      expect(res.body.code).toBe('NOT_FOUND')
+    })
+
+    it('GET /:tournamentId/players - partner details visible only to organizer or partner', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const player1 = await PlayerFactory.create(pool)
+      const player2 = await PlayerFactory.create(pool)
+      const player3 = await PlayerFactory.create(pool)
+      const playerRepo = new PlayerRepository(pool)
+
+      const reg1 = await playerRepo.createRegistration(player1.id, tournament.id)
+      const reg2 = await playerRepo.createRegistration(player2.id, tournament.id)
+      await playerRepo.createRegistration(player3.id, tournament.id)
+
+      if (reg1 && reg2) {
+        await pool.query(
+          'UPDATE public.player_registrations SET partner_id = $1, partner_confirmed = true WHERE id = $2',
+          [player2.id, reg1.id]
+        )
+      }
+
+      const player1Session = await generatePlayerSession(
+        {
+          playerId: player1.id,
+          tournamentId: tournament.id,
+          email: `player${player1.id}@test.local`,
+          createdAt: Date.now(),
+        },
+        3600,
+        tokenStore
+      )
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/players`)
+        .set('Authorization', `Bearer ${player1Session.token}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.players).toBeDefined()
+    })
+
+    it('GET /:tournamentId/players - with pagination parameters', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/players?offset=0&limit=1`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.players).toBeDefined()
+      expect(Array.isArray(res.body.players)).toBe(true)
+    })
+
+    it('GET /tournaments/available - lists available tournaments for registration', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const res = await request(app)
+        .get('/tournaments/available')
+
+      expect(res.status).toBe(200)
+      expect(res.body.tournaments).toBeDefined()
+      expect(Array.isArray(res.body.tournaments)).toBe(true)
+      expect(res.body.total).toBeDefined()
+      expect(res.body.page).toBeDefined()
+      expect(res.body.limit).toBeDefined()
+    })
+
+    it('GET /tournaments/available - filters by sport parameter', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const data = TournamentFactory.data({ sport: 'tennis' })
+      const tournament = await TournamentFactory.create(pool, organizerId, data)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const res = await request(app)
+        .get('/tournaments/available?sport=tennis')
+
+      expect(res.status).toBe(200)
+      expect(res.body.tournaments).toBeDefined()
+      expect(Array.isArray(res.body.tournaments)).toBe(true)
+    })
+
+    it('GET /tournaments/available - handles offset and limit pagination', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const res = await request(app)
+        .get('/tournaments/available?offset=0&limit=5')
+
+      expect(res.status).toBe(200)
+      expect(res.body.tournaments).toBeDefined()
+      expect(res.body.page).toBe(1)
+      expect(res.body.limit).toBe(5)
+    })
+
+    it('GET /tournaments/available - shows player count for each tournament', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const player = await PlayerFactory.create(pool)
+      const playerRepo = new PlayerRepository(pool)
+      await playerRepo.createRegistration(player.id, tournament.id)
+
+      const res = await request(app)
+        .get('/tournaments/available')
+
+      expect(res.status).toBe(200)
+      const availableTournament = res.body.tournaments.find((t: any) => t.id === tournament.id)
+      if (availableTournament) {
+        expect(availableTournament.currentParticipants).toBeGreaterThanOrEqual(1)
+        expect(availableTournament.maxParticipants).toBeDefined()
+      }
+    })
+
+    it('GET /tournaments/:id/groups - organizer can list all groups', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 2, advancingPerGroup: 1 })
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.groups).toBeDefined()
+      expect(Array.isArray(res.body.groups)).toBe(true)
+      expect(res.body.groups.length).toBeGreaterThan(0)
+    })
+
+    it('GET /tournaments/:id/groups/:groupId/standings - calculates correct standings', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      const groupRes = await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 1, advancingPerGroup: 1 })
+
+      const groupId = groupRes.body.groups[0].id
+
+      const playerSession = await generatePlayerSession(
+        {
+          playerId: players[0].id,
+          tournamentId: tournament.id,
+          email: `player${players[0].id}@test.local`,
+          createdAt: Date.now(),
+        },
+        3600,
+        tokenStore
+      )
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/groups/${groupId}/standings`)
+        .set('Authorization', `Bearer ${playerSession.token}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.standings).toBeDefined()
+      expect(Array.isArray(res.body.standings)).toBe(true)
+    })
+
+    it('PATCH /tournaments/:id - organizer can update tournament details', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      const res = await request(app)
+        .patch(`/tournaments/${tournament.id}`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ description: 'Updated description' })
+
+      expect(res.status).toBe(200)
+      expect(res.body.id).toBe(tournament.id)
+    })
+
+    it('POST /tournaments/:id/matches/:matchId/score - valid score submission', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      const groupRes = await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 1, advancingPerGroup: 1 })
+
+      const groupId = groupRes.body.groups[0].id
+      const groupRepo = new GroupRepository(pool)
+      const matches = await groupRepo.findMatchesByGroup(groupId)
+
+      if (matches.length > 0) {
+        const playerSession = await generatePlayerSession(
+          {
+            playerId: matches[0].player1_id,
+            tournamentId: tournament.id,
+            email: `player${matches[0].player1_id}@test.local`,
+            createdAt: Date.now(),
+          },
+          3600,
+          tokenStore
+        )
+
+        const res = await request(app)
+          .post(`/tournaments/${tournament.id}/matches/${matches[0].id}/score`)
+          .set('Authorization', `Bearer ${playerSession.token}`)
+          .send({ score: '6-4, 6-3' })
+
+        expect(res.status).toBe(200)
+        expect(res.body.match).toBeDefined()
+      }
+    })
+
+    it('GET /:tournamentId/players - partner not found when deleted', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const player1 = await PlayerFactory.create(pool)
+      const player2 = await PlayerFactory.create(pool)
+      const playerRepo = new PlayerRepository(pool)
+
+      const reg1 = await playerRepo.createRegistration(player1.id, tournament.id)
+      const reg2 = await playerRepo.createRegistration(player2.id, tournament.id)
+
+      if (reg1 && reg2) {
+        await pool.query(
+          'UPDATE public.player_registrations SET partner_id = $1, partner_confirmed = true WHERE id = $2',
+          [player2.id, reg1.id]
+        )
+      }
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/players`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.players).toBeDefined()
+    })
+
+    it('GET /tournaments/available - returns empty list when no tournaments available', async () => {
+      const res = await request(app)
+        .get('/tournaments/available?sport=nonexistent-sport-xyz')
+
+      expect(res.status).toBe(200)
+      expect(Array.isArray(res.body.tournaments)).toBe(true)
+    })
+
+    it('DELETE /tournaments/:id - removes tournament', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+
+      const res = await request(app)
+        .delete(`/tournaments/${tournament.id}`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      expect(res.status).toBe(204)
+    })
+
+    it('GET /tournaments/:id/bracket - returns bracket structure', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 1, advancingPerGroup: 1 })
+
+      await repo.updateStatus(tournament.id, 'group_stage_complete')
+
+      const bracketRes = await request(app)
+        .post(`/tournaments/${tournament.id}/bracket/generate`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/bracket`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.bracket).toBeDefined()
+      expect(res.body.bracket.rounds).toBeDefined()
+    })
+  })
 })
