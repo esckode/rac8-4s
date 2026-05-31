@@ -1,5 +1,10 @@
 import { closeTestPool } from './helpers/db'
 
+// Set LOG_LEVEL for testing logger.ts coverage
+if (!process.env.LOG_LEVEL) {
+  process.env.LOG_LEVEL = 'debug'
+}
+
 declare global {
   var __jest_setup_done__: boolean
 }
