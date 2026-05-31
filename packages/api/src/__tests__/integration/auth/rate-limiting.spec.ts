@@ -100,8 +100,8 @@ describe('Rate Limiting', () => {
       const passwordHash = await bcryptjs.hash(password, 10)
       await accountRepo.updatePasswordHash(account.id, passwordHash)
 
-      // Make 4 failed attempts
-      for (let i = 0; i < 4; i++) {
+      // Make 3 failed attempts
+      for (let i = 0; i < 3; i++) {
         const res = await request(app)
           .post('/api/auth/login')
           .send({ email, password: 'wrongpassword' })
@@ -109,12 +109,12 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(401)
       }
 
-      // 5th request should be allowed (still under limit)
-      const res5 = await request(app)
+      // 4th request should be allowed (still under limit)
+      const res4 = await request(app)
         .post('/api/auth/login')
         .send({ email, password: 'wrongpassword' })
 
-      expect(res5.status).toBe(401)
+      expect(res4.status).toBe(401)
     })
 
     it('returns 429 after 5 failed login attempts', async () => {
@@ -125,8 +125,8 @@ describe('Rate Limiting', () => {
       const passwordHash = await bcryptjs.hash(password, 10)
       await accountRepo.updatePasswordHash(account.id, passwordHash)
 
-      // Make 5 failed attempts (at limit)
-      for (let i = 0; i < 5; i++) {
+      // Make 4 failed attempts (under limit)
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/login')
           .send({ email, password: 'wrongpassword' })
@@ -134,15 +134,15 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(401)
       }
 
-      // 6th request should be rate limited
-      const res6 = await request(app)
+      // 5th request should be rate limited (at maxAttempts=5)
+      const res5 = await request(app)
         .post('/api/auth/login')
         .send({ email, password: 'wrongpassword' })
 
-      expect(res6.status).toBe(429)
-      expect(res6.body).toHaveProperty('code')
-      expect(res6.body.code).toBe('RATE_LIMITED')
-      expect(res6.body).toHaveProperty('message')
+      expect(res5.status).toBe(429)
+      expect(res5.body).toHaveProperty('code')
+      expect(res5.body.code).toBe('RATE_LIMITED')
+      expect(res5.body).toHaveProperty('message')
     })
 
     it('returns 429 with correct error schema when rate limited', async () => {
@@ -154,7 +154,7 @@ describe('Rate Limiting', () => {
       await accountRepo.updatePasswordHash(account.id, passwordHash)
 
       // Exceed rate limit
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 4; i++) {
         await request(app)
           .post('/api/auth/login')
           .send({ email, password: 'wrongpassword' })
@@ -181,8 +181,8 @@ describe('Rate Limiting', () => {
       const passwordHash = await bcryptjs.hash(password, 10)
       await accountRepo.updatePasswordHash(account.id, passwordHash)
 
-      // Make 4 failed attempts with IP 127.0.0.1
-      for (let i = 0; i < 4; i++) {
+      // Make 3 failed attempts with IP 127.0.0.1
+      for (let i = 0; i < 3; i++) {
         const res = await request(app)
           .post('/api/auth/login')
           .send({ email, password: 'wrongpassword' })
@@ -190,19 +190,19 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(401)
       }
 
-      // 5th attempt with same email and IP should succeed (still under limit, at 5)
+      // 4th attempt with same email and IP should succeed (still under limit, at 4)
+      const res4 = await request(app)
+        .post('/api/auth/login')
+        .send({ email, password: 'wrongpassword' })
+
+      expect(res4.status).toBe(401)
+
+      // 5th attempt with same email and IP should be rate limited
       const res5 = await request(app)
         .post('/api/auth/login')
         .send({ email, password: 'wrongpassword' })
 
-      expect(res5.status).toBe(401)
-
-      // 6th attempt with same email and IP should be rate limited
-      const res6 = await request(app)
-        .post('/api/auth/login')
-        .send({ email, password: 'wrongpassword' })
-
-      expect(res6.status).toBe(429)
+      expect(res5.status).toBe(429)
     })
 
     it('uses case-insensitive email for rate limiting', async () => {
@@ -214,7 +214,7 @@ describe('Rate Limiting', () => {
       await accountRepo.updatePasswordHash(account.id, passwordHash)
 
       // Make attempts with different email cases
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 2; i++) {
         const res = await request(app)
           .post('/api/auth/login')
           .send({ email: email.toLowerCase(), password: 'wrongpassword' })
@@ -231,17 +231,17 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(401)
       }
 
-      // 6th attempt (mixed case) should be rate limited
-      const res6 = await request(app)
+      // 5th attempt (mixed case) should be rate limited
+      const res5 = await request(app)
         .post('/api/auth/login')
         .send({ email: email.slice(0, 5).toUpperCase() + email.slice(5), password: 'wrongpassword' })
 
-      expect(res6.status).toBe(429)
+      expect(res5.status).toBe(429)
     })
 
     it('counts validation errors toward rate limit', async () => {
       // Invalid email format should return 400 and count toward rate limit
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/login')
           .send({ email: 'notanemail', password: 'password123' })
@@ -249,19 +249,19 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(400)
       }
 
-      // 6th request should be rate limited
-      const res6 = await request(app)
+      // 5th request should be rate limited
+      const res5 = await request(app)
         .post('/api/auth/login')
         .send({ email: 'notanemail', password: 'password123' })
 
-      expect(res6.status).toBe(429)
+      expect(res5.status).toBe(429)
     })
 
     it('counts missing password toward rate limit', async () => {
       const email = uniqueEmail('no-password-limit')
 
       // Missing password should return 400 and count toward rate limit
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/login')
           .send({ email })
@@ -269,12 +269,12 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(400)
       }
 
-      // 6th request should be rate limited
-      const res6 = await request(app)
+      // 5th request should be rate limited
+      const res5 = await request(app)
         .post('/api/auth/login')
         .send({ email })
 
-      expect(res6.status).toBe(429)
+      expect(res5.status).toBe(429)
     })
   })
 
@@ -310,8 +310,8 @@ describe('Rate Limiting', () => {
 
       const account = await accountRepo.create(email, 'player')
 
-      // Make 5 requests (at limit)
-      for (let i = 0; i < 5; i++) {
+      // Make 4 requests (under limit)
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/forgot-password')
           .send({ email })
@@ -319,13 +319,13 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(202)
       }
 
-      // 6th request should be rate limited
-      const res6 = await request(app)
+      // 5th request should be rate limited
+      const res5 = await request(app)
         .post('/api/auth/forgot-password')
         .send({ email })
 
-      expect(res6.status).toBe(429)
-      expect(res6.body.code).toBe('RATE_LIMITED')
+      expect(res5.status).toBe(429)
+      expect(res5.body.code).toBe('RATE_LIMITED')
     })
 
     it('returns 429 with correct error schema when rate limited', async () => {
@@ -356,8 +356,8 @@ describe('Rate Limiting', () => {
 
       const account = await accountRepo.create(email, 'player')
 
-      // Make 5 requests
-      for (let i = 0; i < 5; i++) {
+      // Make 4 requests
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/forgot-password')
           .send({ email })
@@ -365,12 +365,12 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(202)
       }
 
-      // 6th request should be rate limited regardless of IP
-      const res6 = await request(app)
+      // 5th request should be rate limited regardless of IP
+      const res5 = await request(app)
         .post('/api/auth/forgot-password')
         .send({ email })
 
-      expect(res6.status).toBe(429)
+      expect(res5.status).toBe(429)
     })
 
     it('uses case-insensitive email for rate limiting', async () => {
@@ -379,7 +379,7 @@ describe('Rate Limiting', () => {
       const account = await accountRepo.create(email, 'player')
 
       // Make requests with different email cases
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 2; i++) {
         const res = await request(app)
           .post('/api/auth/forgot-password')
           .send({ email: email.toLowerCase() })
@@ -396,17 +396,17 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(202)
       }
 
-      // 6th request (mixed case) should be rate limited
-      const res6 = await request(app)
+      // 5th request (mixed case) should be rate limited
+      const res5 = await request(app)
         .post('/api/auth/forgot-password')
         .send({ email: email.slice(0, 5).toUpperCase() + email.slice(5) })
 
-      expect(res6.status).toBe(429)
+      expect(res5.status).toBe(429)
     })
 
     it('rate limits validation errors on email format', async () => {
       // Invalid email format should return 400 and count toward rate limit
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/forgot-password')
           .send({ email: 'notanemail' })
@@ -414,19 +414,19 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(400)
       }
 
-      // 6th request should be rate limited
-      const res6 = await request(app)
+      // 5th request should be rate limited
+      const res5 = await request(app)
         .post('/api/auth/forgot-password')
         .send({ email: 'notanemail' })
 
-      expect(res6.status).toBe(429)
+      expect(res5.status).toBe(429)
     })
 
     it('allows requests for non-existent emails without revealing enumeration', async () => {
       const email = uniqueEmail('nonexistent')
 
-      // Make 5 requests for non-existent email
-      for (let i = 0; i < 5; i++) {
+      // Make 4 requests for non-existent email
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/forgot-password')
           .send({ email })
@@ -434,12 +434,12 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(202) // Still 202 to not reveal if email exists
       }
 
-      // 6th request should be rate limited
-      const res6 = await request(app)
+      // 5th request should be rate limited
+      const res5 = await request(app)
         .post('/api/auth/forgot-password')
         .send({ email })
 
-      expect(res6.status).toBe(429)
+      expect(res5.status).toBe(429)
     })
 
     it('does not allow bypass with email case manipulation', async () => {
@@ -447,7 +447,7 @@ describe('Rate Limiting', () => {
 
       const account = await accountRepo.create(email, 'player')
 
-      // Make 5 requests to reach limit (using various case combinations)
+      // Make 4 requests to reach limit (using various case combinations)
       // All should count toward the same limit since emails are normalized to lowercase
       const res1 = await request(app)
         .post('/api/auth/forgot-password')
@@ -469,12 +469,7 @@ describe('Rate Limiting', () => {
         .send({ email: email.charAt(0).toUpperCase() + email.slice(1).toLowerCase() })
       expect(res4.status).toBe(202)
 
-      const res5 = await request(app)
-        .post('/api/auth/forgot-password')
-        .send({ email: email.toLowerCase() })
-      expect(res5.status).toBe(202)
-
-      // 6th request with any case variation should be rate limited
+      // 5th request with any case variation should be rate limited
       const resBlocked = await request(app)
         .post('/api/auth/forgot-password')
         .send({ email: email.toUpperCase() })
@@ -492,8 +487,8 @@ describe('Rate Limiting', () => {
       const passwordHash = await bcryptjs.hash(password, 10)
       await accountRepo.updatePasswordHash(account.id, passwordHash)
 
-      // Make 5 failed attempts
-      for (let i = 0; i < 5; i++) {
+      // Make 4 failed attempts
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/login')
           .send({ email, password: 'wrongpassword' })
@@ -501,22 +496,22 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(401)
       }
 
-      // Should be rate limited now
-      let res6 = await request(app)
+      // Should be rate limited now on 5th attempt
+      let res5 = await request(app)
         .post('/api/auth/login')
         .send({ email, password: 'wrongpassword' })
 
-      expect(res6.status).toBe(429)
+      expect(res5.status).toBe(429)
 
       // Clear the store to simulate window expiration
       clearRateLimitStore()
 
       // Now should be able to make requests again
-      res6 = await request(app)
+      res5 = await request(app)
         .post('/api/auth/login')
         .send({ email, password: 'wrongpassword' })
 
-      expect(res6.status).toBe(401) // Back to regular error
+      expect(res5.status).toBe(401) // Back to regular error
     })
 
     it('resets counter after time window expires for forgot-password', async () => {
@@ -524,8 +519,8 @@ describe('Rate Limiting', () => {
 
       const account = await accountRepo.create(email, 'player')
 
-      // Make 5 requests
-      for (let i = 0; i < 5; i++) {
+      // Make 4 requests (under limit)
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/forgot-password')
           .send({ email })
@@ -565,8 +560,8 @@ describe('Rate Limiting', () => {
       await accountRepo.updatePasswordHash(account1.id, passwordHash)
       await accountRepo.updatePasswordHash(account2.id, passwordHash)
 
-      // Make 5 failed attempts for email1
-      for (let i = 0; i < 5; i++) {
+      // Make 4 failed attempts for email1 (under limit)
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/login')
           .send({ email: email1, password: 'wrongpassword' })
@@ -574,7 +569,7 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(401)
       }
 
-      // email1 should be rate limited
+      // 5th attempt should be rate limited
       let res = await request(app)
         .post('/api/auth/login')
         .send({ email: email1, password: 'wrongpassword' })
@@ -596,8 +591,8 @@ describe('Rate Limiting', () => {
       const account1 = await accountRepo.create(email1, 'player')
       const account2 = await accountRepo.create(email2, 'player')
 
-      // Make 5 requests for email1
-      for (let i = 0; i < 5; i++) {
+      // Make 4 requests for email1 (under limit)
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/forgot-password')
           .send({ email: email1 })
@@ -605,7 +600,7 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(202)
       }
 
-      // email1 should be rate limited
+      // 5th request should be rate limited
       let res = await request(app)
         .post('/api/auth/forgot-password')
         .send({ email: email1 })

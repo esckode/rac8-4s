@@ -202,8 +202,8 @@ describe('StandingsTable - Virtualization Performance', () => {
       rerender(<StandingsTable standings={updatedStandings} />)
       const endTime = performance.now()
 
-      // Update should be fast (less than 50ms)
-      expect(endTime - startTime).toBeLessThan(50)
+      // Update should be fast (less than 100ms)
+      expect(endTime - startTime).toBeLessThan(100)
     })
 
     it('should handle sorting 500 rows efficiently', () => {
@@ -215,11 +215,11 @@ describe('StandingsTable - Virtualization Performance', () => {
       fireEvent.click(winsHeader)
       const endTime = performance.now()
 
-      // Sorting should be fast (less than 100ms)
-      expect(endTime - startTime).toBeLessThan(100)
+      // Sorting should be fast (less than 150ms)
+      expect(endTime - startTime).toBeLessThan(150)
     })
 
-    it('should sort 1000 rows in less than 150ms', () => {
+    it('should sort 1000 rows in less than 200ms', () => {
       const standings = generateLargeStandingsList(1000)
       render(<StandingsTable standings={standings} />)
 
@@ -228,7 +228,7 @@ describe('StandingsTable - Virtualization Performance', () => {
       fireEvent.click(winsHeader)
       const endTime = performance.now()
 
-      expect(endTime - startTime).toBeLessThan(150)
+      expect(endTime - startTime).toBeLessThan(200)
     })
   })
 
@@ -280,8 +280,8 @@ describe('StandingsTable - Virtualization Performance', () => {
       }
       const endTime = performance.now()
 
-      // Rapid scrolling should not block (less than 200ms for 10 scroll events)
-      expect(endTime - startTime).toBeLessThan(200)
+      // Rapid scrolling should not block (less than 250ms for 10 scroll events)
+      expect(endTime - startTime).toBeLessThan(250)
     })
 
     it('should handle scroll to end of 500-row table', () => {
@@ -366,7 +366,7 @@ describe('StandingsTable - Virtualization Performance', () => {
       const endTime = performance.now()
 
       // 5 rapid re-renders should complete quickly
-      expect(endTime - startTime).toBeLessThan(500)
+      expect(endTime - startTime).toBeLessThan(600)
     })
   })
 

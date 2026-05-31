@@ -157,7 +157,7 @@ export default function authRouter(deps: AppDependencies) {
           id: account.id,
           email: account.email,
           name: name,
-          role: 'player'
+          role: account.role
         },
         token: tokenPair.accessToken
       })

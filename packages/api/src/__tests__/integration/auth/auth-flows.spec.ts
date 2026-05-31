@@ -404,8 +404,8 @@ describe('Complete Authentication Flows', () => {
       const passwordHash = await bcryptjs.hash(password, 10)
       await accountRepo.updatePasswordHash(account.id, passwordHash)
 
-      // Step 1: Make 5 failed attempts with wrong password
-      for (let i = 0; i < 5; i++) {
+      // Step 1: Make 4 failed attempts with wrong password (maxAttempts=5 allows 4)
+      for (let i = 0; i < 4; i++) {
         const res = await request(app)
           .post('/api/auth/login')
           .send({ email, password: 'wrongpassword' })
@@ -413,7 +413,7 @@ describe('Complete Authentication Flows', () => {
         expect(res.status).toBe(401)
       }
 
-      // Step 2: 6th attempt should be rate limited
+      // Step 2: 5th attempt should be rate limited
       const rateLimitedRes = await request(app)
         .post('/api/auth/login')
         .send({ email, password: 'wrongpassword' })

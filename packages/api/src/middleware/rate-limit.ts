@@ -176,6 +176,7 @@ export function createRateLimitMiddleware(
           })
 
           // Check if we've now exceeded the limit AFTER incrementing
+          // Block when attempts >= maxAttempts (e.g., 5th when maxAttempts=5)
           if (current.attempts >= options.maxAttempts) {
             log.warn('rate_limit.exceeded', {
               identifier: options.prefix ? `${options.prefix}:***` : '***',
