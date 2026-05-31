@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './hooks/useAuth'
 import { ResponsiveLayout } from './components/shared'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
@@ -138,7 +139,8 @@ const Standings = () => {
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
-      <Routes>
+      <AuthProvider>
+        <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
@@ -182,7 +184,8 @@ export const App: React.FC = () => {
             </ResponsiveLayout>
           }
         />
-      </Routes>
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   )
 }
