@@ -1322,7 +1322,9 @@ export class PasswordResetCodeRepository {
    * Check if a password reset code has expired.
    */
   static isExpired(row: PasswordResetCodeRow): boolean {
-    return new Date() > new Date(row.expires_at)
+    const now = new Date()
+    const expiresAt = new Date(row.expires_at)
+    return now > expiresAt
   }
 
   /**

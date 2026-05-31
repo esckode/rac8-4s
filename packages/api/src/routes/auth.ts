@@ -433,7 +433,7 @@ export default function authRouter(deps: AppDependencies) {
       const account = await accountRepo.findByEmail(normalizedEmail)
       if (!account) {
         return res.status(401).json({
-          code: 'UNAUTHORIZED',
+          code: 'INVALID_RESET_CODE',
           message: 'Invalid reset code'
         })
       }
@@ -476,7 +476,7 @@ export default function authRouter(deps: AppDependencies) {
               attemptsRemaining,
             })
             return res.status(401).json({
-              code: 'UNAUTHORIZED',
+              code: 'INVALID_RESET_CODE',
               message: `Invalid reset code. ${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} remaining`
             })
           }
@@ -488,7 +488,7 @@ export default function authRouter(deps: AppDependencies) {
         }
 
         return res.status(401).json({
-          code: 'UNAUTHORIZED',
+          code: 'INVALID_RESET_CODE',
           message: 'Invalid reset code'
         })
       }
@@ -527,7 +527,7 @@ export default function authRouter(deps: AppDependencies) {
             attemptsRemaining,
           })
           return res.status(401).json({
-            code: 'UNAUTHORIZED',
+            code: 'INVALID_RESET_CODE',
             message: `Invalid reset code. ${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} remaining`
           })
         }
@@ -537,7 +537,7 @@ export default function authRouter(deps: AppDependencies) {
           attemptsRemaining,
         })
         return res.status(401).json({
-          code: 'UNAUTHORIZED',
+          code: 'INVALID_RESET_CODE',
           message: 'Invalid reset code'
         })
       }
@@ -545,7 +545,7 @@ export default function authRouter(deps: AppDependencies) {
       // Check if code has already been used
       if (PasswordResetCodeRepository.isUsed(resetCode)) {
         return res.status(401).json({
-          code: 'UNAUTHORIZED',
+          code: 'INVALID_RESET_CODE',
           message: 'Invalid reset code'
         })
       }

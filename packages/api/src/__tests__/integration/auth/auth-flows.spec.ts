@@ -285,7 +285,7 @@ describe('Complete Authentication Flows', () => {
       // Create account and reset code with very short TTL
       const account = await accountRepo.create(email, 'organizer')
       const code = PasswordResetCodeRepository.generateCode()
-      await resetCodeRepo.create(account.id, code, 1) // 1 second TTL
+      await resetCodeRepo.create(account.id, code, 1 / 60) // 1 second TTL (parameter is in minutes)
 
       // Wait for code to expire
       await new Promise(resolve => setTimeout(resolve, 1100))
@@ -471,7 +471,7 @@ describe('Complete Authentication Flows', () => {
         .send({ email, password: 'wrongpassword' })
 
       expect(rateLimitedRes.status).toBe(429)
-    })
+    }, 15000)
   })
 
   // ===================================

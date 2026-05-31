@@ -147,20 +147,6 @@ export function createRateLimitMiddleware(
         lastAttemptAt: now,
       }
 
-      // Check if already rate limited
-      if (current.attempts >= options.maxAttempts) {
-        log.warn('rate_limit.exceeded', {
-          identifier: options.prefix ? `${options.prefix}:***` : '***',
-          attempts: current.attempts,
-          maxAttempts: options.maxAttempts,
-        })
-
-        return res.status(429).json({
-          code: 'RATE_LIMITED',
-          message: 'Too many attempts. Try again later.',
-        })
-      }
-
       // Wrap response.json to track attempts
       const originalJson = res.json.bind(res)
       const countMode = options.countMode || 'failures'
@@ -188,6 +174,21 @@ export function createRateLimitMiddleware(
             attempts: current.attempts,
             maxAttempts: options.maxAttempts,
           })
+
+          // Check if we've now exceeded the limit AFTER incrementing
+          if (current.attempts >= options.maxAttempts) {
+            log.warn('rate_limit.exceeded', {
+              identifier: options.prefix ? `${options.prefix}:***` : '***',
+              attempts: current.attempts,
+              maxAttempts: options.maxAttempts,
+            })
+            // Return 429 instead of the original response
+            res.status(429)
+            return originalJson({
+              code: 'RATE_LIMITED',
+              message: 'Too many attempts. Try again later.',
+            })
+          }
         } else if (countMode === 'failures') {
           // Clear counter on success (only in 'failures' mode)
           rateLimitStore.delete(identifier)
