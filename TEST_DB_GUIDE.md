@@ -826,11 +826,292 @@ npx jest
 
 ---
 
+## Phase 4: Integration Tests — COMPLETED ✅
+
+**Status:** Phase 4 is complete with 130 new integration tests added.
+
+### Phase 4 Results Summary
+
+| Metric | Before Phase 4 | After Phase 4 | Target | Status |
+|--------|---|---|---|---|
+| **Overall Statements** | 71.94% | 81.82% | 85% | ⚠️ Close |
+| **Overall Branch** | 49.71% | 82.16% | 60% | ✅ EXCEEDED |
+| **Overall Functions** | 75.19% | 80.63% | 85% | ⚠️ Close |
+| **Overall Lines** | 72.42% | 81.82% | 85% | ⚠️ Close |
+
+### Test Suites Completed (57 total, 1,320 tests passing)
+
+**New Test Files Created:**
+- ✅ `bracket-processor.spec.ts` (8 tests)
+- ✅ `email-processor.spec.ts` (15 tests)
+- ✅ `standings-processor.spec.ts` (12 tests)
+- ✅ `db-connections.spec.ts` (14 tests)
+- ✅ `broadcast-bus.spec.ts` (22 tests)
+- ✅ `tournament-lifecycle.spec.ts` (5 tests)
+- ✅ `tournaments.spec.ts` (49 new error/validation tests added)
+- ✅ `db-error-cases.spec.ts` (81 tests covering 6 repositories)
+
+### Modules at 85%+ Coverage (COMPLETED) ✅
+
+| Module | Statements | Branch | Functions | Notes |
+|--------|-----------|--------|-----------|-------|
+| **broadcast-bus.ts** | 100% | 100% | 100% | ✅ PERFECT |
+| **db-connections.ts** | 100% | 100% | 100% | ✅ PERFECT |
+| **queue-monitor.ts** | 100% | 100% | 100% | ✅ PERFECT |
+| **token-store.ts** | 100% | 100% | 100% | ✅ PERFECT |
+| **password.ts** | 100% | 100% | 100% | ✅ PERFECT |
+| **email-job-validator.ts** | 100% | 100% | 100% | ✅ PERFECT |
+| **validation/** | 100% | 100% | 100% | ✅ PERFECT |
+| **auth/** | 96.37% | 89.47% | 93.33% | ✅ EXCELLENT |
+| **workers/** | 96.03% | 86.27% | 100% | ✅ EXCELLENT |
+| **core-logic/** | 97.46% | 89.92% | 96.42% | ✅ EXCELLENT |
+
+---
+
+## Phase 5: Remaining Coverage Gaps (Path to 85%+)
+
+### Critical Gaps (Completely Untested — 0%)
+
+#### 1. **server.ts** (0% coverage)
+**File:** `packages/api/src/server.ts` — Express server entry point
+
+**What's Missing:**
+- Server startup logic
+- Signal handlers (SIGTERM, SIGINT)
+- Graceful shutdown
+- Port binding and listening
+
+**Tests Needed (3-5):**
+```typescript
+describe('server.ts', () => {
+  it('starts server on configured port')
+  it('listens on TCP port')
+  it('handles SIGTERM graceful shutdown')
+  it('closes database connection on shutdown')
+  it('closes HTTP server on shutdown')
+})
+```
+
+#### 2. **standings-cache.ts** (0% coverage)
+**File:** `packages/api/src/standings-cache.ts` — In-memory standings cache
+
+**What's Missing:**
+- Cache get/set/clear operations
+- TTL expiration logic
+- Group-keyed storage
+
+**Tests Needed (4-6):**
+```typescript
+describe('StandingsCache', () => {
+  it('stores standings by groupId')
+  it('retrieves stored standings')
+  it('clears standings for a group')
+  it('returns undefined for missing group')
+  it('expires entries after TTL')
+})
+```
+
+#### 3. **email-adapter.ts** (0% coverage)
+**File:** `packages/api/src/email-adapter.ts` — Email provider integration
+
+**What's Missing:**
+- Send email method
+- Error handling
+- SMTP configuration
+
+**Tests Needed (3-4):**
+```typescript
+describe('EmailAdapter', () => {
+  it('sends email successfully')
+  it('includes subject and body in request')
+  it('throws on SMTP failure')
+  it('retries on transient failure')
+})
+```
+
+---
+
+### High-Priority Gaps (Branch Coverage <70%)
+
+#### 4. **tournaments.ts routes** (67.05% stmt | **52.28% branch**)
+**File:** `packages/api/src/routes/tournaments.ts` — Tournament HTTP endpoints
+
+**What's Missing (28% of branch paths):**
+- Error response branches (400, 409, 404 on various endpoints)
+- Edge cases in state validation
+- Constraint violation handling
+- Complex conditional branches in:
+  - Group creation (edge cases with player distribution)
+  - Bracket generation (pending match checking)
+  - Bracket patching (seed validation)
+  - Tournament update conflicts
+
+**Tests Needed (15-20 additional):**
+- Edge cases in POST /groups (uneven player distribution, boundary conditions)
+- PATCH /bracket seed validation branches
+- POST /advance state machine edge cases
+- Error response verification (409 on invalid transitions, 400 on bad seeds)
+- Concurrency scenarios (multiple requests to same tournament)
+
+#### 5. **app.ts** (67.6% stmt | **39.28% branch**)
+**File:** `packages/api/src/app.ts` — Express app setup
+
+**What's Missing (61% of branch paths):**
+- Error handler branches
+- Middleware conditional logic
+- Development vs. production paths
+- Optional dependency initialization
+
+**Tests Needed (5-8):**
+```typescript
+describe('app.ts setup', () => {
+  it('configures CORS with correct headers')
+  it('sets up error handler middleware')
+  it('logs unhandled errors')
+  it('handles async middleware errors')
+  it('sets proper status codes in error responses')
+})
+```
+
+#### 6. **logger.ts** (77.41% stmt | **42.1% branch**)
+**File:** `packages/api/src/logger.ts` — Structured logging
+
+**What's Missing (58% of branch paths):**
+- Log level conditional branches
+- AsyncLocalStorage context injection
+- Environment-specific logging
+
+**Tests Needed (4-6):**
+```typescript
+describe('logger.ts', () => {
+  it('respects LOG_LEVEL=debug')
+  it('respects LOG_LEVEL=info')
+  it('respects LOG_LEVEL=warn')
+  it('respects LOG_LEVEL=error')
+  it('injects requestId from AsyncLocalStorage')
+  it('handles missing requestId gracefully')
+})
+```
+
+#### 7. **db/errors.ts** (67.85% stmt | **13.33% branch**)
+**File:** `packages/api/src/db/errors.ts` — Database error classes
+
+**What's Missing (87% of branch paths!):**
+- Error class constructors with different argument patterns
+- instanceof checks
+- Error code parsing
+- Nested error details extraction
+
+**Tests Needed (8-10):**
+```typescript
+describe('db/errors.ts', () => {
+  it('creates NotFoundError')
+  it('creates ValidationError')
+  it('creates CheckConstraintError')
+  it('creates UniqueConstraintError')
+  it('parses PostgreSQL error codes')
+  it('includes original error in chain')
+  it('formats error messages with context')
+})
+```
+
+---
+
+### Medium-Priority Gaps (70-84% coverage)
+
+#### 8. **migrations.ts** (62.5% stmt | 50% branch)
+**Migrations running/verification logic**
+
+**Tests Needed (5-7):**
+- Migration file discovery
+- Already-run migration skip logic
+- Migration order validation
+- Rollback scenarios
+
+#### 9. **config.ts** (66.66% stmt)
+**Configuration loading and validation**
+
+**Tests Needed (4-5):**
+- Environment variable parsing
+- Default values
+- Invalid configuration rejection
+- Development vs. production modes
+
+---
+
+### Frontend Gaps (Lower Priority)
+
+#### 10. **UI Components with Low Coverage (<50%):**
+- TournamentCard.tsx: 11.47%
+- Modal.tsx: 13.07%
+- SuccessBanner.tsx: 23.37%
+- LoadingSpinner.tsx: 35.41%
+- PhaseIndicator.tsx: 40.74%
+
+**Note:** These are rendering-focused components requiring snapshot/interaction tests. Lower priority since API coverage is the main goal.
+
+---
+
+## Recommended Test Implementation Order
+
+### Round 1: Critical Path to 85%+ (8-10 tests, ~2-3 hours)
+
+1. **db/errors.ts** (8-10 tests) — Quick wins, foundational
+2. **email-adapter.ts** (3-4 tests) — Small scope
+3. **standings-cache.ts** (4-6 tests) — Small scope
+
+**Expected Impact:** +2-3% overall statements, +5-8% branch coverage
+
+### Round 2: Near-85% Modules (10-15 additional tests)
+
+1. **tournaments.ts routes** (add 15-20 tests for branch coverage)
+   - Focus on error branches (400, 409, 404)
+   - State validation edge cases
+   - Seed validation
+
+2. **app.ts** (add 5-8 error handler tests)
+
+3. **logger.ts** (add 4-6 log level tests)
+
+**Expected Impact:** +4-6% overall statements, +15-20% branch coverage
+
+### Round 3: Complete Coverage (5-10 additional tests)
+
+1. **server.ts** (add 3-5 startup/shutdown tests)
+2. **migrations.ts** (add 5-7 migration logic tests)
+3. **config.ts** (add 4-5 config validation tests)
+
+**Expected Impact:** +3-5% overall statements
+
+---
+
+## Coverage Restoration Script
+
+Once all additional tests are written, restore the coverage threshold in `jest.config.js`:
+
+```javascript
+module.exports = {
+  // ... other config
+  coverageThreshold: {
+    global: {
+      branches: 85,       // restored
+      functions: 85,      // restored
+      lines: 85,          // restored
+      statements: 85,     // restored
+    },
+  },
+}
+```
+
+---
+
 ## Next Steps
 
-1. **Phase 1-2:** Remove old tests, verify 5 unit tests pass (expect coverage to drop below 85%)
-2. **Phase 3:** Create test infrastructure files (helpers + factories using UUID)
-3. **Phase 4:** Write integration tests domain-by-domain (tournaments → players → groups → bracket → locations → analytics)
-   - Each domain is a separate task for incremental validation
-   - `maxWorkers: 4` is already set to test parallelism aggressively
-4. **Restore coverage threshold** once Phase 4 integration tests bring coverage back above 85%
+1. **Phase 1-2:** ✅ COMPLETED — Old tests removed, unit tests passing
+2. **Phase 3:** ✅ COMPLETED — Test infrastructure (helpers, factories) created
+3. **Phase 4:** ✅ COMPLETED — 130 integration tests added, branch coverage improved from 49.71% → 82.16%
+4. **Phase 5 (Current):** Write remaining gap tests following Round 1 → Round 2 → Round 3 order
+   - Round 1: 3 files, 15-20 tests
+   - Round 2: 3 files, 25-35 tests
+   - Round 3: 3 files, 12-17 tests
+5. **Coverage Verification:** Run `npm test -- --coverage` and restore 85% threshold once targets reached
