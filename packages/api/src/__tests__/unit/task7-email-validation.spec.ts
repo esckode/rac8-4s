@@ -29,6 +29,12 @@ const testConfig: AppConfig = {
     emailRecipientsPerJob: 1000,
     playerQueryLimit: 10000,
     sseMaxConnectionsPerUser: 5,
+    rateLimit: {
+      loginMaxAttempts: 5,
+      loginWindowMs: 15 * 60 * 1000,
+      forgotPasswordMaxAttempts: 5,
+      forgotPasswordWindowMs: 15 * 60 * 1000,
+    },
     paginationDefaults: {
       tournaments: 20,
       matches: 20,
@@ -43,6 +49,11 @@ const testConfig: AppConfig = {
   jobs: {
     maxAttempts: 3,
     backoffBase: 1000,
+  },
+  email: {
+    fromAddress: 'noreply@example.com',
+    frontendUrl: 'http://localhost:3000',
+    service: 'mock',
   },
 }
 

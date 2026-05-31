@@ -6,7 +6,12 @@ import { runMigrations } from './migrations'
 import { InMemoryTokenStore } from './auth/token-store'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { BroadcastBus } from './broadcast-bus'
-import { DEFAULT_APP_CONFIG } from './config'
+import { getAppConfig } from './config'
+import { createEmailService } from './services/email-service'
+import { ServiceEmailAdapter } from './email-service-adapter'
+import { getLogger } from './logger'
+
+const log = getLogger('server')
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001
 
@@ -21,19 +26,45 @@ async function main() {
     const migrationsDir = path.resolve(__dirname, '../../../db/migrations')
     await runMigrations(pool, migrationsDir)
 
+    // Load configuration with environment overrides
+    const config = getAppConfig()
+
     // Initialize dependencies
     const tokenStore = new InMemoryTokenStore()
     const jobQueue = new InMemoryJobQueue()
     const broadcastBus = new BroadcastBus()
 
+    // Initialize email service based on configuration
+    let emailAdapter
+    try {
+      const emailService = createEmailService(config.email.service, {
+        fromAddress: config.email.fromAddress,
+        sendgridApiKey: process.env.SENDGRID_API_KEY || undefined,
+        awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || undefined,
+        awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || undefined,
+        awsRegion: process.env.AWS_REGION || undefined,
+      })
+      emailAdapter = new ServiceEmailAdapter(emailService, config.email.fromAddress)
+      log.info('email.service.initialized', { service: config.email.service })
+    } catch (error) {
+      log.warn('email.service.initialization_failed', {
+        service: config.email.service,
+        error: error instanceof Error ? error.message : String(error),
+        fallback: 'none',
+      })
+      // For now, don't provide an email adapter if service fails
+      // In production, consider fallback or different initialization strategy
+    }
+
     // Create Express app
     const app = createApp({
-      config: DEFAULT_APP_CONFIG,
+      config,
       db: pool,
       jwtConfig: { secret: process.env.JWT_SECRET || 'dev-secret-key-change-in-production', expiresInSeconds: 3600 },
       tokenStore,
       jobQueue,
       broadcastBus,
+      emailAdapter,
     })
 
     // Add health check endpoint

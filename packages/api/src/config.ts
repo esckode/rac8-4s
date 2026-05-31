@@ -44,6 +44,57 @@ export interface AuthConfig {
 }
 
 /**
+ * Rate limiting configuration for auth endpoints.
+ */
+export interface RateLimitConfig {
+  /**
+   * Maximum failed login attempts before rate limiting.
+   * Tracks by email + IP address to prevent distributed attacks.
+   * Default: 5
+   *
+   * Usage: Login endpoint rate limiting.
+   * - After this many failed attempts, subsequent requests return 429
+   * - Counter resets on successful login or after time window expires
+   * - Recommended value: 5 (allows a few typos before blocking)
+   */
+  loginMaxAttempts: number
+
+  /**
+   * Time window for login rate limiting in milliseconds.
+   * Default: 900000 (15 minutes)
+   *
+   * Usage: How long to track failed login attempts.
+   * - Failed attempts within this window count toward the limit
+   * - Counter resets after window expires
+   * - Recommended value: 15 minutes (standard for password flows)
+   */
+  loginWindowMs: number
+
+  /**
+   * Maximum forgot-password requests before rate limiting.
+   * Tracks by email to prevent email enumeration attacks.
+   * Default: 5
+   *
+   * Usage: Forgot-password endpoint rate limiting.
+   * - After this many requests, subsequent requests return 429
+   * - Counter resets after time window expires
+   * - Recommended value: 5 (prevents abuse without being too restrictive)
+   */
+  forgotPasswordMaxAttempts: number
+
+  /**
+   * Time window for forgot-password rate limiting in milliseconds.
+   * Default: 900000 (15 minutes)
+   *
+   * Usage: How long to track forgot-password requests.
+   * - Requests within this window count toward the limit
+   * - Counter resets after window expires
+   * - Recommended value: 15 minutes (standard for password flows)
+   */
+  forgotPasswordWindowMs: number
+}
+
+/**
  * Data access limits and pagination settings.
  */
 export interface LimitsConfig {
@@ -89,6 +140,11 @@ export interface LimitsConfig {
    * - Typical value: 5-10 per user
    */
   sseMaxConnectionsPerUser: number
+
+  /**
+   * Rate limiting configuration for auth endpoints.
+   */
+  rateLimit: RateLimitConfig
 
   /**
    * Default pagination limits for different list endpoints.
@@ -204,6 +260,44 @@ export interface JobsConfig extends RetryConfig {
 }
 
 /**
+ * Email service configuration.
+ */
+export interface EmailConfig {
+  /**
+   * Email address to send from.
+   * Default: "noreply@rac8-4s.local"
+   *
+   * Usage: Sender address for password reset and other transactional emails.
+   * - Should be a valid, non-monitored address
+   * - Override via EMAIL_FROM_ADDRESS env var
+   */
+  fromAddress: string
+
+  /**
+   * Frontend base URL for generating reset links.
+   * Default: "http://localhost:3000"
+   *
+   * Usage: Used in password reset emails to create clickable links.
+   * - Must include protocol (http:// or https://)
+   * - No trailing slash
+   * - Override via FRONTEND_URL env var
+   */
+  frontendUrl: string
+
+  /**
+   * Email service type for sending emails.
+   * Default: "mock" (logs to console instead of sending)
+   *
+   * Usage: Choose which email service to use for sending emails.
+   * - "mock": Development/testing mode - logs emails to console
+   * - "sendgrid": Production - sends via SendGrid API (requires SENDGRID_API_KEY env var)
+   * - "aws_ses": Production - sends via AWS SES (requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY)
+   * - Override via EMAIL_SERVICE env var
+   */
+  service: 'mock' | 'sendgrid' | 'aws_ses'
+}
+
+/**
  * Complete application configuration.
  * All magic numbers and environment-dependent settings are centralized here.
  */
@@ -212,6 +306,7 @@ export interface AppConfig {
   database: DatabaseConfig
   limits: LimitsConfig
   jobs: JobsConfig
+  email: EmailConfig
 }
 
 /**
@@ -242,6 +337,12 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     emailRecipientsPerJob: 1000, // Reasonable batch size for email providers
     playerQueryLimit: 10000, // Should handle most tournaments without pagination
     sseMaxConnectionsPerUser: 5, // Prevent resource exhaustion from one user
+    rateLimit: {
+      loginMaxAttempts: 5, // Max 5 failed login attempts
+      loginWindowMs: 15 * 60 * 1000, // 15 minutes
+      forgotPasswordMaxAttempts: 5, // Max 5 forgot-password requests
+      forgotPasswordWindowMs: 15 * 60 * 1000, // 15 minutes
+    },
     paginationDefaults: {
       tournaments: 20, // Default limit for tournament listings
       matches: 20, // Default limit for match listings
@@ -257,6 +358,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     maxAttempts: 3, // Try 3 times before giving up
     backoffBase: 1000, // 1000ms base = 2s, 4s, 8s delays
   },
+  email: {
+    fromAddress: 'noreply@rac8-4s.local', // Sender address for transactional emails
+    frontendUrl: 'http://localhost:3000', // Frontend base URL for reset links
+    service: 'mock', // Use mock service by default (development)
+  },
 }
 
 /**
@@ -271,8 +377,19 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
  *   APP_LIMITS_EMAIL_RECIPIENTS_PER_JOB=500
  *   APP_LIMITS_SSE_MAX_CONNECTIONS_PER_USER=10
  *   APP_LIMITS_PAGINATION_TOURNAMENTS=20
+ *   APP_LIMITS_RATE_LIMIT_LOGIN_MAX_ATTEMPTS=5
+ *   APP_LIMITS_RATE_LIMIT_LOGIN_WINDOW_MS=900000
+ *   APP_LIMITS_RATE_LIMIT_FORGOT_PASSWORD_MAX_ATTEMPTS=5
+ *   APP_LIMITS_RATE_LIMIT_FORGOT_PASSWORD_WINDOW_MS=900000
  *   APP_JOBS_MAX_ATTEMPTS=5
  *   APP_JOBS_BACKOFF_BASE=2000
+ *   EMAIL_SERVICE=mock|sendgrid|aws_ses
+ *   EMAIL_FROM_ADDRESS=noreply@example.com
+ *   FRONTEND_URL=https://app.example.com
+ *   SENDGRID_API_KEY=your-key (for EMAIL_SERVICE=sendgrid)
+ *   AWS_ACCESS_KEY_ID=your-key (for EMAIL_SERVICE=aws_ses)
+ *   AWS_SECRET_ACCESS_KEY=your-secret (for EMAIL_SERVICE=aws_ses)
+ *   AWS_REGION=us-east-1 (for EMAIL_SERVICE=aws_ses)
  */
 export function getAppConfig(): AppConfig {
   return {
@@ -323,6 +440,28 @@ export function getAppConfig(): AppConfig {
           String(DEFAULT_APP_CONFIG.limits.sseMaxConnectionsPerUser),
         10
       ),
+      rateLimit: {
+        loginMaxAttempts: parseInt(
+          process.env.APP_LIMITS_RATE_LIMIT_LOGIN_MAX_ATTEMPTS ??
+            String(DEFAULT_APP_CONFIG.limits.rateLimit.loginMaxAttempts),
+          10
+        ),
+        loginWindowMs: parseInt(
+          process.env.APP_LIMITS_RATE_LIMIT_LOGIN_WINDOW_MS ??
+            String(DEFAULT_APP_CONFIG.limits.rateLimit.loginWindowMs),
+          10
+        ),
+        forgotPasswordMaxAttempts: parseInt(
+          process.env.APP_LIMITS_RATE_LIMIT_FORGOT_PASSWORD_MAX_ATTEMPTS ??
+            String(DEFAULT_APP_CONFIG.limits.rateLimit.forgotPasswordMaxAttempts),
+          10
+        ),
+        forgotPasswordWindowMs: parseInt(
+          process.env.APP_LIMITS_RATE_LIMIT_FORGOT_PASSWORD_WINDOW_MS ??
+            String(DEFAULT_APP_CONFIG.limits.rateLimit.forgotPasswordWindowMs),
+          10
+        ),
+      },
       paginationDefaults: {
         tournaments: parseInt(
           process.env.APP_LIMITS_PAGINATION_TOURNAMENTS ??
@@ -364,6 +503,11 @@ export function getAppConfig(): AppConfig {
         10
       ),
       backoffBase: parseInt(process.env.APP_JOBS_BACKOFF_BASE ?? String(DEFAULT_APP_CONFIG.jobs.backoffBase), 10),
+    },
+    email: {
+      fromAddress: process.env.EMAIL_FROM_ADDRESS ?? DEFAULT_APP_CONFIG.email.fromAddress,
+      frontendUrl: process.env.FRONTEND_URL ?? DEFAULT_APP_CONFIG.email.frontendUrl,
+      service: (process.env.EMAIL_SERVICE ?? DEFAULT_APP_CONFIG.email.service) as 'mock' | 'sendgrid' | 'aws_ses',
     },
   }
 }
