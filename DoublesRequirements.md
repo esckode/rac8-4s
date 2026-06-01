@@ -56,6 +56,45 @@ This document outlines the implementation of doubles tournament support in RAC8-
    - Document security review in acceptance criteria
    - **Task cannot be marked complete without security review**
 
+7. **Security Tooling Compliance (REQUIRED)**
+   - `npm audit --production` must pass (no known vulnerabilities in dependencies)
+   - `npm run lint` must pass (ESLint security plugin checks)
+   - Both checks must pass before task can be marked complete
+   - No hardcoded secrets, API keys, or credentials in code
+   - All `.env` files must be in `.gitignore`
+
+8. **Input Validation at System Boundaries (REQUIRED)**
+   - All user input must be validated before processing:
+     - API request payloads (validate type, format, length)
+     - Magic link tokens (validate format and expiration)
+     - Score submissions (validate format against tournament rules)
+     - Partner email addresses (validate format)
+     - Tournament configuration (validate date ranges, counts)
+   - Do NOT validate internal function arguments (trust the codebase)
+   - Use parameterized queries for all database operations
+
+9. **Accessibility Compliance (REQUIRED for Phase 5 Frontend Tasks)**
+   - WCAG 2.1 AA compliance mandatory for all UI components
+   - Keyboard navigation must work for all interactive elements
+   - Color contrast ≥ 4.5:1 for all text
+   - ARIA labels for buttons, form fields, dynamic content
+   - Screen reader testing required for new components
+   - Mobile-first responsive design (320px minimum width)
+
+10. **Environment & Version Requirements (REQUIRED)**
+    - Node.js 18+ (check with `node --version`)
+    - npm 9+ (check with `npm --version`)
+    - PostgreSQL 15+ (check with `psql --version`)
+    - All code must run in both development and production environments
+    - Environment variables must use `.env` pattern (never hardcoded)
+
+11. **Real-Time & Reliability Requirements (REQUIRED for Phase 4 & 5)**
+    - Standings updates broadcast via SSE (Server-Sent Events) in real-time
+    - Bracket updates propagate to all connected clients immediately
+    - Score submission includes 3× exponential backoff retry (on network failure)
+    - Analytics events tracked for: page views, score submissions, bracket advances
+    - All async operations must complete or fail gracefully (no hanging requests)
+
 ---
 
 ## Security Review Checklist
@@ -702,11 +741,20 @@ function calculateGroupSize(participantCount: number): number {
 - ✅ No performance regressions
 - ✅ Commented only where WHY is non-obvious
 
+**Code Quality Gates (REQUIRED):**
+- ✅ `npm run lint` passes (ESLint security plugin checks)
+- ✅ `npm audit --production` passes (no vulnerabilities)
+- ✅ No hardcoded secrets or credentials
+- ✅ All `.env` files in `.gitignore`
+- ✅ Input validation at system boundaries (parameterized queries)
+
 **Verification:**
 ```bash
 npm test -- packages/core-logic/src/__tests__/teams.spec.ts
 npm test -- packages/api/src/__tests__/integration/doubles-group-formation.spec.ts
-# All tests should PASS
+npm run lint
+npm audit --production
+# All tests should PASS, linting clean, audit clean
 ```
 
 ---
@@ -2210,11 +2258,25 @@ router.get('/:tournamentId/standings', async (req, res, next) => {
 - ✅ Response formatting cleaner
 - ✅ No performance regressions
 
+**Code Quality Gates (REQUIRED):**
+- ✅ `npm run lint` passes (ESLint security plugin checks)
+- ✅ `npm audit --production` passes (no vulnerabilities)
+- ✅ No hardcoded secrets or credentials
+- ✅ All `.env` files in `.gitignore`
+
+**Real-Time Requirements Verification:**
+- ✅ SSE connections tested (standings updates broadcast)
+- ✅ Concurrent score submissions handled correctly
+- ✅ No race conditions in standings recalculation
+- ✅ Client connections properly cleaned up on disconnect
+
 **Verification:**
 ```bash
 npm test -- packages/api/src/__tests__/integration/doubles-score-submission.spec.ts
 npm test -- packages/api/src/__tests__/integration/doubles-api-endpoints.spec.ts
-# All tests should PASS
+npm run lint
+npm audit --production
+# All tests should PASS, linting clean, audit clean
 ```
 
 ---
@@ -2562,6 +2624,19 @@ return (
 - ✅ Doubles displays "Player1 & Player2" as team name
 - ✅ All statistics display correctly
 - ✅ Responsive on mobile (no horizontal scroll)
+
+**Accessibility (WCAG 2.1 AA):**
+- ✅ Table has proper semantic markup (`<table>`, `<thead>`, `<tbody>`, `<th>`)
+- ✅ Header row has `scope="col"` attributes
+- ✅ Table caption or title visible (for screen readers)
+- ✅ Color not sole means of conveying information (rank, wins, etc.)
+- ✅ Mobile: Table doesn't require horizontal scroll (or scrollable container properly labeled)
+
+**Mobile Design:**
+- ✅ Minimum 320px width support
+- ✅ No horizontal scroll on mobile
+- ✅ Font size ≥ 16px on mobile (readable without zoom)
+- ✅ Tap targets accessible (no tiny numbers)
 
 ---
 
@@ -3752,6 +3827,32 @@ export function PartnerConfirmation() {
 - ✅ Shows error for invalid/expired links
 - ✅ Allows manual refresh of status
 - ✅ Mobile responsive
+
+**Accessibility (WCAG 2.1 AA):**
+- ✅ Page title updates to reflect status (screen reader announces)
+- ✅ Status messages in ARIA live region (`role="status"`)
+- ✅ Refresh button has visible label (not icon-only)
+- ✅ Error message clearly visible with high contrast (4.5:1)
+- ✅ Countdown timer or message accessible to screen readers
+- ✅ Back link has descriptive text
+
+**Mobile Design:**
+- ✅ Responsive at 320px width
+- ✅ Centered layout works on all screen sizes
+- ✅ Touch-friendly button (≥ 44×44px)
+- ✅ Text readable at 16px+ without pinch-zoom
+- ✅ No horizontal scrolling
+
+**Real-Time & Reliability:**
+- ✅ Auto-redirect doesn't block manual refresh
+- ✅ Status checks use efficient polling (not blocking)
+- ✅ Network failures handled gracefully (show "retry" button)
+
+**Security & Code Quality:**
+- ✅ API response escaped before display (no XSS)
+- ✅ No sensitive data in localStorage
+- ✅ `npm run lint` passes
+- ✅ `npm audit --production` passes
 - ✅ **All tests from Phase 5.0 pass GREEN**
 
 ---
@@ -3779,11 +3880,42 @@ export function PartnerConfirmation() {
 - ✅ Common patterns extracted
 - ✅ Prop drilling reduced where possible
 
+**Accessibility Compliance (WCAG 2.1 AA):**
+- ✅ All interactive elements keyboard accessible (Tab, Enter, Space)
+- ✅ Color contrast ≥ 4.5:1 for all text
+- ✅ ARIA labels present on buttons and form fields
+- ✅ Screen reader tested for new components
+- ✅ Focus indicators visible on keyboard navigation
+- ✅ Form error messages associated with inputs (`aria-invalid`, `aria-describedby`)
+
+**Mobile-First Design:**
+- ✅ Minimum width support: 320px (iPhone SE)
+- ✅ No horizontal scrolling
+- ✅ Touch targets ≥ 44×44px
+- ✅ Responsive breakpoints: 320px, 768px, 1024px, 1440px
+- ✅ Text readable on mobile without pinch-zoom
+
+**Code Quality Gates (REQUIRED):**
+- ✅ `npm run lint` passes (ESLint security plugin checks)
+- ✅ `npm audit --production` passes (no vulnerabilities)
+- ✅ No hardcoded secrets or credentials
+- ✅ All `.env` files in `.gitignore`
+
+**Real-Time Behavior:**
+- ✅ Standings table updates in real-time (SSE)
+- ✅ Bracket updates reflect immediately
+- ✅ Score form submission includes 3× retry with exponential backoff
+- ✅ Analytics events tracked: page views, score submissions, team formations
+
 **Verification:**
 ```bash
 npm test -- packages/frontend/src/__tests__/components/
 npm test -- packages/frontend/src/__tests__/doubles-tournament-flow.e2e.spec.ts
-# All tests should PASS
+npm run lint
+npm audit --production
+# All tests should PASS, linting clean, audit clean
+# Accessibility testing: axe DevTools, WAVE, keyboard navigation
+# Mobile testing: Chrome DevTools responsive mode 320px+
 ```
 
 ---
