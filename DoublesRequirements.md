@@ -477,6 +477,11 @@ router.patch('/registrations/:registrationId/confirm', async (req, res, next) =>
 - ✅ Return confirmation status
 - ✅ Indicate if both partners confirmed
 - ✅ Error handling for invalid/missing registration
+- ✅ **Structured logging at INFO level:**
+  - Log `partnership.confirmed` when player confirms
+  - Include: `playerId`, `partnerId`, `tournamentId`
+  - Use module-level logger: `const log = getLogger('partnerships')`
+  - Never include: tokens, passwords, full request bodies
 
 ---
 
@@ -571,6 +576,10 @@ async function createPartnershipRegistrations(
 - ✅ Prevent duplicate partnerships
 - ✅ Store registration timestamps
 - ✅ Return both registration records
+- ✅ **Structured logging at INFO level:**
+  - Log `team.created` when partnership registrations created
+  - Include: `tournamentId`, `player1Id`, `player2Id`, `registrationType` (select|invite)
+  - Use repository-level logger for database operations
 
 ---
 
@@ -625,6 +634,11 @@ async function sendPartnerNotificationEmail(
 - ✅ Include confirmation/signup links
 - ✅ Queue emails for async processing
 - ✅ Handle email failures gracefully
+- ✅ **Structured logging at DEBUG/INFO level:**
+  - Log at DEBUG when email queued: `email.queued`
+  - Log at WARN if email fails: `email.send_failed`
+  - Include: `recipientEmail`, `emailType` (confirmation|invite), `tournamentId`
+  - Never include: actual email content, token values
 
 ---
 
@@ -661,6 +675,11 @@ export class PlayerRepository {
 - ✅ Find partner registration for tournament
 - ✅ Mark registration as confirmed
 - ✅ Get confirmation status for all teams
+- ✅ **Logging in repository methods:**
+  - Log at DEBUG level for database queries
+  - Log at WARN if partner registration not found (expected case)
+  - Include: relevant IDs, tournament context
+  - Use module-level logger: `const log = getLogger('player-repository')`
 
 ---
 
@@ -1139,6 +1158,12 @@ router.post('/:tournamentId/matches/:matchId/score', async (req, res, next) => {
 - ✅ Use helper for doubles validation
 - ✅ Return appropriate error messages
 - ✅ All existing logic continues unchanged
+- ✅ **Structured logging at INFO level:**
+  - Log `score.submitted` immediately before success response
+  - Include: `playerId` (or both team members for doubles), `matchId`, `tournamentId`, `score`, `groupId`
+  - Use module-level logger: `const log = getLogger('tournaments')`
+  - Never include: full request body, sensitive player info beyond IDs
+  - Note: Existing score submission logging should already be in place; ensure doubles adds actor identification
 
 **Test Cases:**
 ```typescript
