@@ -125,6 +125,252 @@ START: Tournament Detail Page (doubles format)
 
 ---
 
+## Flow 2.5: Partner Confirmation (NEW - Doubles Only)
+
+**Status:** ⚠️ **New flow - must be designed and implemented**
+
+This is a critical new user journey for doubles tournaments that does not exist in current flows.
+
+### Partner Selection & Confirmation Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│            DOUBLES PARTNER SELECTION & CONFIRMATION FLOW             │
+└─────────────────────────────────────────────────────────────────────┘
+
+ENTRY POINT: Tournament Detail Page (doubles format)
+/tournament/:id/browse
+┌──────────────────────────────────────────────────────┐
+│  Tournament Name                                [←Back]│
+│  Sport: Pickleball | Format: Doubles                 │
+│  Status: Registration Open                           │
+│  Deadline: June 15, 2026 at 5:00 PM                  │
+│  Registered Teams: 6/8 teams (12/16 players)         │
+├──────────────────────────────────────────────────────┤
+│  REGISTRATION SECTION (for unauthenticated users)    │
+│                                                      │
+│  [Already have an account? Sign In]                  │
+│                                                      │
+│  OR register as a team:                              │
+│  Email: [___________________]                        │
+│  Name:  [___________________]                        │
+│                                                      │
+│  Partner Selection:                                  │
+│  ┌─ Option A: [Select from existing players ▼]      │
+│  │  Shows list of registered players for this        │
+│  │  tournament who aren't yet on a team              │
+│  │                                                   │
+│  └─ Option B: [Invite partner by email]              │
+│     [Enter partner email _______________]            │
+│     └─ Partner must accept to confirm team           │
+│                                                      │
+│  [Register as Team]                                  │
+├──────────────────────────────────────────────────────┤
+│  Details | Rules | Venue | Contact                  │
+└──────────────────────────────────────────────────────┘
+
+REGISTRATION FLOW (NEW STEPS):
+
+SCENARIO A: Select from existing players
+├─ User enters: email, name
+├─ User selects: partner from dropdown
+├─ Backend:
+│   ├─ Check deadline not passed (409 if passed)
+│   ├─ Check email not registered (409 if exists)
+│   ├─ Validate partner_id is different and registered (409 if invalid)
+│   ├─ Create team record
+│   ├─ Create player_registrations for self: partner_id set, partner_confirmed=false
+│   ├─ Create player_registrations for partner: mirror record
+│   ├─ Send email to partner: "You've been paired with [Your Name]"
+│   │   └─ Email contains confirmation link
+│   ├─ Generate magic link token for self (24-hour TTL)
+│   ├─ Send email to self: "Confirm your team with [Partner Name]"
+│   └─ Return token to frontend
+│
+└─ User sees: "Team pending partner confirmation"
+   └─ States shown until both confirm:
+      ├─ "Waiting for your confirmation" (link in email)
+      └─ "Waiting for [Partner Name]'s confirmation"
+
+SCENARIO B: Invite partner by email
+├─ User enters: email, name, partner email
+├─ Backend:
+│   ├─ Check deadline not passed (409 if passed)
+│   ├─ Check email not registered (409 if exists)
+│   ├─ Check partner email is valid format (400 if invalid)
+│   ├─ Check partner email not same as self (400 if same)
+│   ├─ Generate magic link token for self
+│   ├─ Send email to self: "Complete registration and confirm team"
+│   ├─ Send email to partner: "You've been invited to team with [Your Name]"
+│   │   └─ Email contains link: /signup?token=partner_invite_token
+│   │       └─ Token is valid for 7 days
+│   │       └─ Clicking link takes partner to:
+│   │           /signup?token=xxx (pre-fill email from token)
+│   │           └─ Partner creates account + auto-confirms as partner
+│   └─ Return token to frontend
+│
+└─ User sees: "Waiting for partner to accept invitation"
+   └─ Partner receives email:
+      "You've been invited to join [Tournament Name] as [Your Name]'s partner"
+      [Accept & Create Account] button
+        └─ Clicking takes to signup page
+        └─ Partner creates account
+        └─ Partner automatically confirmed as team member
+
+PARTNER CONFIRMATION FLOW:
+
+User clicks confirmation link in email
+  → /registrations/:registrationId/confirm (GET or POST?)
+    ↓
+Backend: Mark partner_confirmed=true
+  ├─ Query: player_registrations WHERE id=:registrationId
+  ├─ Update: partner_confirmed=true, confirmed_at=NOW()
+  ├─ Check if both players confirmed
+  │   ├─ If yes: team is ready for group stage
+  │   └─ If no: still waiting on other player
+  └─ Return 200 OK
+    ↓
+Frontend: Show "Team confirmed! You're ready for group stage"
+  ├─ Auto-redirect to /tournament/:id/standings after 3 seconds
+  └─ If both confirmed, show ready badge on team
+
+STATES DURING REGISTRATION:
+
+Before any confirmation:
+  Status: "pending_partner_confirm"
+  Display: "⏳ Waiting for confirmation from [Player Name]"
+
+After both confirm:
+  Status: "registered"
+  Display: "✓ Team ready for group stage"
+
+If partner hasn't confirmed by deadline:
+  Status: "registration_incomplete"
+  Display: "❌ Partnership not confirmed - team not eligible"
+  Action: Can cancel registration and try with different partner
+
+ERROR SCENARIOS:
+
+├─ Partner email doesn't exist (Scenario B)
+│   └─ "Partner must accept invitation before deadline"
+│   └─ Display: "Waiting for [email] to accept invitation"
+│   └─ Resend option: "Send invitation again"
+│
+├─ Partner declines (NEW endpoint needed)
+│   └─ POST /registrations/:id/decline
+│   └─ Display: "Partnership declined - register with different partner"
+│   └─ Option: "Find another partner"
+│
+└─ Deadline passed while waiting
+    └─ "Registration deadline passed"
+    └─ Cannot register anymore
+
+CONFIRMATION EMAIL EXAMPLES:
+
+TEMPLATE 1: You've been paired
+═════════════════════════════════
+To: partner@example.com
+Subject: Confirm your team for [Tournament Name]
+
+Hi [Partner Name],
+
+[Your Name] has paired you for doubles in [Tournament Name]!
+
+To confirm your partnership, click the link below:
+[Confirmation Link with 24-hour TTL]
+
+If you're not interested, you can ignore this email.
+
+─
+Deadline: [Date/Time]
+─
+
+TEMPLATE 2: You've been invited
+═════════════════════════════════
+To: partner@example.com
+Subject: Team invitation for [Tournament Name]
+
+Hi there,
+
+[Your Name] has invited you to join their team for [Tournament Name]!
+
+To accept and create your account:
+[Signup Link with 7-day TTL, pre-filled email]
+
+After signing up, you'll automatically be confirmed as their partner.
+
+─
+Deadline: [Date/Time]
+─
+```
+
+### Issue 2.5: Team Confirmation Status Display
+
+**New Page:** `/registrations/:registrationId/confirm`
+
+**Purpose:** Shows partner confirmation status after clicking email link
+
+**Scenarios:**
+
+```
+Scenario 1: First partner confirms
+┌────────────────────────────────────────┐
+│  Team Confirmation                [←Back]
+├────────────────────────────────────────┤
+│                                        │
+│  ✓ Your partnership confirmed!        │
+│                                        │
+│  Team: [Your Name] & [Partner Name]   │
+│  Tournament: [Tournament Name]         │
+│  Status: Pending partner confirmation │
+│                                        │
+│  [Watch for partner to confirm...]    │
+│  (Auto-refresh every 10 seconds)      │
+│                                        │
+│  Redirecting to tournament...          │
+│                                        │
+└────────────────────────────────────────┘
+
+Scenario 2: Both partners confirm
+┌────────────────────────────────────────┐
+│  Team Confirmation                [←Back]
+├────────────────────────────────────────┤
+│                                        │
+│  ✓ Partnership complete!              │
+│                                        │
+│  Team: [Your Name] & [Partner Name]   │
+│  Tournament: [Tournament Name]         │
+│  Status: ✓ Ready for group stage      │
+│                                        │
+│  Your team is eligible for the        │
+│  upcoming group stage!                │
+│                                        │
+│  [Go to tournament]                   │
+│                                        │
+└────────────────────────────────────────┘
+
+Scenario 3: Partner hasn't confirmed yet
+┌────────────────────────────────────────┐
+│  Team Confirmation                [←Back]
+├────────────────────────────────────────┤
+│                                        │
+│  ✓ Your confirmation received         │
+│                                        │
+│  Team: [Your Name] & [Partner Name]   │
+│  Tournament: [Tournament Name]         │
+│                                        │
+│  Waiting for [Partner Name] to       │
+│  confirm...                           │
+│                                        │
+│  [Resend confirmation email]          │
+│                                        │
+│  Deadline: [Date/Time]                │
+│                                        │
+└────────────────────────────────────────┘
+```
+
+---
+
 ## Flow 3: Tournament Participation & Score Submission
 
 **Status:** ⚠️ Requires major updates

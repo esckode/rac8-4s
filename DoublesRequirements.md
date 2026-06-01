@@ -409,6 +409,423 @@ async function generateGroupMatchesDoubles(groupId: string, teams: Team[]): Prom
 
 ---
 
+## Phase 2.5: Partner Registration & Confirmation (Doubles-Specific)
+
+**Duration:** 1.5 days  
+**Risk Level:** Medium (new endpoints, partner state management)  
+**Rollback:** Disable doubles registrations, revert API endpoints
+
+**Dependencies:** Phase 1 (database schema with partner_id already exists)
+
+### Task 2.5.1: Add Partner Confirmation Endpoint
+
+**File:** `packages/api/src/routes/tournaments.ts` (new endpoint)
+
+**Endpoint:** `PATCH /registrations/:registrationId/confirm`
+
+**Implementation:**
+```typescript
+router.patch('/registrations/:registrationId/confirm', async (req, res, next) => {
+  try {
+    const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+    const registrationId = req.params.registrationId as string
+
+    // Get registration
+    const registration = await playerRepo.findRegistrationById(registrationId)
+    if (!registration) {
+      return res.status(404).json({ code: 'NOT_FOUND', message: 'Registration not found' })
+    }
+
+    // Verify player is confirming their own registration
+    if (registration.player_id !== payload.playerId) {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Cannot confirm others registrations' })
+    }
+
+    // Mark as confirmed
+    await playerRepo.confirmPartnershipRegistration(registrationId)
+
+    // Check if both partners confirmed
+    const partnerReg = await playerRepo.findPartnerRegistration(
+      registration.tournament_id,
+      registration.partner_id
+    )
+
+    const bothConfirmed = registration.partner_confirmed && partnerReg?.partner_confirmed
+
+    return res.status(200).json({
+      confirmed: true,
+      partnership: {
+        registrationId,
+        playerId: registration.player_id,
+        partnerId: registration.partner_id,
+        partnerConfirmed: registration.partner_confirmed,
+        bothConfirmed,
+        confirmedAt: new Date()
+      },
+      message: bothConfirmed ? 'Partnership confirmed!' : 'Waiting for partner confirmation'
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Endpoint accessible only to authenticated players
+- ✅ Only the registered player can confirm
+- ✅ Mark player's registration as confirmed
+- ✅ Return confirmation status
+- ✅ Indicate if both partners confirmed
+- ✅ Error handling for invalid/missing registration
+
+---
+
+### Task 2.5.2: Add Partner Selection to Registration
+
+**File:** `packages/api/src/routes/tournaments.ts` (modify registration endpoint)
+
+**Current:** `POST /tournaments/:tournamentId/register` accepts email + name
+
+**Updated:** Add partner selection options
+
+```typescript
+router.post('/:tournamentId/register', async (req, res, next) => {
+  try {
+    // ... existing validation ...
+
+    const tournament = await repo.findById(req.params.tournamentId)
+    
+    // NEW: Check if doubles tournament
+    if (tournament.match_format === 'doubles') {
+      const partnerSelection = req.body.partnerSelection // { type: 'select' | 'invite', value: partnerId | email }
+      
+      if (!partnerSelection) {
+        return res.status(400).json({ 
+          code: 'INVALID_REQUEST', 
+          message: 'Partner selection required for doubles tournament' 
+        })
+      }
+
+      if (partnerSelection.type === 'select') {
+        // User selected from existing registered players
+        const partnerId = partnerSelection.value
+        
+        // Validate partner exists and is registered for tournament
+        const partner = await playerRepo.findById(partnerId)
+        if (!partner) {
+          return res.status(409).json({ code: 'INVALID_PARTNER', message: 'Partner not found' })
+        }
+
+        const partnerReg = await playerRepo.findRegistrationByPlayerAndTournament(partnerId, tournamentId)
+        if (!partnerReg) {
+          return res.status(409).json({ code: 'INVALID_PARTNER', message: 'Partner not registered' })
+        }
+
+        // Check partner is not already on a team
+        if (partnerReg.partner_id && partnerReg.partner_confirmed) {
+          return res.status(409).json({ code: 'PARTNER_UNAVAILABLE', message: 'Partner already on team' })
+        }
+
+        // Create/update partnerships
+        const newRegistration = {
+          id: generateRegistrationId(),
+          tournament_id: tournamentId,
+          player_id: playerId,
+          partner_id: partnerId,
+          partner_confirmed: false,
+          status: 'pending_partner_confirm'
+        }
+
+        await playerRepo.createRegistration(newRegistration)
+
+        // Mirror registration for partner
+        await playerRepo.createRegistration({
+          id: generateRegistrationId(),
+          tournament_id: tournamentId,
+          player_id: partnerId,
+          partner_id: playerId,
+          partner_confirmed: false,
+          status: 'pending_partner_confirm'
+        })
+
+        // Send confirmation email to partner
+        await emailQueue.enqueue({
+          to: partner.email,
+          template: 'partner_confirmation',
+          data: {
+            partnerName: playerName,
+            tournamentName: tournament.name,
+            confirmLink: `${process.env.FRONTEND_URL}/registrations/${newRegistration.id}/confirm`
+          }
+        })
+
+      } else if (partnerSelection.type === 'invite') {
+        // User inviting new partner by email
+        const partnerEmail = partnerSelection.value
+
+        // Validate email format
+        if (!isValidEmail(partnerEmail)) {
+          return res.status(400).json({ code: 'INVALID_EMAIL' })
+        }
+
+        if (partnerEmail === email) {
+          return res.status(400).json({ code: 'CANNOT_SELF_PARTNER' })
+        }
+
+        // Generate magic link token for partner
+        const partnerToken = generateMagicLinkToken()
+
+        const newRegistration = {
+          id: generateRegistrationId(),
+          tournament_id: tournamentId,
+          player_id: playerId,
+          partner_email: partnerEmail,  // Not yet a player
+          status: 'pending_partner_signup'
+        }
+
+        await playerRepo.createRegistration(newRegistration)
+
+        // Send signup link to partner
+        await emailQueue.enqueue({
+          to: partnerEmail,
+          template: 'partner_invite',
+          data: {
+            inviterName: playerName,
+            tournamentName: tournament.name,
+            signupLink: `${process.env.FRONTEND_URL}/signup?token=${partnerToken}&partner_reg=${newRegistration.id}`,
+            expiresIn: 7 * 24 * 60 * 60  // 7 days
+          }
+        })
+      }
+
+      return res.status(201).json({
+        message: 'Registration created, waiting for partner',
+        status: 'pending_partner_confirm'
+      })
+
+    } else {
+      // Singles tournament - existing logic
+      // ... create single registration ...
+    }
+
+  } catch (err) {
+    next(err)
+  }
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Accepts partnerSelection with type and value
+- ✅ Validates partner exists (for select)
+- ✅ Validates email format (for invite)
+- ✅ Prevents self-pairing
+- ✅ Creates mirror registrations for both players
+- ✅ Sends confirmation email to selected partner
+- ✅ Sends signup link to invited partner
+- ✅ Returns pending status
+
+---
+
+### Task 2.5.3: Add Partner Registration Repository Methods
+
+**File:** `packages/api/src/repositories/player-repository.ts` (extend existing)
+
+```typescript
+export class PlayerRepository {
+  async findPartnerRegistration(
+    tournamentId: string,
+    partnerId: string
+  ): Promise<Registration | null>
+  
+  async confirmPartnershipRegistration(registrationId: string): Promise<void>
+  
+  async findRegistrationByPlayerAndTournament(
+    playerId: string,
+    tournamentId: string
+  ): Promise<Registration | null>
+  
+  async getTeamConfirmationStatus(tournamentId: string): Promise<{
+    teamId: string
+    player1Id: string
+    player1Confirmed: boolean
+    player2Id: string
+    player2Confirmed: boolean
+    bothConfirmed: boolean
+  }[]>
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Find partner registration for tournament
+- ✅ Mark registration as confirmed
+- ✅ Get confirmation status for all teams
+
+---
+
+### Task 2.5.4: Add Partner Email Templates
+
+**File:** `packages/api/src/email/templates/` (new templates)
+
+**Template 1: partner_confirmation.hbs**
+```handlebars
+<h2>Confirm Your Team</h2>
+
+<p>Hi {{partnerName}},</p>
+
+<p>You've been paired with {{inviterName}} for <strong>{{tournamentName}}</strong>!</p>
+
+<p><a href="{{confirmLink}}" class="btn btn-primary">Confirm Partnership</a></p>
+
+<p>If you accept, you'll be ready for the group stage.</p>
+
+<p>
+  <small>
+    This link expires in 24 hours.<br>
+    Deadline: {{deadline}}
+  </small>
+</p>
+```
+
+**Template 2: partner_invite.hbs**
+```handlebars
+<h2>Join a Team</h2>
+
+<p>Hi {{partnerName}},</p>
+
+<p>{{inviterName}} has invited you to team up for <strong>{{tournamentName}}</strong>!</p>
+
+<p>To accept and create your account, click below:</p>
+
+<p><a href="{{signupLink}}" class="btn btn-primary">Accept & Create Account</a></p>
+
+<p>Once you sign up, you'll automatically be confirmed as their partner.</p>
+
+<p>
+  <small>
+    This link expires in 7 days.<br>
+    Deadline: {{deadline}}
+  </small>
+</p>
+```
+
+**Acceptance Criteria:**
+- ✅ Both templates created and tested
+- ✅ Links include proper tokens with expiration
+- ✅ Clear call-to-action
+- ✅ Deadline information included
+
+---
+
+### Task 2.5.5: Add Partner Confirmation Tests
+
+**File:** `packages/api/src/__tests__/integration/doubles-partner-confirmation.spec.ts` (new file)
+
+```typescript
+describe('Doubles: Partner Confirmation', () => {
+  it('should allow player to select existing partner', async () => {
+    const tournament = await createTournament({ matchFormat: 'doubles' })
+    const player1 = await createPlayer('alice@test.com')
+    const player2 = await createPlayer('bob@test.com')
+
+    // Register player1
+    const response = await post(`/tournaments/${tournament.id}/register`, {
+      email: 'alice@test.com',
+      name: 'Alice',
+      partnerSelection: { type: 'select', value: player2.id }
+    })
+
+    expect(response.status).toBe(201)
+    expect(response.body.status).toBe('pending_partner_confirm')
+
+    // Verify registrations created
+    const aliceReg = await findRegistration('alice@test.com', tournament.id)
+    const bobReg = await findRegistration('bob@test.com', tournament.id)
+    
+    expect(aliceReg.partner_id).toBe(player2.id)
+    expect(bobReg.partner_id).toBe(player1.id)
+    expect(aliceReg.partner_confirmed).toBe(false)
+    expect(bobReg.partner_confirmed).toBe(false)
+  })
+
+  it('should send confirmation email to partner', async () => {
+    // ... setup ...
+    const emailsSent = await getEmailQueue()
+    expect(emailsSent).toHaveLength(1)
+    expect(emailsSent[0].to).toBe('bob@test.com')
+    expect(emailsSent[0].template).toBe('partner_confirmation')
+  })
+
+  it('should allow partner to confirm registration', async () => {
+    // ... setup registration ...
+    const registration = await findRegistration('bob@test.com', tournament.id)
+
+    const response = await patch(
+      `/registrations/${registration.id}/confirm`,
+      {},
+      { auth: bob }  // Authenticated as Bob
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body.confirmed).toBe(true)
+
+    // Verify database updated
+    const updated = await findRegistration('bob@test.com', tournament.id)
+    expect(updated.partner_confirmed).toBe(true)
+  })
+
+  it('should reject confirmation from non-partner', async () => {
+    // ... setup registration ...
+    const registration = await findRegistration('bob@test.com', tournament.id)
+
+    const response = await patch(
+      `/registrations/${registration.id}/confirm`,
+      {},
+      { auth: charlie }  // Wrong player
+    )
+
+    expect(response.status).toBe(403)
+  })
+
+  it('should allow inviting new partner by email', async () => {
+    const tournament = await createTournament({ matchFormat: 'doubles' })
+    
+    const response = await post(`/tournaments/${tournament.id}/register`, {
+      email: 'alice@test.com',
+      name: 'Alice',
+      partnerSelection: { type: 'invite', value: 'bob@notyet.com' }
+    })
+
+    expect(response.status).toBe(201)
+    
+    // Verify invite email sent
+    const emails = await getEmailQueue()
+    expect(emails).toHaveLength(1)
+    expect(emails[0].to).toBe('bob@notyet.com')
+    expect(emails[0].template).toBe('partner_invite')
+  })
+
+  it('should show team confirmation status', async () => {
+    const tournament = await createTournament({ matchFormat: 'doubles' })
+    // ... register teams ...
+    
+    const status = await getTeamConfirmationStatus(tournament.id)
+    expect(status).toHaveLength(1)
+    expect(status[0].bothConfirmed).toBe(false)
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Partner selection creates paired registrations
+- ✅ Confirmation email sent
+- ✅ Partner can confirm via endpoint
+- ✅ Non-partners cannot confirm
+- ✅ Partner invites work
+- ✅ Confirmation status tracked
+- ✅ 20+ test cases
+
+---
+
 ## Phase 3: Standings Calculation
 
 **Duration:** 1 day  
@@ -1380,6 +1797,243 @@ return (
 
 ---
 
+### Task 5.8: Partner Registration & Confirmation Pages (Doubles-Specific)
+
+**File:** `packages/frontend/src/pages/TournamentBrowse.tsx` (modify registration section)
+
+**Updated Registration Section for Doubles:**
+
+```typescript
+// In tournament detail page, modify registration section
+const isSingles = tournament.matchFormat === 'singles'
+const isDoubles = tournament.matchFormat === 'doubles'
+
+return (
+  <section className="registration">
+    {isSingles ? (
+      <SinglesRegistration tournament={tournament} />
+    ) : (
+      <DoublesRegistration tournament={tournament} />
+    )}
+  </section>
+)
+
+function DoublesRegistration({ tournament }) {
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [partnerOption, setPartnerOption] = useState('select') // 'select' | 'invite'
+  const [selectedPartnerId, setSelectedPartnerId] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [registeredPlayers, setRegisteredPlayers] = useState([])
+
+  useEffect(() => {
+    // Fetch players already registered (not on teams)
+    fetchAvailablePartners(tournament.id)
+  }, [tournament.id])
+
+  return (
+    <form onSubmit={handleRegister}>
+      <h3>Register as a Team</h3>
+      
+      <div className="form-group">
+        <label>Your Email</label>
+        <input type="email" value={email} onChange={e => setEmail(e.target.value)} />
+      </div>
+
+      <div className="form-group">
+        <label>Your Name</label>
+        <input type="text" value={name} onChange={e => setName(e.target.value)} />
+      </div>
+
+      <div className="form-group">
+        <label>Partner Selection</label>
+        
+        <div className="radio-group">
+          <label>
+            <input type="radio" value="select" checked={partnerOption === 'select'} 
+                   onChange={e => setPartnerOption(e.target.value)} />
+            Select from registered players
+          </label>
+        </div>
+
+        {partnerOption === 'select' && (
+          <select value={selectedPartnerId} onChange={e => setSelectedPartnerId(e.target.value)}>
+            <option value="">-- Choose a partner --</option>
+            {registeredPlayers.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
+
+        <div className="radio-group">
+          <label>
+            <input type="radio" value="invite" checked={partnerOption === 'invite'}
+                   onChange={e => setPartnerOption(e.target.value)} />
+            Invite partner by email
+          </label>
+        </div>
+
+        {partnerOption === 'invite' && (
+          <input type="email" placeholder="Partner's email" 
+                 value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+        )}
+      </div>
+
+      <button type="submit" className="btn-primary">Register as Team</button>
+    </form>
+  )
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Option A: Select from registered unpartnered players
+- ✅ Option B: Invite new partner by email
+- ✅ Clear radio buttons for both options
+- ✅ Partner dropdown populated with available players
+- ✅ Email input for invitations
+- ✅ Validation of email format
+- ✅ Mobile responsive
+
+---
+
+### Task 5.9: Partner Confirmation Page (NEW)
+
+**File:** `packages/frontend/src/pages/PartnerConfirmation.tsx` (new file)
+
+**Route:** `/registrations/:registrationId/confirm`
+
+**Implementation:**
+
+```typescript
+import { useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+
+export function PartnerConfirmation() {
+  const { registrationId } = useParams<{ registrationId: string }>()
+  const [status, setStatus] = useState<'loading' | 'success' | 'waiting' | 'error'>('loading')
+  const [confirmation, setConfirmation] = useState<any>(null)
+  const [autoRedirect, setAutoRedirect] = useState(false)
+
+  useEffect(() => {
+    confirmPartnership()
+  }, [registrationId])
+
+  useEffect(() => {
+    if (status === 'success' && !autoRedirect) {
+      const timer = setTimeout(() => {
+        setAutoRedirect(true)
+        // Redirect to tournament
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [status])
+
+  const confirmPartnership = async () => {
+    try {
+      const response = await fetch(`/api/registrations/${registrationId}/confirm`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setConfirmation(data.partnership)
+        setStatus(data.partnership.bothConfirmed ? 'success' : 'waiting')
+      } else {
+        setStatus('error')
+      }
+    } catch (err) {
+      setStatus('error')
+    }
+  }
+
+  if (status === 'loading') {
+    return <div className="confirmation-page"><p>Confirming partnership...</p></div>
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="confirmation-page error">
+        <h2>❌ Confirmation Failed</h2>
+        <p>Could not confirm partnership. The link may have expired.</p>
+        <a href="/browse">Back to tournaments</a>
+      </div>
+    )
+  }
+
+  return (
+    <div className="confirmation-page">
+      {status === 'success' && (
+        <>
+          <h2>✓ Partnership Complete!</h2>
+          <div className="team-info">
+            <p>Team: {confirmation.partnerId} & [your name]</p>
+            <p>Status: Ready for group stage</p>
+          </div>
+          <p className="redirect-message">Redirecting to tournament in 3 seconds...</p>
+        </>
+      )}
+
+      {status === 'waiting' && (
+        <>
+          <h2>✓ Your confirmation received</h2>
+          <div className="team-info">
+            <p>Waiting for your partner to confirm...</p>
+          </div>
+          <button onClick={() => confirmPartnership()}>
+            Refresh status
+          </button>
+          <p>
+            <small>Auto-refresh every 10 seconds</small>
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+```
+
+**Styling:**
+```css
+.confirmation-page {
+  max-width: 500px;
+  margin: 60px auto;
+  padding: 20px;
+  text-align: center;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.confirmation-page.error {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+}
+
+.team-info {
+  background: white;
+  padding: 16px;
+  border-radius: 6px;
+  margin: 20px 0;
+  border-left: 4px solid #10b981;
+}
+
+.redirect-message {
+  color: #666;
+  font-size: 0.875rem;
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Calls confirmation API endpoint on load
+- ✅ Shows "success" state when both confirmed
+- ✅ Shows "waiting" state when only self confirmed
+- ✅ Auto-redirects after 3 seconds on success
+- ✅ Shows error for invalid/expired links
+- ✅ Allows manual refresh of status
+- ✅ Mobile responsive
+
+---
+
 ## Phase 6: Testing
 
 **Duration:** 2 days  
@@ -1763,14 +2417,22 @@ log.error('doubles.error', {
 |-------|----------|--------|
 | Phase 1: Database | 1 day | Design |
 | Phase 2: Core Logic | 2 days | Design |
+| Phase 2.5: Partner Registration | 1.5 days | Design |
 | Phase 3: Standings | 1 day | Design |
 | Phase 4: API Routes | 1.5 days | Design |
-| Phase 5: Frontend | 2.5 days | Design |
+| Phase 5: Frontend | 3.5 days | Design |
 | Phase 6: Testing | 2 days | Design |
 | Phase 7: Rollout | 1 day | Design |
-| **Total** | **~11 days** | **Ready for implementation** |
+| **Total** | **~13.5 days** | **Ready for implementation** |
 
-**Phase 5 Expanded (2.5 days):**
+**Phase 2.5 New (1.5 days):**
+- Task 2.5.1: Partner Confirmation Endpoint (0.5 days)
+- Task 2.5.2: Partner Selection in Registration (0.5 days)
+- Task 2.5.3: Partner Repository Methods (0.2 days)
+- Task 2.5.4: Email Templates (0.2 days)
+- Task 2.5.5: Partner Confirmation Tests (0.1 days)
+
+**Phase 5 Expanded (3.5 days):**
 - Task 5.1: Standings Table (0.5 days)
 - Task 5.2: Match Cards (0.5 days)
 - Task 5.3: Match Detail Page (0.5 days)
@@ -1778,18 +2440,26 @@ log.error('doubles.error', {
 - Task 5.5: Tournament Browse (0.3 days)
 - Task 5.6: Tournament Detail (0.3 days)
 - Task 5.7: Score Form Labels (0.1 days)
+- Task 5.8: Partner Registration Form (0.5 days)
+- Task 5.9: Partner Confirmation Page (0.5 days)
 
 ---
 
 ## Dependencies & Blockers
 
 **Hard Dependencies:**
-- None (all code additive)
+- Phase 1 before Phase 2 (teams table needed before group formation)
+- Phase 2 before Phase 2.5 (group formation logic needed)
+- Phase 2.5 before Phase 3 (partners must be confirmed before standings calculated)
 
 **Soft Dependencies:**
-- Complete Phase 1 before Phase 2
-- Complete Phase 2 before Phase 3
-- Phases 4, 5, 6 can proceed in parallel
+- Complete Phase 3 before Phase 4 begins (standings calculation must work)
+- Phases 4, 5, 6 can proceed in parallel after Phase 3 completes
+- Phase 6 (testing) should start during Phase 4-5 for parallel development
+
+**Parallelization Opportunities:**
+- Phase 2 and Phase 2.5 can overlap (start 2.5 after 2 is 50% complete)
+- Phases 4, 5, 6 can run in parallel (once Phase 3 complete)
 
 **Blockers:**
 - None identified
