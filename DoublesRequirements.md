@@ -480,149 +480,151 @@ router.patch('/registrations/:registrationId/confirm', async (req, res, next) =>
 
 ---
 
-### Task 2.5.2: Add Partner Selection to Registration
+### Task 2.5.2a: Add Partner Selection Validation
 
 **File:** `packages/api/src/routes/tournaments.ts` (modify registration endpoint)
 
-**Current:** `POST /tournaments/:tournamentId/register` accepts email + name
-
-**Updated:** Add partner selection options
+**Implementation:** Add validation layer for partner selection
 
 ```typescript
-router.post('/:tournamentId/register', async (req, res, next) => {
-  try {
-    // ... existing validation ...
-
-    const tournament = await repo.findById(req.params.tournamentId)
-    
-    // NEW: Check if doubles tournament
-    if (tournament.match_format === 'doubles') {
-      const partnerSelection = req.body.partnerSelection // { type: 'select' | 'invite', value: partnerId | email }
-      
-      if (!partnerSelection) {
-        return res.status(400).json({ 
-          code: 'INVALID_REQUEST', 
-          message: 'Partner selection required for doubles tournament' 
-        })
-      }
-
-      if (partnerSelection.type === 'select') {
-        // User selected from existing registered players
-        const partnerId = partnerSelection.value
-        
-        // Validate partner exists and is registered for tournament
-        const partner = await playerRepo.findById(partnerId)
-        if (!partner) {
-          return res.status(409).json({ code: 'INVALID_PARTNER', message: 'Partner not found' })
-        }
-
-        const partnerReg = await playerRepo.findRegistrationByPlayerAndTournament(partnerId, tournamentId)
-        if (!partnerReg) {
-          return res.status(409).json({ code: 'INVALID_PARTNER', message: 'Partner not registered' })
-        }
-
-        // Check partner is not already on a team
-        if (partnerReg.partner_id && partnerReg.partner_confirmed) {
-          return res.status(409).json({ code: 'PARTNER_UNAVAILABLE', message: 'Partner already on team' })
-        }
-
-        // Create/update partnerships
-        const newRegistration = {
-          id: generateRegistrationId(),
-          tournament_id: tournamentId,
-          player_id: playerId,
-          partner_id: partnerId,
-          partner_confirmed: false,
-          status: 'pending_partner_confirm'
-        }
-
-        await playerRepo.createRegistration(newRegistration)
-
-        // Mirror registration for partner
-        await playerRepo.createRegistration({
-          id: generateRegistrationId(),
-          tournament_id: tournamentId,
-          player_id: partnerId,
-          partner_id: playerId,
-          partner_confirmed: false,
-          status: 'pending_partner_confirm'
-        })
-
-        // Send confirmation email to partner
-        await emailQueue.enqueue({
-          to: partner.email,
-          template: 'partner_confirmation',
-          data: {
-            partnerName: playerName,
-            tournamentName: tournament.name,
-            confirmLink: `${process.env.FRONTEND_URL}/registrations/${newRegistration.id}/confirm`
-          }
-        })
-
-      } else if (partnerSelection.type === 'invite') {
-        // User inviting new partner by email
-        const partnerEmail = partnerSelection.value
-
-        // Validate email format
-        if (!isValidEmail(partnerEmail)) {
-          return res.status(400).json({ code: 'INVALID_EMAIL' })
-        }
-
-        if (partnerEmail === email) {
-          return res.status(400).json({ code: 'CANNOT_SELF_PARTNER' })
-        }
-
-        // Generate magic link token for partner
-        const partnerToken = generateMagicLinkToken()
-
-        const newRegistration = {
-          id: generateRegistrationId(),
-          tournament_id: tournamentId,
-          player_id: playerId,
-          partner_email: partnerEmail,  // Not yet a player
-          status: 'pending_partner_signup'
-        }
-
-        await playerRepo.createRegistration(newRegistration)
-
-        // Send signup link to partner
-        await emailQueue.enqueue({
-          to: partnerEmail,
-          template: 'partner_invite',
-          data: {
-            inviterName: playerName,
-            tournamentName: tournament.name,
-            signupLink: `${process.env.FRONTEND_URL}/signup?token=${partnerToken}&partner_reg=${newRegistration.id}`,
-            expiresIn: 7 * 24 * 60 * 60  // 7 days
-          }
-        })
-      }
-
-      return res.status(201).json({
-        message: 'Registration created, waiting for partner',
-        status: 'pending_partner_confirm'
-      })
-
-    } else {
-      // Singles tournament - existing logic
-      // ... create single registration ...
-    }
-
-  } catch (err) {
-    next(err)
+function validatePartnerSelection(partnerSelection: any, email: string): { valid: boolean; error?: string } {
+  if (!partnerSelection) {
+    return { valid: false, error: 'Partner selection required for doubles tournament' }
   }
-})
+
+  if (!['select', 'invite'].includes(partnerSelection.type)) {
+    return { valid: false, error: 'Invalid partner selection type' }
+  }
+
+  if (partnerSelection.type === 'select') {
+    if (!partnerSelection.value || typeof partnerSelection.value !== 'string') {
+      return { valid: false, error: 'Partner ID required' }
+    }
+  } else if (partnerSelection.type === 'invite') {
+    if (!isValidEmail(partnerSelection.value)) {
+      return { valid: false, error: 'Invalid email format' }
+    }
+    if (partnerSelection.value === email) {
+      return { valid: false, error: 'Cannot partner with yourself' }
+    }
+  }
+
+  return { valid: true }
+}
 ```
 
 **Acceptance Criteria:**
-- ✅ Accepts partnerSelection with type and value
-- ✅ Validates partner exists (for select)
-- ✅ Validates email format (for invite)
+- ✅ Validates partnerSelection parameter exists
+- ✅ Validates type is 'select' or 'invite'
+- ✅ Validates partnerId for select case
+- ✅ Validates email for invite case
 - ✅ Prevents self-pairing
-- ✅ Creates mirror registrations for both players
-- ✅ Sends confirmation email to selected partner
-- ✅ Sends signup link to invited partner
-- ✅ Returns pending status
+- ✅ Returns validation errors with messages
+
+---
+
+### Task 2.5.2b: Create Dual Partner Registrations
+
+**File:** `packages/api/src/routes/tournaments.ts` (new helper function)
+
+**Implementation:** Create paired registrations in database
+
+```typescript
+async function createPartnershipRegistrations(
+  tournamentId: string,
+  player1Id: string,
+  player2Id: string,
+  partnershipType: 'select' | 'invite'
+): Promise<{ reg1: Registration; reg2: Registration }> {
+  const now = new Date()
+  
+  const reg1 = {
+    id: generateRegistrationId(),
+    tournament_id: tournamentId,
+    player_id: player1Id,
+    partner_id: player2Id,
+    partner_confirmed: partnershipType === 'invite' ? true : false,
+    status: partnershipType === 'invite' ? 'registered' : 'pending_partner_confirm',
+    registered_at: now
+  }
+
+  const reg2 = {
+    id: generateRegistrationId(),
+    tournament_id: tournamentId,
+    player_id: player2Id,
+    partner_id: player1Id,
+    partner_confirmed: false,  // Always false - other player must confirm
+    status: 'pending_partner_confirm',
+    registered_at: now
+  }
+
+  await playerRepo.createRegistration(reg1)
+  await playerRepo.createRegistration(reg2)
+
+  return { reg1, reg2 }
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Create bidirectional registration records
+- ✅ Set correct confirmation status (select vs invite)
+- ✅ Prevent duplicate partnerships
+- ✅ Store registration timestamps
+- ✅ Return both registration records
+
+---
+
+### Task 2.5.2c: Send Partner Notification Emails
+
+**File:** `packages/api/src/routes/tournaments.ts` (new helper function)
+
+**Implementation:** Queue appropriate email for each scenario
+
+```typescript
+async function sendPartnerNotificationEmail(
+  scenario: 'select' | 'invite',
+  partner: { id: string; email: string; name: string },
+  inviter: { name: string },
+  tournament: { name: string },
+  registrationId: string
+): Promise<void> {
+  if (scenario === 'select') {
+    // Scenario A: You selected an existing player
+    await emailQueue.enqueue({
+      to: partner.email,
+      template: 'partner_confirmation',
+      data: {
+        partnerName: inviter.name,
+        tournamentName: tournament.name,
+        confirmLink: `${process.env.FRONTEND_URL}/registrations/${registrationId}/confirm`,
+        deadline: addDays(new Date(), 1)
+      }
+    })
+  } else if (scenario === 'invite') {
+    // Scenario B: You invited someone new
+    const partnerToken = generateMagicLinkToken(24 * 7)  // 7-day TTL
+    
+    await emailQueue.enqueue({
+      to: partner.email,
+      template: 'partner_invite',
+      data: {
+        inviterName: inviter.name,
+        tournamentName: tournament.name,
+        signupLink: `${process.env.FRONTEND_URL}/signup?token=${partnerToken}`,
+        deadline: addDays(new Date(), 7)
+      }
+    })
+  }
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Send confirmation email for existing partner
+- ✅ Send signup invite for new partner
+- ✅ Include correct deadline
+- ✅ Include confirmation/signup links
+- ✅ Queue emails for async processing
+- ✅ Handle email failures gracefully
 
 ---
 
@@ -1001,13 +1003,100 @@ async function getGroupParticipants(groupId: string): Promise<Participant[]> {
 **Risk Level:** Medium (validates user input)  
 **Rollback:** Revert route changes
 
-### Task 4.1: Score Submission Validation
+### Task 4.1a: Add Match Type Detection
 
-**File:** `packages/api/src/routes/tournaments.ts` (modify score submission endpoint)
+**File:** `packages/api/src/utils/match-utils.ts` (new file)
 
-**Current code location:** Search for `POST /tournaments/:tournamentId/matches/:matchId/score`
+**Implementation:** Helper to detect singles vs doubles matches
 
-**Refactoring:**
+```typescript
+export function getMatchType(match: any): 'singles' | 'doubles' | 'unknown' {
+  // Check if player columns populated (singles)
+  if (match.player1_id !== null && match.player2_id !== null) {
+    return 'singles'
+  }
+  
+  // Check if team columns populated (doubles)
+  if (match.team1_id !== null && match.team2_id !== null) {
+    return 'doubles'
+  }
+  
+  return 'unknown'
+}
+
+export function getMatchParticipantIds(match: any): string[] {
+  const type = getMatchType(match)
+  
+  if (type === 'singles') {
+    return [match.player1_id, match.player2_id]
+  } else if (type === 'doubles') {
+    return [match.team1_id, match.team2_id]
+  }
+  
+  return []
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Detect singles matches (player1_id, player2_id populated)
+- ✅ Detect doubles matches (team1_id, team2_id populated)
+- ✅ Return correct match type
+- ✅ Handle edge cases (no participants)
+- ✅ Exported for reuse across routes
+
+---
+
+### Task 4.1b: Add Doubles Participant Validation
+
+**File:** `packages/api/src/routes/tournaments.ts` (new helper)
+
+**Implementation:** Check if player is in doubles match
+
+```typescript
+async function canPlayerSubmitDoublesScore(
+  match: any,
+  playerId: string,
+  teamRepo: TeamRepository
+): Promise<{ allowed: boolean; error?: string }> {
+  try {
+    const team1 = await teamRepo.findTeamById(match.team1_id)
+    const team2 = await teamRepo.findTeamById(match.team2_id)
+
+    if (!team1 || !team2) {
+      return { allowed: false, error: 'Match teams not found' }
+    }
+
+    // Check if player is on team1
+    if (team1.player1_id === playerId || team1.player2_id === playerId) {
+      return { allowed: true }
+    }
+
+    // Check if player is on team2
+    if (team2.player1_id === playerId || team2.player2_id === playerId) {
+      return { allowed: true }
+    }
+
+    return { allowed: false, error: 'You are not in this match' }
+  } catch (err) {
+    return { allowed: false, error: 'Error validating match participation' }
+  }
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Query both teams from database
+- ✅ Check all 4 team members against playerId
+- ✅ Return true if player in either team
+- ✅ Return false with error message if not
+- ✅ Handle missing team records gracefully
+
+---
+
+### Task 4.1c: Update Score Submission Endpoint
+
+**File:** `packages/api/src/routes/tournaments.ts` (modify existing)
+
+**Implementation:** Use new helpers for validation
 
 ```typescript
 router.post('/:tournamentId/matches/:matchId/score', async (req, res, next) => {
@@ -1018,49 +1107,45 @@ router.post('/:tournamentId/matches/:matchId/score', async (req, res, next) => {
     return res.status(404).json({ code: 'NOT_FOUND' })
   }
   
-  // Determine match type and validate player participation
-  const canSubmit = await canPlayerSubmitScore(match, payload.playerId)
-  
-  if (!canSubmit) {
-    return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not in this match' })
-  }
-  
-  // Rest of logic unchanged
-  const score = parseScore(req.body.score)
-  // ... validation, db update, etc.
-})
+  // Determine match type and validate
+  const matchType = getMatchType(match)
+  let canSubmit = false
+  let errorMessage = 'You are not in this match'
 
-async function canPlayerSubmitScore(match: any, playerId: string): Promise<boolean> {
-  if (match.player1_id) {
-    // Singles match
-    return match.player1_id === playerId || match.player2_id === playerId
-  } else if (match.team1_id) {
-    // Doubles match: check if player is on either team
-    const team1 = await getTeamById(match.team1_id)
-    const team2 = await getTeamById(match.team2_id)
-    
-    return (
-      team1.player1_id === playerId || team1.player2_id === playerId ||
-      team2.player1_id === playerId || team2.player2_id === playerId
-    )
+  if (matchType === 'singles') {
+    canSubmit = match.player1_id === payload.playerId || match.player2_id === payload.playerId
+  } else if (matchType === 'doubles') {
+    const validation = await canPlayerSubmitDoublesScore(match, payload.playerId, teamRepo)
+    canSubmit = validation.allowed
+    errorMessage = validation.error || errorMessage
+  } else {
+    return res.status(400).json({ code: 'INVALID_MATCH', message: 'Match type unknown' })
+  }
+
+  if (!canSubmit) {
+    return res.status(403).json({ code: 'FORBIDDEN', message: errorMessage })
   }
   
-  return false
-}
+  // Rest of score submission logic unchanged
+  const score = parseScore(req.body.score)
+  // ... validation, db update, job queue, etc.
+})
 ```
 
 **Acceptance Criteria:**
-- ✅ Singles matches validate correctly (2 players)
-- ✅ Doubles matches validate correctly (4 players, 2 teams)
-- ✅ Returns 403 if player not in match
-- ✅ Edge case: same player on both teams rejected
+- ✅ Import getMatchType helper
+- ✅ Call getMatchType on match
+- ✅ Use direct check for singles
+- ✅ Use helper for doubles validation
+- ✅ Return appropriate error messages
+- ✅ All existing logic continues unchanged
 
 **Test Cases:**
 ```typescript
-// Singles: player1 can submit
-// Singles: player2 can submit
-// Singles: player3 cannot submit (403)
-// Doubles: team1.player1 can submit
+// Singles: player1 can submit ✅
+// Singles: player2 can submit ✅
+// Singles: player3 cannot submit (403) ✅
+// Doubles: team1.player1 can submit ✅
 // Doubles: team1.player2 can submit
 // Doubles: team2.player1 can submit
 // Doubles: team2.player2 can submit
@@ -1614,118 +1699,257 @@ return (
 
 ---
 
-### Task 5.6: Update Tournament Detail Page
+### Task 5.6a: Add Participant List Section
 
 **File:** `packages/frontend/src/pages/TournamentDetail.tsx`
 
-**New section - Registered Participants:**
-
-Current implementation shows individual players. Update to show:
+**Implementation:** Add participants section to tournament detail
 
 ```typescript
-const tournament = await getTournament(tournamentId)
-const participants = await getParticipants(tournamentId)
-const isSingles = tournament.matchFormat === 'singles'
-const isDoubles = tournament.matchFormat === 'doubles'
+const TournamentDetail = () => {
+  const [tournament, setTournament] = useState<Tournament | null>(null)
+  const [participants, setParticipants] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-return (
-  <div className="tournament-detail">
-    {/* ... existing sections ... */}
-    
-    <section className="participants">
-      <h2>
-        Registered {isSingles ? 'Players' : 'Teams'} ({participants.length}/{tournament.maxPlayers})
-      </h2>
+  useEffect(() => {
+    loadTournamentAndParticipants()
+  }, [tournamentId])
+
+  const loadTournamentAndParticipants = async () => {
+    const t = await getTournament(tournamentId)
+    const p = await getParticipants(tournamentId)
+    setTournament(t)
+    setParticipants(p)
+    setLoading(false)
+  }
+
+  if (loading) return <div>Loading...</div>
+
+  return (
+    <div className="tournament-detail">
+      {/* ... existing sections (status, deadline, etc.) ... */}
       
-      {isSingles ? (
-        <div className="player-list">
-          {participants.map(p => (
-            <div key={p.id} className="participant-item">
-              <div className="name">{p.name}</div>
-              <div className="email">{p.email}</div>
-              <div className="status">{p.status}</div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="team-list">
-          {participants.map(team => (
-            <div key={team.id} className="participant-item team-item">
-              <div className="team-info">
-                <div className="team-name">
-                  {team.player1Name} & {team.player2Name}
-                </div>
-                <div className="team-players">
-                  <div className="player">
-                    <span>{team.player1Name}</span>
-                    <span className="email">{team.player1Email}</span>
-                    <span className={`confirmation ${team.player1Confirmed ? 'confirmed' : 'pending'}`}>
-                      {team.player1Confirmed ? '✓' : 'Pending'}
-                    </span>
-                  </div>
-                  <div className="player">
-                    <span>{team.player2Name}</span>
-                    <span className="email">{team.player2Email}</span>
-                    <span className={`confirmation ${team.player2Confirmed ? 'confirmed' : 'pending'}`}>
-                      {team.player2Confirmed ? '✓' : 'Pending'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="status">{team.status}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  </div>
-)
+      <section className="participants-section">
+        <h2>
+          Registered {tournament.matchFormat === 'doubles' ? 'Teams' : 'Players'}
+          <span className="count">
+            {participants.length}/{tournament.maxPlayers}
+          </span>
+        </h2>
+
+        {tournament.matchFormat === 'doubles' ? (
+          <ParticipantListDoubles participants={participants} />
+        ) : (
+          <ParticipantListSingles participants={participants} />
+        )}
+      </section>
+    </div>
+  )
+}
 ```
 
-**Styling Additions:**
-```css
-.team-item .team-info {
-  padding: 12px;
-  border-left: 4px solid #0ea5e9;
+**Acceptance Criteria:**
+- ✅ Fetch tournament and participants on mount
+- ✅ Show loading state while fetching
+- ✅ Display correct participant count
+- ✅ Show "Players" vs "Teams" based on format
+- ✅ Route to correct component based on format
+
+---
+
+### Task 5.6b: Create Team Participant Component
+
+**File:** `packages/frontend/src/components/ParticipantListDoubles.tsx` (new file)
+
+**Implementation:** Display team registrations with confirmation
+
+```typescript
+export function ParticipantListDoubles({ participants }: { participants: any[] }) {
+  return (
+    <div className="team-list">
+      {participants.map(team => (
+        <div key={team.id} className="team-item">
+          <div className="team-header">
+            <h3 className="team-name">
+              {team.player1Name} & {team.player2Name}
+            </h3>
+            <span className={`status status-${team.status}`}>
+              {getStatusLabel(team.status)}
+            </span>
+          </div>
+
+          <div className="team-members">
+            <MemberRow
+              name={team.player1Name}
+              email={team.player1Email}
+              confirmed={team.player1Confirmed}
+            />
+            <MemberRow
+              name={team.player2Name}
+              email={team.player2Email}
+              confirmed={team.player2Confirmed}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
-.team-item .player {
+function MemberRow({
+  name,
+  email,
+  confirmed
+}: {
+  name: string
+  email: string
+  confirmed: boolean
+}) {
+  return (
+    <div className="member-row">
+      <div>
+        <div className="member-name">{name}</div>
+        <div className="member-email">{email}</div>
+      </div>
+      <span className={`confirmation-badge ${confirmed ? 'confirmed' : 'pending'}`}>
+        {confirmed ? '✓ Confirmed' : '⏳ Pending'}
+      </span>
+    </div>
+  )
+}
+```
+
+**Styling:**
+```css
+.team-item {
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #0ea5e9;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.team-header {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.team-name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin: 0;
+  color: #1f2937;
+}
+
+.team-members {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f9fafb;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.member-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-size: 0.875rem;
 }
 
-.team-item .player .email {
-  color: #666;
+.member-name {
+  font-weight: 500;
+  color: #374151;
+}
+
+.member-email {
   font-size: 0.75rem;
+  color: #9ca3af;
 }
 
-.confirmation {
-  font-weight: 600;
-  padding: 2px 6px;
+.confirmation-badge {
+  padding: 2px 8px;
   border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
-.confirmation.confirmed {
+.confirmation-badge.confirmed {
   background-color: #dcfce7;
   color: #166534;
 }
 
-.confirmation.pending {
+.confirmation-badge.pending {
   background-color: #fef3c7;
   color: #92400e;
 }
 ```
 
 **Acceptance Criteria:**
-- ✅ Singles shows player list with names, emails, status
-- ✅ Doubles shows teams with:
-  - Team name ("Player1 & Player2")
-  - Individual player info (name, email)
-  - Confirmation status per player
-- ✅ Count shows "Players" vs "Teams" correctly
-- ✅ Clear visual grouping of team members
+- ✅ Display team name from both players
+- ✅ Show both players in team
+- ✅ Display confirmation status per player
+- ✅ Show team registration status
+- ✅ Styling matches design system
+- ✅ Mobile responsive
+
+---
+
+### Task 5.6c: Create Singles Participant Component
+
+**File:** `packages/frontend/src/components/ParticipantListSingles.tsx` (new file)
+
+**Implementation:** Display single player registrations
+
+```typescript
+export function ParticipantListSingles({ participants }: { participants: any[] }) {
+  return (
+    <div className="player-list">
+      {participants.map(player => (
+        <div key={player.id} className="player-item">
+          <div className="player-info">
+            <div className="player-name">{player.name}</div>
+            <div className="player-email">{player.email}</div>
+          </div>
+          <span className={`status status-${player.status}`}>
+            {getStatusLabel(player.status)}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+**Styling:**
+```css
+.player-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.player-name {
+  font-weight: 500;
+  color: #374151;
+}
+
+.player-email {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Display player name and email
+- ✅ Show registration status
+- ✅ Reuse existing button/badge styles
 - ✅ Mobile responsive
 
 ---
@@ -1797,14 +2021,271 @@ return (
 
 ---
 
-### Task 5.8: Partner Registration & Confirmation Pages (Doubles-Specific)
+### Task 5.8a: Create Partner Selection UI
+
+**File:** `packages/frontend/src/components/PartnerSelection.tsx` (new file)
+
+**Implementation:** Radio buttons and conditional rendering
+
+```typescript
+interface PartnerSelectionProps {
+  partnerOption: 'select' | 'invite'
+  onOptionChange: (option: 'select' | 'invite') => void
+}
+
+export function PartnerSelection({ partnerOption, onOptionChange }: PartnerSelectionProps) {
+  return (
+    <div className="partner-selection">
+      <fieldset>
+        <legend>How do you want to find your partner?</legend>
+
+        <div className="radio-option">
+          <label>
+            <input
+              type="radio"
+              value="select"
+              checked={partnerOption === 'select'}
+              onChange={e => onOptionChange(e.target.value as 'select')}
+            />
+            <span>Select from registered players</span>
+            <small>Choose a player already registered for this tournament</small>
+          </label>
+        </div>
+
+        <div className="radio-option">
+          <label>
+            <input
+              type="radio"
+              value="invite"
+              checked={partnerOption === 'invite'}
+              onChange={e => onOptionChange(e.target.value as 'invite')}
+            />
+            <span>Invite by email</span>
+            <small>Invite someone new to join as your partner</small>
+          </label>
+        </div>
+      </fieldset>
+    </div>
+  )
+}
+```
+
+**Styling:**
+```css
+.partner-selection fieldset {
+  border: none;
+  padding: 0;
+}
+
+.partner-selection legend {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.radio-option {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.radio-option input[type="radio"] {
+  margin-right: 8px;
+}
+
+.radio-option span {
+  font-weight: 500;
+  display: block;
+}
+
+.radio-option small {
+  display: block;
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Radio buttons for both options
+- ✅ Clear labels and descriptions
+- ✅ Conditional rendering works correctly
+- ✅ Accessibility (fieldset, legend)
+- ✅ Mobile responsive
+
+---
+
+### Task 5.8b: Implement Partner Dropdown
+
+**File:** `packages/frontend/src/components/PartnerDropdown.tsx` (new file)
+
+**Implementation:** Fetch and display available partners
+
+```typescript
+interface PartnerDropdownProps {
+  tournamentId: string
+  value: string
+  onChange: (partnerId: string) => void
+}
+
+export function PartnerDropdown({ tournamentId, value, onChange }: PartnerDropdownProps) {
+  const [partners, setPartners] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchAvailablePartners()
+  }, [tournamentId])
+
+  const fetchAvailablePartners = async () => {
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}/available-partners`)
+      const data = await response.json()
+      setPartners(data.partners)
+    } catch (err) {
+      console.error('Failed to load partners', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) return <div className="loading">Loading partners...</div>
+
+  if (partners.length === 0) {
+    return (
+      <div className="no-partners">
+        No other players available to team up. Try inviting someone instead.
+      </div>
+    )
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="partner-dropdown"
+    >
+      <option value="">-- Select a partner --</option>
+      {partners.map(partner => (
+        <option key={partner.id} value={partner.id}>
+          {partner.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Fetch available partners on mount
+- ✅ Show loading state
+- ✅ Display partners in dropdown
+- ✅ Handle empty state
+- ✅ Pass selected value to parent
+
+---
+
+### Task 5.8c: Implement Partner Invite Input
+
+**File:** `packages/frontend/src/components/PartnerInviteInput.tsx` (new file)
+
+**Implementation:** Email input with validation
+
+```typescript
+interface PartnerInviteInputProps {
+  value: string
+  onChange: (email: string) => void
+  onBlur?: () => void
+  error?: string
+}
+
+export function PartnerInviteInput({
+  value,
+  onChange,
+  onBlur,
+  error
+}: PartnerInviteInputProps) {
+  const [touched, setTouched] = useState(false)
+
+  const handleBlur = () => {
+    setTouched(true)
+    onBlur?.()
+  }
+
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+  const showError = touched && value && !isValidEmail
+
+  return (
+    <div className="invite-input-group">
+      <input
+        type="email"
+        placeholder="partner@example.com"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onBlur={handleBlur}
+        className={`partner-email ${showError ? 'error' : ''}`}
+      />
+      {showError && (
+        <span className="error-message">Please enter a valid email</span>
+      )}
+      {error && (
+        <span className="error-message">{error}</span>
+      )}
+      <small className="helper-text">
+        They'll receive an email invitation and create their account
+      </small>
+    </div>
+  )
+}
+```
+
+**Styling:**
+```css
+.invite-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.partner-email {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.partner-email.error {
+  border-color: #ef4444;
+  background-color: #fef2f2;
+}
+
+.error-message {
+  color: #ef4444;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.helper-text {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Email input with placeholder
+- ✅ Real-time validation
+- ✅ Show error only after blur
+- ✅ Display helper text
+- ✅ Pass value to parent
+
+---
+
+### Task 5.8d: Handle Form Submission
 
 **File:** `packages/frontend/src/pages/TournamentBrowse.tsx` (modify registration section)
 
-**Updated Registration Section for Doubles:**
+**Implementation:** Wire up partner selection to form
 
 ```typescript
-// In tournament detail page, modify registration section
 const isSingles = tournament.matchFormat === 'singles'
 const isDoubles = tournament.matchFormat === 'doubles'
 
@@ -1818,81 +2299,117 @@ return (
   </section>
 )
 
-function DoublesRegistration({ tournament }) {
+function DoublesRegistration({ tournament }: { tournament: Tournament }) {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
-  const [partnerOption, setPartnerOption] = useState('select') // 'select' | 'invite'
+  const [partnerOption, setPartnerOption] = useState<'select' | 'invite'>('select')
   const [selectedPartnerId, setSelectedPartnerId] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
-  const [registeredPlayers, setRegisteredPlayers] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    // Fetch players already registered (not on teams)
-    fetchAvailablePartners(tournament.id)
-  }, [tournament.id])
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+
+    try {
+      const partnerSelection =
+        partnerOption === 'select'
+          ? { type: 'select', value: selectedPartnerId }
+          : { type: 'invite', value: inviteEmail }
+
+      const response = await fetch(
+        `/api/tournaments/${tournament.id}/register`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            name,
+            partnerSelection
+          })
+        }
+      )
+
+      if (response.ok) {
+        // Show success message
+        // Redirect to confirmation or standings
+      } else {
+        const data = await response.json()
+        setError(data.message)
+      }
+    } catch (err) {
+      setError('Failed to register. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
-    <form onSubmit={handleRegister}>
+    <form onSubmit={handleSubmit}>
       <h3>Register as a Team</h3>
-      
+
+      {error && <div className="error-banner">{error}</div>}
+
       <div className="form-group">
-        <label>Your Email</label>
-        <input type="email" value={email} onChange={e => setEmail(e.target.value)} />
+        <label htmlFor="email">Your Email</label>
+        <input
+          id="email"
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          required
+        />
       </div>
 
       <div className="form-group">
-        <label>Your Name</label>
-        <input type="text" value={name} onChange={e => setName(e.target.value)} />
+        <label htmlFor="name">Your Name</label>
+        <input
+          id="name"
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          required
+        />
       </div>
 
       <div className="form-group">
         <label>Partner Selection</label>
-        
-        <div className="radio-group">
-          <label>
-            <input type="radio" value="select" checked={partnerOption === 'select'} 
-                   onChange={e => setPartnerOption(e.target.value)} />
-            Select from registered players
-          </label>
-        </div>
+        <PartnerSelection partnerOption={partnerOption} onOptionChange={setPartnerOption} />
 
         {partnerOption === 'select' && (
-          <select value={selectedPartnerId} onChange={e => setSelectedPartnerId(e.target.value)}>
-            <option value="">-- Choose a partner --</option>
-            {registeredPlayers.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          <PartnerDropdown
+            tournamentId={tournament.id}
+            value={selectedPartnerId}
+            onChange={setSelectedPartnerId}
+          />
         )}
 
-        <div className="radio-group">
-          <label>
-            <input type="radio" value="invite" checked={partnerOption === 'invite'}
-                   onChange={e => setPartnerOption(e.target.value)} />
-            Invite partner by email
-          </label>
-        </div>
-
         {partnerOption === 'invite' && (
-          <input type="email" placeholder="Partner's email" 
-                 value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+          <PartnerInviteInput
+            value={inviteEmail}
+            onChange={setInviteEmail}
+            error={error}
+          />
         )}
       </div>
 
-      <button type="submit" className="btn-primary">Register as Team</button>
+      <button type="submit" disabled={loading} className="btn-primary">
+        {loading ? 'Registering...' : 'Register as Team'}
+      </button>
     </form>
   )
 }
 ```
 
 **Acceptance Criteria:**
-- ✅ Option A: Select from registered unpartnered players
-- ✅ Option B: Invite new partner by email
-- ✅ Clear radio buttons for both options
-- ✅ Partner dropdown populated with available players
-- ✅ Email input for invitations
-- ✅ Validation of email format
-- ✅ Mobile responsive
+- ✅ Wire together all partner selection components
+- ✅ Build correct payload for API
+- ✅ Handle both partner scenarios
+- ✅ Show error messages
+- ✅ Loading state during submission
+- ✅ Success handling
 
 ---
 
@@ -2419,29 +2936,43 @@ log.error('doubles.error', {
 | Phase 2: Core Logic | 2 days | Design |
 | Phase 2.5: Partner Registration | 1.5 days | Design |
 | Phase 3: Standings | 1 day | Design |
-| Phase 4: API Routes | 1.5 days | Design |
-| Phase 5: Frontend | 3.5 days | Design |
+| Phase 4: API Routes | 1.75 days | Design |
+| Phase 5: Frontend | 4.2 days | Design |
 | Phase 6: Testing | 2 days | Design |
 | Phase 7: Rollout | 1 day | Design |
-| **Total** | **~13.5 days** | **Ready for implementation** |
+| **Total** | **~14.45 days** | **Ready for implementation** |
 
-**Phase 2.5 New (1.5 days):**
+**Phase 2.5 (1.5 days):**
 - Task 2.5.1: Partner Confirmation Endpoint (0.5 days)
-- Task 2.5.2: Partner Selection in Registration (0.5 days)
+- Task 2.5.2a: Partner Selection Validation (0.25 days)
+- Task 2.5.2b: Create Dual Registrations (0.25 days)
+- Task 2.5.2c: Send Partner Emails (0.25 days)
 - Task 2.5.3: Partner Repository Methods (0.2 days)
 - Task 2.5.4: Email Templates (0.2 days)
-- Task 2.5.5: Partner Confirmation Tests (0.1 days)
+- Task 2.5.5: Partner Tests (0.1 days)
 
-**Phase 5 Expanded (3.5 days):**
+**Phase 4 (1.75 days):**
+- Task 4.1a: Match Type Detection (0.2 days)
+- Task 4.1b: Doubles Validation Helper (0.25 days)
+- Task 4.1c: Score Submission Endpoint (0.25 days)
+- Task 4.2: Match Details Endpoint (0.5 days)
+- Task 4.3: Standings Endpoint (0.5 days)
+
+**Phase 5 (4.2 days):**
 - Task 5.1: Standings Table (0.5 days)
 - Task 5.2: Match Cards (0.5 days)
 - Task 5.3: Match Detail Page (0.5 days)
 - Task 5.4: Bracket View (0.3 days)
 - Task 5.5: Tournament Browse (0.3 days)
-- Task 5.6: Tournament Detail (0.3 days)
-- Task 5.7: Score Form Labels (0.1 days)
-- Task 5.8: Partner Registration Form (0.5 days)
-- Task 5.9: Partner Confirmation Page (0.5 days)
+- Task 5.6a: Participant Section (0.25 days)
+- Task 5.6b: Team Component (0.25 days)
+- Task 5.6c: Singles Component (0.1 days)
+- Task 5.7: Score Form (0.1 days)
+- Task 5.8a: Partner Selection UI (0.2 days)
+- Task 5.8b: Partner Dropdown (0.2 days)
+- Task 5.8c: Partner Invite (0.2 days)
+- Task 5.8d: Form Submission (0.2 days)
+- Task 5.9: Confirmation Page (0.5 days)
 
 ---
 
