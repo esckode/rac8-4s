@@ -17,6 +17,40 @@ This document outlines the implementation of doubles tournament support in RAC8-
 
 ---
 
+## Project-Wide Requirements
+
+**All tasks across all phases must adhere to these requirements:**
+
+1. **Minimum 85% Branch Coverage (REQUIRED)**
+   - Every code change must maintain or improve overall branch coverage
+   - Coverage cannot drop below 85% at any point during implementation
+   - Each phase is responsible for verifying coverage does not regress
+   - Task verification includes: `npm test -- --coverage`
+
+2. **All Tests Must Pass (REQUIRED)**
+   - Existing test suite: 2,126+ tests must pass 100%
+   - New tests added in each phase must pass before proceeding
+   - No code merge without green test suite
+
+3. **TDD Compliance (REQUIRED)**
+   - Each feature phase (2, 2.5, 3, 4, 5) must follow RED-GREEN-REFACTOR cycle
+   - RED tests written first, GREEN implementation second, REFACTOR third
+   - No implementation without failing tests first
+
+4. **Logging Standards (REQUIRED)**
+   - All state-changing operations must log per CLAUDE.md standards
+   - Module-level loggers: `const log = getLogger('module-name')`
+   - Event naming: `noun.verb` in past tense
+   - Include actor identity (playerId, tournamentId, etc.)
+   - Never log sensitive data (tokens, passwords, full bodies)
+
+5. **Backwards Compatibility (REQUIRED)**
+   - Zero changes to singles tournament logic
+   - All existing APIs must remain compatible
+   - Database migrations must be idempotent and reversible
+
+---
+
 ## Architecture Overview
 
 ### Current State (Singles Only)
@@ -419,6 +453,8 @@ describe('Doubles: Round-Robin Match Generation (RED)', () => {
 ---
 
 ### Phase 2.GREEN: Implement to Pass Tests
+
+**Coverage Checkpoint:** Before proceeding to Phase 2.REFACTOR, verify branch coverage ≥ 85%
 
 ### Task 2.1: Create Team Creation Helper
 
@@ -846,6 +882,8 @@ describe('Doubles: Partner Selection & Registration (RED)', () => {
 ---
 
 ### Phase 2.5.GREEN: Implement Partner Confirmation & Registration
+
+**Coverage Checkpoint:** Before proceeding to Phase 2.5.REFACTOR, verify branch coverage ≥ 85%
 
 ### Task 2.5.1: Add Partner Confirmation Endpoint
 
@@ -1330,6 +1368,8 @@ describe('Standings Calculation (RED - Generic Participants)', () => {
 
 ### Phase 3.GREEN: Implement Generic Standings
 
+**Coverage Checkpoint:** Before proceeding to Phase 3.REFACTOR, verify branch coverage ≥ 85%
+
 ### Task 3.1: Refactor calculateStandings() for Generic Participants
 
 **File:** `packages/core-logic/src/standings.ts` (modify existing)
@@ -1793,6 +1833,8 @@ describe('Doubles: API Endpoints (RED)', () => {
 ---
 
 ### Phase 4.GREEN: Implement API Routes
+
+**Coverage Checkpoint:** Before proceeding to Phase 4.REFACTOR, verify branch coverage ≥ 85%
 
 ### Task 4.1a: Add Match Type Detection
 
@@ -2370,6 +2412,8 @@ describe('Partner Selection Components (RED)', () => {
 ---
 
 ### Phase 5.GREEN: Implement Components
+
+**Coverage Checkpoint:** Before proceeding to Phase 5.REFACTOR, verify branch coverage ≥ 85%
 
 ### Task 5.1: Update Standings Table Component
 
