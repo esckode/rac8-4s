@@ -272,7 +272,7 @@ All baseline E2E tests passing as of commit `fc30166`.
 
 ```bash
 # Database
-- In-memory SQLite (:memory:) created fresh for each test
+- PostgreSQL database created fresh for each test
 - Tables created via schema (group_matches, group_memberships, etc.)
 - Foreign key constraints enforced
 

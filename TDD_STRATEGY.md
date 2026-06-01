@@ -948,7 +948,7 @@ Result: ~30 tests, 90% coverage for async logic, ~15 hours work
 |------|---------|-------|
 | **Jest** | Unit + Integration test runner | npm install --save-dev jest |
 | **Supertest** | HTTP assertion library (API testing) | npm install --save-dev supertest |
-| **SQLite (for tests)** | In-memory test database | npm install --save-dev sqlite3 |
+| **PostgreSQL** | Test database | npm install --save-dev pg |
 | **jest-mock-extended** | Mock complex objects | npm install --save-dev jest-mock-extended |
 | **fast-check** | Property-based testing | npm install --save-dev fast-check |
 | **nock** | Mock HTTP requests | npm install --save-dev nock |

@@ -442,7 +442,7 @@ Every authenticated response re-issues the cookie (resets 30-day window). A user
 
 **Flow:**
 1. App mounts → `AuthContext` calls `GET /auth/me`
-2. Middleware reads `req.cookies.session` and validates against `SQLiteTokenStore`
+2. Middleware reads `req.cookies.session` and validates against PostgreSQL
 3. If valid → returns `{ id, email, role, name }` → context stores it
 4. If invalid (401) → context sets `isAuthenticated: false` → redirects to `/login`
 5. Every response re-issues the session cookie (rolling window)
