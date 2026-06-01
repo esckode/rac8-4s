@@ -1341,6 +1341,555 @@ pg_basebackup -D /mnt/backup
 
 ---
 
+## UX Design Flows
+
+### User Journey: Authentication Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    AUTHENTICATION USER JOURNEY                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+ENTRY POINT: Landing Page
+  ↓
+┌─ [Sign In] → /login
+│   ├─ Email input
+│   ├─ Password input
+│   ├─ [Sign In] button
+│   ├─ "Forgot password?" link → /forgot-password
+│   └─ "Need an account?" link → /signup
+│
+├─ HAPPY PATH: Valid credentials
+│   ├─ Email found in database ✓
+│   ├─ Password hash matches ✓
+│   ├─ JWT token issued ✓
+│   ├─ Session cookie set (httpOnly) ✓
+│   └─ Redirect → /browse (authenticated)
+│
+├─ ERROR PATHS:
+│   ├─ Email not found → 401 "Invalid email or password"
+│   ├─ Password incorrect → 401 "Invalid email or password"
+│   ├─ Account locked → 429 "Too many attempts (5 remaining)"
+│   └─ Rate limit exceeded → 429 "Try again in 15 minutes"
+│
+└─ OFFLINE: Queue submission, retry on reconnect
+   └─ Show "Offline - will retry" banner
+
+┌─ [Sign Up] → /signup
+│   ├─ Email input
+│   ├─ Name input (min 2 chars)
+│   ├─ Password input (min 6 chars)
+│   ├─ Confirm password input
+│   ├─ Real-time validation on blur
+│   └─ [Create Account] button
+│
+├─ HAPPY PATH:
+│   ├─ Email not already registered ✓
+│   ├─ Password >= 6 characters ✓
+│   ├─ Passwords match ✓
+│   ├─ Account created (hashed password) ✓
+│   ├─ JWT token issued ✓
+│   └─ Redirect → /browse (authenticated, welcome toast)
+│
+├─ ERROR PATHS:
+│   ├─ Email already in use → 409 "Email already in use"
+│   ├─ Password too short → 400 "Password must be at least 6 characters"
+│   └─ Passwords don't match → Real-time error below field
+│
+└─ MAGIC LINK SIGNUP (/signup?token=xxx)
+   ├─ Email pre-filled from token
+   ├─ Name & password fields
+   ├─ Token validated server-side
+   ├─ Account created + registered for tournament
+   └─ Redirect → tournament view
+
+┌─ [Forgot Password] → /forgot-password
+│   ├─ Email input
+│   └─ [Send Reset Code] button
+│
+├─ HAPPY PATH:
+│   ├─ 6-digit code generated ✓
+│   ├─ Code stored (15-min expiration) ✓
+│   ├─ Email sent (mocked/real adapter) ✓
+│   ├─ Screen shows: "Check your email for reset code"
+│   └─ Show [Enter Code] button → /reset-password
+│
+├─ ERROR PATH (always returns success for security):
+│   └─ Email not found → Still shows "Check your email"
+│
+└─ RESET PASSWORD → /reset-password
+   ├─ Email input
+   ├─ 6-digit code input (auto-format: "12 34 56")
+   ├─ New password input
+   ├─ Confirm password input
+   └─ [Update Password] button
+   │
+   ├─ HAPPY PATH:
+   │   ├─ Email found ✓
+   │   ├─ Code valid + not expired ✓
+   │   ├─ Code not already used ✓
+   │   ├─ Password >= 6 characters ✓
+   │   ├─ Passwords match ✓
+   │   ├─ Password hash updated ✓
+   │   ├─ Code marked as used ✓
+   │   └─ Redirect → /login (show success message)
+   │
+   └─ ERROR PATHS:
+       ├─ Code invalid → 401 "Invalid reset code"
+       ├─ Code expired → 401 "Reset code expired"
+       ├─ Too many attempts (5) → 429 "Try again later"
+       └─ [Request new code] → /forgot-password
+```
+
+### User Journey: Tournament Discovery & Registration
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│              TOURNAMENT DISCOVERY & REGISTRATION FLOW                │
+└─────────────────────────────────────────────────────────────────────┘
+
+START: /browse (unauthenticated or authenticated)
+  ↓
+[Tournament List] (paginated, 20 per page)
+├─ Tournament card
+│   ├─ Tournament name
+│   ├─ Sport (pickleball/tennis), format (singles/doubles)
+│   ├─ Max players, registered count
+│   ├─ Status badge (draft, open, closed, active, complete)
+│   ├─ Registration deadline
+│   └─ [View Details] → /tournament/:id/browse
+│
+├─ Prefetch on hover: Load tournament data before click
+├─ Pagination: [← Prev] [1] [2] [3] [Next →]
+└─ Filter/sort options (sport, deadline, size)
+
+TOURNAMENT DETAILS PAGE: /tournament/:id/browse
+┌──────────────────────────────────────────────────┐
+│  Tournament Name                            [←Back]│
+│  Sport: Pickleball | Format: Doubles              │
+│  Status: Registration Open                        │
+│  Deadline: June 15, 2026 at 5:00 PM              │
+│  Registered: 12/16 players                        │
+├──────────────────────────────────────────────────┤
+│  REGISTRATION SECTION (for unauthenticated users) │
+│                                                   │
+│  [Already have an account? Sign In]               │
+│                                                   │
+│  OR register with email:                          │
+│  Email: [___________________]                     │
+│  Name:  [___________________]                     │
+│  [Register for Tournament]                        │
+├──────────────────────────────────────────────────┤
+│  Details | Rules | Venue | Contact               │
+└──────────────────────────────────────────────────┘
+
+REGISTRATION FLOW:
+├─ User enters: email, name
+├─ Backend:
+│   ├─ Check deadline not passed (409 if passed)
+│   ├─ Check email not registered (409 if exists)
+│   ├─ Generate magic link token (24-hour TTL)
+│   ├─ Send email with link
+│   └─ Return token to frontend
+│
+├─ User receives email
+│   └─ Email contains: "Complete your registration: [LINK]"
+│       └─ Link: /signup?token=abc123def456
+│
+└─ User clicks link → /signup
+   ├─ Email pre-filled
+   ├─ Name, password, confirm password
+   ├─ [Create Account & Register]
+   └─ Success → Redirect to /tournament/:id/standings
+      (logged in, registered for tournament)
+```
+
+### User Journey: Tournament Participation
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│           TOURNAMENT PARTICIPATION & SCORE SUBMISSION FLOW           │
+└─────────────────────────────────────────────────────────────────────┘
+
+TOURNAMENT DETAIL PAGE (Authenticated Player)
+/tournament/:id/standings
+┌────────────────────────────────────────────────────────────────────┐
+│  Spring Open 2026                                     [⋯] [👤]      │
+├────────────────────────────────────────────────────────────────────┤
+│  Status: Group Stage Active                                        │
+│  Your Group: Group 1 (4 players)                                   │
+│  Deadline: June 22, 2026 at 5:00 PM (3 days left)                  │
+├────────────────────────────────────────────────────────────────────┤
+│  STANDINGS                                                          │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │ Rank | Name          | Wins | Losses | Sets W | Sets L | +/- │
+│  ├─────────────────────────────────────────────────────────────┤  │
+│  │  1   | Alice Davis   │  2   │  0     │  4    │  1    │ +3  │  │
+│  │  2   | Bob Miller    │  1   │  1     │  3    │  2    │ +1  │  │
+│  │  3   | Charlie Smith │  1   │  1     │  3    │  3    │  0  │  │
+│  │  4   | Diana Brown   │  0   │  2     │  1    │  4    │ -3  │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│  ⬆ Virtual scrolling for 500+ row tables                           │
+│  Real-time updates via SSE (scores update automatically)           │
+├────────────────────────────────────────────────────────────────────┤
+│  BOTTOM NAVIGATION (Mobile)                                        │
+│  [🏠 Standings] [⚔️ Matches] [🏆 Bracket] [ℹ️ Details]            │
+└────────────────────────────────────────────────────────────────────┘
+
+MATCHES TAB: /tournament/:id/matches
+├─ Your Upcoming Matches
+│   ├─ Match Card #1
+│   │   ├─ vs. Bob Miller
+│   │   ├─ Group 1, Round-Robin
+│   │   ├─ Status: Pending
+│   │   └─ [Submit Score] button
+│   │
+│   ├─ Match Card #2
+│   │   ├─ vs. Charlie Smith
+│   │   ├─ Status: Pending
+│   │   └─ [Submit Score] button
+│   │
+│   ├─ Match Card #3 (Completed)
+│   │   ├─ vs. Diana Brown
+│   │   ├─ Score: You won 2-1
+│   │   ├─ Status: Completed
+│   │   └─ [Edit Score] button (organizer only)
+│   │
+│   └─ [View All Matches in Tournament]
+
+SCORE SUBMISSION MODAL
+┌─────────────────────────────────────┐
+│  Submit Score                   [X] │
+├─────────────────────────────────────┤
+│                                     │
+│  You vs. Bob Miller                 │
+│                                     │
+│  Score Format: "X-Y"                │
+│  Example: "2-1" (you won 2, he 1)   │
+│                                     │
+│  Your Sets: [2▼]                    │
+│  Their Sets: [1▼]                   │
+│                                     │
+│  [Submit] [Cancel]                  │
+│                                     │
+│  Validation (real-time):            │
+│  ✓ Score entered                    │
+│  ✓ Winner determined                │
+│  ✓ Deadline not passed              │
+└─────────────────────────────────────┘
+
+SUBMISSION FLOW:
+├─ HAPPY PATH:
+│  ├─ Score validates (format, range, not tied)
+│  ├─ POST /tournaments/:id/matches/:matchId/score
+│  ├─ Backend: 202 Accepted (async processing)
+│  ├─ Frontend: Show "Score submitted" toast
+│  ├─ Match status updates to "Completed"
+│  ├─ Standings job triggered (async)
+│  └─ SSE event received: standings.updated
+│      └─ Standings table re-renders (real-time)
+│
+├─ OFFLINE SCENARIO:
+│  ├─ No network connection
+│  ├─ Service Worker intercepts request
+│  ├─ Request queued in IndexedDB
+│  ├─ Show "Offline - will retry" banner
+│  └─ Auto-retry when online (with exponential backoff)
+│      ├─ Retry #1: 1s delay
+│      ├─ Retry #2: 2s delay
+│      ├─ Retry #3: 4s delay
+│      └─ Show "Score synced" toast on success
+│
+└─ ERROR SCENARIOS:
+   ├─ Score already submitted: 409 "Match already scored"
+   ├─ Deadline passed: 409 "Scoring deadline exceeded"
+   ├─ Not a participant: 403 "You're not in this match"
+   └─ Invalid format: 400 "Invalid score format"
+
+BRACKET TAB: /tournament/:id/bracket (lazy-loaded)
+├─ Status: Group Stage Active (bracket not yet generated)
+├─ [Bracket will appear when group stage completes]
+│
+└─ Once published:
+   ├─ BRACKET TREE
+   │  └─ Semifinals
+   │     ├─ (1) Alice vs (4) Diana    [Pending]
+   │     └─ (2) Bob vs (3) Charlie    [Pending]
+   │
+   ├─ Finals
+   │  └─ Winner A vs Winner B         [Pending]
+   │
+   └─ Real-time updates via SSE
+      └─ Match scores and bracket structure update live
+```
+
+### Mobile Layout Flow
+
+```
+┌─────────────────────────────────┐
+│       MOBILE LAYOUT             │
+│  (320px - 640px width)          │
+└─────────────────────────────────┘
+
+Full-Screen Pages (Stack vertically)
+═══════════════════════════════════
+
+[Header with title and menu]
+┌─────────────────────────────────┐
+│ ← Tournament Name         ⋯ 👤   │
+└─────────────────────────────────┘
+
+[Main Content Area - Single Column]
+┌─────────────────────────────────┐
+│                                 │
+│  Tournament Details Card        │
+│  - Scrollable, full width       │
+│  - Padding: 16px left/right     │
+│                                 │
+│  Standings Table (Virtualized)  │
+│  - Horizontal scroll if needed  │
+│  - Rank | Name | Wins | Loss    │
+│  - Touch-friendly row height    │
+│                                 │
+│  Score Submission Card          │
+│  - Full width                   │
+│  - Large tap targets (48px)     │
+│                                 │
+└─────────────────────────────────┘
+
+[Bottom Tab Navigation - Fixed]
+┌─────────────────────────────────┐
+│ 🏠      ⚔️      🏆      ℹ️      │
+│Standings Matches Bracket Details│
+└─────────────────────────────────┘
+
+Tab Interaction:
+├─ Active tab: Highlighted, bold
+├─ Inactive tabs: Grayed out, tappable
+├─ Swiping: Swipe left/right to switch tabs
+└─ No scroll on page (tabs are navigation)
+
+Form Layout (Full Width)
+═══════════════════════════════════
+
+[Sign Up Page Example]
+┌─────────────────────────────────┐
+│  Create Account              [X]│
+├─────────────────────────────────┤
+│                                 │
+│  Email                          │
+│  [_____________________________] │
+│  Invalid email format           │ ← Error (red)
+│                                 │
+│  Name                           │
+│  [_____________________________] │
+│  Min 2 characters               │ ← Helper text
+│                                 │
+│  Password                       │
+│  [_____________________________] │
+│  [👁] Show password             │
+│  Min 6 characters               │
+│                                 │
+│  Confirm Password               │
+│  [_____________________________] │
+│  ✓ Passwords match              │ ← Success (green)
+│                                 │
+│  [Create Account ▶] (full width)│
+│  [Cancel]                       │
+│                                 │
+└─────────────────────────────────┘
+
+Button Sizing:
+├─ Min height: 48px (touch target)
+├─ Padding: 16px vertical, 32px horizontal
+├─ Full width on mobile forms
+└─ Stack vertically (not side-by-side)
+```
+
+### Real-Time Update Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│               REAL-TIME SSE UPDATE FLOW                              │
+└─────────────────────────────────────────────────────────────────────┘
+
+Initialization:
+1. User navigates to /tournament/:id/standings
+2. useSSE(tournamentId) hook runs
+3. Opens EventSource connection: GET /tournaments/:id/events
+4. Subscribes to: standings.updated, bracket.published, match.updated
+
+Score Submission Event:
+┌────────────────────────────────────────────────────────────────────┐
+│                                                                    │
+│ User submits score: "2-1"                                          │
+│   ↓                                                                 │
+│ POST /tournaments/:id/matches/:matchId/score                       │
+│   ↓                                                                 │
+│ Backend: 202 Accepted (async job)                                  │
+│   ├─ Store score in database                                       │
+│   ├─ Enqueue: standings.recalculate (dedup by groupId)            │
+│   └─ Return immediately                                            │
+│   ↓                                                                 │
+│ Job Queue Processing (background):                                 │
+│   ├─ Recalculate standings for group                               │
+│   ├─ Determine rankings with tiebreakers                           │
+│   ├─ Update group_standings table                                  │
+│   └─ Emit SSE event: standings.updated                             │
+│   ↓                                                                 │
+│ BroadcastBus:                                                      │
+│   ├─ Find all SSE connections for tournament                       │
+│   ├─ Send event to each connection:                                │
+│   │  "event: standings.updated\n"                                  │
+│   │  "data: { groupId, standings: [...] }\n\n"                    │
+│   └─ Multiple subscribers receive simultaneously                   │
+│   ↓                                                                 │
+│ Frontend SSE Handler:                                              │
+│   ├─ EventSource onmessage listener triggered                      │
+│   ├─ Parse event: { groupId, standings: [...] }                   │
+│   ├─ Dispatch to standingsStore.update(payload)                   │
+│   └─ Component re-renders with new standings (auto)               │
+│   ↓                                                                 │
+│ UI Update:                                                          │
+│   ├─ Standings table rows animate (highlight changed rows)        │
+│   ├─ Rank positions update                                         │
+│   ├─ Set counts and differential recalculated                      │
+│   └─ User sees live standings (latency ~100ms)                     │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+
+Multi-User Scenario (Real-Time):
+┌────────────────────────────────────────────────────────────────────┐
+│                                                                    │
+│ Time: 2:00 PM                                                      │
+│                                                                    │
+│ Alice: Opens tournament standings                                   │
+│   └─ SSE connection established                                    │
+│                                                                    │
+│ Bob: Opens same tournament                                          │
+│   └─ SSE connection established                                    │
+│                                                                    │
+│ Time: 2:05 PM                                                      │
+│ Charlie: Submits score "2-0"                                        │
+│   └─ Backend triggers standings recalculation                      │
+│   └─ Broadcasts standings.updated event                            │
+│                                                                    │
+│ Result: Both Alice AND Bob receive event immediately               │
+│   ├─ Alice's standings table updates (live)                        │
+│   ├─ Bob's standings table updates (live)                          │
+│   └─ Both see identical standings within 100ms                     │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Error Handling & Recovery Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│               ERROR HANDLING & RECOVERY FLOW                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+Offline Scenario:
+┌────────────────────────────────────┐
+│  User Submits Score                │
+├────────────────────────────────────┤
+│ Network is offline                 │
+│   ↓                                 │
+│ Service Worker intercepts request  │
+│   ├─ Queue request in IndexedDB    │
+│   └─ Return queued response        │
+│   ↓                                 │
+│ Frontend shows banner:              │
+│ "📱 Offline - will retry"           │
+│   ↓                                 │
+│ Browser comes online                │
+│   ↓                                 │
+│ Service Worker detects connection   │
+│   ├─ Retry #1: 1s delay             │
+│   │  └─ If fails, wait 2s           │
+│   │                                 │
+│   ├─ Retry #2: 2s delay             │
+│   │  └─ If fails, wait 4s           │
+│   │                                 │
+│   ├─ Retry #3: 4s delay             │
+│   │  └─ If fails, show persistent   │
+│   │     error with manual retry     │
+│   │                                 │
+│   └─ On success: Show "✓ Synced"   │
+│                                     │
+│ All queued requests processed (FIFO)
+│   └─ User sees success confirmations
+│
+└────────────────────────────────────┘
+
+Network Timeout/Error Scenario:
+┌────────────────────────────────────┐
+│  User Submits Score                │
+├────────────────────────────────────┤
+│ Network request initiated          │
+│   ↓                                 │
+│ Request times out (> 30s)           │
+│   ↓                                 │
+│ Show error banner:                  │
+│ "⚠️ Network error - Retrying..."    │
+│   ↓                                 │
+│ Auto-retry in background:           │
+│ ├─ Retry every 10s for 1 minute    │
+│ ├─ Show cancel button               │
+│ └─ User can close banner            │
+│   ↓                                 │
+│ On success: "✓ Score submitted"     │
+│ On persistent failure:              │
+│ "❌ Could not submit score"         │
+│ [Retry] [Copy to clipboard]         │
+│
+└────────────────────────────────────┘
+
+Validation Error Scenario:
+┌────────────────────────────────────┐
+│  User Submits Score "2-2"           │
+├────────────────────────────────────┤
+│ Frontend validation runs (before API)
+│   ├─ Check format: "X-Y" ✓         │
+│   ├─ Check X != Y ✗                │
+│   └─ Show inline error:            │
+│      "Score cannot be tied"         │
+│                                     │
+│ User fixes: "2-1"                   │
+│   ├─ Error clears immediately      │
+│   └─ [Submit] button enabled       │
+│   ↓                                 │
+│ Submit succeeds                     │
+│
+└────────────────────────────────────┘
+
+Server Error Scenario (429 Rate Limit):
+┌────────────────────────────────────┐
+│  User clicks login 6x (failed)      │
+├────────────────────────────────────┤
+│ Attempts 1-5: Standard error        │
+│   ├─ "Invalid email or password"   │
+│   └─ Show: "5 attempts remaining"  │
+│   ↓                                 │
+│ Attempt 6: Rate limit triggered     │
+│   ├─ Status: 429 Too Many Requests │
+│   ├─ Show banner (red):             │
+│   │  "Too many attempts"            │
+│   │  "Try again in 15 minutes"      │
+│   └─ [Forgot password?] link       │
+│   ↓                                 │
+│ Email field disabled               │
+│ Password field disabled            │
+│ Submit button disabled             │
+│   ↓                                 │
+│ 15 minutes later (or manual reset): │
+│ Fields re-enabled                  │
+│
+└────────────────────────────────────┘
+```
+
+---
+
 ## Completed Milestones
 
 ### Phase 1: Authentication ✅ COMPLETE
