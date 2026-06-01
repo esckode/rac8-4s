@@ -3715,24 +3715,31 @@ npm test
 
 ### Task 6.2: Verify Test Coverage
 
-**Coverage Targets:**
+**Project Requirement:** Minimum 85% branch coverage (hard requirement per project standards)
+
+**Coverage Verification:**
 
 ```bash
 npm test -- --coverage
 ```
 
-**Expected Coverage:**
-- ✅ Core logic (Phase 2-3): 100% coverage
-- ✅ API routes (Phase 4): 95%+ coverage
-- ✅ Frontend components (Phase 5): 90%+ coverage
-- ✅ Overall: 87%+ statement coverage (maintained from current 87.52%)
-- ✅ Overall: 85%+ branch coverage (maintained from current 85.27%)
+**Coverage Targets (Minimum Requirements):**
+- ✅ **Overall: 85%+ branch coverage (REQUIRED - minimum project standard)**
+- ✅ Overall: 87%+ statement coverage (REQUIRED - maintain from current 87.52%)
+- ✅ Core logic (Phase 2-3): 100% coverage (target for critical path)
+- ✅ API routes (Phase 4): 95%+ coverage (target for safety-critical code)
+- ✅ Frontend components (Phase 5): 90%+ coverage (target for user-facing features)
 
 **Acceptance Criteria:**
+- ✅ **Branch coverage ≥ 85% (FAIL if below this threshold)**
+- ✅ Statement coverage ≥ 87% (FAIL if below this threshold)
 - ✅ All new code has coverage
-- ✅ No regression in overall coverage
+- ✅ No regression in overall coverage metrics
 - ✅ Critical paths have 100% coverage
-- ✅ Coverage report generated
+- ✅ Coverage report generated and reviewed
+
+**Failure Condition:**
+If branch coverage falls below 85%, implementation must add additional tests until requirement is met. Do not proceed to Phase 7 without meeting this requirement.
 
 ---
 
@@ -3923,6 +3930,8 @@ log.error('doubles.error', {
 - ✅ Zero changes to singles tournament logic
 - ✅ All existing 2,126 tests passing
 - ✅ 80+ new tests for doubles (15%+ increase)
+- ✅ **Minimum 85% branch coverage (project requirement)**
+- ✅ Target 87%+ statement coverage (from current 87.52%)
 - ✅ Database migrations backwards compatible
 - ✅ Feature flag controls rollout
 - ✅ Code review + QA sign-off
