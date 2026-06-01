@@ -130,25 +130,27 @@ export default function authRouter(deps: AppDependencies) {
       const passwordHash = await hashPassword(password, 10)
 
       // Step 5: Create account
-      const account = await accountRepo.create(email, 'organizer', 'active')
+      const account = await accountRepo.create(email, 'player', 'active')
 
       // Step 5b: Update password hash
       await accountRepo.updatePasswordHash(account.id, passwordHash)
 
       // Step 6: Generate JWT session token
-      const tokenPair = issueOrganizerToken(
+      const sessionToken = issueSessionToken(
         {
           sub: account.id,
           email: account.email,
         },
-        deps.jwtConfig
+        account.role,
+        deps.config.auth.sessionTtlSeconds,
+        deps.jwtConfig.secret
       )
 
       // Step 8: Log success
       log.info('account.created', {
         accountId: account.id,
         email: account.email,
-        role: 'organizer'
+        role: account.role
       })
 
       // Step 9: Return 201 with user and token
@@ -159,7 +161,7 @@ export default function authRouter(deps: AppDependencies) {
           name: name,
           role: account.role
         },
-        token: tokenPair.accessToken
+        token: sessionToken
       })
     } catch (err) {
       next(err)
@@ -218,7 +220,7 @@ export default function authRouter(deps: AppDependencies) {
 
       if (!passwordMatch) {
         return res.status(401).json({
-          code: 'UNAUTHORIZED',
+          code: 'INVALID_CREDENTIALS',
           message: 'Invalid email or password',
         })
       }

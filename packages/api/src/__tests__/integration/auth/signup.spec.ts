@@ -108,7 +108,7 @@ describe('POST /api/auth/signup', () => {
       const decoded = jwt.verify(res.body.token, jwtConfig.secret) as any
       expect(decoded.sub).toBeDefined()
       expect(decoded.email).toBe(email.toLowerCase())
-      expect(decoded.role).toBe('organizer')
+      expect(decoded.role).toBe('player')
       expect(decoded.exp).toBeDefined()
       expect(decoded.iat).toBeDefined()
     })

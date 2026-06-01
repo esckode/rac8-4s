@@ -158,11 +158,11 @@ describe('Complete Authentication Flows', () => {
         .send({ email, name: 'Role User', password })
 
       expect(signupRes.status).toBe(201)
-      expect(signupRes.body.user.role).toBe('organizer')
+      expect(signupRes.body.user.role).toBe('player')
 
-      // Verify database also has organizer role
+      // Verify database also has player role
       const account = await accountRepo.findById(signupRes.body.user.id)
-      expect(account?.role).toBe('organizer')
+      expect(account?.role).toBe('player')
     })
   })
 
@@ -690,8 +690,8 @@ describe('Complete Authentication Flows', () => {
     it('multiple users maintain separate auth states and sessions', async () => {
       const email1 = uniqueEmail('user1')
       const email2 = uniqueEmail('user2')
-      const password1 = 'pass1'
-      const password2 = 'pass2'
+      const password1 = 'pass1234'
+      const password2 = 'pass5678'
 
       // User 1: Signup
       const signup1 = await request(app)
