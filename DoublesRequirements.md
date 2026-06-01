@@ -3,8 +3,9 @@
 **Document Version:** 1.0  
 **Status:** Design Phase  
 **Approach:** Option 3 - Minimal Refactor with Team Participant Model  
-**Timeline:** 5-7 days  
-**Estimated Scope:** ~1000 lines of code
+**Timeline:** 3-5 days (TDD approach reduces timeline 30-40%)  
+**Estimated Scope:** ~1000 lines of code  
+**Approach:** Test-Driven Development (TDD) per `TDD_STRATEGY.md`
 
 ---
 
@@ -216,9 +217,208 @@ CREATE INDEX idx_knockout_matches_team2 ON public.knockout_matches(team2_id);
 
 ## Phase 2: Core Logic - Group Formation & Match Generation
 
-**Duration:** 2 days  
+**Duration:** 1.5 days (reduced from 2 due to TDD efficiency)  
 **Risk Level:** Medium (modifies match generation algorithm)  
 **Rollback:** Feature-flag off, revert to single-player logic
+
+**TDD Approach:** RED-GREEN-REFACTOR cycle
+
+---
+
+### Phase 2.RED: Write Tests for Group Formation & Matching
+
+**Task 2.0.1: Write Tests - Team Model**
+
+**File:** `packages/core-logic/src/__tests__/teams.spec.ts` (write tests first)
+
+**Test Structure:**
+
+```typescript
+describe('Team Model', () => {
+  describe('generateTeamId', () => {
+    it('should generate unique team IDs', () => {
+      const id1 = generateTeamId()
+      const id2 = generateTeamId()
+      expect(id1).not.toBe(id2)
+      expect(id1).toMatch(/^team_/)
+    })
+
+    it('should generate string IDs', () => {
+      const id = generateTeamId()
+      expect(typeof id).toBe('string')
+    })
+  })
+
+  describe('validateTeamPlayers', () => {
+    it('should throw when both players are the same', () => {
+      expect(() => validateTeamPlayers('p1', 'p1')).toThrow('Team must contain two different players')
+    })
+
+    it('should not throw when players are different', () => {
+      expect(() => validateTeamPlayers('p1', 'p2')).not.toThrow()
+    })
+  })
+
+  describe('Team interface', () => {
+    it('should have required properties', () => {
+      const team: Team = {
+        id: 'team_1',
+        tournamentId: 'tourney_1',
+        player1Id: 'p1',
+        player2Id: 'p2',
+        createdAt: new Date()
+      }
+      expect(team.id).toBeDefined()
+      expect(team.tournamentId).toBeDefined()
+      expect(team.player1Id).toBeDefined()
+      expect(team.player2Id).toBeDefined()
+    })
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Team interface defined
+- ✅ generateTeamId tests written (passes on implementation)
+- ✅ validateTeamPlayers tests written (passes on implementation)
+- ✅ 10+ test cases covering edge cases
+- ✅ Tests are RED (failing) until implementation done
+
+---
+
+**Task 2.0.2: Write Tests - Group Formation**
+
+**File:** `packages/api/src/__tests__/integration/doubles-group-formation.spec.ts` (write tests first)
+
+**Test Structure:**
+
+```typescript
+describe('Doubles: Group Formation (RED)', () => {
+  it('should create teams from confirmed partnerships', async () => {
+    const tournament = await createTournament({ matchFormat: 'doubles' })
+    await registerPlayerWithPartner(tournament.id, 'alice@test.com', 'bob@test.com')
+    await registerPlayerWithPartner(tournament.id, 'charlie@test.com', 'diana@test.com')
+    
+    // This should FAIL until implementation
+    await expect(() => 
+      advanceTournament(tournament.id, 'to_group_stage')
+    ).not.toThrow()
+    
+    const teams = await getTeamsInTournament(tournament.id)
+    expect(teams).toHaveLength(2)
+    expect(teams[0]).toMatchObject({
+      player1Id: expect.any(String),
+      player2Id: expect.any(String)
+    })
+  })
+
+  it('should divide 4 teams into 1 group of 4', async () => {
+    const tournament = await setupDoublesTournament(4)
+    await advanceTournament(tournament.id, 'to_group_stage')
+    
+    const groups = await getGroupsForTournament(tournament.id)
+    expect(groups).toHaveLength(1)
+    expect(groups[0].teamCount).toBe(4)
+  })
+
+  it('should divide 8 teams into 2 groups (4 and 4)', async () => {
+    const tournament = await setupDoublesTournament(8)
+    await advanceTournament(tournament.id, 'to_group_stage')
+    
+    const groups = await getGroupsForTournament(tournament.id)
+    expect(groups).toHaveLength(2)
+    const sizes = groups.map(g => g.teamCount).sort()
+    expect(sizes).toEqual([4, 4])
+  })
+
+  it('should divide 6 teams into 2 groups (3 and 3)', async () => {
+    const tournament = await setupDoublesToournament(6)
+    await advanceTournament(tournament.id, 'to_group_stage')
+    
+    const groups = await getGroupsForTournament(tournament.id)
+    expect(groups).toHaveLength(2)
+    const sizes = groups.map(g => g.teamCount)
+    expect(sizes).toContain(3)
+    expect(sizes).toContain(3)
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Group formation tests written
+- ✅ All group sizing scenarios covered
+- ✅ 12+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+**Task 2.0.3: Write Tests - Match Generation**
+
+**File:** `packages/api/src/__tests__/integration/doubles-group-formation.spec.ts` (add to same file)
+
+**Test Structure:**
+
+```typescript
+describe('Doubles: Round-Robin Match Generation (RED)', () => {
+  it('should generate n*(n-1)/2 matches for n teams', async () => {
+    const tournament = await setupDoublesTournament(4)
+    const matches = await getGroupMatches(tournament.groupId)
+    
+    // 4 teams = 4*3/2 = 6 matches
+    expect(matches).toHaveLength(6)
+  })
+
+  it('should use team_id columns for doubles matches', async () => {
+    const tournament = await setupDoublesTournament(4)
+    const matches = await getGroupMatches(tournament.groupId)
+    
+    matches.forEach(match => {
+      expect(match.team1_id).toBeDefined()
+      expect(match.team2_id).toBeDefined()
+      expect(match.player1_id).toBeNull()
+      expect(match.player2_id).toBeNull()
+    })
+  })
+
+  it('should not generate matches between same team twice', async () => {
+    const tournament = await setupDoublesTournament(4)
+    const matches = await getGroupMatches(tournament.groupId)
+    
+    const pairs = matches.map(m => [m.team1_id, m.team2_id].sort())
+    const uniquePairs = new Set(pairs.map(p => JSON.stringify(p)))
+    expect(uniquePairs.size).toBe(matches.length)
+  })
+
+  it('should create all matches with pending status', async () => {
+    const tournament = await setupDoublesTournament(4)
+    const matches = await getGroupMatches(tournament.groupId)
+    
+    matches.forEach(match => {
+      expect(match.status).toBe('pending')
+    })
+  })
+
+  it('should include created_at timestamp', async () => {
+    const tournament = await setupDoublesToournament(4)
+    const matches = await getGroupMatches(tournament.groupId)
+    
+    matches.forEach(match => {
+      expect(match.created_at).toBeDefined()
+      expect(match.created_at).toBeInstanceOf(Date)
+    })
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Match generation tests written
+- ✅ Combinatorial logic verified
+- ✅ 10+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+### Phase 2.GREEN: Implement to Pass Tests
 
 ### Task 2.1: Create Team Creation Helper
 
@@ -284,13 +484,13 @@ export class TeamRepository {
 
 ---
 
-### Task 2.3: Refactor Group Formation Logic
+### Task 2.3: Implement Group Formation Logic
 
 **File:** `packages/api/src/db.ts` (modify existing)
 
 **Current code location:** Search for "Generate groups and matches"
 
-**Refactoring:**
+**Implementation:** Write code to pass tests from Phase 2.0.2
 
 Replace monolithic group formation with conditional branches:
 
@@ -360,13 +560,13 @@ async function formGroupsDoubles(
 
 ---
 
-### Task 2.4: Refactor Match Generation
+### Task 2.4: Implement Match Generation
 
 **File:** `packages/api/src/db.ts` (modify existing)
 
 **Current code location:** Search for "Generate round-robin"
 
-**Refactoring:**
+**Implementation:** Write code to pass tests from Phase 2.0.3
 
 ```typescript
 async function generateGroupMatchesSingles(groupId: string, players: Player[]): Promise<void> {
@@ -406,16 +606,246 @@ async function generateGroupMatchesDoubles(groupId: string, teams: Team[]): Prom
 - ✅ Round-robin count correct (n*(n-1)/2)
 - ✅ All matches created with pending status
 - ✅ No matches between same participant twice
+- ✅ **All tests from Phase 2.0 pass GREEN**
+
+---
+
+### Phase 2.REFACTOR: Refactor While Maintaining Test Pass
+
+**Task 2.5: Refactor Group Formation & Match Generation**
+
+**Scope:** While all tests pass, optimize for readability and maintainability
+
+```typescript
+// Review these aspects for refactoring:
+// 1. Extract helper functions (e.g., calculateGroupSize)
+// 2. Simplify match generation loop
+// 3. Add meaningful variable names
+// 4. Consolidate error handling
+// 5. Add code comments where logic is non-obvious
+
+// Example refactor:
+function calculateGroupSize(participantCount: number): number {
+  // Groups of 3-4 are ideal for round-robin (6-12 matches per group)
+  if (participantCount <= 4) return participantCount
+  if (participantCount <= 8) return 4
+  return 3
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Code more readable and maintainable
+- ✅ All tests still pass (GREEN)
+- ✅ No logic changes (same output)
+- ✅ No performance regressions
+- ✅ Commented only where WHY is non-obvious
+
+**Verification:**
+```bash
+npm test -- packages/core-logic/src/__tests__/teams.spec.ts
+npm test -- packages/api/src/__tests__/integration/doubles-group-formation.spec.ts
+# All tests should PASS
+```
 
 ---
 
 ## Phase 2.5: Partner Registration & Confirmation (Doubles-Specific)
 
-**Duration:** 1.5 days  
+**Duration:** 1 day (reduced from 1.5 due to TDD efficiency)  
 **Risk Level:** Medium (new endpoints, partner state management)  
 **Rollback:** Disable doubles registrations, revert API endpoints
 
 **Dependencies:** Phase 1 (database schema with partner_id already exists)
+
+**TDD Approach:** RED-GREEN-REFACTOR cycle
+
+---
+
+### Phase 2.5.RED: Write Tests for Partner Confirmation
+
+**Task 2.5.0.1: Write Tests - Partner Confirmation Endpoint**
+
+**File:** `packages/api/src/__tests__/integration/doubles-partner-confirmation.spec.ts` (write tests first)
+
+**Test Structure:**
+
+```typescript
+describe('Doubles: Partner Confirmation (RED)', () => {
+  it('should allow player to confirm partnership', async () => {
+    const tournament = await createTournament({ matchFormat: 'doubles' })
+    const player1 = await createPlayer('alice@test.com')
+    const player2 = await createPlayer('bob@test.com')
+    
+    // Create partnership registrations
+    const reg = await createPartnershipRegistrations(
+      tournament.id,
+      player1.id,
+      player2.id,
+      'select'
+    )
+
+    // Bob confirms his registration
+    const response = await patch(
+      `/registrations/${reg.player2RegistrationId}/confirm`,
+      {},
+      { auth: player2 }
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body.confirmed).toBe(true)
+    expect(response.body.partnership.bothConfirmed).toBe(false) // Alice not confirmed yet
+  })
+
+  it('should reject confirmation from non-partner', async () => {
+    // ... setup ...
+    const response = await patch(
+      `/registrations/${reg.id}/confirm`,
+      {},
+      { auth: unrelatedPlayer }
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it('should indicate when both partners confirmed', async () => {
+    // ... setup both confirmations ...
+    const response = await getConfirmationStatus(reg.id)
+    expect(response.bothConfirmed).toBe(true)
+  })
+
+  it('should log partnership.confirmed at INFO level', async () => {
+    // ... setup and confirm ...
+    const logs = await getLogs()
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        level: 'info',
+        event: 'partnership.confirmed',
+        playerId: player2.id,
+        partnerId: player1.id,
+        tournamentId: tournament.id
+      })
+    )
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Partner confirmation tests written
+- ✅ Logging behavior tested
+- ✅ 15+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+**Task 2.5.0.2: Write Tests - Partner Selection & Registration**
+
+**File:** `packages/api/src/__tests__/integration/doubles-partner-confirmation.spec.ts` (add to same file)
+
+**Test Structure:**
+
+```typescript
+describe('Doubles: Partner Selection & Registration (RED)', () => {
+  it('should validate partner selection required for doubles', async () => {
+    const tournament = await createTournament({ matchFormat: 'doubles' })
+    
+    const response = await post(
+      `/tournaments/${tournament.id}/register`,
+      {
+        email: 'alice@test.com',
+        name: 'Alice'
+        // Missing partnerSelection
+      }
+    )
+
+    expect(response.status).toBe(400)
+    expect(response.body.message).toContain('Partner selection required')
+  })
+
+  it('should create paired registrations for select type', async () => {
+    const tournament = await createTournament({ matchFormat: 'doubles' })
+    const player2 = await createPlayer('bob@test.com')
+
+    const response = await post(
+      `/tournaments/${tournament.id}/register`,
+      {
+        email: 'alice@test.com',
+        name: 'Alice',
+        partnerSelection: { type: 'select', value: player2.id }
+      }
+    )
+
+    expect(response.status).toBe(201)
+    
+    // Verify both registrations exist
+    const aliceReg = await findRegistration('alice@test.com', tournament.id)
+    const bobReg = await findRegistration('bob@test.com', tournament.id)
+    
+    expect(aliceReg.partner_id).toBe(player2.id)
+    expect(bobReg.partner_id).toBe(aliceReg.player_id)
+  })
+
+  it('should send confirmation email for select type', async () => {
+    // ... setup ...
+    const emails = await getQueuedEmails()
+    expect(emails).toHaveLength(1)
+    expect(emails[0].template).toBe('partner_confirmation')
+    expect(emails[0].to).toBe('bob@test.com')
+  })
+
+  it('should create paired registrations for invite type', async () => {
+    const tournament = await createTournament({ matchFormat: 'doubles' })
+
+    const response = await post(
+      `/tournaments/${tournament.id}/register`,
+      {
+        email: 'alice@test.com',
+        name: 'Alice',
+        partnerSelection: { type: 'invite', value: 'bob@notyet.com' }
+      }
+    )
+
+    expect(response.status).toBe(201)
+    
+    // Verify registrations created (even though bob doesn't exist yet)
+    const regs = await getRegistrationsByTournament(tournament.id)
+    expect(regs).toHaveLength(1) // Only alice registered
+  })
+
+  it('should send invite email for invite type', async () => {
+    // ... setup ...
+    const emails = await getQueuedEmails()
+    expect(emails[0].template).toBe('partner_invite')
+    expect(emails[0].to).toBe('bob@notyet.com')
+    expect(emails[0].data.signupLink).toContain('token=')
+  })
+
+  it('should log team.created at INFO level', async () => {
+    // ... setup registration ...
+    const logs = await getLogs()
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        level: 'info',
+        event: 'team.created',
+        tournamentId: tournament.id,
+        player1Id: expect.any(String),
+        player2Id: expect.any(String),
+        registrationType: 'select'
+      })
+    )
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Partner selection and registration tests written
+- ✅ Both select and invite flows tested
+- ✅ Email sending verified
+- ✅ Logging tested
+- ✅ 20+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+### Phase 2.5.GREEN: Implement Partner Confirmation & Registration
 
 ### Task 2.5.1: Add Partner Confirmation Endpoint
 
@@ -737,121 +1167,168 @@ export class PlayerRepository {
 
 ---
 
-### Task 2.5.5: Add Partner Confirmation Tests
+---
 
-**File:** `packages/api/src/__tests__/integration/doubles-partner-confirmation.spec.ts` (new file)
+### Phase 2.5.REFACTOR: Refactor While Maintaining Test Pass
+
+**Task 2.5.6: Refactor Partner Registration & Confirmation**
+
+**Scope:** While all tests pass, optimize partner flow
 
 ```typescript
-describe('Doubles: Partner Confirmation', () => {
-  it('should allow player to select existing partner', async () => {
-    const tournament = await createTournament({ matchFormat: 'doubles' })
-    const player1 = await createPlayer('alice@test.com')
-    const player2 = await createPlayer('bob@test.com')
-
-    // Register player1
-    const response = await post(`/tournaments/${tournament.id}/register`, {
-      email: 'alice@test.com',
-      name: 'Alice',
-      partnerSelection: { type: 'select', value: player2.id }
-    })
-
-    expect(response.status).toBe(201)
-    expect(response.body.status).toBe('pending_partner_confirm')
-
-    // Verify registrations created
-    const aliceReg = await findRegistration('alice@test.com', tournament.id)
-    const bobReg = await findRegistration('bob@test.com', tournament.id)
-    
-    expect(aliceReg.partner_id).toBe(player2.id)
-    expect(bobReg.partner_id).toBe(player1.id)
-    expect(aliceReg.partner_confirmed).toBe(false)
-    expect(bobReg.partner_confirmed).toBe(false)
-  })
-
-  it('should send confirmation email to partner', async () => {
-    // ... setup ...
-    const emailsSent = await getEmailQueue()
-    expect(emailsSent).toHaveLength(1)
-    expect(emailsSent[0].to).toBe('bob@test.com')
-    expect(emailsSent[0].template).toBe('partner_confirmation')
-  })
-
-  it('should allow partner to confirm registration', async () => {
-    // ... setup registration ...
-    const registration = await findRegistration('bob@test.com', tournament.id)
-
-    const response = await patch(
-      `/registrations/${registration.id}/confirm`,
-      {},
-      { auth: bob }  // Authenticated as Bob
-    )
-
-    expect(response.status).toBe(200)
-    expect(response.body.confirmed).toBe(true)
-
-    // Verify database updated
-    const updated = await findRegistration('bob@test.com', tournament.id)
-    expect(updated.partner_confirmed).toBe(true)
-  })
-
-  it('should reject confirmation from non-partner', async () => {
-    // ... setup registration ...
-    const registration = await findRegistration('bob@test.com', tournament.id)
-
-    const response = await patch(
-      `/registrations/${registration.id}/confirm`,
-      {},
-      { auth: charlie }  // Wrong player
-    )
-
-    expect(response.status).toBe(403)
-  })
-
-  it('should allow inviting new partner by email', async () => {
-    const tournament = await createTournament({ matchFormat: 'doubles' })
-    
-    const response = await post(`/tournaments/${tournament.id}/register`, {
-      email: 'alice@test.com',
-      name: 'Alice',
-      partnerSelection: { type: 'invite', value: 'bob@notyet.com' }
-    })
-
-    expect(response.status).toBe(201)
-    
-    // Verify invite email sent
-    const emails = await getEmailQueue()
-    expect(emails).toHaveLength(1)
-    expect(emails[0].to).toBe('bob@notyet.com')
-    expect(emails[0].template).toBe('partner_invite')
-  })
-
-  it('should show team confirmation status', async () => {
-    const tournament = await createTournament({ matchFormat: 'doubles' })
-    // ... register teams ...
-    
-    const status = await getTeamConfirmationStatus(tournament.id)
-    expect(status).toHaveLength(1)
-    expect(status[0].bothConfirmed).toBe(false)
-  })
-})
+// Review these aspects for refactoring:
+// 1. Consolidate validation logic
+// 2. Extract email queuing to separate function
+// 3. Simplify partnership creation flow
+// 4. Add meaningful comments only where WHY is non-obvious
 ```
 
 **Acceptance Criteria:**
-- ✅ Partner selection creates paired registrations
-- ✅ Confirmation email sent
-- ✅ Partner can confirm via endpoint
-- ✅ Non-partners cannot confirm
-- ✅ Partner invites work
-- ✅ Confirmation status tracked
-- ✅ 20+ test cases
+- ✅ Code more readable and maintainable
+- ✅ All tests from Phase 2.5.0 still pass
+- ✅ No logic changes
+- ✅ Email handling cleaner
+- ✅ Error handling consistent
+
+**Verification:**
+```bash
+npm test -- packages/api/src/__tests__/integration/doubles-partner-confirmation.spec.ts
+# All tests should PASS
+```
 
 ---
 
 ## Phase 3: Standings Calculation
 
-**Duration:** 1 day  
+**Duration:** 0.75 days (reduced from 1 day due to TDD efficiency)  
 **Risk Level:** Low (generic refactor, backwards compatible)  
 **Rollback:** Revert type changes only
+
+**TDD Approach:** RED-GREEN-REFACTOR cycle
+
+---
+
+### Phase 3.RED: Write Tests for Standings Calculation
+
+**Task 3.0.1: Write Tests - Generic Standings Calculation**
+
+**File:** `packages/core-logic/src/__tests__/standings.spec.ts` (modify existing to add RED tests)
+
+**Test Structure:**
+
+```typescript
+describe('Standings Calculation (RED - Generic Participants)', () => {
+  describe('calculateStandings with teams', () => {
+    it('should calculate standings for team participants', () => {
+      const teams = [
+        { id: 'team_1' },
+        { id: 'team_2' }
+      ]
+      
+      const matches = [
+        {
+          participant1Id: 'team_1',
+          participant2Id: 'team_2',
+          winnerId: 'team_1',
+          score: '2-1'
+        }
+      ]
+
+      const standings = calculateStandings(teams, matches)
+      
+      expect(standings[0].participantId).toBe('team_1')
+      expect(standings[0].wins).toBe(1)
+      expect(standings[1].participantId).toBe('team_2')
+      expect(standings[1].wins).toBe(0)
+    })
+
+    it('should work with playerIds (backwards compatibility)', () => {
+      const players = [
+        { id: 'p1' },
+        { id: 'p2' }
+      ]
+      
+      const matches = [
+        {
+          participant1Id: 'p1',
+          participant2Id: 'p2',
+          winnerId: 'p1',
+          score: '2-1'
+        }
+      ]
+
+      const standings = calculateStandings(players, matches)
+      expect(standings[0].participantId).toBe('p1')
+    })
+
+    it('should apply tiebreakers for teams with same wins', () => {
+      const teams = [
+        { id: 'team_1' },
+        { id: 'team_2' }
+      ]
+      
+      const matches = [
+        { participant1Id: 'team_1', participant2Id: 'team_2', winnerId: 'team_1', score: '2-1' },
+        { participant1Id: 'team_2', participant2Id: 'team_1', winnerId: 'team_2', score: '2-0' }
+      ]
+
+      const standings = calculateStandings(teams, matches)
+      // Both have 1 win, but team_1 won 2 sets total
+      expect(standings[0].participantId).toBe('team_1')
+    })
+
+    it('should handle head-to-head tiebreaker', () => {
+      const teams = [
+        { id: 'team_1' },
+        { id: 'team_2' },
+        { id: 'team_3' }
+      ]
+      
+      const matches = [
+        { participant1Id: 'team_1', participant2Id: 'team_2', winnerId: 'team_1', score: '2-0' },
+        { participant1Id: 'team_1', participant2Id: 'team_3', winnerId: 'team_3', score: '2-0' },
+        { participant1Id: 'team_2', participant2Id: 'team_3', winnerId: 'team_2', score: '2-0' }
+      ]
+
+      const standings = calculateStandings(teams, matches)
+      // All have 1 win, 2 sets. Head-to-head: team_1 beat team_2
+      expect(standings[0].participantId).toBe('team_1')
+      expect(standings[1].participantId).toBe('team_2')
+    })
+
+    it('should rank all participants correctly', () => {
+      const teams = [
+        { id: 'team_1' },
+        { id: 'team_2' },
+        { id: 'team_3' }
+      ]
+      
+      const matches = [
+        { participant1Id: 'team_1', participant2Id: 'team_2', winnerId: 'team_1', score: '2-0' },
+        { participant1Id: 'team_1', participant2Id: 'team_3', winnerId: 'team_1', score: '2-0' },
+        { participant1Id: 'team_2', participant2Id: 'team_3', winnerId: 'team_2', score: '2-0' }
+      ]
+
+      const standings = calculateStandings(teams, matches)
+      expect(standings[0].rank).toBe(1)
+      expect(standings[1].rank).toBe(2)
+      expect(standings[2].rank).toBe(3)
+    })
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Generic participant tests written (teams and players)
+- ✅ Tiebreaker logic tested
+- ✅ Head-to-head tested
+- ✅ Ranking tested
+- ✅ 15+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+### Phase 3.GREEN: Implement Generic Standings
 
 ### Task 3.1: Refactor calculateStandings() for Generic Participants
 
@@ -1013,14 +1490,309 @@ async function getGroupParticipants(groupId: string): Promise<Participant[]> {
 - ✅ Correctly detects singles vs doubles
 - ✅ Updates standings with correct participant ID
 - ✅ Maintains backwards compatibility
+- ✅ **All tests from Phase 3.0 pass GREEN**
+
+---
+
+### Phase 3.REFACTOR: Refactor While Maintaining Test Pass
+
+**Task 3.3: Refactor Standings Calculation**
+
+**Scope:** While all tests pass, optimize standings logic
+
+```typescript
+// Review these aspects for refactoring:
+// 1. Extract tiebreaker logic to separate function
+// 2. Simplify participant stats initialization
+// 3. Add meaningful comments only where algorithm is non-obvious
+// 4. Consider caching tiebreaker results
+```
+
+**Acceptance Criteria:**
+- ✅ Code more readable and maintainable
+- ✅ All tests from Phase 3.0 still pass
+- ✅ No logic changes
+- ✅ Tiebreaker logic clearly separated
+- ✅ No performance regressions
+
+**Verification:**
+```bash
+npm test -- packages/core-logic/src/__tests__/standings.spec.ts
+# All tests should PASS
+```
 
 ---
 
 ## Phase 4: API Routes & Validation
 
-**Duration:** 1.5 days  
+**Duration:** 1.25 days (reduced from 1.75 due to TDD efficiency)  
 **Risk Level:** Medium (validates user input)  
 **Rollback:** Revert route changes
+
+**TDD Approach:** RED-GREEN-REFACTOR cycle
+
+---
+
+### Phase 4.RED: Write Tests for API Routes
+
+**Task 4.0.1: Write Tests - Match Type Detection & Doubles Validation**
+
+**File:** `packages/api/src/__tests__/utils/match-utils.spec.ts` (new file)
+
+**Test Structure:**
+
+```typescript
+describe('Match Utils (RED)', () => {
+  describe('getMatchType', () => {
+    it('should identify singles matches', () => {
+      const match = {
+        player1_id: 'p1',
+        player2_id: 'p2',
+        team1_id: null,
+        team2_id: null
+      }
+      expect(getMatchType(match)).toBe('singles')
+    })
+
+    it('should identify doubles matches', () => {
+      const match = {
+        player1_id: null,
+        player2_id: null,
+        team1_id: 'team_1',
+        team2_id: 'team_2'
+      }
+      expect(getMatchType(match)).toBe('doubles')
+    })
+
+    it('should return unknown for mixed match', () => {
+      const match = {
+        player1_id: 'p1',
+        player2_id: null,
+        team1_id: 'team_1',
+        team2_id: null
+      }
+      expect(getMatchType(match)).toBe('unknown')
+    })
+  })
+
+  describe('getMatchParticipantIds', () => {
+    it('should return player IDs for singles', () => {
+      const match = {
+        player1_id: 'p1',
+        player2_id: 'p2',
+        team1_id: null,
+        team2_id: null
+      }
+      expect(getMatchParticipantIds(match)).toEqual(['p1', 'p2'])
+    })
+
+    it('should return team IDs for doubles', () => {
+      const match = {
+        player1_id: null,
+        player2_id: null,
+        team1_id: 'team_1',
+        team2_id: 'team_2'
+      }
+      expect(getMatchParticipantIds(match)).toEqual(['team_1', 'team_2'])
+    })
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Match type detection tests written
+- ✅ Edge cases covered
+- ✅ 10+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+**Task 4.0.2: Write Tests - Score Submission Validation**
+
+**File:** `packages/api/src/__tests__/integration/doubles-score-submission.spec.ts` (new file)
+
+**Test Structure:**
+
+```typescript
+describe('Doubles: Score Submission (RED)', () => {
+  it('should allow team1.player1 to submit score', async () => {
+    const match = await setupDoublesMatch()
+    
+    const response = await post(
+      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
+      { score: '2-1' },
+      { auth: match.team1.player1 }
+    )
+    
+    expect(response.status).toBe(202)
+  })
+
+  it('should allow team1.player2 to submit score', async () => {
+    const match = await setupDoublesMatch()
+    
+    const response = await post(
+      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
+      { score: '2-1' },
+      { auth: match.team1.player2 }
+    )
+    
+    expect(response.status).toBe(202)
+  })
+
+  it('should allow team2.player1 to submit score', async () => {
+    const match = await setupDoublesMatch()
+    
+    const response = await post(
+      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
+      { score: '2-1' },
+      { auth: match.team2.player1 }
+    )
+    
+    expect(response.status).toBe(202)
+  })
+
+  it('should allow team2.player2 to submit score', async () => {
+    const match = await setupDoublesMatch()
+    
+    const response = await post(
+      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
+      { score: '1-2' },
+      { auth: match.team2.player2 }
+    )
+    
+    expect(response.status).toBe(202)
+  })
+
+  it('should reject unrelated player', async () => {
+    const match = await setupDoublesMatch()
+    const unrelated = await createPlayer('unrelated@test.com')
+    
+    const response = await post(
+      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
+      { score: '2-1' },
+      { auth: unrelated }
+    )
+    
+    expect(response.status).toBe(403)
+    expect(response.body.message).toContain('not in this match')
+  })
+
+  it('should log score.submitted at INFO level', async () => {
+    const match = await setupDoublesMatch()
+    
+    await post(
+      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
+      { score: '2-1' },
+      { auth: match.team1.player1 }
+    )
+    
+    const logs = await getLogs()
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        level: 'info',
+        event: 'score.submitted',
+        playerId: match.team1.player1.id,
+        matchId: match.id,
+        tournamentId: match.tournamentId,
+        score: '2-1'
+      })
+    )
+  })
+
+  it('should update standings after score submission', async () => {
+    const match = await setupDoublesMatch()
+    
+    await post(
+      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
+      { score: '2-1' },
+      { auth: match.team1.player1 }
+    )
+    
+    const standings = await getGroupStandings(match.groupId)
+    expect(standings[0].participantId).toBe(match.team1.id)
+    expect(standings[0].wins).toBe(1)
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Score submission validation tests written
+- ✅ All team member scenarios tested
+- ✅ Unrelated player rejection tested
+- ✅ Logging tested
+- ✅ Standings update tested
+- ✅ 15+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+**Task 4.0.3: Write Tests - Match Details & Standings Endpoints**
+
+**File:** `packages/api/src/__tests__/integration/doubles-api-endpoints.spec.ts` (new file)
+
+**Test Structure:**
+
+```typescript
+describe('Doubles: API Endpoints (RED)', () => {
+  describe('GET /matches/:matchId', () => {
+    it('should return singles match with player details', async () => {
+      const tournament = await createTournament({ matchFormat: 'singles' })
+      const match = await setupSinglesMatch(tournament.id)
+      
+      const response = await get(`/tournaments/${tournament.id}/matches/${match.id}`)
+      
+      expect(response.body.matchType).toBe('singles')
+      expect(response.body.participants[0].playerId).toBeDefined()
+      expect(response.body.participants[1].playerId).toBeDefined()
+    })
+
+    it('should return doubles match with team details', async () => {
+      const tournament = await createTournament({ matchFormat: 'doubles' })
+      const match = await setupDoublesMatch(tournament.id)
+      
+      const response = await get(`/tournaments/${tournament.id}/matches/${match.id}`)
+      
+      expect(response.body.matchType).toBe('doubles')
+      expect(response.body.participants[0].teamId).toBeDefined()
+      expect(response.body.participants[0].players).toHaveLength(2)
+      expect(response.body.participants[1].teamId).toBeDefined()
+      expect(response.body.participants[1].players).toHaveLength(2)
+    })
+  })
+
+  describe('GET /standings', () => {
+    it('should return singles standings with player info', async () => {
+      const tournament = await createTournament({ matchFormat: 'singles' })
+      const standings = await getStandings(tournament.groupId)
+      
+      expect(standings[0].playerId).toBeDefined()
+      expect(standings[0].name).toBeDefined()
+    })
+
+    it('should return doubles standings with team info', async () => {
+      const tournament = await createTournament({ matchFormat: 'doubles' })
+      const standings = await getStandings(tournament.groupId)
+      
+      expect(standings[0].teamId).toBeDefined()
+      expect(standings[0].teamName).toBeDefined()
+      expect(standings[0].players).toHaveLength(2)
+      expect(standings[0].players[0].id).toBeDefined()
+      expect(standings[0].players[0].name).toBeDefined()
+    })
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Endpoint response format tests written
+- ✅ Both singles and doubles tested
+- ✅ Detail object structure verified
+- ✅ 10+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+### Phase 4.GREEN: Implement API Routes
 
 ### Task 4.1a: Add Match Type Detection
 
@@ -1308,14 +2080,296 @@ router.get('/:tournamentId/standings', async (req, res, next) => {
 - ✅ Doubles standings show team names + both players
 - ✅ Differential calculated correctly for both
 - ✅ Ranking unchanged (only display changes)
+- ✅ **All tests from Phase 4.0 pass GREEN**
+
+---
+
+### Phase 4.REFACTOR: Refactor While Maintaining Test Pass
+
+**Task 4.4: Refactor API Routes**
+
+**Scope:** While all tests pass, optimize endpoint logic
+
+```typescript
+// Review these aspects for refactoring:
+// 1. Consolidate singles/doubles logic where possible
+// 2. Extract response formatting to helper functions
+// 3. Simplify validation chain
+// 4. Add meaningful comments only where logic flow is non-obvious
+```
+
+**Acceptance Criteria:**
+- ✅ Code more readable and maintainable
+- ✅ All tests from Phase 4.0 still pass
+- ✅ No logic changes
+- ✅ Response formatting cleaner
+- ✅ No performance regressions
+
+**Verification:**
+```bash
+npm test -- packages/api/src/__tests__/integration/doubles-score-submission.spec.ts
+npm test -- packages/api/src/__tests__/integration/doubles-api-endpoints.spec.ts
+# All tests should PASS
+```
 
 ---
 
 ## Phase 5: Frontend Display
 
-**Duration:** 1.5 days  
+**Duration:** 3 days (reduced from 4.2 due to TDD efficiency)  
 **Risk Level:** Low (UI only, no logic changes)  
 **Rollback:** Revert component changes
+
+**TDD Approach:** RED-GREEN-REFACTOR cycle with component & E2E tests
+
+---
+
+### Phase 5.RED: Write Component & E2E Tests
+
+**Task 5.0.1: Write E2E Tests - Doubles Tournament Flow**
+
+**File:** `packages/frontend/src/__tests__/doubles-tournament-flow.e2e.spec.ts` (new file)
+
+**Test Structure (Playwright/Cypress):**
+
+```typescript
+describe('Doubles: E2E Tournament Flow (RED)', () => {
+  it('should complete doubles tournament from registration to standings', async () => {
+    // 1. Create tournament with matchFormat='doubles'
+    const tournament = await createTournament({
+      name: 'Spring Doubles Cup',
+      matchFormat: 'doubles'
+    })
+
+    // 2. Navigate to tournament browse
+    await page.goto('/tournaments')
+    
+    // Should show doubles badge
+    await expect(page.locator('[data-testid="format-badge"]')).toContainText('👥 Doubles')
+
+    // 3. Register alice with partner bob
+    await page.click('[data-testid="register-button"]')
+    await page.fill('[name="email"]', 'alice@test.com')
+    await page.fill('[name="name"]', 'Alice')
+    
+    // Select "invite" option
+    await page.click('input[value="invite"]')
+    await page.fill('[name="partnerEmail"]', 'bob@test.com')
+    await page.click('[type="submit"]')
+    
+    // Should show confirmation message
+    await expect(page).toContainText('Registration successful')
+
+    // 4. Verify tournament detail shows teams
+    await page.goto(`/tournaments/${tournament.id}`)
+    await expect(page).toContainText('Registered Teams')
+    await expect(page).toContainText('Alice')
+
+    // 5. Advance to group stage
+    await advanceTournament(tournament.id, 'to_group_stage')
+    
+    // 6. Verify standings shows team names
+    await page.goto(`/tournaments/${tournament.id}/standings`)
+    
+    // Should see table with team names
+    const standingsTable = page.locator('[role="table"]')
+    await expect(standingsTable).toContainText('Alice & Bob')
+
+    // 7. Submit a score
+    const match = await getFirstMatch(tournament.id)
+    await page.goto(`/matches/${match.id}`)
+    
+    // Should show team compositions
+    await expect(page).toContainText('Team 1')
+    await expect(page).toContainText('Team 2')
+    
+    // Fill and submit score
+    await page.fill('[name="score"]', '2-1')
+    await page.click('[type="submit"]')
+    
+    await expect(page).toContainText('Score submitted')
+
+    // 8. Verify standings updated
+    const standings = page.locator('[data-testid="standings-table"]')
+    await expect(standings).toContainText('1 win')
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Full E2E flow tested
+- ✅ Team names display correctly
+- ✅ Real-time updates verified
+- ✅ Score submission works
+- ✅ 5+ E2E test scenarios
+- ✅ Tests are RED until implementation
+
+---
+
+**Task 5.0.2: Write Component Tests - Standings & Match Display**
+
+**File:** `packages/frontend/src/__tests__/components/StandingsTable.spec.tsx` (new file)
+
+**Test Structure (React Testing Library):**
+
+```typescript
+describe('StandingsTable Component (RED)', () => {
+  it('should render singles standings', () => {
+    const standings = [
+      { playerId: 'p1', name: 'Alice', rank: 1, wins: 2, losses: 0 },
+      { playerId: 'p2', name: 'Bob', rank: 2, wins: 1, losses: 1 }
+    ]
+    
+    const { getByText } = render(<StandingsTable standings={standings} />)
+    
+    expect(getByText('Alice')).toBeInTheDocument()
+    expect(getByText('Bob')).toBeInTheDocument()
+    expect(getByText('Player')).toBeInTheDocument() // Header
+  })
+
+  it('should render doubles standings with team names', () => {
+    const standings = [
+      {
+        teamId: 'team_1',
+        teamName: 'Alice & Bob',
+        players: [
+          { id: 'p1', name: 'Alice' },
+          { id: 'p2', name: 'Bob' }
+        ],
+        rank: 1,
+        wins: 2,
+        losses: 0
+      }
+    ]
+    
+    const { getByText } = render(<StandingsTable standings={standings} />)
+    
+    expect(getByText('Alice & Bob')).toBeInTheDocument()
+    expect(getByText('Team')).toBeInTheDocument() // Header
+  })
+
+  it('should display set differential', () => {
+    const standings = [
+      {
+        teamId: 'team_1',
+        teamName: 'Alice & Bob',
+        players: [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
+        rank: 1,
+        wins: 2,
+        setsWon: 5,
+        setsLost: 2,
+        differential: 3
+      }
+    ]
+    
+    const { getByText } = render(<StandingsTable standings={standings} />)
+    expect(getByText('+3')).toBeInTheDocument()
+  })
+
+  it('should be responsive on mobile', () => {
+    const standings = [
+      {
+        teamId: 'team_1',
+        teamName: 'Alice & Bob',
+        players: [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
+        rank: 1,
+        wins: 2,
+        losses: 0
+      }
+    ]
+    
+    window.innerWidth = 320
+    const { getByText } = render(<StandingsTable standings={standings} />)
+    
+    // Should still display team name without horizontal scroll
+    expect(getByText('Alice & Bob')).toBeVisible()
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Component rendering tests written
+- ✅ Singles and doubles variants tested
+- ✅ Responsive behavior tested
+- ✅ 20+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+**Task 5.0.3: Write Component Tests - Partner Selection UI**
+
+**File:** `packages/frontend/src/__tests__/components/PartnerSelection.spec.tsx` (new file)
+
+**Test Structure:**
+
+```typescript
+describe('Partner Selection Components (RED)', () => {
+  it('should render partner selection radio options', () => {
+    const { getByLabelText } = render(
+      <PartnerSelection
+        partnerOption="select"
+        onOptionChange={jest.fn()}
+      />
+    )
+    
+    expect(getByLabelText(/select from registered players/i)).toBeInTheDocument()
+    expect(getByLabelText(/invite by email/i)).toBeInTheDocument()
+  })
+
+  it('should show partner dropdown when select option chosen', () => {
+    const { getByText } = render(<PartnerDropdown tournamentId="t1" />)
+    
+    expect(getByText(/loading partners/i)).toBeInTheDocument()
+  })
+
+  it('should show invite input when invite option chosen', () => {
+    const { getByPlaceholderText } = render(
+      <PartnerInviteInput
+        value=""
+        onChange={jest.fn()}
+      />
+    )
+    
+    expect(getByPlaceholderText(/partner@example.com/i)).toBeInTheDocument()
+  })
+
+  it('should validate email format', () => {
+    const { getByText } = render(
+      <PartnerInviteInput
+        value="invalid-email"
+        onChange={jest.fn()}
+      />
+    )
+    
+    expect(getByText(/valid email/i)).toBeInTheDocument()
+  })
+
+  it('should handle form submission', () => {
+    const onSubmit = jest.fn()
+    const { getByRole } = render(
+      <DoublesRegistrationForm tournament={{ id: 't1' }} onSuccess={onSubmit} />
+    )
+    
+    // Fill form
+    userEvent.type(getByRole('textbox', { name: /email/i }), 'alice@test.com')
+    userEvent.click(getByRole('button', { name: /register/i }))
+    
+    // Should submit
+    expect(onSubmit).toHaveBeenCalled()
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Component tests written for all partner selection UI
+- ✅ Validation tested
+- ✅ Form submission tested
+- ✅ 15+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+### Phase 5.GREEN: Implement Components
 
 ### Task 5.1: Update Standings Table Component
 
@@ -2573,220 +3627,165 @@ export function PartnerConfirmation() {
 - ✅ Shows error for invalid/expired links
 - ✅ Allows manual refresh of status
 - ✅ Mobile responsive
+- ✅ **All tests from Phase 5.0 pass GREEN**
 
 ---
 
-## Phase 6: Testing
+### Phase 5.REFACTOR: Refactor While Maintaining Test Pass
 
-**Duration:** 2 days  
-**Risk Level:** Low (adds tests, doesn't modify existing)  
-**Rollback:** Not needed (tests are additive)
+**Task 5.10: Refactor Frontend Components**
 
-### Task 6.1: Unit Tests - Team Model
-
-**File:** `packages/core-logic/src/__tests__/teams.spec.ts` (new file)
+**Scope:** While all tests pass, optimize component structure
 
 ```typescript
-describe('Team Model', () => {
-  it('should generate unique team IDs', () => {
-    const id1 = generateTeamId()
-    const id2 = generateTeamId()
-    expect(id1).not.toBe(id2)
-    expect(id1).toMatch(/^team_/)
-  })
-
-  it('should validate that teams have different players', () => {
-    expect(() => validateTeamPlayers('p1', 'p1')).toThrow()
-    expect(() => validateTeamPlayers('p1', 'p2')).not.toThrow()
-  })
-})
+// Review these aspects for refactoring:
+// 1. Extract common conditional rendering patterns
+// 2. Consolidate styling (singles vs doubles variants)
+// 3. Extract reusable sub-components
+// 4. Simplify component prop interfaces
+// 5. Add meaningful comments only where component behavior is non-obvious
 ```
 
 **Acceptance Criteria:**
-- ✅ All team utility functions tested
-- ✅ Edge cases covered (same player, etc.)
-- ✅ 100% coverage
+- ✅ Components more readable and maintainable
+- ✅ All tests from Phase 5.0 still pass
+- ✅ No UI changes (same visual output)
+- ✅ No performance regressions
+- ✅ Common patterns extracted
+- ✅ Prop drilling reduced where possible
+
+**Verification:**
+```bash
+npm test -- packages/frontend/src/__tests__/components/
+npm test -- packages/frontend/src/__tests__/doubles-tournament-flow.e2e.spec.ts
+# All tests should PASS
+```
 
 ---
 
-### Task 6.2: Integration Tests - Doubles Group Formation
+## Phase 6: Final Verification
 
-**File:** `packages/api/src/__tests__/integration/doubles-group-formation.spec.ts` (new file)
+**Duration:** 1 day (coverage verification, not test writing)  
+**Risk Level:** Low (verification only)  
+**Rollback:** Not needed (no code changes)
 
-**Structure (mirrors `singles-group-formation.spec.ts`):**
+**Purpose:** Verify all tests pass, coverage targets met, regression tests green
 
-```typescript
-describe('Doubles: Group Formation', () => {
-  it('should create teams from partnerships', async () => {
-    const tournament = await createTournament({ matchFormat: 'doubles' })
-    await registerPlayerWithPartner(tournament.id, 'alice@test.com', 'bob@test.com')
-    await registerPlayerWithPartner(tournament.id, 'charlie@test.com', 'diana@test.com')
-    
-    await advanceTournament(tournament.id, 'to_group_stage')
-    
-    const teams = await getTeamsInTournament(tournament.id)
-    expect(teams).toHaveLength(2)
-    expect(teams[0].player1Id).toBe('alice')
-    expect(teams[0].player2Id).toBe('bob')
-  })
+### Task 6.1: Run Full Test Suite
 
-  it('should divide teams into groups', async () => {
-    // Create 8 teams (6 + 2)
-    // Should create 2 groups of size 4 and 3
-    
-    const groups = await getGroupsForTournament(tournament.id)
-    expect(groups).toHaveLength(2)
-    
-    const teamsInGroup1 = await getTeamsInGroup(groups[0].id)
-    expect(teamsInGroup1).toHaveLength(4)
-  })
+**Verification:** Execute all tests across all phases
 
-  it('should generate round-robin matches between teams', async () => {
-    // 4 teams should generate 6 matches (4*3/2)
-    
-    const matches = await getMatchesInGroup(group.id)
-    expect(matches).toHaveLength(6)
-    expect(matches[0].team1_id).toBeDefined()
-    expect(matches[0].team2_id).toBeDefined()
-    expect(matches[0].player1_id).toBeNull()
-    expect(matches[0].player2_id).toBeNull()
-  })
-})
+```bash
+# Phase 2 tests (Group Formation & Match Generation)
+npm test -- packages/core-logic/src/__tests__/teams.spec.ts
+npm test -- packages/api/src/__tests__/integration/doubles-group-formation.spec.ts
+
+# Phase 2.5 tests (Partner Confirmation & Registration)
+npm test -- packages/api/src/__tests__/integration/doubles-partner-confirmation.spec.ts
+
+# Phase 3 tests (Standings Calculation)
+npm test -- packages/core-logic/src/__tests__/standings.spec.ts
+
+# Phase 4 tests (API Routes)
+npm test -- packages/api/src/__tests__/utils/match-utils.spec.ts
+npm test -- packages/api/src/__tests__/integration/doubles-score-submission.spec.ts
+npm test -- packages/api/src/__tests__/integration/doubles-api-endpoints.spec.ts
+
+# Phase 5 tests (Frontend Components)
+npm test -- packages/frontend/src/__tests__/components/
+npm test -- packages/frontend/src/__tests__/doubles-tournament-flow.e2e.spec.ts
+
+# All tests
+npm test
 ```
 
+**Expected Results:**
+- ✅ All new doubles tests pass (80+ tests)
+- ✅ All existing singles tests still pass (2,126+ tests)
+- ✅ **Total: 2,200+ tests passing**
+- ✅ No test regressions
+
 **Acceptance Criteria:**
-- ✅ Team creation from partnerships
-- ✅ Group division with correct sizes
-- ✅ Round-robin match count correct
-- ✅ Match references use team_id columns
-- ✅ 15+ test cases
+- ✅ New test suite passes 100%
+- ✅ Existing test suite passes 100%
+- ✅ No regressions detected
+- ✅ Build/CI passes
 
 ---
 
-### Task 6.3: Integration Tests - Doubles Standings
+### Task 6.2: Verify Test Coverage
 
-**File:** `packages/api/src/__tests__/integration/doubles-standings.spec.ts` (new file)
+**Coverage Targets:**
 
-```typescript
-describe('Doubles: Standings Calculation', () => {
-  it('should calculate standings for teams', async () => {
-    const tournament = await setupDoublesTournament(4)
-    const matches = await getGroupMatches(group.id)
-    
-    // Submit score: team1 wins 2-1
-    await submitScore(matches[0].id, '2-1', team1PlayerId)
-    
-    const standings = await getGroupStandings(group.id)
-    expect(standings[0].participantId).toBe(team1.id)
-    expect(standings[0].wins).toBe(1)
-    expect(standings[1].wins).toBe(0)
-  })
-
-  it('should apply tiebreakers to teams', async () => {
-    // Team A: 1 win, 4 sets
-    // Team B: 1 win, 3 sets
-    // Team A should rank higher
-  })
-
-  it('should track head-to-head for teams', async () => {
-    // If Team A and Team B both have 1 win
-    // But Team A beat Team B directly
-    // Team A should rank higher
-  })
-})
+```bash
+npm test -- --coverage
 ```
 
+**Expected Coverage:**
+- ✅ Core logic (Phase 2-3): 100% coverage
+- ✅ API routes (Phase 4): 95%+ coverage
+- ✅ Frontend components (Phase 5): 90%+ coverage
+- ✅ Overall: 87%+ statement coverage (maintained from current 87.52%)
+- ✅ Overall: 85%+ branch coverage (maintained from current 85.27%)
+
 **Acceptance Criteria:**
-- ✅ Standings calculation works with team IDs
-- ✅ Tiebreaker logic applied correctly
-- ✅ Head-to-head tracked per team
-- ✅ 20+ test cases
+- ✅ All new code has coverage
+- ✅ No regression in overall coverage
+- ✅ Critical paths have 100% coverage
+- ✅ Coverage report generated
 
 ---
 
-### Task 6.4: Integration Tests - Doubles Score Submission
+### Task 6.3: Regression Testing
 
-**File:** `packages/api/src/__tests__/integration/doubles-score-submission.spec.ts` (new file)
+**Scope:** Verify singles tournaments unaffected
 
 ```typescript
-describe('Doubles: Score Submission', () => {
-  it('should allow team1.player1 to submit score', async () => {
-    const response = await submitScore(matchId, '2-1', team1.player1Id)
-    expect(response.status).toBe(202)
-  })
+// Run existing singles tests to ensure no regressions
+npm test -- packages/api/src/__tests__/integration/singles-*.spec.ts
 
-  it('should allow team1.player2 to submit score', async () => {
-    const response = await submitScore(matchId, '2-1', team1.player2Id)
-    expect(response.status).toBe(202)
-  })
-
-  it('should reject unrelated player', async () => {
-    const response = await submitScore(matchId, '2-1', 'unrelated_player_id')
-    expect(response.status).toBe(403)
-  })
-
-  it('should update standings after score submission', async () => {
-    await submitScore(matchId, '2-1', team1.player1Id)
-    
-    const standings = await getGroupStandings(groupId)
-    expect(standings[0].participantId).toBe(team1.id)
-    expect(standings[0].wins).toBe(1)
-  })
-})
+// Specific critical paths:
+// - Singles group formation
+// - Singles match generation
+// - Singles score submission
+// - Singles standings calculation
+// - Singles bracket seeding
 ```
 
 **Acceptance Criteria:**
-- ✅ Both team members can submit
-- ✅ Non-team members rejected (403)
-- ✅ Standings updated after submission
-- ✅ 15+ test cases
+- ✅ All singles tests pass
+- ✅ No performance regressions
+- ✅ API backwards compatible
+- ✅ Database migrations safe
 
 ---
 
-### Task 6.5: E2E Tests - Doubles Tournament Flow
+### Task 6.4: Documentation Verification
 
-**File:** `packages/frontend/src/__tests__/doubles-tournament-flow.e2e.spec.ts` (new file)
+**Checklist:**
 
-```typescript
-describe('Doubles: E2E Tournament Flow', () => {
-  it('should complete doubles tournament from start to finish', async () => {
-    // 1. Create tournament with matchFormat='doubles'
-    await createTournament({ name: 'Spring Doubles Cup', matchFormat: 'doubles' })
-    
-    // 2. Register players with partners
-    await registerPlayerWithPartner('alice@test.com', 'bob@test.com')
-    await registerPlayerWithPartner('charlie@test.com', 'diana@test.com')
-    
-    // 3. Advance to group stage
-    await advanceTournament('to_group_stage')
-    
-    // 4. Verify groups created with teams
-    const standings = await page.getByRole('table')
-    await expect(standings).toContainText('Alice & Bob')
-    await expect(standings).toContainText('Charlie & Diana')
-    
-    // 5. Submit scores
-    await submitScore('Team 1 vs Team 2', '2-1')
-    await submitScore('Team 1 vs Team 3', '2-0')
-    
-    // 6. Verify standings updated (real-time)
-    await expect(standings).toContainText('2 wins')
-    
-    // 7. Advance to knockout
-    await advanceTournament('to_knockout')
-    
-    // 8. Verify bracket shows teams
-    const bracket = await page.getByRole('heading', { name: /bracket/i })
-    await expect(bracket).toContainText('Alice & Bob vs Charlie & Diana')
-  })
-})
-```
+- ✅ All logging statements follow CLAUDE.md standards
+  - Module-level loggers created: `const log = getLogger('module-name')`
+  - Event names follow `noun.verb` pattern (past tense)
+  - INFO level for state changes: team.created, partnership.confirmed, score.submitted
+  - Actor identity included: playerId, tournamentId, groupId
+  - No sensitive data logged: tokens, passwords, full bodies
+  
+- ✅ All error handling documented
+  - 403 errors for unauthorized access
+  - 400 errors for validation failures
+  - 404 errors for missing resources
+  
+- ✅ All API changes documented
+  - New endpoints listed
+  - Request/response examples provided
+  - Error codes documented
 
 **Acceptance Criteria:**
-- ✅ Full tournament flow works
-- ✅ Team names display correctly
-- ✅ Real-time updates work for teams
-- ✅ Bracket seeding by team standings
+- ✅ Logging standards verified
+- ✅ Error handling consistent
+- ✅ API documentation complete
+- ✅ No gaps in documentation
 
 ---
 
@@ -2955,67 +3954,116 @@ log.error('doubles.error', {
 
 ## Timeline Summary
 
+**TDD Approach reduces timeline 30-40% per `TDD_STRATEGY.md`**
+
 | Phase | Duration | Status |
 |-------|----------|--------|
 | Phase 1: Database | 1 day | Design |
-| Phase 2: Core Logic | 2 days | Design |
-| Phase 2.5: Partner Registration | 1.5 days | Design |
-| Phase 3: Standings | 1 day | Design |
-| Phase 4: API Routes | 1.75 days | Design |
-| Phase 5: Frontend | 4.2 days | Design |
-| Phase 6: Testing | 2 days | Design |
+| Phase 2: Core Logic (RED-GREEN-REFACTOR) | 1.5 days | Design |
+| Phase 2.5: Partner Registration (RED-GREEN-REFACTOR) | 1 day | Design |
+| Phase 3: Standings (RED-GREEN-REFACTOR) | 0.75 days | Design |
+| Phase 4: API Routes (RED-GREEN-REFACTOR) | 1.25 days | Design |
+| Phase 5: Frontend (RED-GREEN-REFACTOR) | 3 days | Design |
+| Phase 6: Verification | 1 day | Design |
 | Phase 7: Rollout | 1 day | Design |
-| **Total** | **~14.45 days** | **Ready for implementation** |
+| **Total** | **~9.5 days** | **Ready for implementation (33% faster than pre-TDD 14.45 days)** |
 
-**Phase 2.5 (1.5 days):**
-- Task 2.5.1: Partner Confirmation Endpoint (0.5 days)
-- Task 2.5.2a: Partner Selection Validation (0.25 days)
-- Task 2.5.2b: Create Dual Registrations (0.25 days)
-- Task 2.5.2c: Send Partner Emails (0.25 days)
-- Task 2.5.3: Partner Repository Methods (0.2 days)
-- Task 2.5.4: Email Templates (0.2 days)
-- Task 2.5.5: Partner Tests (0.1 days)
+**Breakdown by Approach:**
 
-**Phase 4 (1.75 days):**
-- Task 4.1a: Match Type Detection (0.2 days)
-- Task 4.1b: Doubles Validation Helper (0.25 days)
-- Task 4.1c: Score Submission Endpoint (0.25 days)
-- Task 4.2: Match Details Endpoint (0.5 days)
-- Task 4.3: Standings Endpoint (0.5 days)
+**Pre-TDD (Original): 14.45 days**
+- Code first, test last (Phase 6 isolated)
+- Rework required due to defects
+- Integration testing done late
+- High risk of regressions
 
-**Phase 5 (4.2 days):**
-- Task 5.1: Standings Table (0.5 days)
-- Task 5.2: Match Cards (0.5 days)
-- Task 5.3: Match Detail Page (0.5 days)
-- Task 5.4: Bracket View (0.3 days)
-- Task 5.5: Tournament Browse (0.3 days)
-- Task 5.6a: Participant Section (0.25 days)
-- Task 5.6b: Team Component (0.25 days)
-- Task 5.6c: Singles Component (0.1 days)
-- Task 5.7: Score Form (0.1 days)
-- Task 5.8a: Partner Selection UI (0.2 days)
-- Task 5.8b: Partner Dropdown (0.2 days)
-- Task 5.8c: Partner Invite (0.2 days)
-- Task 5.8d: Form Submission (0.2 days)
-- Task 5.9: Confirmation Page (0.5 days)
+**TDD (This Plan): 9.5 days (33% reduction)**
+- Tests first (RED phase in each feature phase)
+- Minimal code to pass (GREEN phase)
+- Refactoring with safety (REFACTOR phase)
+- Comprehensive coverage throughout
+- Lower risk, faster overall delivery
+- 80+ tests distributed across phases (not isolated)
+
+**Phase 2 Breakdown (1.5 days):**
+- Phase 2.0.1: Write Team Model Tests (RED)
+- Phase 2.0.2: Write Group Formation Tests (RED)
+- Phase 2.0.3: Write Match Generation Tests (RED)
+- Task 2.1: Implement Team Helpers (GREEN)
+- Task 2.2: Implement Team Repository (GREEN)
+- Task 2.3: Implement Group Formation (GREEN)
+- Task 2.4: Implement Match Generation (GREEN)
+- Task 2.5: Refactor While Passing (REFACTOR)
+
+**Phase 2.5 Breakdown (1 day):**
+- Phase 2.5.0.1: Write Partner Confirmation Tests (RED)
+- Phase 2.5.0.2: Write Registration Tests (RED)
+- Tasks 2.5.1-2.5.4: Implement Partner Features (GREEN)
+- Task 2.5.6: Refactor Partner Flow (REFACTOR)
+
+**Phase 3 Breakdown (0.75 days):**
+- Phase 3.0.1: Write Generic Standings Tests (RED)
+- Tasks 3.1-3.2: Implement Standings (GREEN)
+- Task 3.3: Refactor Standings (REFACTOR)
+
+**Phase 4 Breakdown (1.25 days):**
+- Phase 4.0.1-4.0.3: Write API Tests (RED)
+- Tasks 4.1-4.3: Implement API Routes (GREEN)
+- Task 4.4: Refactor Routes (REFACTOR)
+
+**Phase 5 Breakdown (3 days):**
+- Phase 5.0.1-5.0.3: Write Component Tests (RED)
+- Tasks 5.1-5.9: Implement Components (GREEN)
+- Task 5.10: Refactor Components (REFACTOR)
 
 ---
 
 ## Dependencies & Blockers
 
-**Hard Dependencies:**
-- Phase 1 before Phase 2 (teams table needed before group formation)
-- Phase 2 before Phase 2.5 (group formation logic needed)
-- Phase 2.5 before Phase 3 (partners must be confirmed before standings calculated)
+**Hard Dependencies (TDD Order):**
+- Phase 1 before Phase 2.RED (teams table needed before writing tests)
+- Phase 2.RED before Phase 2.GREEN (tests define what to implement)
+- Phase 2.GREEN before Phase 2.REFACTOR (code must work before refactoring)
+- Phase 2 complete before Phase 2.5.RED (group formation logic needed)
+- Phase 2.5.RED before Phase 2.5.GREEN
+- Phase 2.5.GREEN before Phase 2.5.REFACTOR
+- Phase 2.5 complete before Phase 3.RED (partners must be confirmable before standings test)
+- Phase 3.RED before Phase 3.GREEN
+- Phase 3.GREEN before Phase 3.REFACTOR
+- Phase 3 complete before Phase 4.RED (standings must exist before API testing)
+- Phase 4.RED before Phase 4.GREEN
+- Phase 4.GREEN before Phase 4.REFACTOR
+- Phase 5.RED can start after Phase 3 (tests don't require API implementation details)
+- Phase 5.RED before Phase 5.GREEN
+- Phase 5.GREEN before Phase 5.REFACTOR
+- Phases 4 & 5 can overlap (start Phase 5.RED when Phase 3 complete)
 
 **Soft Dependencies:**
-- Complete Phase 3 before Phase 4 begins (standings calculation must work)
-- Phases 4, 5, 6 can proceed in parallel after Phase 3 completes
-- Phase 6 (testing) should start during Phase 4-5 for parallel development
+- Phase 6 runs after all code phases complete (verification only)
+- Phase 7 can begin during Phase 6 (rollout planning)
 
 **Parallelization Opportunities:**
-- Phase 2 and Phase 2.5 can overlap (start 2.5 after 2 is 50% complete)
-- Phases 4, 5, 6 can run in parallel (once Phase 3 complete)
+- Phase 2.RED, Phase 2.5.RED can be written in parallel (different features)
+- Phase 2.GREEN and Phase 2.5.GREEN can be implemented in parallel (after respective RED phases)
+- Phase 4.RED and Phase 5.RED can be written in parallel (after Phase 3.RED)
+- Phase 4.GREEN and Phase 5.GREEN can overlap (once Phase 4.RED complete)
+- Phase 6 and Phase 7 can overlap (verification while planning rollout)
+
+**Critical Path:**
+1. Phase 1 (1 day)
+2. Phase 2 (1.5 days)
+3. Phase 2.5 (1 day)
+4. Phase 3 (0.75 days)
+5. Phase 4 (1.25 days) OR Phase 5 (3 days) - can overlap after Phase 3
+6. Phase 5 (3 days) if not started with Phase 4
+7. Phase 6 (1 day)
+8. Phase 7 (1 day)
+
+**Minimum Sequential Time:** 9.5 days (no parallelization)
+
+**With Optimal Parallelization:**
+- Phases 4 & 5 overlap: saves ~1.25 days
+- Phases 6 & 7 overlap: saves ~0.5 days
+- **Optimized timeline: ~7.75 days**
 
 **Blockers:**
 - None identified
@@ -3028,4 +4076,12 @@ log.error('doubles.error', {
 **Last Updated:** 2026-06-01  
 **Next Review:** Before Phase 1 implementation  
 **Revision History:**
+- v2.0 (2026-06-01): Restructured for TDD compliance per `TDD_STRATEGY.md`
+  - Moved test writing to RED phases (before implementation)
+  - Introduced GREEN phases (minimal implementation)
+  - Introduced REFACTOR phases (cleanup while passing tests)
+  - Distributed 80+ tests across phases instead of isolated Phase 6
+  - Reduced timeline from 14.45 to 9.5 days (33% efficiency gain)
+  - Updated dependencies to reflect TDD RED-GREEN-REFACTOR order
+  - Organized phases into RED-GREEN-REFACTOR structure
 - v1.0 (2026-06-01): Initial design, Option 3 approach
