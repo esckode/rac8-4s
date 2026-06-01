@@ -49,6 +49,32 @@ This document outlines the implementation of doubles tournament support in RAC8-
    - All existing APIs must remain compatible
    - Database migrations must be idempotent and reversible
 
+6. **Security Review for Each Task (REQUIRED)**
+   - Every task completing code implementation must include vulnerability analysis
+   - Check for OWASP Top 10 vulnerabilities relevant to the code area
+   - Verify no introduction of security vulnerabilities per CLAUDE.md
+   - Document security review in acceptance criteria
+   - **Task cannot be marked complete without security review**
+
+---
+
+## Security Review Checklist
+
+**All code tasks must verify against these common vulnerabilities:**
+
+| Vulnerability | Relevant Phases | Check |
+|---|---|---|
+| **A1: Injection (SQL, NoSQL, Command)** | Phase 4 (API), Phase 2.5 (validation) | Parameterized queries? No string concatenation in queries? |
+| **A2: Broken Authentication** | Phase 2.5 (partner confirmation), Phase 4 (score submission) | Auth tokens validated? Sessions secure? Partner identity verified? |
+| **A3: Broken Access Control** | Phase 4 (score submission), Phase 2.5 (partner endpoint) | Only team members can submit scores? Only player can confirm partnership? |
+| **A4: Sensitive Data Exposure** | All phases | Passwords/tokens logged? PII in logs? Secure transmission? |
+| **A5: Broken Access Control (XXE)** | Phase 5 (frontend) | File uploads validated? Parser configured safely? |
+| **A6: Broken Auth (continued)** | Phase 2.5 (email links) | Magic link tokens properly scoped? Expiration enforced? |
+| **A7: XSS (Cross-Site Scripting)** | Phase 5 (frontend forms) | User input sanitized? Output escaped? Template injection possible? |
+| **A8: Insecure Deserialization** | Phase 4 (JSON parsing) | Untrusted data deserialized safely? Type validation? |
+| **A9: Using Components with Known Vulnerabilities** | All phases | Dependencies audited? npm audit clean? |
+| **A10: Insufficient Logging** | All phases | Security events logged? Cannot tamper with logs? |
+
 ---
 
 ## Architecture Overview
@@ -951,6 +977,15 @@ router.patch('/registrations/:registrationId/confirm', async (req, res, next) =>
   - Use module-level logger: `const log = getLogger('partnerships')`
   - Never include: tokens, passwords, full request bodies
 
+**Security Review (A2: Broken Authentication, A3: Broken Access Control):**
+- ✅ Authentication token validated on every request
+- ✅ Authorization check: `registration.player_id === payload.playerId` verified
+- ✅ No authentication bypass possible (e.g., missing auth check)
+- ✅ 403 Forbidden returned for unauthorized access (not 400 Bad Request)
+- ✅ No sensitive data in error messages (reveals valid registrations)
+- ✅ Session/token cannot be reused for other players
+- ✅ Rate limiting on endpoint (prevent brute force confirmation)
+
 ---
 
 ### Task 2.5.2a: Add Partner Selection Validation
@@ -993,6 +1028,14 @@ function validatePartnerSelection(partnerSelection: any, email: string): { valid
 - ✅ Validates email for invite case
 - ✅ Prevents self-pairing
 - ✅ Returns validation errors with messages
+
+**Security Review (A1: Injection, A3: Access Control):**
+- ✅ Email validation uses safe regex (no ReDoS vulnerability)
+- ✅ Partner ID validated to be valid UUID format before DB query
+- ✅ No SQL injection in partner lookup queries
+- ✅ Prevents validating arbitrary partner IDs (authorization check)
+- ✅ Self-pairing check prevents account enumeration via loop
+- ✅ Error messages don't reveal if email/ID exists (enumeration attack)
 
 ---
 
@@ -1048,6 +1091,15 @@ async function createPartnershipRegistrations(
   - Log `team.created` when partnership registrations created
   - Include: `tournamentId`, `player1Id`, `player2Id`, `registrationType` (select|invite)
   - Use repository-level logger for database operations
+
+**Security Review (A1: Injection, A4: Sensitive Data Exposure):**
+- ✅ All database queries use parameterized statements (no string concatenation)
+- ✅ Player IDs validated before insertion (UUID format check)
+- ✅ Unique constraint prevents duplicate partnerships
+- ✅ No sensitive data logged (passwords, tokens, confirmation codes)
+- ✅ Timestamps use server time (not client-provided)
+- ✅ Database constraint enforces player1_id ≠ player2_id (prevents self-pairing)
+- ✅ Foreign key constraints prevent orphaned registrations
 
 ---
 
@@ -1990,6 +2042,17 @@ router.post('/:tournamentId/matches/:matchId/score', async (req, res, next) => {
 // Doubles: team2.player2 can submit
 // Doubles: unregistered player cannot submit (403)
 ```
+
+**Security Review (A2: Broken Auth, A3: Broken Access Control, A1: Injection):**
+- ✅ Authentication token validated before authorization check
+- ✅ Authorization: player verified to be in match (team membership validated)
+- ✅ Score format validated (e.g., "2-1" not "'; DROP TABLE;")
+- ✅ No SQL injection possible in score parsing
+- ✅ Team IDs cannot be spoofed in request (validated against DB)
+- ✅ 403 Forbidden for unauthorized access (not 400)
+- ✅ Match ID cannot be manipulated to access different matches
+- ✅ No user information leaked in error messages
+- ✅ Rate limiting on endpoint (prevent spam/DoS)
 
 ---
 
@@ -3400,6 +3463,13 @@ export function PartnerInviteInput({
 - ✅ Display helper text
 - ✅ Pass value to parent
 
+**Security Review (A7: XSS, A1: Injection):**
+- ✅ Email validation uses safe regex (no ReDoS)
+- ✅ No dangerouslySetInnerHTML used
+- ✅ Error messages escaped before display
+- ✅ Input value never used in DOM manipulation
+- ✅ No email enumeration via timing attacks (validation same speed for all)
+
 ---
 
 ### Task 5.8d: Handle Form Submission
@@ -3533,6 +3603,17 @@ function DoublesRegistration({ tournament }: { tournament: Tournament }) {
 - ✅ Show error messages
 - ✅ Loading state during submission
 - ✅ Success handling
+
+**Security Review (A7: XSS, A1: Injection, A8: Insecure Deserialization):**
+- ✅ Email input validated client-side AND server-side
+- ✅ User input never directly inserted into DOM
+- ✅ React automatically escapes output (no dangerouslySetInnerHTML)
+- ✅ No eval() or Function() constructors used
+- ✅ API response parsed safely (no eval)
+- ✅ Error messages from API escaped before display
+- ✅ No localStorage of sensitive data (auth tokens)
+- ✅ CSRF token included in form submission
+- ✅ Form data sent as JSON, not vulnerable encoding
 
 ---
 
