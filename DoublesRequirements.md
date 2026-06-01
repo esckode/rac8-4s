@@ -986,6 +986,400 @@ return (
 
 ---
 
+### Task 5.4: Update Bracket View Component
+
+**File:** `packages/frontend/src/components/BracketView.tsx`
+
+**Current implementation (singles):**
+```typescript
+const bracket = await getBracket(tournamentId)
+
+return (
+  <div className="bracket-tree">
+    {bracket.map(round => (
+      <div key={round} className="round">
+        <h3>{round}</h3>
+        {matches[round].map(match => (
+          <div className="match-box" key={match.id}>
+            <div className="player">{match.player1Name}</div>
+            <div className="score">{match.score || 'vs'}</div>
+            <div className="player">{match.player2Name}</div>
+          </div>
+        ))}
+      </div>
+    ))}
+  </div>
+)
+```
+
+**Refactored implementation (handles both):**
+```typescript
+const bracket = await getBracket(tournamentId)
+const isSingles = bracket[0]?.player1Id !== undefined
+const isDoubles = bracket[0]?.team1Id !== undefined
+
+return (
+  <div className="bracket-tree">
+    {bracket.map(round => (
+      <div key={round} className="round">
+        <h3>{round}</h3>
+        {matches[round].map(match => (
+          <div className="match-box" key={match.id}>
+            {isSingles ? (
+              <>
+                <div className="player">{match.player1Name}</div>
+                <div className="score">{match.score || 'vs'}</div>
+                <div className="player">{match.player2Name}</div>
+              </>
+            ) : (
+              <>
+                <div className="team">
+                  <div className="team-name">{match.team1Name}</div>
+                  <div className="players">
+                    {match.team1Players.map(p => (
+                      <div key={p.id} className="player-name">{p.name}</div>
+                    ))}
+                  </div>
+                </div>
+                <div className="score">{match.score || 'vs'}</div>
+                <div className="team">
+                  <div className="team-name">{match.team2Name}</div>
+                  <div className="players">
+                    {match.team2Players.map(p => (
+                      <div key={p.id} className="player-name">{p.name}</div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    ))}
+  </div>
+)
+```
+
+**Styling Considerations:**
+```css
+.match-box {
+  /* Existing singles styles */
+}
+
+.match-box .team {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.match-box .team-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.match-box .players {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.match-box .player-name {
+  margin-left: 4px;
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Singles shows player names in bracket
+- ✅ Doubles shows "Team Name" with player list below
+- ✅ Team compositions clearly visible
+- ✅ Mobile layout stacks properly (no horizontal overflow)
+- ✅ Responsive at all breakpoints (320px-1440px)
+
+---
+
+### Task 5.5: Update Tournament Browse Page
+
+**File:** `packages/frontend/src/pages/Browse.tsx`
+
+**Current implementation:**
+```typescript
+const tournaments = await getTournaments()
+
+return (
+  <div className="tournament-list">
+    {tournaments.map(t => (
+      <div className="tournament-card" key={t.id}>
+        <h3>{t.name}</h3>
+        <p>Sport: {t.sport}</p>
+        <p>Format: {t.format}</p>
+        <p>Players: {t.registeredCount}/{t.maxPlayers}</p>
+        <button>View Details</button>
+      </div>
+    ))}
+  </div>
+)
+```
+
+**Refactored implementation:**
+```typescript
+const tournaments = await getTournaments()
+
+return (
+  <div className="tournament-list">
+    {tournaments.map(t => (
+      <div className="tournament-card" key={t.id}>
+        <div className="card-header">
+          <h3>{t.name}</h3>
+          <div className="badges">
+            <span className={`format-badge ${t.format}`}>
+              {t.format === 'doubles' ? '👥 Doubles' : '👤 Singles'}
+            </span>
+            <span className="sport-badge">{t.sport}</span>
+          </div>
+        </div>
+        
+        <div className="card-body">
+          <div className="stat">
+            <label>Registration</label>
+            <p>
+              {t.registeredCount}/{t.maxPlayers} {t.format === 'doubles' ? 'teams' : 'players'}
+            </p>
+          </div>
+          
+          <div className="stat">
+            <label>Deadline</label>
+            <p>{formatDate(t.registrationDeadline)}</p>
+          </div>
+          
+          <div className="stat">
+            <label>Status</label>
+            <p className={`status status-${t.status}`}>{t.status}</p>
+          </div>
+        </div>
+        
+        <button className="view-btn">View Details</button>
+      </div>
+    ))}
+  </div>
+)
+```
+
+**Styling Additions:**
+```css
+.format-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.format-badge.doubles {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.format-badge.singles {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Clear visual distinction between singles and doubles
+- ✅ Badge shows match format
+- ✅ Participant count shows "teams" for doubles, "players" for singles
+- ✅ All tournament information visible
+- ✅ Mobile responsive (single column)
+- ✅ Desktop responsive (grid layout)
+
+---
+
+### Task 5.6: Update Tournament Detail Page
+
+**File:** `packages/frontend/src/pages/TournamentDetail.tsx`
+
+**New section - Registered Participants:**
+
+Current implementation shows individual players. Update to show:
+
+```typescript
+const tournament = await getTournament(tournamentId)
+const participants = await getParticipants(tournamentId)
+const isSingles = tournament.matchFormat === 'singles'
+const isDoubles = tournament.matchFormat === 'doubles'
+
+return (
+  <div className="tournament-detail">
+    {/* ... existing sections ... */}
+    
+    <section className="participants">
+      <h2>
+        Registered {isSingles ? 'Players' : 'Teams'} ({participants.length}/{tournament.maxPlayers})
+      </h2>
+      
+      {isSingles ? (
+        <div className="player-list">
+          {participants.map(p => (
+            <div key={p.id} className="participant-item">
+              <div className="name">{p.name}</div>
+              <div className="email">{p.email}</div>
+              <div className="status">{p.status}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="team-list">
+          {participants.map(team => (
+            <div key={team.id} className="participant-item team-item">
+              <div className="team-info">
+                <div className="team-name">
+                  {team.player1Name} & {team.player2Name}
+                </div>
+                <div className="team-players">
+                  <div className="player">
+                    <span>{team.player1Name}</span>
+                    <span className="email">{team.player1Email}</span>
+                    <span className={`confirmation ${team.player1Confirmed ? 'confirmed' : 'pending'}`}>
+                      {team.player1Confirmed ? '✓' : 'Pending'}
+                    </span>
+                  </div>
+                  <div className="player">
+                    <span>{team.player2Name}</span>
+                    <span className="email">{team.player2Email}</span>
+                    <span className={`confirmation ${team.player2Confirmed ? 'confirmed' : 'pending'}`}>
+                      {team.player2Confirmed ? '✓' : 'Pending'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="status">{team.status}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  </div>
+)
+```
+
+**Styling Additions:**
+```css
+.team-item .team-info {
+  padding: 12px;
+  border-left: 4px solid #0ea5e9;
+}
+
+.team-item .player {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 0.875rem;
+}
+
+.team-item .player .email {
+  color: #666;
+  font-size: 0.75rem;
+}
+
+.confirmation {
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.confirmation.confirmed {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.confirmation.pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+```
+
+**Acceptance Criteria:**
+- ✅ Singles shows player list with names, emails, status
+- ✅ Doubles shows teams with:
+  - Team name ("Player1 & Player2")
+  - Individual player info (name, email)
+  - Confirmation status per player
+- ✅ Count shows "Players" vs "Teams" correctly
+- ✅ Clear visual grouping of team members
+- ✅ Mobile responsive
+
+---
+
+### Task 5.7: Update Score Submission Form
+
+**File:** `packages/frontend/src/components/ScoreSubmitForm.tsx`
+
+**Current form (works for both, minor styling updates):**
+```typescript
+// Form itself needs no logic changes - API accepts any participant ID
+// But labeling should reflect singles vs doubles
+
+const [score, setScore] = useState('')
+const match = props.match
+const isSingles = match.matchType === 'singles'
+const isDoubles = match.matchType === 'doubles'
+
+return (
+  <form onSubmit={handleSubmit}>
+    <div className="form-header">
+      {isSingles ? (
+        <h3>Submit Score</h3>
+      ) : (
+        <h3>
+          <div>Submit Score</div>
+          <div className="teams-info">
+            {match.team1Name} vs {match.team2Name}
+          </div>
+        </h3>
+      )}
+    </div>
+    
+    <div className="form-body">
+      <div className="score-input">
+        <label>
+          {isSingles ? 'Your Sets' : `${match.team1Name} Sets`}
+        </label>
+        <input type="number" min="0" max="3" />
+      </div>
+      
+      <div className="score-input">
+        <label>
+          {isSingles ? 'Opponent Sets' : `${match.team2Name} Sets`}
+        </label>
+        <input type="number" min="0" max="3" />
+      </div>
+    </div>
+    
+    <div className="validation">
+      {isSingles ? (
+        <p className="hint">Format: X-Y (you won X sets, opponent won Y)</p>
+      ) : (
+        <p className="hint">Format: X-Y ({match.team1Name} won X sets, {match.team2Name} won Y)</p>
+      )}
+    </div>
+    
+    <button type="submit">Submit Score</button>
+  </form>
+)
+```
+
+**Acceptance Criteria:**
+- ✅ Form labels clear for singles (You vs Opponent)
+- ✅ Form labels clear for doubles (Team names)
+- ✅ Help text explains format with team/player names
+- ✅ Validation unchanged (no ties allowed)
+- ✅ Mobile responsive (full width input)
+
+---
+
 ## Phase 6: Testing
 
 **Duration:** 2 days  
@@ -1371,10 +1765,19 @@ log.error('doubles.error', {
 | Phase 2: Core Logic | 2 days | Design |
 | Phase 3: Standings | 1 day | Design |
 | Phase 4: API Routes | 1.5 days | Design |
-| Phase 5: Frontend | 1.5 days | Design |
+| Phase 5: Frontend | 2.5 days | Design |
 | Phase 6: Testing | 2 days | Design |
 | Phase 7: Rollout | 1 day | Design |
-| **Total** | **~10 days** | **Ready for implementation** |
+| **Total** | **~11 days** | **Ready for implementation** |
+
+**Phase 5 Expanded (2.5 days):**
+- Task 5.1: Standings Table (0.5 days)
+- Task 5.2: Match Cards (0.5 days)
+- Task 5.3: Match Detail Page (0.5 days)
+- Task 5.4: Bracket View (0.3 days)
+- Task 5.5: Tournament Browse (0.3 days)
+- Task 5.6: Tournament Detail (0.3 days)
+- Task 5.7: Score Form Labels (0.1 days)
 
 ---
 
