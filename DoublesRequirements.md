@@ -161,9 +161,618 @@ DOUBLES PATH:
 
 ## Phase 1: Database Schema
 
-**Duration:** 1 day  
+**Duration:** 1.25 days  
 **Risk Level:** Low (additive only, no breaking changes)  
 **Rollback:** Drop migrations if needed
+
+### ⚠️ BLOCKER: Phase 1.0 - Add Format Column (Discriminated Union)
+
+**Status:** Must complete before Tasks 1.1-1.4  
+**Purpose:** Establish explicit format tracking for singles vs doubles matches, enabling partial index optimization and clearer type detection
+
+---
+
+### Phase 1.0.RED: Write Tests for Format Column
+
+**Task 1.0.1: Write Migration & Schema Tests**
+
+**File:** `packages/api/src/__tests__/unit/database-format-column.spec.ts` (new file)
+
+**Test Structure:**
+
+```typescript
+describe('Format Column (Discriminated Union)', () => {
+  describe('Migration: 020_add_format_column', () => {
+    it('should add format column to group_matches', async () => {
+      const result = await db.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'group_matches' AND column_name = 'format'"
+      )
+      expect(result.rows.length).toBe(1)
+    })
+
+    it('should add format column to knockout_matches', async () => {
+      const result = await db.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'knockout_matches' AND column_name = 'format'"
+      )
+      expect(result.rows.length).toBe(1)
+    })
+
+    it('should set DEFAULT format to singles for existing matches', async () => {
+      const result = await db.query(
+        "SELECT column_default FROM information_schema.columns WHERE table_name = 'group_matches' AND column_name = 'format'"
+      )
+      expect(result.rows[0].column_default).toContain("'singles'")
+    })
+
+    it('should migrate all existing matches to format=singles', async () => {
+      const singles = await db.query('SELECT COUNT(*) FROM group_matches WHERE format = ?', ['singles'])
+      const total = await db.query('SELECT COUNT(*) FROM group_matches')
+      expect(singles.rows[0].count).toBe(total.rows[0].count)
+    })
+
+    it('should be idempotent (safe to re-run)', async () => {
+      const before = await db.query('SELECT COUNT(*) FROM group_matches')
+      // Re-run migration (in transaction)
+      await runMigration('020_add_format_column.sql')
+      const after = await db.query('SELECT COUNT(*) FROM group_matches')
+      expect(before.rows[0].count).toBe(after.rows[0].count)
+    })
+
+    it('should be reversible', async () => {
+      // Verify rollback migration exists
+      const rollback = await fs.readFile('db/rollback/020_add_format_column.sql')
+      expect(rollback).toBeDefined()
+    })
+  })
+
+  describe('Schema Constraints', () => {
+    it('should enforce format in (singles, doubles)', async () => {
+      await expect(() =>
+        db.query(
+          'INSERT INTO group_matches (id, group_id, format, player1_id, player2_id, status) VALUES (?, ?, ?, ?, ?, ?)',
+          ['m1', 'g1', 'invalid', 'p1', 'p2', 'pending']
+        )
+      ).rejects.toThrow('constraint')
+    })
+
+    it('should require format column (NOT NULL)', async () => {
+      await expect(() =>
+        db.query(
+          'INSERT INTO group_matches (id, group_id, player1_id, player2_id, status) VALUES (?, ?, ?, ?, ?)',
+          ['m1', 'g1', 'p1', 'p2', 'pending']
+        )
+      ).rejects.toThrow('null')
+    })
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Migration adds format column to both tables
+- ✅ DEFAULT value is 'singles'
+- ✅ All existing matches migrated to format='singles'
+- ✅ Migration is idempotent (safe to re-run)
+- ✅ Rollback migration exists
+- ✅ Constraint enforces valid format values
+- ✅ NOT NULL constraint prevents NULL format
+- ✅ 15+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+### Phase 1.0.RED: Write Tests for Partial Indexes
+
+**Task 1.0.2: Write Partial Index Verification Tests**
+
+**File:** `packages/api/src/__tests__/integration/partial-indexes.spec.ts` (new file)
+
+**Test Structure:**
+
+```typescript
+describe('Partial Indexes for Discriminated Union', () => {
+  describe('Partial index creation', () => {
+    it('should create partial index for singles matches', async () => {
+      const result = await db.query(
+        "SELECT indexname FROM pg_indexes WHERE tablename = 'group_matches' AND indexname = 'idx_group_matches_singles_player1'"
+      )
+      expect(result.rows.length).toBe(1)
+    })
+
+    it('should create partial index for doubles matches', async () => {
+      const result = await db.query(
+        "SELECT indexname FROM pg_indexes WHERE tablename = 'group_matches' AND indexname = 'idx_group_matches_doubles_team1'"
+      )
+      expect(result.rows.length).toBe(1)
+    })
+
+    it('should create partial index on knockout_matches for singles', async () => {
+      const result = await db.query(
+        "SELECT indexname FROM pg_indexes WHERE tablename = 'knockout_matches' AND indexname = 'idx_knockout_matches_singles_player1'"
+      )
+      expect(result.rows.length).toBe(1)
+    })
+
+    it('should create partial index on knockout_matches for doubles', async () => {
+      const result = await db.query(
+        "SELECT indexname FROM pg_indexes WHERE tablename = 'knockout_matches' AND indexname = 'idx_knockout_matches_doubles_team1'"
+      )
+      expect(result.rows.length).toBe(1)
+    })
+  })
+
+  describe('Partial index query optimization', () => {
+    it('should use partial index for singles player1 lookup', async () => {
+      const plan = await db.query(
+        "EXPLAIN (FORMAT json) SELECT * FROM group_matches WHERE format = 'singles' AND player1_id = $1",
+        ['player_1']
+      )
+      const jsonPlan = JSON.parse(plan.rows[0]['QUERY PLAN'])
+      const indexName = jsonPlan[0]['Plan']['Index Name']
+      
+      // Verify partial index is used, not full table scan
+      expect(indexName).toBe('idx_group_matches_singles_player1')
+      expect(jsonPlan[0]['Plan']['Node Type']).toBe('Index Scan')
+    })
+
+    it('should use partial index for doubles team1 lookup', async () => {
+      const plan = await db.query(
+        "EXPLAIN (FORMAT json) SELECT * FROM group_matches WHERE format = 'doubles' AND team1_id = $1",
+        ['team_1']
+      )
+      const jsonPlan = JSON.parse(plan.rows[0]['QUERY PLAN'])
+      const indexName = jsonPlan[0]['Plan']['Index Name']
+      
+      expect(indexName).toBe('idx_group_matches_doubles_team1')
+      expect(jsonPlan[0]['Plan']['Node Type']).toBe('Index Scan')
+    })
+
+    it('should NOT use partial index if format predicate missing', async () => {
+      const plan = await db.query(
+        "EXPLAIN (FORMAT json) SELECT * FROM group_matches WHERE player1_id = $1",
+        ['player_1']
+      )
+      const jsonPlan = JSON.parse(plan.rows[0]['QUERY PLAN'])
+      
+      // Without format predicate, full table scan expected
+      expect(jsonPlan[0]['Plan']['Node Type']).toBe('Seq Scan')
+    })
+
+    it('should verify partial index excludes NULL values', async () => {
+      const indexInfo = await db.query(
+        "SELECT pg_size_pretty(pg_relation_size('idx_group_matches_singles_player1')) as size"
+      )
+      const singlesIndexSize = indexInfo.rows[0].size
+      
+      // Partial index should be smaller than if it included all rows
+      const allIndexInfo = await db.query(
+        "SELECT pg_size_pretty(pg_relation_size('idx_group_matches_player1_all')) as size"
+      )
+      const allIndexSize = allIndexInfo.rows[0].size
+      
+      // Partial index should be roughly 50% smaller (only singles matches)
+      expect(parseFloat(singlesIndexSize) < parseFloat(allIndexSize)).toBe(true)
+    })
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ Partial indexes exist on both tables
+- ✅ EXPLAIN ANALYZE verifies indexes are used
+- ✅ Query planner chooses index for format-filtered queries
+- ✅ Tests verify index excludes NULL values
+- ✅ Performance improvement measurable
+- ✅ 12+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+### Phase 1.0.RED: Write Tests for Type Detection
+
+**Task 1.0.3: Write Type Detection Function Tests**
+
+**File:** `packages/api/src/__tests__/unit/match-type-detection.spec.ts` (new file)
+
+**Test Structure:**
+
+```typescript
+describe('Match Type Detection (Format Column)', () => {
+  describe('getMatchFormat()', () => {
+    it('should return singles for format=singles', () => {
+      const match = { format: 'singles', player1_id: 'p1', player2_id: 'p2' }
+      expect(getMatchFormat(match)).toBe('singles')
+    })
+
+    it('should return doubles for format=doubles', () => {
+      const match = { format: 'doubles', team1_id: 't1', team2_id: 't2' }
+      expect(getMatchFormat(match)).toBe('doubles')
+    })
+
+    it('should throw for invalid format', () => {
+      const match = { format: 'invalid' }
+      expect(() => getMatchFormat(match)).toThrow('Invalid match format')
+    })
+
+    it('should throw for NULL format', () => {
+      const match = { format: null }
+      expect(() => getMatchFormat(match)).toThrow('Match format required')
+    })
+
+    it('should handle missing format gracefully', () => {
+      const match = {}
+      expect(() => getMatchFormat(match)).toThrow('Match format required')
+    })
+  })
+
+  describe('isSinglesMatch()', () => {
+    it('should return true for singles', () => {
+      expect(isSinglesMatch({ format: 'singles' })).toBe(true)
+    })
+
+    it('should return false for doubles', () => {
+      expect(isSinglesMatch({ format: 'doubles' })).toBe(false)
+    })
+  })
+
+  describe('isDoublesMatch()', () => {
+    it('should return true for doubles', () => {
+      expect(isDoublesMatch({ format: 'doubles' })).toBe(true)
+    })
+
+    it('should return false for singles', () => {
+      expect(isDoublesMatch({ format: 'singles' })).toBe(false)
+    })
+  })
+
+  describe('getMatchParticipantIds()', () => {
+    it('should return player IDs for singles', () => {
+      const match = { format: 'singles', player1_id: 'p1', player2_id: 'p2' }
+      expect(getMatchParticipantIds(match)).toEqual(['p1', 'p2'])
+    })
+
+    it('should return team IDs for doubles', () => {
+      const match = { format: 'doubles', team1_id: 't1', team2_id: 't2' }
+      expect(getMatchParticipantIds(match)).toEqual(['t1', 't2'])
+    })
+
+    it('should throw for mismatched format and data', () => {
+      const match = { format: 'singles', team1_id: 't1', team2_id: 't2' }
+      expect(() => getMatchParticipantIds(match)).toThrow('Format mismatch')
+    })
+  })
+})
+```
+
+**Acceptance Criteria:**
+- ✅ `getMatchFormat()` returns correct format
+- ✅ `isSinglesMatch()` predicate works
+- ✅ `isDoublesMatch()` predicate works
+- ✅ `getMatchParticipantIds()` returns correct IDs
+- ✅ Error handling for NULL/missing format
+- ✅ Error handling for format mismatches
+- ✅ 15+ test cases
+- ✅ Tests are RED until implementation
+
+---
+
+### Phase 1.0.GREEN: Implement Format Column & Indexes
+
+**Coverage Checkpoint:** Before proceeding to Phase 1.0.REFACTOR, verify branch coverage ≥ 85%
+
+**Task 1.0.4: Create Migration & Update Data**
+
+**File:** `db/migrations/020_add_format_column.sql`
+
+**Implementation:**
+
+```sql
+-- Add format column to group_matches
+ALTER TABLE public.group_matches 
+ADD COLUMN format VARCHAR(20) NOT NULL DEFAULT 'singles';
+
+-- Add constraint to enforce valid formats
+ALTER TABLE public.group_matches
+ADD CONSTRAINT check_format_value 
+CHECK (format IN ('singles', 'doubles'));
+
+-- Migrate existing matches to explicit format=singles
+UPDATE public.group_matches 
+SET format = 'singles' 
+WHERE format = 'singles' AND player1_id IS NOT NULL;
+
+-- Create partial indexes for singles (exclude NULL player columns)
+CREATE INDEX idx_group_matches_singles_player1 
+ON public.group_matches(player1_id) 
+WHERE format = 'singles' AND player1_id IS NOT NULL;
+
+CREATE INDEX idx_group_matches_singles_player2 
+ON public.group_matches(player2_id) 
+WHERE format = 'singles' AND player2_id IS NOT NULL;
+
+-- Create partial indexes for doubles (exclude NULL team columns)
+CREATE INDEX idx_group_matches_doubles_team1 
+ON public.group_matches(team1_id) 
+WHERE format = 'doubles' AND team1_id IS NOT NULL;
+
+CREATE INDEX idx_group_matches_doubles_team2 
+ON public.group_matches(team2_id) 
+WHERE format = 'doubles' AND team2_id IS NOT NULL;
+
+-- Same for knockout_matches
+ALTER TABLE public.knockout_matches 
+ADD COLUMN format VARCHAR(20) NOT NULL DEFAULT 'singles';
+
+ALTER TABLE public.knockout_matches
+ADD CONSTRAINT check_format_value 
+CHECK (format IN ('singles', 'doubles'));
+
+UPDATE public.knockout_matches 
+SET format = 'singles' 
+WHERE format = 'singles' AND player1_id IS NOT NULL;
+
+CREATE INDEX idx_knockout_matches_singles_player1 
+ON public.knockout_matches(player1_id) 
+WHERE format = 'singles' AND player1_id IS NOT NULL;
+
+CREATE INDEX idx_knockout_matches_singles_player2 
+ON public.knockout_matches(player2_id) 
+WHERE format = 'singles' AND player2_id IS NOT NULL;
+
+CREATE INDEX idx_knockout_matches_doubles_team1 
+ON public.knockout_matches(team1_id) 
+WHERE format = 'doubles' AND team1_id IS NOT NULL;
+
+CREATE INDEX idx_knockout_matches_doubles_team2 
+ON public.knockout_matches(team2_id) 
+WHERE format = 'doubles' AND team2_id IS NOT NULL;
+```
+
+**Rollback:** `db/rollback/020_add_format_column.sql`
+
+```sql
+DROP INDEX IF EXISTS idx_group_matches_singles_player1;
+DROP INDEX IF EXISTS idx_group_matches_singles_player2;
+DROP INDEX IF EXISTS idx_group_matches_doubles_team1;
+DROP INDEX IF EXISTS idx_group_matches_doubles_team2;
+DROP INDEX IF EXISTS idx_knockout_matches_singles_player1;
+DROP INDEX IF EXISTS idx_knockout_matches_singles_player2;
+DROP INDEX IF EXISTS idx_knockout_matches_doubles_team1;
+DROP INDEX IF EXISTS idx_knockout_matches_doubles_team2;
+
+ALTER TABLE public.group_matches DROP CONSTRAINT check_format_value;
+ALTER TABLE public.group_matches DROP COLUMN format;
+
+ALTER TABLE public.knockout_matches DROP CONSTRAINT check_format_value;
+ALTER TABLE public.knockout_matches DROP COLUMN format;
+```
+
+**Acceptance Criteria:**
+- ✅ Migration adds format column
+- ✅ Constraint enforces valid values
+- ✅ All existing matches set to format='singles'
+- ✅ Partial indexes created for both tables
+- ✅ Rollback migration exists and tested
+- ✅ No data loss during migration
+- ✅ Migration is idempotent
+
+---
+
+**Task 1.0.5: Implement Type Detection Functions**
+
+**File:** `packages/api/src/utils/match-format.ts` (new file)
+
+**Implementation:**
+
+```typescript
+import { getLogger } from '../logger'
+
+const log = getLogger('match-format')
+
+export type MatchFormat = 'singles' | 'doubles'
+
+export interface FormattedMatch {
+  format: MatchFormat
+  player1_id?: string
+  player2_id?: string
+  team1_id?: string
+  team2_id?: string
+  [key: string]: any
+}
+
+/**
+ * Get the format of a match from the database record.
+ * Throws if format is invalid or missing.
+ */
+export function getMatchFormat(match: any): MatchFormat {
+  if (!match || typeof match.format !== 'string') {
+    throw new Error('Match format required')
+  }
+
+  const format = match.format.toLowerCase()
+  if (!['singles', 'doubles'].includes(format)) {
+    throw new Error(`Invalid match format: ${format}`)
+  }
+
+  return format as MatchFormat
+}
+
+/**
+ * Check if a match is a singles match.
+ */
+export function isSinglesMatch(match: any): boolean {
+  try {
+    return getMatchFormat(match) === 'singles'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Check if a match is a doubles match.
+ */
+export function isDoublesMatch(match: any): boolean {
+  try {
+    return getMatchFormat(match) === 'doubles'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get participant IDs from a match based on format.
+ * Returns [participant1_id, participant2_id]
+ */
+export function getMatchParticipantIds(match: FormattedMatch): string[] {
+  const format = getMatchFormat(match)
+
+  if (format === 'singles') {
+    if (!match.player1_id || !match.player2_id) {
+      throw new Error('Singles match missing player IDs')
+    }
+    return [match.player1_id, match.player2_id]
+  }
+
+  if (format === 'doubles') {
+    if (!match.team1_id || !match.team2_id) {
+      throw new Error('Doubles match missing team IDs')
+    }
+    return [match.team1_id, match.team2_id]
+  }
+
+  throw new Error('Unknown match format')
+}
+
+/**
+ * Validate that match format matches the data present.
+ * Throws if format='singles' but only team IDs present, etc.
+ */
+export function validateMatchFormatConsistency(match: FormattedMatch): void {
+  const format = getMatchFormat(match)
+
+  if (format === 'singles') {
+    if ((!match.player1_id || !match.player2_id) && (match.team1_id || match.team2_id)) {
+      throw new Error('Format mismatch: format=singles but team IDs present')
+    }
+  } else if (format === 'doubles') {
+    if ((!match.team1_id || !match.team2_id) && (match.player1_id || match.player2_id)) {
+      throw new Error('Format mismatch: format=doubles but player IDs present')
+    }
+  }
+}
+
+/**
+ * Get the participant type based on match format.
+ */
+export function getParticipantType(match: FormattedMatch): 'player' | 'team' {
+  return isSinglesMatch(match) ? 'player' : 'team'
+}
+```
+
+**Acceptance Criteria:**
+- ✅ `getMatchFormat()` returns correct format
+- ✅ Type guards `isSinglesMatch()` and `isDoublesMatch()` work
+- ✅ `getMatchParticipantIds()` returns correct IDs
+- ✅ `validateMatchFormatConsistency()` catches mismatches
+- ✅ `getParticipantType()` returns correct type
+- ✅ All functions exported for reuse
+- ✅ Error messages are clear and actionable
+- ✅ Typed return values
+
+---
+
+**Task 1.0.6: Update Database Layer to Use Format**
+
+**File:** `packages/api/src/db.ts` (modify existing)
+
+**Changes:**
+
+```typescript
+// In match creation (around line 619):
+// OLD:
+// INSERT INTO public.group_matches (id, group_id, tournament_id, player1_id, player2_id, status, created_at, updated_at)
+// VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+
+// NEW:
+await client.query(
+  `INSERT INTO public.group_matches (id, group_id, tournament_id, format, player1_id, player2_id, status, created_at, updated_at)
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+  [matchId, groupId, tournamentId, 'singles', groupPlayers[j], groupPlayers[k], 'pending', now, now]
+)
+
+// In knockout match creation (around line 860):
+// OLD:
+// INSERT INTO public.knockout_matches (id, tournament_id, round, position, player1_id, player2_id, status, created_at, updated_at)
+
+// NEW:
+await client.query(
+  `INSERT INTO public.knockout_matches (id, tournament_id, round, position, format, player1_id, player2_id, status, created_at, updated_at)
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+  [matchId, tournamentId, round, position, 'singles', player1Id, player2Id, 'pending', now, now]
+)
+```
+
+**Acceptance Criteria:**
+- ✅ All match inserts include format='singles'
+- ✅ Existing queries still work (format column added, not breaking)
+- ✅ All tests pass
+- ✅ No data loss
+
+---
+
+### Phase 1.0.REFACTOR: Refactor While Maintaining Tests
+
+**Coverage Checkpoint:** Verify branch coverage ≥ 85% before proceeding
+
+**Task 1.0.7: Refactor Type Detection Calls**
+
+**File:** `packages/api/src/routes/tournaments.ts` (modify existing)
+
+**Changes:** Replace inline type detection with format-based checks
+
+```typescript
+// Import the new functions
+import { isSinglesMatch, isDoublesMatch, getMatchParticipantIds, validateMatchFormatConsistency } from '../utils/match-format'
+
+// OLD pattern (still works, but less clear):
+// if (match.player1_id) { ... }
+
+// NEW pattern (clearer intent):
+// if (isSinglesMatch(match)) { ... }
+
+// Example refactoring (optional, not required):
+// OLD:
+if (match.player1_id !== payload.playerId && match.player2_id !== payload.playerId) {
+  return res.status(403).json({ message: 'not in this match' })
+}
+
+// NEW (more explicit, validates format consistency):
+validateMatchFormatConsistency(match)
+const [participant1, participant2] = getMatchParticipantIds(match)
+if (participant1 !== payload.playerId && participant2 !== payload.playerId) {
+  return res.status(403).json({ message: 'not in this match' })
+}
+```
+
+**Acceptance Criteria:**
+- ✅ At least 3 type detection calls refactored to use format column
+- ✅ All existing tests still pass (no behavior change)
+- ✅ Code is clearer (format intent explicit)
+- ✅ Coverage ≥ 85%
+- ✅ Backwards compatible with existing code
+
+---
+
+**Phase 1.0 Summary:**
+- ✅ Format column added to group_matches and knockout_matches
+- ✅ Partial indexes created for singles and doubles
+- ✅ Type detection functions implemented
+- ✅ All queries use format column when detecting match type
+- ✅ EXPLAIN ANALYZE confirms partial indexes are used
+- ✅ 50+ tests across migration, indexes, and type detection
+- ✅ Coverage ≥ 85%
+- ✅ Security review passed (no sensitive data, SQL injection safe)
+
+---
 
 ### Task 1.1: Create Teams Table
 
@@ -4098,6 +4707,7 @@ npm test -- packages/api/src/__tests__/integration/singles-*.spec.ts
 
 | Phase | Duration | Status |
 |-------|----------|--------|
+| Phase 1.0: Format Column (Discriminated Union) ⚠️ BLOCKER | 0.25 days | Design |
 | Phase 1: Database | 1 day | Design |
 | Phase 2: Core Logic (RED-GREEN-REFACTOR) | 1.5 days | Design |
 | Phase 2.5: Partner Registration (RED-GREEN-REFACTOR) | 1 day | Design |
@@ -4105,7 +4715,7 @@ npm test -- packages/api/src/__tests__/integration/singles-*.spec.ts
 | Phase 4: API Routes (RED-GREEN-REFACTOR) | 1.25 days | Design |
 | Phase 5: Frontend (RED-GREEN-REFACTOR) | 3 days | Design |
 | Phase 6: Verification | 1 day | Design |
-| **Total** | **~8.5 days** | **Ready for implementation (41% faster than pre-TDD 14.45 days)** |
+| **Total** | **~8.75 days** | **Ready for implementation (41% faster than pre-TDD 14.45 days, +0.25 for format column optimization)** |
 
 **Breakdown by Approach:**
 
@@ -4116,7 +4726,7 @@ npm test -- packages/api/src/__tests__/integration/singles-*.spec.ts
 - High risk of regressions
 - Feature flag rollout (unnecessary for pre-production)
 
-**TDD (This Plan): 8.5 days (41% reduction)**
+**TDD (This Plan): 8.75 days (40% reduction)**
 - Tests first (RED phase in each feature phase)
 - Minimal code to pass (GREEN phase)
 - Refactoring with safety (REFACTOR phase)
@@ -4124,6 +4734,20 @@ npm test -- packages/api/src/__tests__/integration/singles-*.spec.ts
 - Lower risk, faster overall delivery
 - 80+ tests distributed across phases (not isolated)
 - Direct deployment (no feature flag needed for pre-production app)
+- Format column discriminated union optimization enables partial indexes
+
+**Phase 1.0 Breakdown (0.25 days - BLOCKER):**
+- Phase 1.0.RED: Write migration, schema, and index tests (3 test tasks)
+- Phase 1.0.RED: Write type detection tests
+- Phase 1.0.GREEN: Implement migration, partial indexes, type detection functions
+- Phase 1.0.REFACTOR: Refactor existing type detection calls
+- Total: 50+ tests verifying format column and partial index usage
+
+**Phase 1 Breakdown (1 day - after Phase 1.0):**
+- Task 1.1: Create Teams Table
+- Task 1.2: Extend group_memberships
+- Task 1.3: Extend group_matches
+- Task 1.4: Extend knockout_matches
 
 **Phase 2 Breakdown (1.5 days):**
 - Phase 2.0.1: Write Team Model Tests (RED)
@@ -4161,7 +4785,11 @@ npm test -- packages/api/src/__tests__/integration/singles-*.spec.ts
 ## Dependencies & Blockers
 
 **Hard Dependencies (TDD Order):**
-- Phase 1 before Phase 2.RED (teams table needed before writing tests)
+- ⚠️ **Phase 1.0 BLOCKER: must complete before Phase 1.1-1.4** (format column needed for proper schema and index strategy)
+- Phase 1.0.RED before Phase 1.0.GREEN (tests define what to implement)
+- Phase 1.0.GREEN before Phase 1.0.REFACTOR (code must work before refactoring)
+- Phase 1.0 complete before Phase 1.1-1.4 (discriminated union enables all downstream features)
+- Phase 1 complete before Phase 2.RED (teams table needed before writing tests)
 - Phase 2.RED before Phase 2.GREEN (tests define what to implement)
 - Phase 2.GREEN before Phase 2.REFACTOR (code must work before refactoring)
 - Phase 2 complete before Phase 2.5.RED (group formation logic needed)
@@ -4188,31 +4816,42 @@ npm test -- packages/api/src/__tests__/integration/singles-*.spec.ts
 - Phase 4.GREEN and Phase 5.GREEN can overlap (once Phase 4.RED complete)
 
 **Critical Path:**
-1. Phase 1 (1 day)
-2. Phase 2 (1.5 days)
-3. Phase 2.5 (1 day)
-4. Phase 3 (0.75 days)
-5. Phase 4 (1.25 days) OR Phase 5 (3 days) - can overlap after Phase 3
-6. Phase 5 (3 days) if not started with Phase 4
-7. Phase 6 (1 day)
+1. Phase 1.0 (0.25 days) ⚠️ **BLOCKER**
+2. Phase 1 (1 day)
+3. Phase 2 (1.5 days)
+4. Phase 2.5 (1 day)
+5. Phase 3 (0.75 days)
+6. Phase 4 (1.25 days) OR Phase 5 (3 days) - can overlap after Phase 3
+7. Phase 5 (3 days) if not started with Phase 4
+8. Phase 6 (1 day)
 
-**Minimum Sequential Time:** 8.5 days (no parallelization)
+**Minimum Sequential Time:** 8.75 days (no parallelization)
 
 **With Optimal Parallelization:**
 - Phases 4 & 5 overlap: saves ~1.25 days
-- **Optimized timeline: ~7.25 days**
+- **Optimized timeline: ~7.5 days**
 
 **Blockers:**
-- None identified
+- ⚠️ Phase 1.0 (Format Column) must complete before Phase 1.1-1.4 (other database schema tasks)
 
 ---
 
 ## Document Maintenance
 
 **Document Owner:** Development Team  
-**Last Updated:** 2026-06-01  
-**Next Review:** Before Phase 1 implementation  
+**Last Updated:** 2026-06-02  
+**Next Review:** Before Phase 1.0 implementation  
 **Revision History:**
+- v2.2 (2026-06-02): Added Phase 1.0 (Format Column - Discriminated Union) as architectural blocker
+  - Established format column on group_matches and knockout_matches tables
+  - Implemented partial indexes for singles and doubles matches
+  - Added comprehensive TDD tests verifying index usage via EXPLAIN ANALYZE
+  - Added type detection functions using format column instead of NULL inference
+  - Format column enables cleaner schema, better indexing, and future extensibility (3v3, 4v4)
+  - Phase 1.0 is BLOCKER for Phase 1.1-1.4 (other database schema tasks)
+  - Updated timeline: 8.5 → 8.75 days (sequential), 7.25 → 7.5 days (with parallelization)
+  - Minimal code changes: only 2 INSERT statements need `format` column added
+  - Existing queries work unchanged (format column is additive)
 - v2.1 (2026-06-01): Removed Phase 7 (feature flag rollout) - not needed for pre-production
   - Eliminated unnecessary feature flag complexity
   - Direct deployment after Phase 6 verification
