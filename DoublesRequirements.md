@@ -3996,7 +3996,7 @@ npm test -- --coverage
 - ✅ Coverage report generated and reviewed
 
 **Failure Condition:**
-If branch coverage falls below 85%, implementation must add additional tests until requirement is met. Do not proceed to Phase 7 without meeting this requirement.
+If branch coverage falls below 85%, implementation must add additional tests until requirement is met. Do not deploy without meeting this requirement.
 
 ---
 
@@ -4053,124 +4053,6 @@ npm test -- packages/api/src/__tests__/integration/singles-*.spec.ts
 
 ---
 
-## Phase 7: Integration & Rollout
-
-**Duration:** 1 day  
-**Risk Level:** Medium (feature flag management)  
-**Rollback:** Disable feature flag
-
-### Task 7.1: Feature Flag Implementation
-
-**File:** `packages/api/src/config/features.ts` (new or modify existing)
-
-```typescript
-export const features = {
-  doublesSupport: {
-    enabled: process.env.FEATURE_DOUBLES_SUPPORT === 'true',
-    description: 'Allow creation and management of doubles tournaments',
-    rolloutPercentage: 0, // 0-100% of users
-    createdAt: new Date('2026-06-15'),
-    targetDate: new Date('2026-07-01')
-  }
-}
-
-export function isDoublesEnabled(): boolean {
-  return features.doublesSupport.enabled
-}
-```
-
-**Environment Variable:**
-```bash
-# .env.local (development)
-FEATURE_DOUBLES_SUPPORT=true
-
-# .env.production
-FEATURE_DOUBLES_SUPPORT=false  # Launch with off
-
-# .env.staging
-FEATURE_DOUBLES_SUPPORT=true   # Test with on
-```
-
-**Acceptance Criteria:**
-- ✅ Flag controls doubles tournament creation
-- ✅ Can be toggled without code deploy
-- ✅ Set to OFF for production launch
-- ✅ Set to ON for staging
-
----
-
-### Task 7.2: API Guard - Prevent Doubles on Old Code
-
-**File:** `packages/api/src/routes/tournaments.ts` (modify tournament creation)
-
-```typescript
-router.post('/', async (req, res, next) => {
-  const payload = await requireOrganizerAuth(...)
-  
-  if (req.body.matchFormat === 'doubles' && !isDoublesEnabled()) {
-    return res.status(400).json({
-      code: 'FEATURE_NOT_AVAILABLE',
-      message: 'Doubles tournaments not yet available'
-    })
-  }
-  
-  // ... rest of creation logic
-})
-```
-
-**Acceptance Criteria:**
-- ✅ Prevents doubles tournament creation if flag off
-- ✅ Clear error message to API consumers
-- ✅ Singles tournaments unaffected
-
----
-
-### Task 7.3: Rollout Plan
-
-**Rollout Schedule:**
-
-**Stage 1: Development (2-3 days)**
-- All developers test with `FEATURE_DOUBLES_SUPPORT=true`
-- Code review: verify all conditional logic
-- Run full test suite: 2,126 + new 80 tests = 2,206 passing
-
-**Stage 2: Staging (3-5 days)**
-- Deploy with feature flag ON
-- Internal QA team tests doubles flow
-- Beta users test (controlled)
-- Verify no regressions in singles
-
-**Stage 3: Production (Go/No-go decision)**
-- **Go:** Enable flag for 10% of new tournaments
-- **Monitor:** Error rates, performance metrics
-- **Ramp:** 25% → 50% → 100% over 1 week
-- **No-go:** Disable flag, investigate issues
-
-**Monitoring During Rollout:**
-```typescript
-// Track feature usage
-log.info('doubles_tournament.created', {
-  tournamentId,
-  teamCount,
-  timestamp
-})
-
-// Track errors by feature
-log.error('doubles.error', {
-  code: err.code,
-  feature: 'doubles',
-  context: { tournamentId, groupId }
-})
-```
-
-**Acceptance Criteria:**
-- ✅ Feature flag controls rollout
-- ✅ Monitoring in place
-- ✅ Rollback procedure documented
-- ✅ Communication plan for users
-
----
-
 ## Success Criteria
 
 ### Functional Requirements
@@ -4190,19 +4072,12 @@ log.error('doubles.error', {
 - ✅ **Minimum 85% branch coverage (project requirement)**
 - ✅ Target 87%+ statement coverage (from current 87.52%)
 - ✅ Database migrations backwards compatible
-- ✅ Feature flag controls rollout
 - ✅ Code review + QA sign-off
 
 ### Performance Requirements
 - ✅ Team standings recalculation < 500ms (same as singles)
 - ✅ API response times unchanged
 - ✅ No database query plan regressions
-
-### Rollout Requirements
-- ✅ Feature off by default in production
-- ✅ Can be toggled without code deploy
-- ✅ Monitoring and alerting in place
-- ✅ Rollback procedure documented
 
 ---
 
@@ -4213,7 +4088,6 @@ log.error('doubles.error', {
 | Regression in singles logic | Parallel test suites, full regression testing | Low |
 | Database constraint violation | Careful migration design, data validation | Low |
 | API timeout on large tournaments | No algorithmic change, performance verified | Very Low |
-| User confusion (singles vs doubles) | Clear UI labels, feature flag off initially | Low |
 | Score submission bugs | Comprehensive unit tests, E2E coverage | Low |
 
 ---
@@ -4231,8 +4105,7 @@ log.error('doubles.error', {
 | Phase 4: API Routes (RED-GREEN-REFACTOR) | 1.25 days | Design |
 | Phase 5: Frontend (RED-GREEN-REFACTOR) | 3 days | Design |
 | Phase 6: Verification | 1 day | Design |
-| Phase 7: Rollout | 1 day | Design |
-| **Total** | **~9.5 days** | **Ready for implementation (33% faster than pre-TDD 14.45 days)** |
+| **Total** | **~8.5 days** | **Ready for implementation (41% faster than pre-TDD 14.45 days)** |
 
 **Breakdown by Approach:**
 
@@ -4241,14 +4114,16 @@ log.error('doubles.error', {
 - Rework required due to defects
 - Integration testing done late
 - High risk of regressions
+- Feature flag rollout (unnecessary for pre-production)
 
-**TDD (This Plan): 9.5 days (33% reduction)**
+**TDD (This Plan): 8.5 days (41% reduction)**
 - Tests first (RED phase in each feature phase)
 - Minimal code to pass (GREEN phase)
 - Refactoring with safety (REFACTOR phase)
 - Comprehensive coverage throughout
 - Lower risk, faster overall delivery
 - 80+ tests distributed across phases (not isolated)
+- Direct deployment (no feature flag needed for pre-production app)
 
 **Phase 2 Breakdown (1.5 days):**
 - Phase 2.0.1: Write Team Model Tests (RED)
@@ -4305,14 +4180,12 @@ log.error('doubles.error', {
 
 **Soft Dependencies:**
 - Phase 6 runs after all code phases complete (verification only)
-- Phase 7 can begin during Phase 6 (rollout planning)
 
 **Parallelization Opportunities:**
 - Phase 2.RED, Phase 2.5.RED can be written in parallel (different features)
 - Phase 2.GREEN and Phase 2.5.GREEN can be implemented in parallel (after respective RED phases)
 - Phase 4.RED and Phase 5.RED can be written in parallel (after Phase 3.RED)
 - Phase 4.GREEN and Phase 5.GREEN can overlap (once Phase 4.RED complete)
-- Phase 6 and Phase 7 can overlap (verification while planning rollout)
 
 **Critical Path:**
 1. Phase 1 (1 day)
@@ -4322,14 +4195,12 @@ log.error('doubles.error', {
 5. Phase 4 (1.25 days) OR Phase 5 (3 days) - can overlap after Phase 3
 6. Phase 5 (3 days) if not started with Phase 4
 7. Phase 6 (1 day)
-8. Phase 7 (1 day)
 
-**Minimum Sequential Time:** 9.5 days (no parallelization)
+**Minimum Sequential Time:** 8.5 days (no parallelization)
 
 **With Optimal Parallelization:**
 - Phases 4 & 5 overlap: saves ~1.25 days
-- Phases 6 & 7 overlap: saves ~0.5 days
-- **Optimized timeline: ~7.75 days**
+- **Optimized timeline: ~7.25 days**
 
 **Blockers:**
 - None identified
@@ -4342,6 +4213,12 @@ log.error('doubles.error', {
 **Last Updated:** 2026-06-01  
 **Next Review:** Before Phase 1 implementation  
 **Revision History:**
+- v2.1 (2026-06-01): Removed Phase 7 (feature flag rollout) - not needed for pre-production
+  - Eliminated unnecessary feature flag complexity
+  - Direct deployment after Phase 6 verification
+  - Reduced timeline from 9.5 to 8.5 days (41% vs pre-TDD, 33% improvement from feature flag removal)
+  - Updated timeline, dependencies, risk mitigation accordingly
+  - Optimized critical path: 7.25 days with parallelization
 - v2.0 (2026-06-01): Restructured for TDD compliance per `TDD_STRATEGY.md`
   - Moved test writing to RED phases (before implementation)
   - Introduced GREEN phases (minimal implementation)
