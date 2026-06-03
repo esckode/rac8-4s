@@ -960,6 +960,31 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(409).json({ code: 'TOURNAMENT_FULL', message: 'Tournament has reached maximum capacity' })
       }
 
+      // Validate partner selection for doubles tournaments
+      if (tournament.match_format === 'doubles') {
+        if (!req.body.partnerSelection) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Partner selection required for doubles tournament' })
+        }
+
+        const { type, value } = req.body.partnerSelection
+        if (!['select', 'invite'].includes(type)) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid partner selection type' })
+        }
+
+        if (type === 'select' && !value) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Partner ID required for select option' })
+        }
+
+        if (type === 'invite') {
+          if (!value || !value.includes('@')) {
+            return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid email format for invite option' })
+          }
+          if (value === req.body.email.trim()) {
+            return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Cannot partner with yourself' })
+          }
+        }
+      }
+
       const player = await playerRepo.findOrCreatePlayerByEmail(
         req.body.email.trim(),
         req.body.name.trim(),
@@ -968,7 +993,61 @@ export default function tournamentsRouter(deps: AppDependencies) {
       )
 
       const existingReg = await playerRepo.findRegistration(player.id, tournamentId)
-      if (!existingReg) {
+
+      // Handle doubles partnership
+      if (tournament.match_format === 'doubles' && req.body.partnerSelection) {
+        const { type, value } = req.body.partnerSelection
+
+        if (type === 'select') {
+          // Partner already registered - create paired registrations
+          const partnerPlayer = await playerRepo.findById(value)
+          if (!partnerPlayer) {
+            return res.status(404).json({ code: 'NOT_FOUND', message: 'Partner player not found' })
+          }
+
+          // Create registration for this player with partner reference
+          if (!existingReg) {
+            await playerRepo.createRegistration(player.id, tournamentId)
+          }
+
+          // Update with partner information
+          const reg1 = await playerRepo.findRegistration(player.id, tournamentId)
+          if (reg1) {
+            await playerRepo.updateRegistrationWithPartner(reg1.id, value)
+          }
+
+          // Check or create registration for partner
+          const partnerReg = await playerRepo.findRegistration(value, tournamentId)
+          if (!partnerReg) {
+            await playerRepo.createRegistration(value, tournamentId)
+          } else {
+            // Update partner's registration with this player's ID
+            await playerRepo.updateRegistrationWithPartner(partnerReg.id, player.id)
+          }
+
+          log.info('team.created', {
+            tournamentId,
+            player1Id: player.id,
+            player2Id: value,
+            registrationType: 'select',
+          })
+        } else if (type === 'invite') {
+          // Partner not yet registered - create registration with invite pending
+          if (!existingReg) {
+            await playerRepo.createRegistration(player.id, tournamentId)
+          }
+
+          // Store invitation info (will be linked when partner signs up)
+          // For now, we just create the registration
+          log.info('team.created', {
+            tournamentId,
+            playerId: player.id,
+            partnerEmail: value,
+            registrationType: 'invite',
+          })
+        }
+      } else if (!existingReg) {
+        // Single registration (not doubles)
         await playerRepo.createRegistration(player.id, tournamentId)
       }
 

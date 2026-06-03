@@ -33,7 +33,7 @@ export interface Match {
 }
 
 export interface Standing {
-  playerId: string
+  participantId: string  // Can be playerId or teamId
   rank: number
   wins: number
   losses: number

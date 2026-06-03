@@ -18,8 +18,8 @@ describe('InMemoryStandingsCache', () => {
     it('stores standings for a group', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 3, losses: 0, setsWon: 6, setsLost: 0 },
-        { playerId: 'p2', rank: 2, wins: 2, losses: 1, setsWon: 5, setsLost: 1 },
+        { participantId: 'p1', rank: 1, wins: 3, losses: 0, setsWon: 6, setsLost: 0 },
+        { participantId: 'p2', rank: 2, wins: 2, losses: 1, setsWon: 5, setsLost: 1 },
       ]
 
       cache.set('group_1', standings)
@@ -29,10 +29,10 @@ describe('InMemoryStandingsCache', () => {
     it('updates standings when called multiple times for same group', () => {
       const cache = new InMemoryStandingsCache()
       const standings1: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 2, losses: 0, setsWon: 4, setsLost: 0 },
+        { participantId: 'p1', rank: 1, wins: 2, losses: 0, setsWon: 4, setsLost: 0 },
       ]
       const standings2: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 3, losses: 0, setsWon: 6, setsLost: 0 },
+        { participantId: 'p1', rank: 1, wins: 3, losses: 0, setsWon: 6, setsLost: 0 },
       ]
 
       cache.set('group_1', standings1)
@@ -53,7 +53,7 @@ describe('InMemoryStandingsCache', () => {
     it('stores standings with single entry', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'solo_player', rank: 1, wins: 0, losses: 0, setsWon: 0, setsLost: 0 },
+        { participantId: 'solo_player', rank: 1, wins: 0, losses: 0, setsWon: 0, setsLost: 0 },
       ]
 
       cache.set('group_single', standings)
@@ -63,7 +63,7 @@ describe('InMemoryStandingsCache', () => {
     it('stores large standings list', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = Array.from({ length: 100 }, (_, i) => ({
-        playerId: `player_${i}`,
+        participantId: `participant_${i}`,
         rank: i + 1,
         wins: Math.floor(Math.random() * 10),
         losses: Math.floor(Math.random() * 10),
@@ -81,7 +81,7 @@ describe('InMemoryStandingsCache', () => {
     it('returns standings by groupId', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 5, losses: 0, setsWon: 10, setsLost: 0 },
+        { participantId: 'p1', rank: 1, wins: 5, losses: 0, setsWon: 10, setsLost: 0 },
       ]
 
       cache.set('group_1', standings)
@@ -93,7 +93,7 @@ describe('InMemoryStandingsCache', () => {
     it('returns exact same array reference', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 1, losses: 1, setsWon: 2, setsLost: 2 },
+        { participantId: 'p1', rank: 1, wins: 1, losses: 1, setsWon: 2, setsLost: 2 },
       ]
 
       cache.set('group_1', standings)
@@ -110,11 +110,11 @@ describe('InMemoryStandingsCache', () => {
     it('returns standings after multiple sets', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 2, losses: 1, setsWon: 4, setsLost: 2 },
+        { participantId: 'p1', rank: 1, wins: 2, losses: 1, setsWon: 4, setsLost: 2 },
       ]
 
       cache.set('group_1', standings)
-      cache.set('group_2', [{ playerId: 'p2', rank: 1, wins: 0, losses: 0, setsWon: 0, setsLost: 0 }])
+      cache.set('group_2', [{ participantId: 'p2', rank: 1, wins: 0, losses: 0, setsWon: 0, setsLost: 0 }])
 
       expect(cache.get('group_1')).toEqual(standings)
     })
@@ -124,7 +124,7 @@ describe('InMemoryStandingsCache', () => {
     it('clears standings for a group', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 4, losses: 0, setsWon: 8, setsLost: 0 },
+        { participantId: 'p1', rank: 1, wins: 4, losses: 0, setsWon: 8, setsLost: 0 },
       ]
 
       cache.set('group_1', standings)
@@ -136,7 +136,7 @@ describe('InMemoryStandingsCache', () => {
 
     it('returns null after clearing', () => {
       const cache = new InMemoryStandingsCache()
-      cache.set('group_1', [{ playerId: 'p1', rank: 1, wins: 0, losses: 0, setsWon: 0, setsLost: 0 }])
+      cache.set('group_1', [{ participantId: 'p1', rank: 1, wins: 0, losses: 0, setsWon: 0, setsLost: 0 }])
       cache.clear('group_1')
 
       expect(cache.get('group_1')).toBeNull()
@@ -145,10 +145,10 @@ describe('InMemoryStandingsCache', () => {
     it('clears specific group without affecting others', () => {
       const cache = new InMemoryStandingsCache()
       const standings1: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 2, losses: 0, setsWon: 4, setsLost: 0 },
+        { participantId: 'p1', rank: 1, wins: 2, losses: 0, setsWon: 4, setsLost: 0 },
       ]
       const standings2: Standing[] = [
-        { playerId: 'p2', rank: 1, wins: 3, losses: 0, setsWon: 6, setsLost: 0 },
+        { participantId: 'p2', rank: 1, wins: 3, losses: 0, setsWon: 6, setsLost: 0 },
       ]
 
       cache.set('group_1', standings1)
@@ -180,10 +180,10 @@ describe('InMemoryStandingsCache', () => {
     it('maintains separate standings for different groups', () => {
       const cache = new InMemoryStandingsCache()
       const group1: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 5, losses: 0, setsWon: 10, setsLost: 0 },
+        { participantId: 'p1', rank: 1, wins: 5, losses: 0, setsWon: 10, setsLost: 0 },
       ]
       const group2: Standing[] = [
-        { playerId: 'p2', rank: 1, wins: 2, losses: 3, setsWon: 4, setsLost: 6 },
+        { participantId: 'p2', rank: 1, wins: 2, losses: 3, setsWon: 4, setsLost: 6 },
       ]
 
       cache.set('group_1', group1)
@@ -197,7 +197,7 @@ describe('InMemoryStandingsCache', () => {
     it('allows concurrent operations on different groups', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 1, losses: 1, setsWon: 2, setsLost: 2 },
+        { participantId: 'p1', rank: 1, wins: 1, losses: 1, setsWon: 2, setsLost: 2 },
       ]
 
       for (let i = 0; i < 10; i++) {
@@ -212,7 +212,7 @@ describe('InMemoryStandingsCache', () => {
     it('clear on one group does not affect others', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 1, losses: 1, setsWon: 2, setsLost: 2 },
+        { participantId: 'p1', rank: 1, wins: 1, losses: 1, setsWon: 2, setsLost: 2 },
       ]
 
       cache.set('group_a', standings)
@@ -229,7 +229,7 @@ describe('InMemoryStandingsCache', () => {
     it('clears multiple groups independently', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 1, losses: 1, setsWon: 2, setsLost: 2 },
+        { participantId: 'p1', rank: 1, wins: 1, losses: 1, setsWon: 2, setsLost: 2 },
       ]
 
       cache.set('group_1', standings)
@@ -249,14 +249,14 @@ describe('InMemoryStandingsCache', () => {
     it('preserves standings across multiple operations', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 3, losses: 2, setsWon: 6, setsLost: 4 },
-        { playerId: 'p2', rank: 2, wins: 2, losses: 3, setsWon: 5, setsLost: 6 },
+        { participantId: 'p1', rank: 1, wins: 3, losses: 2, setsWon: 6, setsLost: 4 },
+        { participantId: 'p2', rank: 2, wins: 2, losses: 3, setsWon: 5, setsLost: 6 },
       ]
 
       cache.set('group_1', standings)
       const retrieved1 = cache.get('group_1')
 
-      cache.set('group_2', [{ playerId: 'p3', rank: 1, wins: 0, losses: 0, setsWon: 0, setsLost: 0 }])
+      cache.set('group_2', [{ participantId: 'p3', rank: 1, wins: 0, losses: 0, setsWon: 0, setsLost: 0 }])
       const retrieved2 = cache.get('group_1')
 
       expect(retrieved1).toEqual(standings)
@@ -266,10 +266,10 @@ describe('InMemoryStandingsCache', () => {
     it('allows reusing same groupId after clearing', () => {
       const cache = new InMemoryStandingsCache()
       const standings1: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 1, losses: 0, setsWon: 2, setsLost: 0 },
+        { participantId: 'p1', rank: 1, wins: 1, losses: 0, setsWon: 2, setsLost: 0 },
       ]
       const standings2: Standing[] = [
-        { playerId: 'p2', rank: 1, wins: 2, losses: 0, setsWon: 4, setsLost: 0 },
+        { participantId: 'p2', rank: 1, wins: 2, losses: 0, setsWon: 4, setsLost: 0 },
       ]
 
       cache.set('group_1', standings1)
@@ -292,7 +292,7 @@ describe('InMemoryStandingsCache', () => {
     it('get returns Standing[] | null', () => {
       const cache = new InMemoryStandingsCache()
       const standings: Standing[] = [
-        { playerId: 'p1', rank: 1, wins: 0, losses: 0, setsWon: 0, setsLost: 0 },
+        { participantId: 'p1', rank: 1, wins: 0, losses: 0, setsWon: 0, setsLost: 0 },
       ]
 
       cache.set('group_1', standings)

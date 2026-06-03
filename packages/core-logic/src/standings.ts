@@ -1,17 +1,21 @@
-export interface Player {
+export interface Participant {
   id: string
+  name?: string
+}
+
+export interface Player extends Participant {
   name: string
 }
 
 export interface Match {
-  player1Id: string
-  player2Id: string
+  participant1Id: string
+  participant2Id: string
   winnerId: string | null
   score: string | null
 }
 
 export interface Standing {
-  playerId: string
+  participantId: string
   rank: number
   wins: number
   losses: number
@@ -19,12 +23,20 @@ export interface Standing {
   setsLost: number
 }
 
-export function calculateStandings(players: Player[], matches: Match[]): Standing[] {
-  const stats = new Map<string, { wins: number; losses: number; setsWon: number; setsLost: number; headToHead: Map<string, number> }>()
+interface StandingStats {
+  wins: number
+  losses: number
+  setsWon: number
+  setsLost: number
+  headToHead: Map<string, number>
+}
 
-  // Initialize stats for all players
-  players.forEach(player => {
-    stats.set(player.id, {
+export function calculateStandings(participants: Participant[], matches: Match[]): Standing[] {
+  const stats = new Map<string, StandingStats>()
+
+  // Initialize stats for all participants (works for any ID type)
+  participants.forEach(participant => {
+    stats.set(participant.id, {
       wins: 0,
       losses: 0,
       setsWon: 0,
@@ -35,10 +47,10 @@ export function calculateStandings(players: Player[], matches: Match[]): Standin
 
   // Process matches
   matches.forEach(match => {
-    const player1Stats = stats.get(match.player1Id)
-    const player2Stats = stats.get(match.player2Id)
+    const participant1Stats = stats.get(match.participant1Id)
+    const participant2Stats = stats.get(match.participant2Id)
 
-    if (!player1Stats || !player2Stats) return
+    if (!participant1Stats || !participant2Stats) return
 
     if (!match.winnerId) {
       return
@@ -47,34 +59,40 @@ export function calculateStandings(players: Player[], matches: Match[]): Standin
     // Count sets from score
     const sets = match.score ? parseSets(match.score) : { setsWon: 1, setsLost: 0 }
 
-    if (match.winnerId === match.player1Id) {
-      player1Stats.wins++
-      player2Stats.losses++
-      player1Stats.setsWon += sets.setsWon
-      player2Stats.setsLost += sets.setsWon
-      player2Stats.setsWon += sets.setsLost
-      player1Stats.setsLost += sets.setsLost
+    if (match.winnerId === match.participant1Id) {
+      participant1Stats.wins++
+      participant2Stats.losses++
+      participant1Stats.setsWon += sets.setsWon
+      participant2Stats.setsLost += sets.setsWon
+      participant2Stats.setsWon += sets.setsLost
+      participant1Stats.setsLost += sets.setsLost
 
       // Track head-to-head
-      player1Stats.headToHead.set(match.player2Id, (player1Stats.headToHead.get(match.player2Id) ?? 0) + 1)
+      participant1Stats.headToHead.set(
+        match.participant2Id,
+        (participant1Stats.headToHead.get(match.participant2Id) ?? 0) + 1
+      )
     } else {
-      player2Stats.wins++
-      player1Stats.losses++
-      player2Stats.setsWon += sets.setsWon
-      player1Stats.setsLost += sets.setsWon
-      player1Stats.setsWon += sets.setsLost
-      player2Stats.setsLost += sets.setsLost
+      participant2Stats.wins++
+      participant1Stats.losses++
+      participant2Stats.setsWon += sets.setsWon
+      participant1Stats.setsLost += sets.setsWon
+      participant1Stats.setsWon += sets.setsLost
+      participant2Stats.setsLost += sets.setsLost
 
       // Track head-to-head
-      player2Stats.headToHead.set(match.player1Id, (player2Stats.headToHead.get(match.player1Id) ?? 0) + 1)
+      participant2Stats.headToHead.set(
+        match.participant1Id,
+        (participant2Stats.headToHead.get(match.participant1Id) ?? 0) + 1
+      )
     }
   })
 
   // Convert to standings and sort
-  const standings: Standing[] = players.map(player => {
-    const stat = stats.get(player.id)!
+  const standings: Standing[] = participants.map(participant => {
+    const stat = stats.get(participant.id)!
     return {
-      playerId: player.id,
+      participantId: participant.id,
       rank: 0,
       wins: stat.wins,
       losses: stat.losses,
@@ -91,12 +109,12 @@ export function calculateStandings(players: Player[], matches: Match[]): Standin
     // Tiebreaker 1: sets won
     if (a.setsWon !== b.setsWon) return b.setsWon - a.setsWon
 
-    // Tiebreaker 2: head-to-head (for direct matchups only if 2 players)
+    // Tiebreaker 2: head-to-head (for direct matchups only if 2 participants)
     if (standings.length === 2) {
-      const aStats = stats.get(a.playerId)!
-      const bStats = stats.get(b.playerId)!
-      const aHeadToHead = aStats.headToHead.get(b.playerId) ?? 0
-      const bHeadToHead = bStats.headToHead.get(a.playerId) ?? 0
+      const aStats = stats.get(a.participantId)!
+      const bStats = stats.get(b.participantId)!
+      const aHeadToHead = aStats.headToHead.get(b.participantId) ?? 0
+      const bHeadToHead = bStats.headToHead.get(a.participantId) ?? 0
       if (aHeadToHead !== bHeadToHead) return bHeadToHead - aHeadToHead
     }
 
