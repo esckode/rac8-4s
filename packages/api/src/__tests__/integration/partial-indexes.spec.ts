@@ -1,17 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals'
+import { getTestPool, closeTestPool } from '../helpers/db'
 import { Pool } from 'pg'
 
 describe('Partial Indexes for Discriminated Union', () => {
   let db: Pool
 
   beforeAll(async () => {
-    db = new Pool({
-      connectionString: process.env.DATABASE_URL || 'postgresql://localhost/rac8_test'
-    })
+    db = await getTestPool()
   })
 
   afterAll(async () => {
-    await db.end()
+    await closeTestPool()
   })
 
   describe('Partial index creation', () => {

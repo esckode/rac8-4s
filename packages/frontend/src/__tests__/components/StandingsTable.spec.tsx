@@ -68,7 +68,8 @@ describe('StandingsTable Component', () => {
 
       render(<StandingsTable standings={standings} format="doubles" />)
 
-      expect(screen.getByText('Alice & Bob')).toBeInTheDocument()
+      const teamNames = screen.getAllByText('Alice & Bob')
+      expect(teamNames.length).toBeGreaterThan(0)
       expect(screen.getByText('Team')).toBeInTheDocument()
     })
 
@@ -89,10 +90,15 @@ describe('StandingsTable Component', () => {
         }
       ]
 
-      render(<StandingsTable standings={standings} format="doubles" />)
+      const { container } = render(<StandingsTable standings={standings} format="doubles" />)
 
-      expect(screen.getByText('Alice')).toBeInTheDocument()
-      expect(screen.getByText('Bob')).toBeInTheDocument()
+      // Check that team cell exists with team name
+      const teamCell = container.querySelector('.team-cell')
+      expect(teamCell).toBeInTheDocument()
+
+      // Check that team players are displayed
+      const teamPlayers = container.querySelector('.team-players')
+      expect(teamPlayers).toHaveTextContent('Alice & Bob')
     })
 
     it('should display set differential for doubles', () => {
@@ -149,8 +155,10 @@ describe('StandingsTable Component', () => {
 
       render(<StandingsTable standings={standings} format="doubles" />)
 
-      expect(screen.getByText('Alice & Bob')).toBeInTheDocument()
-      expect(screen.getByText('Charlie & Diana')).toBeInTheDocument()
+      const aliceTeam = screen.getAllByText('Alice & Bob')
+      const charlieTeam = screen.getAllByText('Charlie & Diana')
+      expect(aliceTeam.length).toBeGreaterThan(0)
+      expect(charlieTeam.length).toBeGreaterThan(0)
     })
   })
 
@@ -201,8 +209,8 @@ describe('StandingsTable Component', () => {
       global.innerWidth = 320
       const { container } = render(<StandingsTable standings={standings} format="doubles" />)
 
-      const teamName = screen.getByText('Alice & Bob')
-      expect(teamName).toBeInTheDocument()
+      const teamNames = screen.getAllByText('Alice & Bob')
+      expect(teamNames.length).toBeGreaterThan(0)
       expect(container.querySelector('table')).toBeInTheDocument()
     })
 

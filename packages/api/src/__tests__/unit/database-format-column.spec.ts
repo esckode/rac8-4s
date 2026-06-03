@@ -1,18 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals'
+import { getTestPool, closeTestPool } from '../helpers/db'
 import { Pool } from 'pg'
 import * as fs from 'fs/promises'
+import path from 'path'
 
 describe('Format Column (Discriminated Union)', () => {
   let db: Pool
 
   beforeAll(async () => {
-    db = new Pool({
-      connectionString: process.env.DATABASE_URL || 'postgresql://localhost/rac8_test'
-    })
+    db = await getTestPool()
   })
 
   afterAll(async () => {
-    await db.end()
+    await closeTestPool()
   })
 
   describe('Migration: 020_add_format_column', () => {
@@ -80,17 +80,11 @@ describe('Format Column (Discriminated Union)', () => {
     })
 
     it('should require format column (NOT NULL)', async () => {
-      try {
-        // Attempting to insert without format should fail
-        await db.query(
-          `INSERT INTO group_matches (id, group_id, tournament_id, player1_id, player2_id, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          ['test_null_format', 'g1', 't1', 'p1', 'p2', 'pending', new Date(), new Date()]
-        )
-        throw new Error('Should have required format column')
-      } catch (err: any) {
-        expect(err.message).toMatch(/null|not null|required|format/)
-      }
+      // Check that format column is NOT NULL
+      const result = await db.query(
+        "SELECT is_nullable FROM information_schema.columns WHERE table_name = 'group_matches' AND column_name = 'format'"
+      )
+      expect(result.rows[0].is_nullable).toBe('NO')
     })
   })
 })

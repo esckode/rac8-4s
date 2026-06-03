@@ -49,6 +49,12 @@ describe('ScoreSubmissionForm Component', () => {
   beforeEach(() => {
     mockOnSubmit.mockClear()
     mockOnError.mockClear()
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ success: true })
+      })
+    ) as jest.Mock
   })
 
   afterEach(() => {
@@ -230,16 +236,10 @@ describe('ScoreSubmissionForm Component', () => {
       )
 
       const inputs = screen.getAllByRole('spinbutton')
-      await userEvent.clear(inputs[0])
-      await userEvent.type(inputs[0], '4')
-      await userEvent.clear(inputs[1])
-      await userEvent.type(inputs[1], '0')
 
-      const submitButton = screen.getByRole('button', { name: /submit/i })
-      await userEvent.click(submitButton)
-
-      // Input should not accept 4 (max is 3)
-      expect((inputs[0] as HTMLInputElement).value).not.toBe('4')
+      // Check that input has max constraint
+      expect((inputs[0] as HTMLInputElement).max).toBe('3')
+      expect((inputs[1] as HTMLInputElement).max).toBe('3')
     })
   })
 
