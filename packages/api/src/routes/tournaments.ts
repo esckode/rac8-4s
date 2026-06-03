@@ -325,8 +325,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
           validateMatchFormatConsistency(m)
           const [participant1, participant2] = getMatchParticipantIds(m)
           return {
-            player1Id: participant1,
-            player2Id: participant2,
+            participant1Id: participant1,
+            participant2Id: participant2,
             winnerId: m.winner_id || null,
             score: m.score || null,
           }
@@ -335,10 +335,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       res.json({
         standings: standings.map((s: any) => {
-          const player = members.find(m => m.id === s.playerId)
+          const player = members.find(m => m.id === s.participantId)
           return {
             rank: s.rank,
-            playerId: s.playerId,
+            playerId: s.participantId,
             name: player?.name || 'Unknown',
             wins: s.wins,
             losses: s.losses,
@@ -566,14 +566,14 @@ export default function tournamentsRouter(deps: AppDependencies) {
         const standings = calculateStandings(
           members.map((m) => ({ id: m.id, name: m.name })),
           matches.map((m) => ({
-            player1Id: m.player1_id,
-            player2Id: m.player2_id,
+            participant1Id: m.player1_id,
+            participant2Id: m.player2_id,
             winnerId: m.winner_id ?? null,
             score: m.score ?? null,
           }))
         )
 
-        const advancing = standings.slice(0, group.advancing_count).map((s) => s.playerId)
+        const advancing = standings.slice(0, group.advancing_count).map((s) => s.participantId)
         advancingByGroup.push(advancing)
       }
 
@@ -1761,8 +1761,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
           const standings = calculateStandings(
             members.map(m => ({ id: m.id, name: m.name })),
             matches.map(m => ({
-              player1Id: m.player1_id,
-              player2Id: m.player2_id,
+              participant1Id: m.player1_id,
+              participant2Id: m.player2_id,
               winnerId: m.winner_id || null,
               score: m.score || null,
             }))
@@ -1771,10 +1771,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
             groupId: group.id,
             groupName: group.name,
             standings: standings.map((s: any) => {
-              const player = members.find(m => m.id === s.playerId)
+              const player = members.find(m => m.id === s.participantId)
               return {
                 rank: s.rank,
-                playerId: s.playerId,
+                playerId: s.participantId,
                 name: player?.name || 'Unknown',
                 wins: s.wins,
                 losses: s.losses,

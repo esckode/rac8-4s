@@ -49,16 +49,16 @@ export async function processBracketGenerate(
         if (rank >= group.advancing_count) continue
         const members = await deps.groupRepo.findMembersByGroup(group.id)
         const matches = await deps.groupRepo.findMatchesByGroup(group.id)
-        const players = members.map(m => ({ id: m.id, name: m.name }))
+        const participants = members.map(m => ({ id: m.id, name: m.name }))
         const matchData = matches.map(m => ({
-          player1Id: m.player1_id,
-          player2Id: m.player2_id,
+          participant1Id: m.player1_id,
+          participant2Id: m.player2_id,
           winnerId: m.winner_id ?? null,
           score: m.score ?? null,
         }))
-        const standings = calculateStandings(players, matchData)
+        const standings = calculateStandings(participants, matchData)
         if (standings[rank]) {
-          seeds.push({ playerId: standings[rank].playerId, seedPosition: seedPos++ })
+          seeds.push({ playerId: standings[rank].participantId, seedPosition: seedPos++ })
         }
       }
     }

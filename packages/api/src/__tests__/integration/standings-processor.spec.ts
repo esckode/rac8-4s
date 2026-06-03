@@ -64,9 +64,9 @@ describe('Standings Processor', () => {
 
       expect(Array.isArray(standings)).toBe(true)
       expect(standings.length).toBe(playerIds.length)
-      // Standings should have player IDs
+      // Standings should have participant IDs
       for (const standing of standings) {
-        expect(standing.playerId).toBeDefined()
+        expect(standing.participantId).toBeDefined()
       }
     })
 
@@ -194,8 +194,8 @@ describe('Standings Processor', () => {
       )
 
       // Second should have different standings due to match results
-      const winner1 = standings1[0].playerId
-      const winner2 = standings2[0].playerId
+      const winner1 = standings1[0].participantId
+      const winner2 = standings2[0].participantId
       // The actual winner should have moved up
       expect(standings2[0].wins).toBeGreaterThan(standings1[0].wins)
     })

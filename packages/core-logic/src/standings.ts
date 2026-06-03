@@ -31,10 +31,26 @@ interface StandingStats {
   headToHead: Map<string, number>
 }
 
+/**
+ * Calculate standings from participants and match results.
+ * Generic over participant type (players, teams, etc.) - only cares about IDs.
+ *
+ * Ranking order:
+ * 1. Wins (descending)
+ * 2. Sets won (descending)
+ * 3. Head-to-head record (for 2-participant ties only)
+ * 4. Random (for unbreakable ties)
+ */
 export function calculateStandings(participants: Participant[], matches: Match[]): Standing[] {
-  const stats = new Map<string, StandingStats>()
+  const stats = initializeStats(participants)
+  processMatches(matches, stats)
+  const standings = createStandings(participants, stats)
+  rankStandings(standings, stats)
+  return standings
+}
 
-  // Initialize stats for all participants (works for any ID type)
+function initializeStats(participants: Participant[]): Map<string, StandingStats> {
+  const stats = new Map<string, StandingStats>()
   participants.forEach(participant => {
     stats.set(participant.id, {
       wins: 0,
@@ -44,90 +60,86 @@ export function calculateStandings(participants: Participant[], matches: Match[]
       headToHead: new Map(),
     })
   })
+  return stats
+}
 
-  // Process matches
+function processMatches(matches: Match[], stats: Map<string, StandingStats>): void {
   matches.forEach(match => {
-    const participant1Stats = stats.get(match.participant1Id)
-    const participant2Stats = stats.get(match.participant2Id)
+    const p1Stats = stats.get(match.participant1Id)
+    const p2Stats = stats.get(match.participant2Id)
 
-    if (!participant1Stats || !participant2Stats) return
+    // Skip invalid matches (participants not in stats, or no winner)
+    if (!p1Stats || !p2Stats || !match.winnerId) return
 
-    if (!match.winnerId) {
-      return
+    const sets = match.score ? parseSets(match.score) : { setsWon: 1, setsLost: 0 }
+    const participant1Won = match.winnerId === match.participant1Id
+
+    // Update match records and sets
+    if (participant1Won) {
+      p1Stats.wins++
+      p2Stats.losses++
+    } else {
+      p2Stats.wins++
+      p1Stats.losses++
     }
 
-    // Count sets from score
-    const sets = match.score ? parseSets(match.score) : { setsWon: 1, setsLost: 0 }
+    // Update set counts
+    p1Stats.setsWon += participant1Won ? sets.setsWon : sets.setsLost
+    p1Stats.setsLost += participant1Won ? sets.setsLost : sets.setsWon
+    p2Stats.setsWon += participant1Won ? sets.setsLost : sets.setsWon
+    p2Stats.setsLost += participant1Won ? sets.setsWon : sets.setsLost
 
-    if (match.winnerId === match.participant1Id) {
-      participant1Stats.wins++
-      participant2Stats.losses++
-      participant1Stats.setsWon += sets.setsWon
-      participant2Stats.setsLost += sets.setsWon
-      participant2Stats.setsWon += sets.setsLost
-      participant1Stats.setsLost += sets.setsLost
-
-      // Track head-to-head
-      participant1Stats.headToHead.set(
-        match.participant2Id,
-        (participant1Stats.headToHead.get(match.participant2Id) ?? 0) + 1
-      )
+    // Track head-to-head
+    if (participant1Won) {
+      p1Stats.headToHead.set(match.participant2Id, (p1Stats.headToHead.get(match.participant2Id) ?? 0) + 1)
     } else {
-      participant2Stats.wins++
-      participant1Stats.losses++
-      participant2Stats.setsWon += sets.setsWon
-      participant1Stats.setsLost += sets.setsWon
-      participant1Stats.setsWon += sets.setsLost
-      participant2Stats.setsLost += sets.setsLost
-
-      // Track head-to-head
-      participant2Stats.headToHead.set(
-        match.participant1Id,
-        (participant2Stats.headToHead.get(match.participant1Id) ?? 0) + 1
-      )
+      p2Stats.headToHead.set(match.participant1Id, (p2Stats.headToHead.get(match.participant1Id) ?? 0) + 1)
     }
   })
+}
 
-  // Convert to standings and sort
-  const standings: Standing[] = participants.map(participant => {
+function createStandings(participants: Participant[], stats: Map<string, StandingStats>): Standing[] {
+  return participants.map(participant => {
     const stat = stats.get(participant.id)!
     return {
       participantId: participant.id,
-      rank: 0,
+      rank: 0, // Will be assigned in rankStandings
       wins: stat.wins,
       losses: stat.losses,
       setsWon: stat.setsWon,
       setsLost: stat.setsLost,
     }
   })
+}
 
-  // Sort by: wins (desc), sets won (desc), head-to-head, then random
-  standings.sort((a, b) => {
-    // Primary: wins
-    if (a.wins !== b.wins) return b.wins - a.wins
-
-    // Tiebreaker 1: sets won
-    if (a.setsWon !== b.setsWon) return b.setsWon - a.setsWon
-
-    // Tiebreaker 2: head-to-head (for direct matchups only if 2 participants)
-    if (standings.length === 2) {
-      const aStats = stats.get(a.participantId)!
-      const bStats = stats.get(b.participantId)!
-      const aHeadToHead = aStats.headToHead.get(b.participantId) ?? 0
-      const bHeadToHead = bStats.headToHead.get(a.participantId) ?? 0
-      if (aHeadToHead !== bHeadToHead) return bHeadToHead - aHeadToHead
-    }
-
-    // Tiebreaker 3: random (deterministic within same seed for testing)
-    return Math.random() - 0.5
-  })
-
-  // Assign ranks
+function rankStandings(standings: Standing[], stats: Map<string, StandingStats>): void {
+  standings.sort((a, b) => compareStandings(a, b, standings, stats))
   standings.forEach((standing, index) => {
     standing.rank = index + 1
   })
+}
 
-  return standings
+function compareStandings(
+  a: Standing,
+  b: Standing,
+  allStandings: Standing[],
+  stats: Map<string, StandingStats>
+): number {
+  // Primary tiebreaker: wins
+  if (a.wins !== b.wins) return b.wins - a.wins
+
+  // Tiebreaker 1: sets won
+  if (a.setsWon !== b.setsWon) return b.setsWon - a.setsWon
+
+  // Tiebreaker 2: head-to-head (only applies for direct 2-participant matchups)
+  if (allStandings.length === 2) {
+    const aHeadToHead = stats.get(a.participantId)?.headToHead.get(b.participantId) ?? 0
+    const bHeadToHead = stats.get(b.participantId)?.headToHead.get(a.participantId) ?? 0
+    if (aHeadToHead !== bHeadToHead) return bHeadToHead - aHeadToHead
+  }
+
+  // Tiebreaker 3: random for unbreakable ties
+  return Math.random() - 0.5
 }
 
 function parseSets(score: string): { setsWon: number; setsLost: number } {
