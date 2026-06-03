@@ -774,7 +774,7 @@ if (participant1 !== payload.playerId && participant2 !== payload.playerId) {
 
 ---
 
-### Task 1.1: Create Teams Table
+### ✅ Task 1.1: Create Teams Table - COMPLETE
 
 **File:** `db/migrations/016_add_teams_table.sql`
 
@@ -805,7 +805,7 @@ CREATE INDEX idx_teams_player2 ON public.teams(player2_id);
 
 ---
 
-### Task 1.2: Extend group_memberships (Polymorphic)
+### ✅ Task 1.2: Extend group_memberships (Polymorphic) - COMPLETE
 
 **File:** `db/migrations/017_extend_group_memberships.sql`
 
@@ -845,7 +845,7 @@ WHERE (player_id IS NULL AND team_id IS NULL)
 
 ---
 
-### Task 1.3: Extend group_matches (Polymorphic)
+### ✅ Task 1.3: Extend group_matches (Polymorphic) - COMPLETE
 
 **File:** `db/migrations/018_extend_group_matches.sql`
 
@@ -892,7 +892,7 @@ WHERE (player1_id IS NULL AND player2_id IS NULL AND team1_id IS NULL AND team2_
 
 ---
 
-### Task 1.4: Extend knockout_matches (Same as group_matches)
+### ✅ Task 1.4: Extend knockout_matches (Same as group_matches) - COMPLETE
 
 **File:** `db/migrations/019_extend_knockout_matches.sql`
 
