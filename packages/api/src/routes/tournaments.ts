@@ -15,6 +15,7 @@ import { ForbiddenError } from '../auth/errors'
 import { TournamentStateMachine, type TournamentState, type TransitionAction } from '@core/state-machine'
 import { calculateStandings, generateBracket } from '@core/index'
 import { parseScore, type SportFormat } from '@core/score-parser'
+import { isSinglesMatch, getMatchParticipantIds, validateMatchFormatConsistency } from '../utils/match-format'
 import { getLogger } from '../logger'
 
 const log = getLogger('tournaments')
@@ -320,12 +321,16 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       const standings = calculateStandings(
         members.map(m => ({ id: m.id, name: m.name })),
-        matches.map(m => ({
-          player1Id: m.player1_id,
-          player2Id: m.player2_id,
-          winnerId: m.winner_id || null,
-          score: m.score || null,
-        }))
+        matches.map(m => {
+          validateMatchFormatConsistency(m)
+          const [participant1, participant2] = getMatchParticipantIds(m)
+          return {
+            player1Id: participant1,
+            player2Id: participant2,
+            winnerId: m.winner_id || null,
+            score: m.score || null,
+          }
+        })
       )
 
       res.json({
@@ -366,7 +371,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
       }
 
-      if (match.player1_id !== payload.playerId && match.player2_id !== payload.playerId) {
+      validateMatchFormatConsistency(match)
+      const [participant1, participant2] = getMatchParticipantIds(match)
+      if (participant1 !== payload.playerId && participant2 !== payload.playerId) {
         return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
       }
 
@@ -768,12 +775,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
       }
 
-      if (match.player1_id !== payload.playerId && match.player2_id !== payload.playerId) {
+      validateMatchFormatConsistency(match)
+      const [participant1, participant2] = getMatchParticipantIds(match)
+      if (participant1 !== payload.playerId && participant2 !== payload.playerId) {
         return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
-      }
-
-      if (!match.player1_id || !match.player2_id) {
-        return res.status(409).json({ code: 'INVALID_STATE', message: 'This match is not ready for scoring' })
       }
 
       if (new Date() > new Date(tournament.knockout_stage_deadline)) {

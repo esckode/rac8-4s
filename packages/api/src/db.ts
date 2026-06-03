@@ -616,9 +616,9 @@ export class GroupRepository {
             for (let k = j + 1; k < groupPlayers.length; k++) {
               const matchId = `match_${Date.now()}_${Math.random().toString(36).slice(2)}`
               await client.query(
-                `INSERT INTO public.group_matches (id, group_id, tournament_id, player1_id, player2_id, status, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [matchId, groupId, tournamentId, groupPlayers[j], groupPlayers[k], 'pending', now, now]
+                `INSERT INTO public.group_matches (id, group_id, tournament_id, format, player1_id, player2_id, status, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                [matchId, groupId, tournamentId, 'singles', groupPlayers[j], groupPlayers[k], 'pending', now, now]
               )
             }
           }
@@ -857,9 +857,9 @@ export class KnockoutRepository {
             const player2Id = match.player2 ? seedMap.get(parseInt(match.player2.replace('seed_', ''))) ?? null : null
             const status = player2Id === null && player1Id !== null ? 'bye' : 'pending'
             await client.query(
-              `INSERT INTO public.knockout_matches (id, tournament_id, round, position, player1_id, player2_id, status, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-              [id, tournamentId, match.round, match.position, player1Id, player2Id, status, now, now]
+              `INSERT INTO public.knockout_matches (id, tournament_id, round, position, format, player1_id, player2_id, status, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+              [id, tournamentId, match.round, match.position, 'singles', player1Id, player2Id, status, now, now]
             )
           }
         }

@@ -165,16 +165,16 @@ DOUBLES PATH:
 **Risk Level:** Low (additive only, no breaking changes)  
 **Rollback:** Drop migrations if needed
 
-### ⚠️ BLOCKER: Phase 1.0 - Add Format Column (Discriminated Union)
+### ✅ COMPLETE: Phase 1.0 - Add Format Column (Discriminated Union)
 
-**Status:** Must complete before Tasks 1.1-1.4  
+**Status:** ✅ COMPLETED - All tasks (1.0.1-1.0.7) finished
 **Purpose:** Establish explicit format tracking for singles vs doubles matches, enabling partial index optimization and clearer type detection
 
 ---
 
-### Phase 1.0.RED: Write Tests for Format Column
+### ✅ Phase 1.0.RED: Write Tests for Format Column - COMPLETE
 
-**Task 1.0.1: Write Migration & Schema Tests**
+**Task 1.0.1: Write Migration & Schema Tests** ✅ COMPLETE
 
 **File:** `packages/api/src/__tests__/unit/database-format-column.spec.ts` (new file)
 
@@ -260,9 +260,9 @@ describe('Format Column (Discriminated Union)', () => {
 
 ---
 
-### Phase 1.0.RED: Write Tests for Partial Indexes
+### ✅ Phase 1.0.RED: Write Tests for Partial Indexes - COMPLETE
 
-**Task 1.0.2: Write Partial Index Verification Tests**
+**Task 1.0.2: Write Partial Index Verification Tests** ✅ COMPLETE
 
 **File:** `packages/api/src/__tests__/integration/partial-indexes.spec.ts` (new file)
 
@@ -367,9 +367,9 @@ describe('Partial Indexes for Discriminated Union', () => {
 
 ---
 
-### Phase 1.0.RED: Write Tests for Type Detection
+### ✅ Phase 1.0.RED: Write Tests for Type Detection - COMPLETE
 
-**Task 1.0.3: Write Type Detection Function Tests**
+**Task 1.0.3: Write Type Detection Function Tests** ✅ COMPLETE
 
 **File:** `packages/api/src/__tests__/unit/match-type-detection.spec.ts` (new file)
 
@@ -455,11 +455,11 @@ describe('Match Type Detection (Format Column)', () => {
 
 ---
 
-### Phase 1.0.GREEN: Implement Format Column & Indexes
+### ✅ Phase 1.0.GREEN: Implement Format Column & Indexes - COMPLETE
 
-**Coverage Checkpoint:** Before proceeding to Phase 1.0.REFACTOR, verify branch coverage ≥ 85%
+**Coverage Checkpoint:** ✅ Branch coverage ≥ 85% verified
 
-**Task 1.0.4: Create Migration & Update Data**
+**Task 1.0.4: Create Migration & Update Data** ✅ COMPLETE
 
 **File:** `db/migrations/020_add_format_column.sql`
 
@@ -557,7 +557,7 @@ ALTER TABLE public.knockout_matches DROP COLUMN format;
 
 ---
 
-**Task 1.0.5: Implement Type Detection Functions**
+**Task 1.0.5: Implement Type Detection Functions** ✅ COMPLETE
 
 **File:** `packages/api/src/utils/match-format.ts` (new file)
 
@@ -680,7 +680,7 @@ export function getParticipantType(match: FormattedMatch): 'player' | 'team' {
 
 ---
 
-**Task 1.0.6: Update Database Layer to Use Format**
+**Task 1.0.6: Update Database Layer to Use Format** ✅ COMPLETE
 
 **File:** `packages/api/src/db.ts` (modify existing)
 
@@ -719,11 +719,11 @@ await client.query(
 
 ---
 
-### Phase 1.0.REFACTOR: Refactor While Maintaining Tests
+### ✅ Phase 1.0.REFACTOR: Refactor While Maintaining Tests - COMPLETE
 
-**Coverage Checkpoint:** Verify branch coverage ≥ 85% before proceeding
+**Coverage Checkpoint:** ✅ Branch coverage ≥ 85% verified
 
-**Task 1.0.7: Refactor Type Detection Calls**
+**Task 1.0.7: Refactor Type Detection Calls** ✅ COMPLETE
 
 **File:** `packages/api/src/routes/tournaments.ts` (modify existing)
 
