@@ -74,33 +74,20 @@ This document outlines the implementation of doubles tournament support in RAC8-
 
 ---
 
-### ❌ Phase 4: Tournament Lifecycle Test Failure (1 issue)
+### ✅ Phase 4: Tournament Lifecycle Test Failure (1 issue) - RESOLVED
 
-**Issue 4.1: Doubles Tournament Registration**
+**✅ Issue 4.1: Doubles Tournament Registration - RESOLVED**
 - **File:** `packages/api/src/__tests__/integration/tournament-lifecycle.spec.ts`
 - **Test:** "creates doubles tournament and closes registration"
-- **Failure:** Expected status 202, received 400
-- **Root Cause:** Doubles team registration endpoint validation failing; unclear which field/constraint
-- **Resolution Steps:**
-  1. Add detailed logging to tournament registration endpoint
-  2. Check request payload format matches team registration schema
-  3. Verify test data:
-     - Tournament exists with format='doubles'
-     - Players exist and are registered
-     - Team player IDs are valid
-  4. Check API validation:
-     - Player authorization (both players must be registered)
-     - Team uniqueness constraints
-     - Required fields (player1_id, player2_id, tournamentId)
-  5. Run test with debugging: `npm test -- --verbose --no-coverage`
-  6. Capture exact 400 error message from response body
-  7. Fix validation logic in `POST /:tournamentId/register` endpoint
-  8. Re-run test
-- **Time Estimate:** 1-2 hours
-- **Success Criteria:** 
-  - Test passes consistently
-  - Doubles team registration creates valid records
-  - All lifecycle transitions work (registration → groups → bracket)
+- **Original Failure:** Expected status 202, received 400
+- **Root Cause:** Test did not provide required `partnerSelection` field for doubles tournament registration. The endpoint validates that doubles tournaments require partner selection (lines 964-986 in routes/tournaments.ts), but the test was only sending `email` and `name`.
+- **Fix Applied:** Modified test to register players in teams (pairs):
+  1. For each of 4 teams, create 2 players
+  2. Register each player with `partnerSelection: { type: 'invite', value: partnerEmail }`
+  3. This satisfies the doubles tournament registration validation
+  4. Status 202 returned for each registration
+- **Verification:** Test passes consistently
+- **Status:** ✅ RESOLVED - Test passes (213ms)
 
 ---
 
@@ -133,13 +120,17 @@ This document outlines the implementation of doubles tournament support in RAC8-
 
 ### ❌ Other Test Failures (Bonus issues)
 
-**Issue: Database Layer Test Data Inconsistency**
+**✅ Issue: Database Layer Test Data Inconsistency - RESOLVED**
 - **File:** `packages/api/src/__tests__/integration/db-error-cases.spec.ts`
 - **Test:** "soft deleted locations excluded from listAll"
-- **Failure:** Count mismatch (expected 13650, got 13651)
-- **Root Cause:** Shared database state from parallel test execution
-- **Resolution:** Apply same transaction isolation pattern as Issue 1.1
-- **Time Estimate:** 30 minutes
+- **Original Failure:** Count mismatch (expected 13650, got 13651)
+- **Root Cause:** Test depended on global location count which varied with parallel test execution
+- **Fix Applied:** Refactored test to use isolated sport-based location scoping instead of global counts
+  - Create 2 locations with unique sport identifier
+  - Count only locations with that sport (not all locations)
+  - Verify soft deletion removes location from both listAll() and findBySport()
+  - This eliminates dependency on shared global state
+- **Status:** ✅ RESOLVED - Test passes consistently with no count pollution
 
 ---
 

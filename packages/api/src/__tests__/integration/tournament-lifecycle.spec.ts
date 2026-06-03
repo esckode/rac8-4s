@@ -180,18 +180,38 @@ describe('Tournament Lifecycle Workflows', () => {
       const regTournamentRepo = new TournamentRepository(getDb(pool))
       await regTournamentRepo.updateStatus(tournamentId, 'registration_open')
 
-      // Register 8 players
-      for (let i = 0; i < 8; i++) {
-        const player = await PlayerFactory.create(pool)
+      // Register 8 players as 4 teams (pairs)
+      for (let i = 0; i < 4; i++) {
+        const player1 = await PlayerFactory.create(pool)
+        const player2 = await PlayerFactory.create(pool)
 
-        const regRes = await request(app)
+        // Register first player with invite to second player
+        const regRes1 = await request(app)
           .post(`/tournaments/${tournamentId}/register`)
           .send({
-            email: player.email,
-            name: player.name,
+            email: player1.email,
+            name: player1.name,
+            partnerSelection: {
+              type: 'invite',
+              value: player2.email,
+            },
           })
 
-        expect(regRes.status).toBe(202)
+        expect(regRes1.status).toBe(202)
+
+        // Register second player with invite to first player (completes the pairing)
+        const regRes2 = await request(app)
+          .post(`/tournaments/${tournamentId}/register`)
+          .send({
+            email: player2.email,
+            name: player2.name,
+            partnerSelection: {
+              type: 'invite',
+              value: player1.email,
+            },
+          })
+
+        expect(regRes2.status).toBe(202)
       }
 
       // Close registration
