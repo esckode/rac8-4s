@@ -13,21 +13,21 @@
 
 ## Implementation Status Summary
 
-| Phase | Task | Status | Tests | Commits |
-|-------|------|--------|-------|---------|
-| **1.0** | Format Column (Discriminated Union) | ✅ COMPLETE | 50+ | bf274a8 |
-| **1.1-1.4** | Database Schema Extensions | ✅ COMPLETE | Auto | fdc7438 |
-| **2** | Team Model & Repository | ✅ COMPLETE | 21 | 2 commits |
-| **2.REFACTOR** | Code Cleanup | ✅ COMPLETE | 21 | — |
-| **2.5** | Partner Registration | ✅ COMPLETE | 24 | 991ab1e |
-| **3** | Standings Calculation | ✅ COMPLETE | 26 | ac20987 |
-| **4** | Bracket & Real-time | ✅ COMPLETE | 50 | b6aa60a |
-| **5** | Frontend & Analytics | ✅ COMPLETE | 99 | 4a296a9 |
+| Phase | Task | Status | Tests | Progress |
+|-------|------|--------|-------|----------|
+| **1.0** | Format Column (Discriminated Union) | ✅ COMPLETE | 50+ | 100% |
+| **1.1-1.4** | Database Schema Extensions | ✅ COMPLETE | Auto | 100% |
+| **2** | Team Model & Repository | ✅ COMPLETE | 21 | 100% |
+| **2.REFACTOR** | Code Cleanup | ✅ COMPLETE | 21 | 100% |
+| **2.5** | Partner Registration | ✅ COMPLETE | 24 | 100% |
+| **3** | Standings Calculation | ✅ COMPLETE | 26 | 100% |
+| **4** | Bracket & Real-time | 🔶 IN PROGRESS | 50 | 70% |
+| **5** | Frontend & Analytics | 🔶 IN PROGRESS | 99 | 40% |
 
-**Overall Progress:** 8/8 phases COMPLETE ✅
-**Total Tests:** 270+ written and passing  
+**Overall Progress:** 6/8 phases COMPLETE, 2 in progress  
+**Total Tests:** 270+ written; 98.8% passing (29 failures in incomplete Phase 4-5 integration)  
 **Total Coverage:** ≥85% branch coverage maintained  
-**Total Commits:** 10+ with full documentation  
+**Remaining Work:** 14-18 hours (~2 days of development)  
 
 ---
 
@@ -2327,7 +2327,7 @@ npm test -- packages/core-logic/src/__tests__/standings.spec.ts
 
 ## Phase 4: Real-Time Updates & Bracket Advancement
 
-**Status:** ✅ COMPLETE - All tasks (4.0.1-4.3) finished
+**Status:** 🔶 IN PROGRESS (70% complete) - RED-GREEN phases done, integration work remaining
 
 **Duration:** 1.5 days  
 **Risk Level:** Medium (real-time infrastructure, bracket generation)  
@@ -2413,9 +2413,9 @@ npm test -- packages/core-logic/src/__tests__/standings.spec.ts
 
 ## Phase 4 Summary
 
-**Status:** ✅ COMPLETE - All bracket and real-time update functionality implemented
+**Status:** 🔶 IN PROGRESS (70% complete) - RED-GREEN phases complete, integration and REFACTOR work remaining
 
-**What Was Accomplished:**
+**What Is Accomplished:**
 
 **RED Phase (Write Tests):** ✅ COMPLETE
 - Created 50 comprehensive test cases
@@ -2429,660 +2429,72 @@ npm test -- packages/core-logic/src/__tests__/standings.spec.ts
 - SSE real-time broadcast verified
 - All 50 tests passing
 
-**REFACTOR Phase:** ✅ COMPLETE
-- Code already clean and maintainable
-- No additional refactoring needed
+**REFACTOR Phase & Integration:** ⏳ IN PROGRESS
+- Score validation service needs completion
+- Match submission logic needs final integration
+- Bracket generation workflow needs implementation
+- Real-time event broadcasting needs full implementation
+- Bracket advancement logic needs completion
 
-**Test Results:**
-- All 50 tests passing
-- Authorization verified (only team members can submit)
-- Bracket generation tested for 2, 4, 8+ team tournaments
-- Real-time event broadcasting verified
-- Coverage: ≥85% maintained
+**Test Results (Current):**
+- 50 core tests passing (bracket generator + advancement tests)
+- 29 integration test failures (due to incomplete implementation)
+- Authorization framework verified (only team members can submit)
+- Bracket generation utility tested for 2, 4, 8+ team tournaments
 
-**Files Changed:**
-1. `packages/api/src/utils/bracket-generator.ts` - New bracket generation utility
-2. `packages/api/src/__tests__/unit/bracket-advancement.spec.ts` - Advancement tests (24 tests)
-3. `packages/api/src/__tests__/unit/bracket-generator.spec.ts` - Generator tests (26 tests)
-4. `packages/api/src/routes/tournaments.ts` - Score submission & SSE endpoints verified
+**Files Created/Modified:**
+1. `packages/api/src/utils/bracket-generator.ts` - Bracket generation utility ✅
+2. `packages/api/src/__tests__/unit/bracket-advancement.spec.ts` - Advancement tests (24) ✅
+3. `packages/api/src/__tests__/unit/bracket-generator.spec.ts` - Generator tests (26) ✅
+4. `packages/api/src/routes/tournaments.ts` - Endpoints to be integrated
+5. `packages/api/src/utils/score-validator.ts` - Needs implementation
+6. `packages/api/src/repositories/score-repository.ts` - Needs implementation
 
-**Security Review:**
-- ✅ Only team members can submit scores (authorization verified)
-- ✅ Score format validated
-- ✅ No SQL injection vulnerabilities
-- ✅ Parameterized queries maintained
-- ✅ SSE connections properly authenticated and rate-limited
+**Remaining Work (5 major components, 6-8 hours):**
 
-**Backwards Compatibility:**
-- ✅ All existing singles tournament functionality unchanged
-- ✅ Score submission works identically for singles and doubles
-- ✅ Bracket generation is generic to any participant count
+### Step 1: Complete Match Result Submission Logic (1-2 hours)
+- Verify score format validation handles both singles/doubles
+- Test authorization for all team members
+- Verify logging: `score.submitted` at INFO level
+- Test match winner determination and database updates
+
+### Step 2: Implement Score Validation Service (1-2 hours)
+- Create `ScoreValidator` class for centralized validation
+- Validate format: "X-Y" where X,Y ∈ [0-3]
+- Validate no ties (not "0-0", "1-1", "2-2", "3-3")
+- Validate winning margin: winner has 2+ sets
+- Integrate with score submission endpoint
+
+### Step 3: Implement Bracket Generation on Group Completion (2-3 hours)
+- Create `advanceTournament()` route handler at `POST /:tournamentId/advance`
+- Check if all group matches completed before advancing
+- Generate bracket from top N standings participants
+- Handle odd participant counts (add byes)
+- Log `bracket.generated` at INFO level
+- Test with different tournament sizes (4, 8, 12 players)
+
+### Step 4: Real-Time Bracket Updates via SSE (2-3 hours)
+- Ensure SSE endpoint ready: `GET /:tournamentId/events`
+- Implement event types: score.submitted, standings.updated, bracket.generated, bracket.advanced, bracket.completed
+- Test event broadcasting to connected clients
+- Handle edge cases: concurrent connections, disconnections, network failures
+
+### Step 5: Bracket Advancement Logic (2-3 hours)
+- Determine advancement rules (top 2 from groups, winners from knockout)
+- Track bracket state (match participants, winner, round, position)
+- Implement bracket tree navigation (find parent match for winner)
+- Log advancements: `bracket.advanced` at INFO level
+- Handle finals completion
+
+**Estimated Timeline:** 6-8 hours of focused development
 
 **Next Phase:** Phase 5 - Frontend Display & Analytics
 
 ---
 
-## Phase 4: API Routes & Validation (DEPRECATED - MERGED INTO PHASE 4 ABOVE)
-
-**Duration:** 1.25 days (reduced from 1.75 due to TDD efficiency)  
-**Risk Level:** Medium (validates user input)  
-**Rollback:** Revert route changes
-
-**TDD Approach:** RED-GREEN-REFACTOR cycle
-
----
-
-### Phase 4.RED: Write Tests for API Routes
-
-**Task 4.0.1: Write Tests - Match Type Detection & Doubles Validation**
-
-**File:** `packages/api/src/__tests__/utils/match-utils.spec.ts` (new file)
-
-**Test Structure:**
-
-```typescript
-describe('Match Utils (RED)', () => {
-  describe('getMatchType', () => {
-    it('should identify singles matches', () => {
-      const match = {
-        player1_id: 'p1',
-        player2_id: 'p2',
-        team1_id: null,
-        team2_id: null
-      }
-      expect(getMatchType(match)).toBe('singles')
-    })
-
-    it('should identify doubles matches', () => {
-      const match = {
-        player1_id: null,
-        player2_id: null,
-        team1_id: 'team_1',
-        team2_id: 'team_2'
-      }
-      expect(getMatchType(match)).toBe('doubles')
-    })
-
-    it('should return unknown for mixed match', () => {
-      const match = {
-        player1_id: 'p1',
-        player2_id: null,
-        team1_id: 'team_1',
-        team2_id: null
-      }
-      expect(getMatchType(match)).toBe('unknown')
-    })
-  })
-
-  describe('getMatchParticipantIds', () => {
-    it('should return player IDs for singles', () => {
-      const match = {
-        player1_id: 'p1',
-        player2_id: 'p2',
-        team1_id: null,
-        team2_id: null
-      }
-      expect(getMatchParticipantIds(match)).toEqual(['p1', 'p2'])
-    })
-
-    it('should return team IDs for doubles', () => {
-      const match = {
-        player1_id: null,
-        player2_id: null,
-        team1_id: 'team_1',
-        team2_id: 'team_2'
-      }
-      expect(getMatchParticipantIds(match)).toEqual(['team_1', 'team_2'])
-    })
-  })
-})
-```
-
-**Acceptance Criteria:**
-- ✅ Match type detection tests written
-- ✅ Edge cases covered
-- ✅ 10+ test cases
-- ✅ Tests are RED until implementation
-
----
-
-**Task 4.0.2: Write Tests - Score Submission Validation**
-
-**File:** `packages/api/src/__tests__/integration/doubles-score-submission.spec.ts` (new file)
-
-**Test Structure:**
-
-```typescript
-describe('Doubles: Score Submission (RED)', () => {
-  it('should allow team1.player1 to submit score', async () => {
-    const match = await setupDoublesMatch()
-    
-    const response = await post(
-      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
-      { score: '2-1' },
-      { auth: match.team1.player1 }
-    )
-    
-    expect(response.status).toBe(202)
-  })
-
-  it('should allow team1.player2 to submit score', async () => {
-    const match = await setupDoublesMatch()
-    
-    const response = await post(
-      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
-      { score: '2-1' },
-      { auth: match.team1.player2 }
-    )
-    
-    expect(response.status).toBe(202)
-  })
-
-  it('should allow team2.player1 to submit score', async () => {
-    const match = await setupDoublesMatch()
-    
-    const response = await post(
-      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
-      { score: '2-1' },
-      { auth: match.team2.player1 }
-    )
-    
-    expect(response.status).toBe(202)
-  })
-
-  it('should allow team2.player2 to submit score', async () => {
-    const match = await setupDoublesMatch()
-    
-    const response = await post(
-      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
-      { score: '1-2' },
-      { auth: match.team2.player2 }
-    )
-    
-    expect(response.status).toBe(202)
-  })
-
-  it('should reject unrelated player', async () => {
-    const match = await setupDoublesMatch()
-    const unrelated = await createPlayer('unrelated@test.com')
-    
-    const response = await post(
-      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
-      { score: '2-1' },
-      { auth: unrelated }
-    )
-    
-    expect(response.status).toBe(403)
-    expect(response.body.message).toContain('not in this match')
-  })
-
-  it('should log score.submitted at INFO level', async () => {
-    const match = await setupDoublesMatch()
-    
-    await post(
-      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
-      { score: '2-1' },
-      { auth: match.team1.player1 }
-    )
-    
-    const logs = await getLogs()
-    expect(logs).toContainEqual(
-      expect.objectContaining({
-        level: 'info',
-        event: 'score.submitted',
-        playerId: match.team1.player1.id,
-        matchId: match.id,
-        tournamentId: match.tournamentId,
-        score: '2-1'
-      })
-    )
-  })
-
-  it('should update standings after score submission', async () => {
-    const match = await setupDoublesMatch()
-    
-    await post(
-      `/tournaments/${match.tournamentId}/matches/${match.id}/score`,
-      { score: '2-1' },
-      { auth: match.team1.player1 }
-    )
-    
-    const standings = await getGroupStandings(match.groupId)
-    expect(standings[0].participantId).toBe(match.team1.id)
-    expect(standings[0].wins).toBe(1)
-  })
-})
-```
-
-**Acceptance Criteria:**
-- ✅ Score submission validation tests written
-- ✅ All team member scenarios tested
-- ✅ Unrelated player rejection tested
-- ✅ Logging tested
-- ✅ Standings update tested
-- ✅ 15+ test cases
-- ✅ Tests are RED until implementation
-
----
-
-**Task 4.0.3: Write Tests - Match Details & Standings Endpoints**
-
-**File:** `packages/api/src/__tests__/integration/doubles-api-endpoints.spec.ts` (new file)
-
-**Test Structure:**
-
-```typescript
-describe('Doubles: API Endpoints (RED)', () => {
-  describe('GET /matches/:matchId', () => {
-    it('should return singles match with player details', async () => {
-      const tournament = await createTournament({ matchFormat: 'singles' })
-      const match = await setupSinglesMatch(tournament.id)
-      
-      const response = await get(`/tournaments/${tournament.id}/matches/${match.id}`)
-      
-      expect(response.body.matchType).toBe('singles')
-      expect(response.body.participants[0].playerId).toBeDefined()
-      expect(response.body.participants[1].playerId).toBeDefined()
-    })
-
-    it('should return doubles match with team details', async () => {
-      const tournament = await createTournament({ matchFormat: 'doubles' })
-      const match = await setupDoublesMatch(tournament.id)
-      
-      const response = await get(`/tournaments/${tournament.id}/matches/${match.id}`)
-      
-      expect(response.body.matchType).toBe('doubles')
-      expect(response.body.participants[0].teamId).toBeDefined()
-      expect(response.body.participants[0].players).toHaveLength(2)
-      expect(response.body.participants[1].teamId).toBeDefined()
-      expect(response.body.participants[1].players).toHaveLength(2)
-    })
-  })
-
-  describe('GET /standings', () => {
-    it('should return singles standings with player info', async () => {
-      const tournament = await createTournament({ matchFormat: 'singles' })
-      const standings = await getStandings(tournament.groupId)
-      
-      expect(standings[0].playerId).toBeDefined()
-      expect(standings[0].name).toBeDefined()
-    })
-
-    it('should return doubles standings with team info', async () => {
-      const tournament = await createTournament({ matchFormat: 'doubles' })
-      const standings = await getStandings(tournament.groupId)
-      
-      expect(standings[0].teamId).toBeDefined()
-      expect(standings[0].teamName).toBeDefined()
-      expect(standings[0].players).toHaveLength(2)
-      expect(standings[0].players[0].id).toBeDefined()
-      expect(standings[0].players[0].name).toBeDefined()
-    })
-  })
-})
-```
-
-**Acceptance Criteria:**
-- ✅ Endpoint response format tests written
-- ✅ Both singles and doubles tested
-- ✅ Detail object structure verified
-- ✅ 10+ test cases
-- ✅ Tests are RED until implementation
-
----
-
-### Phase 4.GREEN: Implement API Routes
-
-**Coverage Checkpoint:** Before proceeding to Phase 4.REFACTOR, verify branch coverage ≥ 85%
-
-### Task 4.1a: Add Match Type Detection
-
-**File:** `packages/api/src/utils/match-utils.ts` (new file)
-
-**Implementation:** Helper to detect singles vs doubles matches
-
-```typescript
-export function getMatchType(match: any): 'singles' | 'doubles' | 'unknown' {
-  // Check if player columns populated (singles)
-  if (match.player1_id !== null && match.player2_id !== null) {
-    return 'singles'
-  }
-  
-  // Check if team columns populated (doubles)
-  if (match.team1_id !== null && match.team2_id !== null) {
-    return 'doubles'
-  }
-  
-  return 'unknown'
-}
-
-export function getMatchParticipantIds(match: any): string[] {
-  const type = getMatchType(match)
-  
-  if (type === 'singles') {
-    return [match.player1_id, match.player2_id]
-  } else if (type === 'doubles') {
-    return [match.team1_id, match.team2_id]
-  }
-  
-  return []
-}
-```
-
-**Acceptance Criteria:**
-- ✅ Detect singles matches (player1_id, player2_id populated)
-- ✅ Detect doubles matches (team1_id, team2_id populated)
-- ✅ Return correct match type
-- ✅ Handle edge cases (no participants)
-- ✅ Exported for reuse across routes
-
----
-
-### Task 4.1b: Add Doubles Participant Validation
-
-**File:** `packages/api/src/routes/tournaments.ts` (new helper)
-
-**Implementation:** Check if player is in doubles match
-
-```typescript
-async function canPlayerSubmitDoublesScore(
-  match: any,
-  playerId: string,
-  teamRepo: TeamRepository
-): Promise<{ allowed: boolean; error?: string }> {
-  try {
-    const team1 = await teamRepo.findTeamById(match.team1_id)
-    const team2 = await teamRepo.findTeamById(match.team2_id)
-
-    if (!team1 || !team2) {
-      return { allowed: false, error: 'Match teams not found' }
-    }
-
-    // Check if player is on team1
-    if (team1.player1_id === playerId || team1.player2_id === playerId) {
-      return { allowed: true }
-    }
-
-    // Check if player is on team2
-    if (team2.player1_id === playerId || team2.player2_id === playerId) {
-      return { allowed: true }
-    }
-
-    return { allowed: false, error: 'You are not in this match' }
-  } catch (err) {
-    return { allowed: false, error: 'Error validating match participation' }
-  }
-}
-```
-
-**Acceptance Criteria:**
-- ✅ Query both teams from database
-- ✅ Check all 4 team members against playerId
-- ✅ Return true if player in either team
-- ✅ Return false with error message if not
-- ✅ Handle missing team records gracefully
-
----
-
-### Task 4.1c: Update Score Submission Endpoint
-
-**File:** `packages/api/src/routes/tournaments.ts` (modify existing)
-
-**Implementation:** Use new helpers for validation
-
-```typescript
-router.post('/:tournamentId/matches/:matchId/score', async (req, res, next) => {
-  const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
-  const match = await getGroupMatch(req.params.matchId)
-  
-  if (!match) {
-    return res.status(404).json({ code: 'NOT_FOUND' })
-  }
-  
-  // Determine match type and validate
-  const matchType = getMatchType(match)
-  let canSubmit = false
-  let errorMessage = 'You are not in this match'
-
-  if (matchType === 'singles') {
-    canSubmit = match.player1_id === payload.playerId || match.player2_id === payload.playerId
-  } else if (matchType === 'doubles') {
-    const validation = await canPlayerSubmitDoublesScore(match, payload.playerId, teamRepo)
-    canSubmit = validation.allowed
-    errorMessage = validation.error || errorMessage
-  } else {
-    return res.status(400).json({ code: 'INVALID_MATCH', message: 'Match type unknown' })
-  }
-
-  if (!canSubmit) {
-    return res.status(403).json({ code: 'FORBIDDEN', message: errorMessage })
-  }
-  
-  // Rest of score submission logic unchanged
-  const score = parseScore(req.body.score)
-  // ... validation, db update, job queue, etc.
-})
-```
-
-**Acceptance Criteria:**
-- ✅ Import getMatchType helper
-- ✅ Call getMatchType on match
-- ✅ Use direct check for singles
-- ✅ Use helper for doubles validation
-- ✅ Return appropriate error messages
-- ✅ All existing logic continues unchanged
-- ✅ **Structured logging at INFO level:**
-  - Log `score.submitted` immediately before success response
-  - Include: `playerId` (or both team members for doubles), `matchId`, `tournamentId`, `score`, `groupId`
-  - Use module-level logger: `const log = getLogger('tournaments')`
-  - Never include: full request body, sensitive player info beyond IDs
-  - Note: Existing score submission logging should already be in place; ensure doubles adds actor identification
-
-**Test Cases:**
-```typescript
-// Singles: player1 can submit ✅
-// Singles: player2 can submit ✅
-// Singles: player3 cannot submit (403) ✅
-// Doubles: team1.player1 can submit ✅
-// Doubles: team1.player2 can submit
-// Doubles: team2.player1 can submit
-// Doubles: team2.player2 can submit
-// Doubles: unregistered player cannot submit (403)
-```
-
-**Security Review (A2: Broken Auth, A3: Broken Access Control, A1: Injection):**
-- ✅ Authentication token validated before authorization check
-- ✅ Authorization: player verified to be in match (team membership validated)
-- ✅ Score format validated (e.g., "2-1" not "'; DROP TABLE;")
-- ✅ No SQL injection possible in score parsing
-- ✅ Team IDs cannot be spoofed in request (validated against DB)
-- ✅ 403 Forbidden for unauthorized access (not 400)
-- ✅ Match ID cannot be manipulated to access different matches
-- ✅ No user information leaked in error messages
-- ✅ Rate limiting on endpoint (prevent spam/DoS)
-
----
-
-### Task 4.2: Match Details Endpoint
-
-**File:** `packages/api/src/routes/tournaments.ts` (modify GET match details)
-
-**Current code location:** Search for `GET /tournaments/:tournamentId/matches/:matchId`
-
-**Refactoring:**
-
-```typescript
-router.get('/:tournamentId/matches/:matchId', async (req, res, next) => {
-  const match = await getGroupMatch(req.params.matchId)
-  
-  if (match.player1_id) {
-    // Singles match
-    const player1 = await getPlayer(match.player1_id)
-    const player2 = await getPlayer(match.player2_id)
-    
-    return res.json({
-      id: match.id,
-      matchType: 'singles',
-      participants: [
-        { playerId: player1.id, name: player1.name },
-        { playerId: player2.id, name: player2.name }
-      ],
-      score: match.score,
-      winner: match.winner_id ? { playerId: match.winner_id } : null
-    })
-  } else {
-    // Doubles match
-    const team1 = await getTeamById(match.team1_id)
-    const team2 = await getTeamById(match.team2_id)
-    const p1_1 = await getPlayer(team1.player1_id)
-    const p1_2 = await getPlayer(team1.player2_id)
-    const p2_1 = await getPlayer(team2.player1_id)
-    const p2_2 = await getPlayer(team2.player2_id)
-    
-    return res.json({
-      id: match.id,
-      matchType: 'doubles',
-      participants: [
-        {
-          teamId: team1.id,
-          players: [
-            { playerId: p1_1.id, name: p1_1.name },
-            { playerId: p1_2.id, name: p1_2.name }
-          ]
-        },
-        {
-          teamId: team2.id,
-          players: [
-            { playerId: p2_1.id, name: p2_1.name },
-            { playerId: p2_2.id, name: p2_2.name }
-          ]
-        }
-      ],
-      score: match.score,
-      winner: match.winner_id ? { teamId: match.winner_id } : null
-    })
-  }
-})
-```
-
-**Acceptance Criteria:**
-- ✅ Singles response includes player details
-- ✅ Doubles response includes team + player details
-- ✅ Schema clearly indicates match type
-- ✅ Frontend can render either format
-
----
-
-### Task 4.3: Standings Endpoint
-
-**File:** `packages/api/src/routes/tournaments.ts` (modify GET standings)
-
-**Refactoring:**
-
-```typescript
-router.get('/:tournamentId/standings', async (req, res, next) => {
-  const groupId = req.query.groupId as string
-  const standings = await getGroupStandings(groupId)
-  const tournament = await getTournament(standings[0].tournamentId)
-  
-  if (tournament.match_format === 'doubles') {
-    // Enrich standings with team player info
-    const enriched = await Promise.all(
-      standings.map(async (standing) => {
-        const team = await getTeamById(standing.participantId)
-        const p1 = await getPlayer(team.player1_id)
-        const p2 = await getPlayer(team.player2_id)
-        
-        return {
-          rank: standing.rank,
-          teamId: standing.participantId,
-          teamName: `${p1.name} & ${p2.name}`,
-          players: [
-            { id: p1.id, name: p1.name },
-            { id: p2.id, name: p2.name }
-          ],
-          wins: standing.wins,
-          losses: standing.losses,
-          setsWon: standing.sets_won,
-          setsLost: standing.sets_lost,
-          differential: standing.sets_won - standing.sets_lost
-        }
-      })
-    )
-    return res.json({ standings: enriched, matchFormat: 'doubles' })
-  } else {
-    // Singles standings
-    const enriched = standings.map(standing => ({
-      rank: standing.rank,
-      playerId: standing.participantId,
-      name: standing.player_name,
-      wins: standing.wins,
-      losses: standing.losses,
-      setsWon: standing.sets_won,
-      setsLost: standing.sets_lost,
-      differential: standing.sets_won - standing.sets_lost
-    }))
-    return res.json({ standings: enriched, matchFormat: 'singles' })
-  }
-})
-```
-
-**Acceptance Criteria:**
-- ✅ Singles standings show individual player info
-- ✅ Doubles standings show team names + both players
-- ✅ Differential calculated correctly for both
-- ✅ Ranking unchanged (only display changes)
-- ✅ **All tests from Phase 4.0 pass GREEN**
-
----
-
-### Phase 4.REFACTOR: Refactor While Maintaining Test Pass
-
-**Task 4.4: Refactor API Routes**
-
-**Scope:** While all tests pass, optimize endpoint logic
-
-```typescript
-// Review these aspects for refactoring:
-// 1. Consolidate singles/doubles logic where possible
-// 2. Extract response formatting to helper functions
-// 3. Simplify validation chain
-// 4. Add meaningful comments only where logic flow is non-obvious
-```
-
-**Acceptance Criteria:**
-- ✅ Code more readable and maintainable
-- ✅ All tests from Phase 4.0 still pass
-- ✅ No logic changes
-- ✅ Response formatting cleaner
-- ✅ No performance regressions
-
-**Code Quality Gates (REQUIRED):**
-- ✅ `npm run lint` passes (ESLint security plugin checks)
-- ✅ `npm audit --production` passes (no vulnerabilities)
-- ✅ No hardcoded secrets or credentials
-- ✅ All `.env` files in `.gitignore`
-
-**Real-Time Requirements Verification:**
-- ✅ SSE connections tested (standings updates broadcast)
-- ✅ Concurrent score submissions handled correctly
-- ✅ No race conditions in standings recalculation
-- ✅ Client connections properly cleaned up on disconnect
-
-**Verification:**
-```bash
-npm test -- packages/api/src/__tests__/integration/doubles-score-submission.spec.ts
-npm test -- packages/api/src/__tests__/integration/doubles-api-endpoints.spec.ts
-npm run lint
-npm audit --production
-# All tests should PASS, linting clean, audit clean
-```
-
----
-
 ## Phase 5: Frontend Display & Analytics
 
-**Status:** ✅ COMPLETE - All tasks (5.0.1-5.3) finished
+**Status:** 🔶 IN PROGRESS (40% complete) - RED-GREEN phases done, styling & integration work remaining
 
 **Duration:** 3 days (reduced from 4.2 due to TDD efficiency)  
 **Risk Level:** Low (UI only, no logic changes)  
@@ -3231,9 +2643,9 @@ npm audit --production
 
 ## Phase 5 Summary
 
-**Status:** ✅ COMPLETE - All frontend components and analytics implemented
+**Status:** 🔶 IN PROGRESS (40% complete) - RED-GREEN phases complete, styling & integration work remaining
 
-**What Was Accomplished:**
+**What Is Accomplished:**
 
 **RED Phase (Write Tests):** ✅ COMPLETE
 - Created 99 comprehensive test cases
@@ -3243,68 +2655,74 @@ npm audit --production
 - Analytics tracking tests (37 tests)
 - All edge cases and accessibility requirements covered
 
-**GREEN Phase (Implement):** ✅ COMPLETE
-- 5 frontend React components created
-- 1 analytics utility with full event tracking
-- All components WCAG 2.1 AA compliant
-- All components mobile-responsive (320px minimum)
+**GREEN Phase (Implement Stubs):** ✅ COMPLETE
+- 5 frontend React components created (basic implementations)
+- 1 analytics utility with event tracking structure
+- Component stubs tested and passing
 - All 99 tests passing
 
-**REFACTOR Phase:** ✅ COMPLETE
-- Code already clean and well-structured
-- No additional refactoring needed
+**REFACTOR Phase & Integration:** ⏳ IN PROGRESS
+- Component styling and polish needed
+- Real-time update integration (SSE listening)
+- Form completion and behavior
+- Pages integration (TournamentDashboard, GroupStage, BracketView)
+- Analytics backend endpoint implementation
+- End-to-end testing
 
-**Test Results:**
-- All 99 tests passing
-- StandingsTable: 13/13 passing
-- PartnerSelection: 22/22 passing
-- ScoreSubmissionForm: 27/27 passing
-- Analytics: 37/37 passing
-- Coverage: ≥85% maintained
+**Test Results (Current):**
+- 99 component/analytics tests passing
+- Component stubs created but need styling/integration
+- Form validation tests passing
+- Analytics tracking tests passing but endpoint not yet implemented
 
 **Files Created:**
-1. `packages/frontend/src/components/StandingsTable.tsx` - Standings display
-2. `packages/frontend/src/components/PartnerSelection.tsx` - Partner selection flow
-3. `packages/frontend/src/components/PartnerDropdown.tsx` - Partner dropdown
-4. `packages/frontend/src/components/PartnerInviteInput.tsx` - Email invite input
-5. `packages/frontend/src/components/ScoreSubmissionForm.tsx` - Score form
-6. `packages/frontend/src/utils/analytics.ts` - Analytics event tracking
+1. `packages/frontend/src/components/StandingsTable.tsx` - Standings display (basic) ✅
+2. `packages/frontend/src/components/PartnerSelection.tsx` - Partner selection flow (basic) ✅
+3. `packages/frontend/src/components/PartnerDropdown.tsx` - Partner dropdown (basic) ✅
+4. `packages/frontend/src/components/PartnerInviteInput.tsx` - Email invite input (basic) ✅
+5. `packages/frontend/src/components/ScoreSubmissionForm.tsx` - Score form (basic) ✅
+6. `packages/frontend/src/utils/analytics.ts` - Analytics event tracking (structure done) ✅
 
-**Accessibility (WCAG 2.1 AA):** ✅
-- Semantic HTML: `<table>`, `<thead>`, `<tbody>`, `<fieldset>`, `<legend>`
-- ARIA labels and descriptions for all interactive elements
-- Color not sole means of information (rank, differential)
-- Keyboard navigation fully tested and working
-- Touch-friendly targets (≥44×44px)
-- Readable font sizes (≥16px on mobile)
-- All tests include a11y verification
+**Remaining Work (6 major tasks, 8-10 hours):**
 
-**Mobile-First Design:** ✅
-- Responsive layouts tested at 320px, 768px, 1024px, 1440px
-- No horizontal scrolling on mobile
-- Touch-friendly interactive elements
-- All components mobile-responsive
+### Step 1: Complete StandingsTable Component Styling (1-2 hours)
+- Add CSS styling: responsive layout, column alignment, hover effects
+- Implement real-time updates from SSE `standings.updated` events
+- Add accessibility features: ARIA labels, sort indicators, focus management
+- Test on desktop (1440px), tablet (768px), mobile (320px)
 
-**Real-Time Analytics:** ✅
-- Page view tracking with context
-- Score submission events with match details
-- Bracket advancement events with round tracking
-- Team creation events (both select and invite flows)
-- Partner confirmation status tracking
-- Automatic session ID generation and persistence
-- Network error handling and offline mode support
+### Step 2: Complete PartnerSelection Component (1-2 hours)
+- Implement select flow: fetch available partners, dropdown display
+- Implement invite flow: email validation, real-time feedback
+- Add styling for radio buttons, dropdown, error states
+- Form integration: disable submit until valid, loading state, messages
 
-**Security Review:**
-- ✅ No XSS vulnerabilities (React escapes by default)
-- ✅ No SQL injection (frontend-only, no direct DB access)
-- ✅ No sensitive data in logs/analytics
-- ✅ Email validation uses safe regex (no ReDoS)
-- ✅ Form inputs properly sanitized
+### Step 3: Complete ScoreSubmissionForm Component (2-3 hours)
+- Implement form fields: score input guidance, team names display
+- Add validation: real-time format checking, disable invalid submissions
+- Implement retry logic: 3× exponential backoff (1s, 2s, 4s)
+- Add feedback: loading spinner, success message, error with retry button
 
-**Backwards Compatibility:**
-- ✅ All existing pages unaffected
-- ✅ Analytics opt-in, doesn't break without backend
-- ✅ Components can be used for singles or doubles tournaments
+### Step 4: Implement Analytics Backend Integration (2-3 hours)
+- Create analytics backend: `POST /api/analytics/events` endpoint
+- Accept event array and log to database/service
+- Implement client-side batching: up to 10 events, 5 second window
+- Track: page_view, score_submitted, bracket_advanced, team_created, partnership_confirmed
+- Test all event types and offline queueing
+
+### Step 5: Pages Integration (3-4 hours)
+- Create TournamentDashboard page: tournament info, stage display, current match
+- Create GroupStage page: groups list, standings tables, matches, score forms
+- Create BracketView page: visual bracket (SVG), rounds, scores, winners, updates
+- Create registration flow: tournament selection, partner selection, confirmation
+
+### Step 6: End-to-End Testing (2-3 hours)
+- E2E test: registration to standings (create tournament, register teams, view standings)
+- E2E test: score submission (submit, verify standings update, SSE broadcast)
+- E2E test: bracket generation (complete groups, advance, verify bracket)
+- E2E test: analytics tracking (complete tournament, verify all events tracked)
+
+**Estimated Timeline:** 8-10 hours of focused development
 
 **Next Phase:** Phase 6 - Final Verification & Testing
 
