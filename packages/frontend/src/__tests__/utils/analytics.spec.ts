@@ -402,14 +402,12 @@ describe('Analytics Tracking', () => {
   describe('Event data validation', () => {
     it('should require tournament ID for events', async () => {
       // Missing tournament ID should fail validation
-      expect(() => {
-        trackPageView('dashboard', {})
-      }).toThrow()
+      await expect(trackPageView('dashboard', {})).rejects.toThrow()
     })
 
     it('should validate score format', async () => {
       // Invalid score format should fail
-      expect(() => {
+      await expect(
         trackScoreSubmission({
           tournamentId: 't1',
           matchId: 'm1',
@@ -417,12 +415,12 @@ describe('Analytics Tracking', () => {
           submittedBy: 'p1',
           matchFormat: 'singles'
         })
-      }).toThrow()
+      ).rejects.toThrow()
     })
 
     it('should validate match format', async () => {
       // Invalid format should fail
-      expect(() => {
+      await expect(
         trackScoreSubmission({
           tournamentId: 't1',
           matchId: 'm1',
@@ -430,7 +428,7 @@ describe('Analytics Tracking', () => {
           submittedBy: 'p1',
           matchFormat: 'invalid' as any
         })
-      }).toThrow()
+      ).rejects.toThrow()
     })
   })
 
