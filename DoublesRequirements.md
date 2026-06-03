@@ -2317,7 +2317,91 @@ npm test -- packages/core-logic/src/__tests__/standings.spec.ts
 - ✅ Parameterized database queries maintained
 - ✅ Input validation unchanged
 
-**Next Phase:** Phase 4 - API Routes & Validation
+**Next Phase:** Phase 4 - Real-Time Updates & Bracket Advancement
+
+---
+
+## Phase 4: Real-Time Updates & Bracket Advancement (In Progress)
+
+**Status:** 🟡 IN PROGRESS - RED phase complete, GREEN phase in progress
+
+**Duration:** 1.5 days  
+**Risk Level:** Medium (real-time infrastructure, bracket generation)  
+**Rollback:** Revert route and utility changes
+
+**TDD Approach:** RED-GREEN-REFACTOR cycle
+
+---
+
+### ✅ Phase 4.RED: Write Tests - COMPLETE
+
+**Task 4.0.1: Write Tests - Bracket Advancement Logic** ✅ COMPLETE
+
+**File:** `packages/api/src/__tests__/unit/bracket-advancement.spec.ts` (24 tests)
+
+**Test Coverage:**
+- Score Validation (8 tests): Accepts valid scores (2-0, 2-1, 1-2), rejects invalid formats
+- Advancement Logic (3 tests): Top 2 teams identified, ranking correct, ties handled
+- Match Participation (5 tests): All team members can submit, unrelated players blocked
+- Bracket Generation (4 tests): 2-team, 4-team, 8-team brackets with correct structure
+- Real-Time Events (4 tests): Score submitted events, standings updated events with request IDs
+
+**Status:** ✅ All 24 tests passing
+
+---
+
+### Phase 4.GREEN: Implement to Pass Tests - IN PROGRESS
+
+**Task 4.1: Create Bracket Generator Utility** ✅ COMPLETE
+
+**File:** `packages/api/src/utils/bracket-generator.ts` (new file)
+
+**Implementation Complete:**
+- `generateBracket()`: Creates single-elimination brackets from qualified participants
+- `getQualifiedParticipants()`: Determines top N teams from standings
+- `getOptimalBracketSize()`: Calculates power-of-2 bracket sizes
+- `addByesToBracket()`: Handles odd participant counts
+- `countBracketMatches()`: Calculates match count for tournament
+
+**Test Coverage:** 26 unit tests in `bracket-generator.spec.ts`, all passing
+
+---
+
+**Task 4.2: Verify Score Submission Endpoint** ✅ COMPLETE
+
+**File:** `packages/api/src/routes/tournaments.ts` (existing)
+
+**Status:** ✅ Endpoint verified at `POST /:tournamentId/matches/:matchId/score`
+- Accepts scores from team members
+- Validates score format
+- Logs `score.submitted` at INFO level
+- Updates match winner and score in database
+- Enqueues standings recalculation
+
+---
+
+**Task 4.3: Verify SSE Real-Time Broadcast** ✅ COMPLETE
+
+**File:** `packages/api/src/routes/tournaments.ts` (existing)
+
+**Status:** ✅ SSE endpoint verified at `GET /:tournamentId/events`
+- Broadcasts real-time tournament updates
+- Handles concurrent connections
+- Rate-limited (default 10 connections per user)
+- Supports both header and query param authentication
+- Proper connection cleanup and error handling
+
+---
+
+### Phase 4.REFACTOR: Refactor While Maintaining Tests - DEFERRED
+
+**Scope:** Will refactor after GREEN phase completion
+
+**Acceptance Criteria:**
+- ✅ Code more readable and maintainable
+- ✅ All tests still pass
+- ✅ No logic changes
+- ✅ No performance regressions
 
 ---
 
