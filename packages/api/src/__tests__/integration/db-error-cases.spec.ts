@@ -633,15 +633,30 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
     it('soft deleted locations excluded from listAll', async () => {
       const repo = new LocationRepository(getDb(pool))
-      const location = await repo.create(LocationFactory.data())
-      const initialCount = (await repo.listAll()).total
+      const sport = `sport_${Date.now()}_${Math.random()}`
 
-      await repo.softDelete(location.id)
+      // Create two locations with unique sport
+      const location1 = await repo.create(LocationFactory.data({ sport }))
+      const location2 = await repo.create(LocationFactory.data({ sport }))
 
-      const result = await repo.listAll()
-      const ids = result.rows.map(l => l.id)
-      expect(ids).not.toContain(location.id)
-      expect(result.total).toBe(initialCount - 1)
+      // Count locations with this sport (controlled set)
+      const beforeDelete = (await repo.findBySport(sport)).total
+      expect(beforeDelete).toBe(2)
+
+      // Soft delete one location
+      await repo.softDelete(location1.id)
+
+      // Verify it's excluded from listAll
+      const resultAll = await repo.listAll()
+      const allIds = resultAll.rows.map(l => l.id)
+      expect(allIds).not.toContain(location1.id)
+
+      // Verify it's excluded from findBySport
+      const resultSport = await repo.findBySport(sport)
+      const sportIds = resultSport.rows.map(l => l.id)
+      expect(sportIds).not.toContain(location1.id)
+      expect(sportIds).toContain(location2.id)
+      expect(resultSport.total).toBe(1)
     })
 
     it('findNearby returns locations within radius', async () => {
