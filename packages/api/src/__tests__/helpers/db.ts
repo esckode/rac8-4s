@@ -82,7 +82,11 @@ export function getTransactionClient(): PoolClient | null {
  */
 export async function closeTestPool(): Promise<void> {
   if (testPool) {
-    await testPool.end()
+    try {
+      await testPool.end()
+    } catch (err) {
+      // Pool already closed, ignore
+    }
     testPool = null
   }
 }

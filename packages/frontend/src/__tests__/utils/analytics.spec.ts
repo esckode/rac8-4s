@@ -294,7 +294,7 @@ describe('Analytics Tracking', () => {
       })
 
       calls = mockFetch.mock.calls
-      [, options] = calls[calls.length - 1]
+      ;[, options] = calls[calls.length - 1]
       body = JSON.parse(options.body)
       expect(body.registrationType).toBe('invite')
     })
@@ -356,7 +356,7 @@ describe('Analytics Tracking', () => {
       })
 
       calls = mockFetch.mock.calls
-      [, options] = calls[calls.length - 1]
+      ;[, options] = calls[calls.length - 1]
       body = JSON.parse(options.body)
       expect(body.bothConfirmed).toBe(true)
     })
