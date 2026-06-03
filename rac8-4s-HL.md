@@ -131,10 +131,10 @@ Legend:
 
 | Storage | Technology | Purpose |
 |---------|-----------|---------|
-| **Primary** | PostgreSQL 15+ | Persistent application data |
-| **Session** | JWT Tokens | Stateless authentication |
+| **Primary** | PostgreSQL 15+ | All persistent application data (see [SETUP.md](./SETUP.md) for connection details) |
+| **Session** | JWT Tokens (httpOnly cookies) | Stateless authentication |
 | **Cache** | React Query (60s TTL) | Client-side data caching |
-| **Offline** | Service Worker Cache + IndexedDB | Offline data storage |
+| **Offline** | Service Worker Cache + IndexedDB | Offline data storage and sync queue |
 
 ---
 
@@ -1803,10 +1803,18 @@ npm test -- --testPathPattern="auth"
 
 #### 12.1 Environment Configuration
 
-**Environment Variables**
+**For Complete Database Setup Instructions**
+See [SETUP.md](./SETUP.md) for detailed guidance on:
+- PostgreSQL connection setup (development and test environments)
+- Environment variable configuration for both `.env` and `.env.example`
+- Database initialization and migration procedures
+- Connection pooling and performance tuning
+
+**Environment Variables Reference**
 ```bash
-# Database
+# Database (see SETUP.md for full connection details)
 DATABASE_URL=postgresql://user:pass@host:5432/tournament_app
+TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/tournament_app_test
 
 # Server
 PORT=3001
@@ -1835,17 +1843,18 @@ SENTRY_DSN=...
 #### 12.2 Database Migration
 
 **Migration System**
-- Versioned SQL files: `001_create_*.sql`, `002_*.sql`, etc.
-- Tracks executed migrations in schema_migrations table
-- Runs on server startup (safety: idempotent, read-only check)
-- Supports rollback (manual, not automatic)
+- Uses PostgreSQL 15+ with versioned SQL migrations in `db/migrations/`
+- Tracks executed migrations in `public.schema_migrations` table
+- Migrations run automatically on server startup (idempotent, read-only validation)
+- Supports manual rollback (automatic rollback not implemented)
+- See [SETUP.md](./SETUP.md) for initialization and migration procedures
 
 **Backup & Recovery**
 ```bash
-# Backup
+# Backup (PostgreSQL)
 pg_dump tournament_app > backup.sql
 
-# Restore
+# Restore (PostgreSQL)
 psql tournament_app < backup.sql
 
 # Point-in-time recovery
@@ -1854,8 +1863,11 @@ pg_basebackup -D /mnt/backup
 
 #### 12.3 Deployment Steps
 
+**Pre-Deployment: Database Setup**
+- Follow [SETUP.md](./SETUP.md) to configure PostgreSQL connection string and environment variables
+
 **Production Checklist**
-- [ ] Set DATABASE_URL to prod PostgreSQL (15+)
+- [ ] Verify DATABASE_URL points to production PostgreSQL (15+) per [SETUP.md](./SETUP.md)
 - [ ] Set JWT_SECRET to strong random value (32+ chars)
 - [ ] Configure SMTP or email service (production emails)
 - [ ] Set NODE_ENV=production
@@ -1998,18 +2010,26 @@ pg_basebackup -D /mnt/backup
 
 ## Document References
 
-**Related Documentation**
+**Essential Setup Documentation**
+- **[SETUP.md](./SETUP.md)** ⭐ **Source of Truth for Database & Environment Configuration**
+  - PostgreSQL connection setup (production and test)
+  - Environment variable configuration (.env, .env.example)
+  - Database initialization and migration procedures
+  - Running the application locally
+
+**Related Architecture & Planning Documentation**
 - [README.md](./README.md) - Project overview and quick start
 - [FEATURES.md](./FEATURES.md) - Feature checklist
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Detailed architecture
 - [Authentication_Planning.md](./Authentication_Planning.md) - Auth design
 - [TDD_STRATEGY.md](./TDD_STRATEGY.md) - Testing approach
-- [SETUP.md](./SETUP.md) - Development environment setup
 - [Postgres_App_Conversion_Plan.md](./Postgres_App_Conversion_Plan.md) - Migration history
 
 **Code References**
+- Database Connection: `packages/api/src/db-connections.ts` (production)
+- Test Database: `packages/api/src/__tests__/helpers/db.ts` (test isolation)
+- Database Schema: `db/migrations/` (versioned PostgreSQL migrations)
 - API Routes: `packages/api/src/routes/`
-- Database Schema: `db/migrations/`
 - Tests: `packages/api/src/__tests__/`
 - Frontend: `packages/frontend/src/`
 
