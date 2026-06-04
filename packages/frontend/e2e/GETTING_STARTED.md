@@ -48,14 +48,14 @@ npm run test:e2e
 ```
 
 Tests will:
-1. Launch browsers (Chromium, Firefox, WebKit)
+1. Launch browsers (Chromium, Firefox)
 2. Run 40+ test cases
 3. Generate report in playwright-report/
 4. Show summary in terminal
 
 Expected output:
 ```
-Running 40 tests using 3 workers
+Running 40 tests using 2 workers
 ✓ 40 passed (2m 30s)
 ```
 
@@ -113,7 +113,6 @@ npx playwright test --project=firefox
 Available projects:
 - `chromium` (Chrome/Edge equivalent)
 - `firefox` (Firefox)
-- `webkit` (Safari equivalent)
 
 #### Run Tests in Specific Directory
 ```bash

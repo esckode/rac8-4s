@@ -33,7 +33,6 @@ npx playwright test -g "should successfully sign up"
 ```bash
 npx playwright test --project=chromium
 npx playwright test --project=firefox
-npx playwright test --project=webkit
 ```
 
 ## Prerequisites
@@ -231,12 +230,12 @@ For GitHub Actions or other CI systems:
 ## Performance Metrics
 
 All tests should complete in < 5 minutes with:
-- 3 browser profiles (Chromium, Firefox, WebKit)
+- 2 browser profiles (Chromium, Firefox)
 - 40+ individual test cases
 - Real API calls to backend
 - Full DOM manipulation
 
-Typical runtime: 2-3 minutes per browser profile
+Typical runtime: 2-3 minutes total with parallel workers
 
 ## Notes
 

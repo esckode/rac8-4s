@@ -261,7 +261,7 @@
 ### Running Tests
 - [ ] Run full suite: `npm run test:e2e`
 - [ ] Expected: ~2-3 minutes for one browser
-- [ ] Expected: ~6-9 minutes for all 3 browsers
+- [ ] Expected: ~4-6 minutes for all 2 browsers
 - [ ] Result: All 31 tests pass ✓
 
 ### Verifying Results
@@ -389,7 +389,6 @@
 
 - [x] Chromium (Chrome/Edge equivalent)
 - [x] Firefox
-- [x] WebKit (Safari equivalent)
 
 Each browser runs all 31 tests.
 
@@ -409,7 +408,7 @@ Each browser runs all 31 tests.
 
 ## Performance Metrics
 
-- [x] Full suite runtime: 6-9 minutes (3 browsers)
+- [x] Full suite runtime: 4-6 minutes (2 browsers)
 - [x] Single browser: 2-3 minutes
 - [x] Average per test: 3-5 seconds
 - [x] Real API calls (no mocking)

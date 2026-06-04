@@ -104,14 +104,21 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: 'Login failed' }))
-        throw new Error(errorData.message || `Login failed with status ${response.status}`)
+        const errorMessage = errorData.message || `Login failed with status ${response.status}`
+        // Use standard error message for authentication failures
+        if (response.status === 401) {
+          throw new Error('Invalid email or password')
+        }
+        throw new Error(errorMessage)
       }
 
       const data = (await response.json()) as LoginResponse
       localStorage.setItem(TOKEN_KEY, data.token)
       setUser(data.user)
-    } finally {
       setLoading(false)
+    } catch (error) {
+      setLoading(false)
+      throw error
     }
   }, [])
 
