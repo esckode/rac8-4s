@@ -1,5 +1,10 @@
 import http from 'node:http'
 import path from 'node:path'
+import dotenv from 'dotenv'
+
+// Load .env file
+dotenv.config({ path: path.resolve(__dirname, '../.env') })
+
 import { createApp } from './app'
 import { initializeDb, closeDb } from './db-connections'
 import { runMigrations } from './migrations'

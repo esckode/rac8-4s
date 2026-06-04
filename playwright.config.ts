@@ -30,4 +30,8 @@ export default defineConfig({
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
   },
+
+  // Note: API server (port 3001) must be running separately
+  // For E2E tests, start it with: npm run dev --workspace=packages/api
+  // Or use Docker: docker compose up -d postgres && npm run dev --workspace=packages/api
 })

@@ -188,6 +188,7 @@ test.describe('Authentication E2E', () => {
 
       await page.fill('input[type="email"]', 'nonexistent@example.com')
       await page.fill('input[type="password"]', 'WrongPassword123')
+
       await page.click('button:has-text("Sign In"), button:has-text("Log In")')
 
       // Should see error message
