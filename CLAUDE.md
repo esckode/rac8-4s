@@ -111,3 +111,12 @@ const log = getLogger('module-name')
 
 **Verification:** `LOG_LEVEL=debug npm start | grep '"requestId":"<id>"'` to trace a single request through all modules.
 
+## 7. Database
+
+This project uses **PostgreSQL 15+** for all persistent data storage. See [README.md](./README.md) for database setup instructions, including Docker configuration and local PostgreSQL installation options.
+
+**Key details:**
+- Two schemas: `public` (tournament data) and `auth` (authentication)
+- Connection configured via environment variables
+- Requires Docker or local PostgreSQL installation before running the application
+

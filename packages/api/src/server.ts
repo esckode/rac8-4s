@@ -10,6 +10,7 @@ import { getAppConfig } from './config'
 import { createEmailService } from './services/email-service'
 import { ServiceEmailAdapter } from './email-service-adapter'
 import { getLogger } from './logger'
+import { seedTestAccounts } from '../scripts/seed-test-accounts'
 
 const log = getLogger('server')
 
@@ -25,6 +26,11 @@ async function main() {
     // Run migrations
     const migrationsDir = path.resolve(__dirname, '../../../db/migrations')
     await runMigrations(pool, migrationsDir)
+
+    // Seed test accounts in development mode
+    if (process.env.NODE_ENV === 'development') {
+      await seedTestAccounts(pool)
+    }
 
     // Load configuration with environment overrides
     const config = getAppConfig()

@@ -13,6 +13,7 @@ async function runBrowser() {
     headless: false,
     slowMo: 500, // Slow down for visibility
     executablePath: '/snap/bin/chromium',
+    viewport: { width: 390, height: 844 }, // Mobile viewport
   });
 
   const page = await context.newPage();
