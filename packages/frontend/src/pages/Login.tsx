@@ -22,7 +22,6 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [apiError, setApiError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [errorToSet, setErrorToSet] = useState('')
   const emailInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -30,13 +29,6 @@ export const Login: React.FC = () => {
     emailInputRef.current?.focus()
   }, [])
 
-  useEffect(() => {
-    if (errorToSet) {
-      console.log('[Login] useEffect setting apiError to:', errorToSet)
-      setApiError(errorToSet)
-      setErrorToSet('')
-    }
-  }, [errorToSet])
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {}
@@ -84,9 +76,8 @@ export const Login: React.FC = () => {
       navigate('/browse')
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Something went wrong. Please try again.'
-      console.log('[Login catch] Setting errorToSet to:', errorMessage)
-      setErrorToSet(errorMessage)
       setLoading(false)
+      setApiError(errorMessage)
     }
   }
 

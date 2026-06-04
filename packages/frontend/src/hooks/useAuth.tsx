@@ -92,36 +92,27 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
   }, [restoreSession])
 
   const login = useCallback(async (email: string, password: string): Promise<void> => {
-    setLoading(true)
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      })
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    })
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Login failed' }))
-        // Use standard error message for authentication failures
-        if (response.status === 401) {
-          setLoading(false)
-          throw new Error('Invalid email or password')
-        }
-        const errorMessage = errorData.message || `Login failed with status ${response.status}`
-        setLoading(false)
-        throw new Error(errorMessage)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Login failed' }))
+      // Use standard error message for authentication failures
+      if (response.status === 401) {
+        throw new Error('Invalid email or password')
       }
-
-      const data = (await response.json()) as LoginResponse
-      localStorage.setItem(TOKEN_KEY, data.token)
-      setUser(data.user)
-      setLoading(false)
-    } catch (error) {
-      setLoading(false)
-      throw error
+      const errorMessage = errorData.message || `Login failed with status ${response.status}`
+      throw new Error(errorMessage)
     }
+
+    const data = (await response.json()) as LoginResponse
+    localStorage.setItem(TOKEN_KEY, data.token)
+    setUser(data.user)
   }, [])
 
   const signup = useCallback(
