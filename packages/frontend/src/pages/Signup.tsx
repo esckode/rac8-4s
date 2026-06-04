@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 export function Signup() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
+  const { signup } = useAuth();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -38,41 +40,48 @@ export function Signup() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
-  const handleBlur = (field: string) => {
+  const validateField = (field: string, currentFormData?: typeof formData) => {
+    const data = currentFormData || formData;
     const newErrors = { ...errors };
 
     switch (field) {
       case 'email':
-        if (!formData.email) {
+        if (!data.email) {
           newErrors.email = 'Email is required';
-        } else if (!validateEmail(formData.email)) {
+        } else if (!validateEmail(data.email)) {
           newErrors.email = 'Please enter a valid email';
         } else {
           delete newErrors.email;
         }
         break;
       case 'name':
-        if (!formData.name) {
+        if (!data.name) {
           newErrors.name = 'Name is required';
-        } else if (formData.name.length < 2) {
+        } else if (data.name.length < 2) {
           newErrors.name = 'Name must be at least 2 characters';
         } else {
           delete newErrors.name;
         }
         break;
       case 'password':
-        if (!formData.password) {
+        if (!data.password) {
           newErrors.password = 'Password is required';
-        } else if (formData.password.length < 6) {
+        } else if (data.password.length < 6) {
           newErrors.password = 'Password must be at least 6 characters';
         } else {
           delete newErrors.password;
         }
+        // Also validate confirmPassword if it exists
+        if (data.confirmPassword && data.confirmPassword !== data.password) {
+          newErrors.confirmPassword = "Passwords don't match";
+        } else if (data.confirmPassword === data.password) {
+          delete newErrors.confirmPassword;
+        }
         break;
       case 'confirmPassword':
-        if (!formData.confirmPassword) {
+        if (!data.confirmPassword) {
           newErrors.confirmPassword = 'Please confirm your password';
-        } else if (formData.confirmPassword !== formData.password) {
+        } else if (data.confirmPassword !== data.password) {
           newErrors.confirmPassword = "Passwords don't match";
         } else {
           delete newErrors.confirmPassword;
@@ -81,6 +90,22 @@ export function Signup() {
     }
 
     setErrors(newErrors);
+  };
+
+  const handleBlur = (field: string) => {
+    validateField(field);
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newFormData = { ...formData, password: e.target.value };
+    setFormData(newFormData);
+    validateField('password', newFormData);
+  };
+
+  const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newFormData = { ...formData, confirmPassword: e.target.value };
+    setFormData(newFormData);
+    validateField('confirmPassword', newFormData);
   };
 
   const isFormValid = () => {
@@ -108,31 +133,18 @@ export function Signup() {
     setGeneralError('');
 
     try {
-      const response = await fetch('http://localhost:5173/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.email,
-          name: formData.name,
-          password: formData.password,
-          token: token || undefined,
-        }),
-      });
-
-      if (response.ok) {
-        navigate('/browse');
-      } else if (response.status === 409) {
-        setErrors({ email: 'Email already in use' });
-      } else if (response.status === 401) {
-        setGeneralError('This link has expired or is invalid');
-      } else if (response.status === 400) {
-        const data = await response.json();
-        setErrors({ password: data.message || 'Invalid input' });
-      } else {
-        setGeneralError('Something went wrong. Please try again.');
-      }
+      await signup(formData.email, formData.name, formData.password, token || undefined);
+      navigate('/browse');
     } catch (error) {
-      setGeneralError('Something went wrong. Please try again.');
+      const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+
+      if (message.includes('Email already in use') || message.includes('DUPLICATE_EMAIL')) {
+        setErrors({ email: 'Email already in use' });
+      } else if (message.includes('expired') || message.includes('invalid')) {
+        setGeneralError('This link has expired or is invalid');
+      } else {
+        setGeneralError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -174,6 +186,7 @@ export function Signup() {
       {/* Back Button */}
       <button
         onClick={() => navigate('/')}
+        tabIndex={-1}
         style={{
           background: 'none',
           border: 'none',
@@ -294,7 +307,7 @@ export function Signup() {
             }}
           />
           {errors.email && (
-            <span style={{ fontSize: '12px', color: '#FF4444', marginTop: '4px', display: 'block' }}>
+            <span role="alert" style={{ fontSize: '12px', color: '#FF4444', marginTop: '4px', display: 'block' }}>
               {errors.email}
             </span>
           )}
@@ -363,7 +376,7 @@ export function Signup() {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              disabled={loading}
+              tabIndex={-1}
               style={{
                 background: 'none',
                 border: 'none',
@@ -379,7 +392,7 @@ export function Signup() {
           <input
             type={showPassword ? 'text' : 'password'}
             value={formData.password}
-            onChange={e => setFormData({ ...formData, password: e.target.value })}
+            onChange={handlePasswordChange}
             onBlur={() => handleBlur('password')}
             disabled={loading}
             style={{
@@ -430,7 +443,7 @@ export function Signup() {
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                disabled={loading}
+                tabIndex={-1}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -447,7 +460,7 @@ export function Signup() {
           <input
             type={showConfirmPassword ? 'text' : 'password'}
             value={formData.confirmPassword}
-            onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+            onChange={handleConfirmPasswordChange}
             onBlur={() => handleBlur('confirmPassword')}
             disabled={loading}
             style={{
@@ -463,7 +476,7 @@ export function Signup() {
             }}
           />
           {errors.confirmPassword && (
-            <span style={{ fontSize: '12px', color: '#FF4444', marginTop: '4px', display: 'block' }}>
+            <span role="alert" style={{ fontSize: '12px', color: '#FF4444', marginTop: '4px', display: 'block' }}>
               {errors.confirmPassword}
             </span>
           )}
@@ -522,6 +535,7 @@ export function Signup() {
           <button
             type="button"
             onClick={() => navigate('/login')}
+            tabIndex={-1}
             style={{
               background: 'none',
               border: 'none',

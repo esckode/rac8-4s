@@ -96,7 +96,8 @@ export const ResetPassword: React.FC = () => {
     const formatted = formatCode(digitsOnly)
     setFormData(prev => ({ ...prev, code: formatted }))
 
-    if (digitsOnly.length === 6) {
+    // Clear code error when user is typing
+    if (value) {
       setErrors(prev => {
         const { code, ...rest } = prev
         return rest
@@ -105,10 +106,7 @@ export const ResetPassword: React.FC = () => {
   }
 
   const handleCodeBlur = () => {
-    const codeDigitsOnly = extractCode(formData.code)
-    if (formData.code && codeDigitsOnly.length !== 6) {
-      setErrors(prev => ({ ...prev, code: 'Code must be 6 digits' }))
-    }
+    // Code validation happens on submit, not on blur
   }
 
   const handlePasswordBlur = () => {
@@ -213,7 +211,6 @@ export const ResetPassword: React.FC = () => {
     formData.password &&
     formData.confirmPassword &&
     validateEmail(formData.email) &&
-    codeDigitsOnly.length === 6 &&
     formData.password.length >= 6 &&
     formData.confirmPassword === formData.password &&
     Object.keys(errors).length === 0
@@ -636,7 +633,7 @@ export const ResetPassword: React.FC = () => {
               onChange={handleCodeChange}
               onBlur={handleCodeBlur}
               onKeyPress={handleKeyPress}
-              placeholder="00 00 00"
+              placeholder="Reset code"
               disabled={loading}
               maxLength={8}
               style={{

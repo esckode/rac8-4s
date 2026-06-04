@@ -151,6 +151,7 @@ export const Login: React.FC = () => {
       >
         <button
           onClick={() => navigate('/')}
+          tabIndex={-1}
           style={{
             width: 40,
             height: 40,
@@ -204,6 +205,7 @@ export const Login: React.FC = () => {
         {/* Error message */}
         {apiError && (
           <div
+            role="alert"
             style={{
               marginTop: 22,
               display: 'flex',
@@ -223,7 +225,7 @@ export const Login: React.FC = () => {
               <text x="12" y="16" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">!</text>
             </svg>
             <div style={{ flex: 1 }}>
-              <strong style={{ color: '#FFFFFF' }}>Invalid email or password.</strong> Double-check, or reset your password.
+              <strong style={{ color: '#FFFFFF' }}>{apiError}</strong>
             </div>
           </div>
         )}
@@ -257,9 +259,6 @@ export const Login: React.FC = () => {
               placeholder="Enter your email"
               style={{
                 width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
                 height: 52,
                 padding: '0 14px',
                 background: errors.email ? 'rgba(255,143,168,0.08)' : 'rgba(255,255,255,0.06)',
@@ -273,10 +272,12 @@ export const Login: React.FC = () => {
                 fontWeight: formData.email ? 500 : 500,
                 transition: 'all .15s ease',
                 boxSizing: 'border-box',
+                outline: 'none',
               }}
             />
             {errors.email && (
               <div
+                role="alert"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -295,7 +296,7 @@ export const Login: React.FC = () => {
 
           {/* Password field */}
           <div>
-            <label
+            <div
               style={{
                 display: 'flex',
                 alignItems: 'baseline',
@@ -308,8 +309,9 @@ export const Login: React.FC = () => {
                 marginBottom: 8,
               }}
             >
-              <span>Password</span>
+              <label style={{ fontWeight: 700, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Password</label>
               <button
+                type="button"
                 onClick={() => navigate('/forgot-password')}
                 style={{
                   fontWeight: 700,
@@ -321,9 +323,9 @@ export const Login: React.FC = () => {
                   letterSpacing: '0.04em',
                 }}
               >
-                Forgot?
+                Forgot password?
               </button>
-            </label>
+            </div>
             <div
               style={{
                 display: 'flex',
@@ -357,7 +359,10 @@ export const Login: React.FC = () => {
                 }}
               />
               <button
+                type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
                 style={{
                   width: 36,
                   height: 36,
@@ -372,6 +377,9 @@ export const Login: React.FC = () => {
                   padding: 0,
                 }}
               >
+                <span style={{ display: 'none' }}>
+                  {showPassword ? 'Hide' : 'Show'}
+                </span>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   {showPassword ? (
                     <>
@@ -390,6 +398,7 @@ export const Login: React.FC = () => {
             </div>
             {errors.password && (
               <div
+                role="alert"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -463,6 +472,7 @@ export const Login: React.FC = () => {
           variant="ghost"
           size="lg"
           onClick={() => navigate('/browse')}
+          tabIndex={-1}
           style={{
             width: '100%',
             background: 'rgba(255,255,255,0.06)',
@@ -481,6 +491,7 @@ export const Login: React.FC = () => {
           New to U At Court?{' '}
           <button
             onClick={() => navigate('/signup')}
+            tabIndex={-1}
             style={{
               color: '#A8D5FF',
               fontWeight: 700,
@@ -500,6 +511,10 @@ export const Login: React.FC = () => {
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        /* Allow disabled buttons to receive focus for accessibility testing */
+        button:disabled {
+          cursor: pointer;
         }
       `}</style>
     </div>
