@@ -13,7 +13,14 @@ export const Landing: React.FC = () => {
   return (
     <>
       {/* Landing - Dark Theme */}
-      <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#1F2D4E] to-[#0F1B2E] relative overflow-hidden">
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(180deg, #1F2D4E 0%, #0F1B2E 100%)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
         {/* Decorative SVG circles */}
         <div className="absolute inset-0 opacity-[0.18] pointer-events-none">
           <svg width="100%" height="100%" viewBox="0 0 390 844" preserveAspectRatio="none">

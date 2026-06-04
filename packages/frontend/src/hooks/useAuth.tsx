@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE || 'http://localhost:3000'
+const API_BASE_URL = ''  // Use relative paths with Vite proxy (/api)
 const TOKEN_KEY = 'auth_token'
 
 export interface AuthUser {

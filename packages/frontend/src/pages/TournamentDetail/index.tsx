@@ -238,7 +238,7 @@ export const TournamentDetail: React.FC = () => {
       </div>
 
       {/* Debug Info (remove in production) */}
-      {process.env.NODE_ENV === 'development' && (
+      {import.meta.env.MODE === 'development' && (
         <div
           className={`
             rounded-[--r-lg]

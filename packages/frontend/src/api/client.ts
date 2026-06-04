@@ -8,7 +8,7 @@ import type {
 } from '../types'
 import type { Standing } from '../../../shared/src/types'
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:3000'
+const API_BASE = ''  // Use relative paths with Vite proxy (/api)
 
 function createApiError(message: string, status: number, code?: string): ApiError {
   return {

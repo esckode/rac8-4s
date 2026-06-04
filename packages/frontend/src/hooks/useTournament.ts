@@ -35,7 +35,7 @@ async function fetchTournamentBundle(
   tournamentId: string,
   token: string
 ): Promise<TournamentBundle> {
-  const url = new URL(`/tournaments/${tournamentId}/bundle`, process.env.REACT_APP_API_BASE || 'http://localhost:3000')
+  const url = new URL(`/tournaments/${tournamentId}/bundle`, window.location.origin)
 
   const response = await fetch(url.toString(), {
     method: 'GET',

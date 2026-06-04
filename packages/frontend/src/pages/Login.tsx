@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
 import { Button } from '../components/shared/Button'
 import { LogoMark } from '../components/shared/LogoMark'
 
@@ -15,6 +16,7 @@ const validateEmail = (email: string): boolean => {
 
 export const Login: React.FC = () => {
   const navigate = useNavigate()
+  const { login: authLogin } = useAuth()
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [errors, setErrors] = useState<FormErrors>({})
   const [loading, setLoading] = useState(false)
@@ -66,34 +68,13 @@ export const Login: React.FC = () => {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
-      })
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          setApiError('Invalid email or password')
-        } else if (response.status === 400) {
-          const errorData = await response.json()
-          setApiError(errorData.message || 'Invalid request')
-        } else {
-          setApiError('Something went wrong. Please try again.')
-        }
-        setLoading(false)
-        return
-      }
-
+      await authLogin(formData.email, formData.password)
       // Clear form and redirect
       setFormData({ email: '', password: '' })
       navigate('/browse')
     } catch (err) {
-      setApiError('Something went wrong. Please try again.')
+      const errorMessage = err instanceof Error ? err.message : 'Something went wrong. Please try again.'
+      setApiError(errorMessage)
       setLoading(false)
     }
   }

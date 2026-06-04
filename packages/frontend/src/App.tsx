@@ -9,6 +9,7 @@ import { Login } from './pages/Login'
 import { Signup } from './pages/Signup'
 import { ForgotPassword } from './pages/ForgotPassword'
 import { ResetPassword } from './pages/ResetPassword'
+import { Signout } from './pages/Signout'
 import { BrowseTournaments } from './pages/BrowseTournaments'
 import { Matches } from './pages/Matches'
 import { TournamentDetail } from './pages/TournamentDetail'
@@ -152,6 +153,7 @@ export const App: React.FC = () => {
           <Route path={ROUTES.SIGNUP} element={<PublicRoute><Signup /></PublicRoute>} />
           <Route path={ROUTES.FORGOT_PASSWORD} element={<PublicRoute><ForgotPassword /></PublicRoute>} />
           <Route path={ROUTES.RESET_PASSWORD} element={<PublicRoute><ResetPassword /></PublicRoute>} />
+          <Route path="/signout" element={<Signout />} />
 
           {/* Protected routes (require authentication) */}
           <Route

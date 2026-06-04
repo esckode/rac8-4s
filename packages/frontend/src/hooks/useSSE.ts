@@ -37,7 +37,7 @@ export function useSSE(tournamentId: string): SSEState {
       return
     }
 
-    const apiBase = process.env.REACT_APP_API_BASE || 'http://localhost:3000'
+    const apiBase = ''  // Use relative paths with Vite proxy (/api)
     const eventSourceUrl = `${apiBase}/tournaments/${tournamentId}/events`
 
     try {
