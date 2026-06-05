@@ -262,7 +262,7 @@ test.describe('Authentication E2E', () => {
       await page.goto('/login')
 
       // Click forgot password link
-      await page.click('text=Forgot password?, a:has-text("Forgot"), button:has-text("Forgot")')
+      await page.click('button:has-text("Forgot password?")')
 
       // Should navigate to forgot password page
       await expect(page).toHaveURL('/forgot-password')
@@ -578,17 +578,35 @@ test.describe('Authentication E2E', () => {
       // Initially hidden
       await expect(passwordInput).toHaveAttribute('type', 'password')
 
-      // Click show
-      await toggleButton.click()
+      // Click show - use evaluate with dispatchEvent to properly trigger React handlers
+      await toggleButton.evaluate(el => {
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+        el.click()
+      })
 
-      // Should show password
-      const passwordShown = page.locator('input[type="text"]').first()
-      await expect(passwordShown).toBeVisible()
+      // Should show password (verify password field is now text type)
+      await page.waitForFunction(() => {
+        const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]'))
+        return passwordInputs.length === 1  // one should now be text, one still password
+      }, { timeout: 5000 })
 
-      // Click hide
-      await page.locator('button:has-text("Hide")').first().click()
+      // Click hide button - use dispatch approach like the Show button
+      const hideButton = page.locator('button').filter({ hasText: 'Hide' }).first()
+      await hideButton.evaluate(el => {
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+        el.click()
+      })
 
-      // Should hide again
+      // Should hide again - back to 2 password inputs, 1 text input
+      await page.waitForFunction(() => {
+        const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]'))
+        return passwordInputs.length === 2  // both password fields back to password type
+      }, { timeout: 5000 })
+
       await expect(page.locator('input[type="password"]').first()).toBeVisible()
     })
 

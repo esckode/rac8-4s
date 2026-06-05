@@ -378,12 +378,11 @@ export const Login: React.FC = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   padding: 0,
+                  textIndent: '-9999px',
                 }}
               >
-                <span style={{ display: 'none' }}>
-                  {showPassword ? 'Hide' : 'Show'}
-                </span>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {showPassword ? 'Hide' : 'Show'}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute' }}>
                   {showPassword ? (
                     <>
                       <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />

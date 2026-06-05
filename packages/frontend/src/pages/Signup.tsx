@@ -1,12 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
 
 export function Signup() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
-  const { signup } = useAuth();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -109,7 +107,7 @@ export function Signup() {
   };
 
   const isFormValid = () => {
-    return (
+    const valid =
       formData.email &&
       formData.name &&
       formData.password &&
@@ -118,35 +116,75 @@ export function Signup() {
       formData.name.length >= 2 &&
       formData.password.length >= 6 &&
       formData.confirmPassword === formData.password &&
-      Object.keys(errors).length === 0
-    );
+      Object.keys(errors).length === 0;
+
+    if (!valid) {
+      console.log('Form invalid. Errors:', errors, 'Data:', formData);
+    }
+    return valid;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log('handleSubmit called');
     e.preventDefault();
 
     if (!isFormValid()) {
+      console.log('Form is not valid');
       return;
     }
+    console.log('Form is valid, proceeding with submission');
 
     setLoading(true);
     setGeneralError('');
 
     try {
-      await signup(formData.email, formData.name, formData.password, token || undefined);
+      const body: Record<string, string> = {
+        email: formData.email,
+        name: formData.name,
+        password: formData.password,
+      };
+      if (token) {
+        body.token = token;
+      }
+
+      console.log('Submitting signup with:', { email: formData.email });
+
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      console.log('Signup response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Signup failed' }));
+        const errorMessage = errorData.message || `Signup failed with status ${response.status}`;
+        console.log('Error response:', { status: response.status, errorData, errorMessage });
+
+        setLoading(false);
+
+        if (errorMessage.includes('Email already in use') || errorData.code === 'DUPLICATE_EMAIL') {
+          console.log('Setting email error');
+          setGeneralError('Email already in use');
+        } else if (errorMessage.includes('expired') || errorMessage.includes('invalid')) {
+          setGeneralError('This link has expired or is invalid');
+        } else {
+          setGeneralError(errorMessage);
+        }
+        return;
+      }
+
+      const data = await response.json();
+      localStorage.setItem('auth_token', data.token);
       navigate('/browse');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
-
-      if (message.includes('Email already in use') || message.includes('DUPLICATE_EMAIL')) {
-        setErrors({ email: 'Email already in use' });
-      } else if (message.includes('expired') || message.includes('invalid')) {
-        setGeneralError('This link has expired or is invalid');
-      } else {
-        setGeneralError(message);
-      }
-    } finally {
+      console.log('Signup error:', message);
       setLoading(false);
+      setGeneralError(message);
     }
   };
 
@@ -377,6 +415,7 @@ export function Signup() {
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               tabIndex={-1}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
               style={{
                 background: 'none',
                 border: 'none',
@@ -385,9 +424,7 @@ export function Signup() {
                 fontSize: '12px',
                 padding: '0',
               }}
-            >
-              {showPassword ? 'Hide' : 'Show'}
-            </button>
+            >{showPassword ? 'Hide' : 'Show'}</button>
           </div>
           <input
             type={showPassword ? 'text' : 'password'}
@@ -444,6 +481,7 @@ export function Signup() {
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 tabIndex={-1}
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -452,9 +490,7 @@ export function Signup() {
                   fontSize: '12px',
                   padding: '0',
                 }}
-              >
-                {showConfirmPassword ? 'Hide' : 'Show'}
-              </button>
+              >{showConfirmPassword ? 'Hide' : 'Show'}</button>
             </div>
           </div>
           <input
