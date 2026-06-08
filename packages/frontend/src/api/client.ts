@@ -27,7 +27,9 @@ async function apiFetch<T>(
   } = {}
 ): Promise<T> {
   try {
-    const url = new URL(path, API_BASE).toString()
+    // Construct URL, handling both browser (with window.location) and test environments
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+    const url = new URL(`${API_BASE}${path}`, baseUrl).toString()
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }

@@ -24,7 +24,9 @@ export class SSEClient {
     this.handlers = handlers
 
     // Construct URL with token as query parameter (since EventSource doesn't support custom headers)
-    const url = new URL(`${API_BASE}/tournaments/${tournamentId}/events`)
+    // EventSource accepts relative URLs, so we can build the string directly
+    const basePath = `${API_BASE}/tournaments/${tournamentId}/events`
+    const url = new URL(basePath, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
     url.searchParams.set('token', token)
 
     this.eventSource = new EventSource(url.toString())

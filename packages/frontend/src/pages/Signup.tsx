@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 export function Signup() {
   const navigate = useNavigate();
+  const { signup: authSignup } = useAuth();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
 
@@ -138,53 +140,22 @@ export function Signup() {
     setGeneralError('');
 
     try {
-      const body: Record<string, string> = {
-        email: formData.email,
-        name: formData.name,
-        password: formData.password,
-      };
-      if (token) {
-        body.token = token;
-      }
-
       console.log('Submitting signup with:', { email: formData.email });
-
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-
-      console.log('Signup response status:', response.status);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Signup failed' }));
-        const errorMessage = errorData.message || `Signup failed with status ${response.status}`;
-        console.log('Error response:', { status: response.status, errorData, errorMessage });
-
-        setLoading(false);
-
-        if (errorMessage.includes('Email already in use') || errorData.code === 'DUPLICATE_EMAIL') {
-          console.log('Setting email error');
-          setGeneralError('Email already in use');
-        } else if (errorMessage.includes('expired') || errorMessage.includes('invalid')) {
-          setGeneralError('This link has expired or is invalid');
-        } else {
-          setGeneralError(errorMessage);
-        }
-        return;
-      }
-
-      const data = await response.json();
-      localStorage.setItem('auth_token', data.token);
+      await authSignup(formData.email, formData.name, formData.password, token || undefined);
+      // Navigation happens after auth context is updated
       navigate('/browse');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
       console.log('Signup error:', message);
       setLoading(false);
-      setGeneralError(message);
+
+      if (message.includes('Email already in use')) {
+        setGeneralError('Email already in use');
+      } else if (message.includes('expired') || message.includes('invalid')) {
+        setGeneralError('This link has expired or is invalid');
+      } else {
+        setGeneralError(message);
+      }
     }
   };
 

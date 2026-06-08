@@ -53,7 +53,8 @@ function flushEvents(): void {
     }
   } catch (error) {
     // Silent fail - debug log only in dev
-    if (import.meta.env.MODE === 'development') {
+    const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true'
+    if (isDev) {
       console.debug('Analytics flush failed', error)
     }
   }

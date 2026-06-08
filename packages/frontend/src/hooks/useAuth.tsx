@@ -49,47 +49,47 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const restoreSession = useCallback(async (token: string): Promise<void> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (response.ok) {
-        const userData = (await response.json()) as MeResponse
-        setUser({
-          id: userData.id,
-          email: userData.email,
-          role: userData.role as 'player' | 'organizer',
+  useEffect(() => {
+    const restoreSession = async (token: string): Promise<void> => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
         })
-      } else if (response.status === 401) {
-        // Invalid token, clear it
+
+        if (response.ok) {
+          const userData = (await response.json()) as MeResponse
+          setUser({
+            id: userData.id,
+            email: userData.email,
+            role: userData.role as 'player' | 'organizer',
+          })
+        } else if (response.status === 401) {
+          // Invalid token, clear it
+          localStorage.removeItem(TOKEN_KEY)
+          setUser(null)
+        } else {
+          throw new Error(`Unexpected response status: ${response.status}`)
+        }
+      } catch (error) {
+        // Network error or other issue, clear token to be safe
         localStorage.removeItem(TOKEN_KEY)
         setUser(null)
-      } else {
-        throw new Error(`Unexpected response status: ${response.status}`)
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      // Network error or other issue, clear token to be safe
-      localStorage.removeItem(TOKEN_KEY)
-      setUser(null)
-    } finally {
-      setLoading(false)
     }
-  }, [])
 
-  useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY)
     if (token) {
       restoreSession(token)
     } else {
       setLoading(false)
     }
-  }, [restoreSession])
+  }, [])
 
   const login = useCallback(async (email: string, password: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/auth/login`, {

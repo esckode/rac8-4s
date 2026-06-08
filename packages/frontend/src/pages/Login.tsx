@@ -24,10 +24,6 @@ export const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false)
   const emailInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    // Focus email field on mount
-    emailInputRef.current?.focus()
-  }, [])
 
 
   const validateForm = (): boolean => {

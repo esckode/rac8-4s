@@ -477,20 +477,27 @@ test.describe('Authentication E2E', () => {
       await page.locator('input[type="password"]').first().fill(testPassword)
       await page.locator('input[type="password"]').last().fill(testPassword)
       await page.click('button:has-text("Create Account")')
+
+      // Wait for redirect to browse/dashboard
       await expect(page).toHaveURL(/\/browse|\/dashboard/)
 
       // Get token
       const token = await getTokenFromPage(page)
       expect(token).toBeTruthy()
 
-      // Navigate around
-      await page.goto('/login')
-      // Should redirect away from login since we're authenticated
-      // or stay on login but be able to go back
-      const url = page.url()
+      // Navigate to login - authenticated users should be redirected away
+      await page.goto('/login', { waitUntil: 'networkidle' })
 
-      // Navigate back to browse
-      await page.goto('/browse')
+      // PublicRoute redirects authenticated users to /browse
+      // So we should be redirected away from login
+      await expect(page).toHaveURL(/\/browse|\/dashboard/)
+
+      // Verify token is still in localStorage
+      const tokenAfterLogin = await getTokenFromPage(page)
+      expect(tokenAfterLogin).toBe(token)
+
+      // Navigate to browse explicitly
+      await page.goto('/browse', { waitUntil: 'networkidle' })
       await expect(page).toHaveURL(/\/browse|\/dashboard/)
 
       // Token should still exist

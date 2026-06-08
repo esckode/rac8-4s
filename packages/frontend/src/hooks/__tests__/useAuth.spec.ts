@@ -96,7 +96,7 @@ describe('useAuth', () => {
       expect(result.current.isAuthenticated).toBe(true)
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${API_BASE}/api/auth/me`,
+        '/api/auth/me',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -178,7 +178,7 @@ describe('useAuth', () => {
       expect(localStorage.getItem('auth_token')).toBe('new-token-xyz')
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${API_BASE}/api/auth/login`,
+        '/api/auth/login',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -308,7 +308,7 @@ describe('useAuth', () => {
       })
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${API_BASE}/api/auth/signup`,
+        '/api/auth/signup',
         expect.objectContaining({
           body: JSON.stringify({
             email: 'invited@example.com',
@@ -382,7 +382,7 @@ describe('useAuth', () => {
       expect(localStorage.getItem('auth_token')).toBeNull()
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${API_BASE}/api/auth/logout`,
+        '/api/auth/logout',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -496,7 +496,7 @@ describe('useAuth', () => {
       })
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${API_BASE}/api/auth/forgot-password`,
+        '/api/auth/forgot-password',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ email: 'test@example.com' }),
@@ -547,7 +547,7 @@ describe('useAuth', () => {
       })
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${API_BASE}/api/auth/reset-password`,
+        '/api/auth/reset-password',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({
@@ -631,7 +631,7 @@ describe('useAuth', () => {
       expect(result2.current.isAuthenticated).toBe(true)
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `${API_BASE}/api/auth/me`,
+        '/api/auth/me',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Bearer persistent-token',
