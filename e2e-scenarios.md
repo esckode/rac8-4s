@@ -1,8 +1,160 @@
 # E2E Test Scenarios
+
 **Format:** Gherkin BDD  
 **Coverage:** Happy paths + critical error scenarios  
 **Status:** Design phase - Option B (80-100 scenarios)  
 **Last Updated:** 2026-06-10
+
+---
+
+## Running Individual Tests
+
+Each scenario in this document has a corresponding Playwright test in `packages/frontend/e2e/`. Tests are organized by feature and can be run individually, by feature group, or as a full suite.
+
+### Quick Commands
+
+**Run all tests for a feature group:**
+```bash
+# Example: Run all signup tests (5 scenarios × 2 browsers = 10 tests)
+npx playwright test --grep "Feature: User signup flow"
+
+# Example: Run session persistence tests (3 scenarios × 2 browsers = 6 tests)
+npx playwright test --grep "Feature: Session persistence"
+```
+
+**Run a single scenario:**
+```bash
+# Example: Run one specific scenario on both browsers
+npx playwright test --grep "User successfully signs up with valid credentials"
+```
+
+**Run by test file:**
+```bash
+# Run all authentication tests
+npm run test:e2e:auth
+
+# Run all authentication tests in UI mode (recommended for debugging)
+npm run test:e2e:auth:ui
+```
+
+**Run on specific browser:**
+```bash
+# Chromium only
+npx playwright test --grep "Feature: User signup flow" --project=chromium
+
+# Firefox only
+npx playwright test --grep "Feature: User signup flow" --project=firefox
+```
+
+**Run with debugging:**
+```bash
+# Interactive UI mode - click to re-run, inspect elements
+npx playwright test --grep "User successfully signs up" --ui
+
+# Debug mode - step through test line by line
+npx playwright test --grep "User successfully signs up" --debug
+```
+
+### NPM Scripts
+
+```bash
+npm run test:e2e              # Run all e2e tests on all browsers
+npm run test:e2e:auth         # Run all authentication tests
+npm run test:e2e:auth:ui      # Run authentication tests in interactive UI mode
+npm run test:e2e:auth:debug   # Run authentication tests in debug mode
+npm run test:e2e:chromium     # Run all tests on Chromium only
+npm run test:e2e:firefox      # Run all tests on Firefox only
+npm run test:e2e:ui           # Run all tests in interactive UI mode
+npm run test:e2e:debug        # Run all tests in debug mode
+```
+
+### Test Organization
+
+Tests are organized by feature groups matching this document:
+
+| Feature Group | Scenarios | Test File | Command |
+|---|---|---|---|
+| **Authentication & Authorization** | 27 | `auth.spec.ts` | `npm run test:e2e:auth` |
+| **Tournament Discovery & Registration** | 9 | `tournament-discovery.spec.ts` | `npx playwright test --grep "Tournament Discovery"` |
+| **Group Stage - Singles** | 10 | `group-stage-singles.spec.ts` | `npx playwright test --grep "Group Stage Singles"` |
+| **Group Stage - Doubles** | 4 | `group-stage-doubles.spec.ts` | `npx playwright test --grep "Group Stage Doubles"` |
+| **Partner Confirmation** | 5 | `partner-confirmation.spec.ts` | `npx playwright test --grep "Partner Confirmation"` |
+| **Bracket - Singles** | 3 | `bracket-singles.spec.ts` | `npx playwright test --grep "Bracket Singles"` |
+| **Bracket - Doubles** | 2 | `bracket-doubles.spec.ts` | `npx playwright test --grep "Bracket Doubles"` |
+| **Real-Time Updates** | 4 | `real-time-updates.spec.ts` | `npx playwright test --grep "Real-Time Updates"` |
+| **Offline & Error Handling** | 4 | `offline-error.spec.ts` | `npx playwright test --grep "Offline"` |
+| **Mobile & Responsive** | 4 | `mobile-responsive.spec.ts` | `npx playwright test --grep "Mobile"` |
+
+### Development Workflow
+
+**When developing a feature:**
+```bash
+# Watch mode - re-runs tests automatically when code changes
+npx playwright test --grep "Feature: User signup flow" --ui --watch
+```
+
+**Before committing:**
+```bash
+# Quick validation of affected feature
+npx playwright test --grep "signup"
+```
+
+**Pre-push to main:**
+```bash
+# Full test suite on all browsers
+npm run test:e2e
+```
+
+### Performance
+
+- Single scenario: ~3-5 seconds
+- Feature group (5 scenarios): ~15-20 seconds
+- Full authentication suite (32 scenarios): ~1.1 minutes
+- Complete e2e suite (95+ scenarios): ~5-10 minutes
+
+### Implementation Status
+
+✅ **Phase 1: Authentication & Authorization** (27 scenarios) — COMPLETE  
+  - File: `packages/frontend/e2e/auth.spec.ts`
+  - Tests: 32 implemented, all passing
+  - Run: `npm run test:e2e:auth`
+
+⏳ **Phase 2: Tournament Discovery & Registration** (9 scenarios) — Planned  
+⏳ **Phase 3: Group Stage - Singles** (10 scenarios) — Planned  
+⏳ **Phase 4: Group Stage - Doubles** (4 scenarios) — Planned  
+⏳ **Phase 5: Partner Confirmation** (5 scenarios) — Planned  
+⏳ **Phases 6-10: Bracket, Real-Time, Offline, Mobile, Accessibility** (22 scenarios) — Planned  
+
+---
+
+## Gherkin to Playwright Mapping
+
+Each scenario below follows this pattern:
+
+```gherkin
+### Scenario: [Descriptive name]
+- **Type:** [Happy path | Error path | Validation | Security | Navigation | Session | UI Interaction | Token | Accessibility]
+- **Given** [Initial state]
+- **When** [User action]
+- **Then** [Expected outcome]
+- **And** [Additional assertions]
+```
+
+Maps to Playwright test:
+```typescript
+test('Scenario: [Descriptive name]', async ({ page }) => {
+  // Given: Initial state setup
+  await page.goto('/...')
+
+  // When: User action
+  await page.click('...')
+
+  // Then: Verify expected outcome
+  await expect(page).toHaveURL('/...')
+})
+```
+
+Each test is explicitly named to match the Gherkin scenario, making it easy to trace between requirements and implementation.
 
 ---
 
