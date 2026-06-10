@@ -69,10 +69,10 @@ export const API_ENDPOINTS = {
 
   // Tournaments
   TOURNAMENTS: {
-    LIST: '/api/tournaments',
-    CREATE: '/api/tournaments',
-    GET: (id: string) => `/api/tournaments/${id}`,
-    UPDATE: (id: string) => `/api/tournaments/${id}`,
+    LIST: '/tournaments/public',
+    CREATE: '/tournaments',
+    GET: (id: string) => `/tournaments/${id}`,
+    UPDATE: (id: string) => `/tournaments/${id}`,
   },
 
   // Registrations

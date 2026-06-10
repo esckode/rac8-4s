@@ -30,7 +30,7 @@ export const BrowseTournaments: React.FC = () => {
         setLoading(true)
         setError(null)
 
-        const response = await fetch('/api/tournaments/public', {
+        const response = await fetch('/tournaments/public', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
