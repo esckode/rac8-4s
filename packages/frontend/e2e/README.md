@@ -1,246 +1,465 @@
-# Authentication E2E Tests
+# E2E Test Patterns & Reusable Helpers
 
-Comprehensive end-to-end tests for the authentication flow using Playwright. These tests verify complete user journeys from signup, login, password reset, protected routes, and session persistence.
+This document outlines the patterns, helpers, and conventions established in Phase 1 (Authentication) that should be used consistently across all subsequent phases.
 
-## Running Tests
+## Core Helper Functions
 
-### Run all E2E tests
-```bash
-npm run test:e2e
-```
+All e2e tests should include these helpers at the top of the file:
 
-### Run tests with UI mode (interactive)
-```bash
-npm run test:e2e:ui
-```
-
-### Run tests in debug mode
-```bash
-npm run test:e2e:debug
-```
-
-### Run specific test file
-```bash
-npx playwright test auth.spec.ts
-```
-
-### Run specific test
-```bash
-npx playwright test -g "should successfully sign up"
-```
-
-### Run tests in specific browser
-```bash
-npx playwright test --project=chromium
-npx playwright test --project=firefox
-```
-
-## Prerequisites
-
-1. Both frontend and backend must be running:
-   - Frontend: `npm run dev` (runs on http://localhost:5173)
-   - Backend: `npm run dev` in `packages/api` (runs on http://localhost:3001)
-
-2. Clean database state before each test run:
-   ```bash
-   rm -f db/tournament.db
-   ```
-
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-## Test Coverage
-
-### 1. User Signup Flow
-- **successful signup with valid credentials**: Creates account, stores token, redirects to /browse
-- **existing email error**: Shows error when email already registered
-- **validation errors**: Validates email format, password match, required fields
-- **required fields**: Ensures all fields required before submission
-
-### 2. User Login Flow
-- **successful login**: Logs in with valid credentials, stores token, redirects
-- **invalid credentials error**: Shows error for wrong email/password
-- **wrong password error**: Shows error when password is incorrect
-- **required fields**: Ensures email and password required
-- **email validation**: Validates email format before submission
-
-### 3. Forgot Password Flow
-- **navigate to forgot password**: Accessible from login page
-- **send reset request**: Submits email for password reset
-- **non-existent email error**: Handles non-existent email appropriately
-- **email validation**: Validates email format
-
-### 4. Reset Password Flow
-- **invalid code error**: Shows error for invalid reset code
-- **password match validation**: Ensures new passwords match
-- **successful reset**: Allows user to reset password with valid code
-
-### 5. Protected Routes
-- **redirect to login without token**: Redirects when trying to access protected routes
-- **redirect with invalid token**: Clears invalid token and redirects
-- **allow access with valid token**: Allows access to protected routes with valid token
-
-### 6. Session Persistence
-- **restore session after refresh**: Page refresh maintains logged-in state
-- **maintain across navigation**: Session persists when navigating between pages
-- **clear after logout**: Logout clears token and redirects to login
-
-### 7. Password Show/Hide
-- **toggle on signup**: Show/Hide button works on signup form
-- **toggle on login**: Show/Hide button works on login form
-
-### 8. Form Interactions
-- **disable during loading**: Submit button disabled while request is pending
-- **navigate between forms**: Can navigate from signup to login and vice versa
-- **back navigation**: Can go back from signup to landing page
-
-### 9. Token Storage
-- **stored with correct key**: Token stored in localStorage as 'auth_token'
-- **valid JWT format**: Token is valid JWT (3 parts separated by dots)
-- **included in requests**: Token sent in Authorization header for API calls
-
-### 10. Accessibility
-- **keyboard navigation**: Can use Tab to navigate forms
-- **proper labels**: Form inputs have associated labels
-- **button text**: Buttons have proper text content and semantics
-
-## Test Architecture
-
-### Helper Functions
-- `apiCall()`: Makes API requests to backend
-- `getTokenFromPage()`: Retrieves token from localStorage
-- `clearAuthState()`: Clears auth data and reloads page
-
-### Page Navigation
-- `/signup` - Account creation
-- `/login` - User login
-- `/forgot-password` - Password reset request
-- `/reset-password` - Password reset completion
-- `/browse` - Protected dashboard page
-
-### Selectors
-Tests use semantic selectors where possible:
-- Form inputs: `input[type="email"]`, `input[type="password"]`
-- Buttons: `button:has-text("Create Account")`, `button:has-text("Sign In")`
-- Labels: `label:has-text("Email")`
-
-## Key Test Patterns
-
-### Testing Signup
 ```typescript
-await page.goto('/signup')
+import { test, expect } from '@playwright/test'
+
+const API_BASE = 'http://localhost:3001'
+
+// Make authenticated or unauthenticated API calls
+async function apiCall(path: string, method: string, body?: unknown) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  return response
+}
+
+// Extract auth token from localStorage (used to verify login)
+async function getTokenFromPage(page: any): Promise<string | null> {
+  return await page.evaluate(() => localStorage.getItem('auth_token'))
+}
+
+// Clear auth state and reload page (used for logout/reset between tests)
+async function clearAuthState(page: any) {
+  await page.evaluate(() => {
+    localStorage.removeItem('auth_token')
+    sessionStorage.clear()
+  })
+  await page.reload()
+}
+
+// Create unique test user for each test run (no conflicts)
+function createTestUser() {
+  const timestamp = Date.now()
+  return {
+    email: `test-${timestamp}@example.com`,
+    name: 'Test User',
+    password: 'TestPassword123',
+  }
+}
+```
+
+## Test File Structure
+
+Each test file should follow this organization:
+
+```typescript
+import { test, expect } from '@playwright/test'
+
+const API_BASE = 'http://localhost:3001'
+
+// [Include all helper functions above]
+
+test.describe('Feature Group Name E2E', () => {
+  // Setup before each test - clear auth state
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/login')
+    await clearAuthState(page)
+  })
+
+  // Feature group 1
+  test.describe('Feature: Feature Group 1', () => {
+    test('Scenario: scenario name', async ({ page }) => {
+      // Test body
+    })
+  })
+
+  // Feature group 2
+  test.describe('Feature: Feature Group 2', () => {
+    test('Scenario: scenario name', async ({ page }) => {
+      // Test body
+    })
+  })
+})
+```
+
+## Test Naming Convention
+
+Use explicit Gherkin-style names that reference `e2e-scenarios.md`:
+
+```typescript
+// ✅ GOOD - Matches Gherkin scenario name exactly
+test('Scenario: User successfully registers for tournament', async ({ page }) => { ... })
+
+// ❌ AVOID - Vague names that don't reference requirements
+test('should register', async ({ page }) => { ... })
+```
+
+## Test Body Pattern: Given/When/Then
+
+Structure test bodies with comments that match Gherkin:
+
+```typescript
+test('Scenario: User browses tournaments', async ({ page }) => {
+  // Given: I am authenticated
+  const user = createTestUser()
+  await apiCall('/api/auth/signup', 'POST', { ... })
+  
+  // When: I navigate to /browse
+  await page.goto('/browse')
+  
+  // Then: I should see a list of tournaments
+  await expect(page.locator('tournament cards')).toBeVisible()
+})
+```
+
+## Common Element Selectors
+
+Use these patterns for selecting form inputs and buttons:
+
+```typescript
+// Email input
 await page.fill('input[type="email"]', testEmail)
-await page.fill('input[placeholder="Your full name"]', testName)
-await page.locator('input[type="password"]').first().fill(testPassword)
-await page.locator('input[type="password"]').last().fill(testPassword)
-await page.click('button:has-text("Create Account")')
+
+// Password input (first of multiple)
+await page.locator('input[type="password"]').first().fill(password)
+
+// Named input by placeholder
+await page.fill('input[placeholder="Your full name"]', name)
+
+// Button by text (with fallback for variations)
+await page.click('button:has-text("Sign In"), button:has-text("Log In")')
+
+// Link by text
+await page.click('text=Sign in')
+
+// Flexible selector for radio/checkbox
+await page.click('input[value="singles"]')
+
+// By aria-label (for accessibility)
+await page.click('[aria-label="Register"]')
+
+// By data-testid (best practice)
+await page.click('[data-testid="submit-button"]')
+```
+
+## Data Patterns
+
+### Unique Test Data
+
+Use `Date.now()` for guaranteed uniqueness without database cleanup:
+
+```typescript
+// ✅ GOOD - No conflicts between parallel test runs
+const uniqueEmail = `test-${Date.now()}@example.com`
+
+// ✅ GOOD - Use helper function
+const user = createTestUser()  // Returns { email: `test-${timestamp}@...`, ... }
+
+// ❌ AVOID - Will conflict when tests run in parallel
+const email = 'testuser@example.com'
+```
+
+### Test Data Structure
+
+For complex objects (tournaments, players, etc.):
+
+```typescript
+function createTestTournament() {
+  return {
+    name: `Tournament ${Date.now()}`,
+    sport: 'pickleball',
+    format: 'singles',
+    maxPlayers: 16,
+    registrationDeadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+  }
+}
+
+function createTestDoublesToournament() {
+  return {
+    ...createTestTournament(),
+    format: 'doubles',
+  }
+}
+```
+
+## Navigation & URL Patterns
+
+### Flexible URL Matching
+
+Use regex patterns to handle route variations:
+
+```typescript
+// ✅ GOOD - Matches multiple possible destinations
 await expect(page).toHaveURL(/\/browse|\/dashboard/)
+
+// ✅ GOOD - Wait for specific URL with timeout
+await page.waitForURL('/tournament/[0-9]+', { timeout: 10000 })
+
+// ❌ AVOID - Brittle - breaks if route changes
+await expect(page).toHaveURL('/browse')
+```
+
+### Navigation with Network Waits
+
+Always wait for network when navigating to new routes:
+
+```typescript
+// ✅ GOOD - Waits for network requests to complete
+await page.goto('/browse', { waitUntil: 'networkidle' })
+
+// ✅ GOOD - For API-heavy pages
+await page.waitForURL(/\/tournament\//, { timeout: 10000 })
+
+// ❌ AVOID - May not wait for data to load
+await page.goto('/browse')
+```
+
+## API Precondition Pattern
+
+Set up test data via API before testing UI:
+
+```typescript
+test('Scenario: User can view tournament details', async ({ page }) => {
+  // Given: A tournament exists
+  const tournamentResponse = await apiCall('/api/tournaments', 'POST', {
+    name: 'Test Tournament',
+    format: 'singles',
+  })
+  const tournament = await tournamentResponse.json()
+
+  // When: I navigate to the tournament page
+  await page.goto(`/tournament/${tournament.id}`)
+
+  // Then: I see the tournament details
+  await expect(page.locator('h1')).toContainText('Test Tournament')
+})
+```
+
+## Wait Patterns
+
+Use appropriate waits based on what you're waiting for:
+
+```typescript
+// Wait for element visibility
+await expect(page.locator('.tournament-list')).toBeVisible()
+
+// Wait for URL change
+await expect(page).toHaveURL('/browse')
+
+// Wait for specific URL pattern with timeout
+await page.waitForURL(/\/tournament\/[0-9]+/, { timeout: 10000 })
+
+// Wait for network to be idle (all requests complete)
+await page.goto('/browse', { waitUntil: 'networkidle' })
+
+// Wait for custom condition
+await page.waitForFunction(() => {
+  return document.querySelectorAll('.tournament-card').length > 0
+}, { timeout: 5000 })
+
+// Simple delay (use sparingly)
+await page.waitForTimeout(2000)
+```
+
+## Error & Validation Patterns
+
+### Flexible Validation
+
+Allow for UI variations with fallback patterns:
+
+```typescript
+// ✅ GOOD - Checks for success without brittle selectors
+const successMessage = page.locator('text=/success|sent|created/i')
+await expect(successMessage).toBeVisible().catch(() => {
+  // If no explicit message, verify we're still on the page
+  return expect(page).toHaveURL('/tournament')
+})
+
+// ✅ GOOD - Optional element checking
+const optionalLabel = page.locator('label:has-text("Email")')
+if (await optionalLabel.isVisible({ timeout: 500 }).catch(() => false)) {
+  await expect(optionalLabel).toBeVisible()
+}
+```
+
+### Error Message Detection
+
+```typescript
+// Wait for error to appear
+await expect(page.locator('text=Invalid email')).toBeVisible({ timeout: 5000 })
+
+// Or use regex for variations
+await expect(page.locator('text=/invalid|error|failed/i')).toBeVisible()
+
+// Check button disabled state
+const submitButton = page.locator('button:has-text("Submit")')
+await expect(submitButton).toBeDisabled()
+```
+
+## State Verification Patterns
+
+### Token & Auth State
+
+```typescript
+// Verify user is logged in
 const token = await getTokenFromPage(page)
 expect(token).toBeTruthy()
+
+// Verify token is valid JWT format
+expect(token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/)
+
+// Verify user is logged out
+const token = await getTokenFromPage(page)
+expect(token).toBeNull()
 ```
 
-### Testing Protected Routes
+### localStorage & sessionStorage
+
 ```typescript
-await page.goto('/login')
-await clearAuthState(page)
-await page.goto('/browse')
-await expect(page).toHaveURL('/login')
+// Verify data in localStorage
+const storageData = await page.evaluate(() => {
+  const data: Record<string, string> = {}
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key) data[key] = localStorage.getItem(key) || ''
+  }
+  return data
+})
+expect(storageData['auth_token']).toBeTruthy()
 ```
 
-### Testing Session Persistence
+## Accessibility Patterns
+
+Always include accessibility tests for form interactions:
+
 ```typescript
-const tokenBefore = await getTokenFromPage(page)
-await page.reload()
-const tokenAfter = await getTokenFromPage(page)
-expect(tokenAfter).toBe(tokenBefore)
+test('Scenario: Form is keyboard navigable', async ({ page }) => {
+  await page.goto('/login')
+
+  // Tab to first input
+  await page.keyboard.press('Tab')
+  await page.keyboard.type('test@example.com')
+
+  // Tab to password
+  await page.keyboard.press('Tab')
+  await page.keyboard.type('password')
+
+  // Tab to submit button
+  await page.keyboard.press('Tab')
+
+  // Verify button is focused
+  const focusedElement = await page.evaluate(() => document.activeElement?.tagName)
+  expect(focusedElement).toBe('BUTTON')
+})
 ```
 
-## Debugging
+## Browser-Specific Patterns
 
-### Enable verbose logging
-```bash
-PWDEBUG=1 npx playwright test
+Tests run on both Chromium and Firefox. Use patterns that work on both:
+
+```typescript
+// ✅ GOOD - Works on both browsers
+await page.click('button:has-text("Click me")')
+await page.fill('input[type="email"]', 'test@example.com')
+
+// ⚠️ CAUTION - Firefox may behave differently
+// Use .evaluate() for browser-specific code if needed
+await page.evaluate(() => {
+  // Firefox-safe code here
+})
 ```
 
-### Use debug mode with step-by-step execution
-```bash
-npx playwright test --debug
+## Common Pitfalls to Avoid
+
+1. **Race conditions** - Always wait for network, elements, or conditions before asserting
+   ```typescript
+   // ❌ WRONG - May not wait for data
+   await page.goto('/browse')
+   await expect(page.locator('.tournament')).toBeVisible()
+   
+   // ✅ RIGHT - Waits for network
+   await page.goto('/browse', { waitUntil: 'networkidle' })
+   await expect(page.locator('.tournament')).toBeVisible()
+   ```
+
+2. **Hard-coded test data** - Creates conflicts in parallel runs
+   ```typescript
+   // ❌ WRONG
+   const email = 'test@example.com'
+   
+   // ✅ RIGHT
+   const email = `test-${Date.now()}@example.com`
+   ```
+
+3. **Brittle selectors** - Break when UI changes
+   ```typescript
+   // ❌ WRONG - Specific order/structure dependent
+   await page.click('div:nth-child(3) > button')
+   
+   // ✅ RIGHT - Semantic and resilient
+   await page.click('button:has-text("Register")')
+   ```
+
+4. **Unclear test purpose** - Makes maintenance difficult
+   ```typescript
+   // ❌ WRONG - What is this testing?
+   test('should work', async ({ page }) => { ... })
+   
+   // ✅ RIGHT - Clear requirement reference
+   test('Scenario: User can register for tournament', async ({ page }) => { ... })
+   ```
+
+5. **Over-specific waits** - Makes tests flaky
+   ```typescript
+   // ❌ WRONG - Too specific, breaks with UI changes
+   await expect(page.locator('.success-banner')).toBeVisible()
+   
+   // ✅ RIGHT - Flexible, checks for intent not implementation
+   await expect(page.locator('text=/success|created|registered/i')).toBeVisible()
+   ```
+
+## File Organization by Phase
+
+Create one test file per feature group, organized by phase:
+
+```
+packages/frontend/e2e/
+├── auth.spec.ts                    # Phase 1: Authentication (27 scenarios)
+├── tournament-discovery.spec.ts    # Phase 2: Tournament Discovery (9 scenarios)
+├── group-stage-singles.spec.ts     # Phase 3: Group Stage Singles (10 scenarios)
+├── group-stage-doubles.spec.ts     # Phase 4: Group Stage Doubles (4 scenarios)
+├── partner-confirmation.spec.ts    # Phase 5: Partner Confirmation (5 scenarios)
+├── bracket-singles.spec.ts         # Phase 6: Bracket Singles (3 scenarios)
+├── bracket-doubles.spec.ts         # Phase 7: Bracket Doubles (2 scenarios)
+├── real-time-updates.spec.ts       # Phase 8: Real-Time Updates (4 scenarios)
+├── offline-error.spec.ts           # Phase 9: Offline & Error (4 scenarios)
+├── mobile-responsive.spec.ts       # Phase 10: Mobile & Responsive (4 scenarios)
+└── README.md                       # This file
 ```
 
-### View test report
-```bash
-npx playwright show-report
-```
+## Quick Checklist for New Test Files
 
-### Record test video
-Videos are automatically recorded on test failure (configured in playwright.config.ts)
+When implementing a new phase, ensure:
 
-## Troubleshooting
+- [ ] Import test, expect from @playwright/test
+- [ ] Define API_BASE constant
+- [ ] Include all 4 helper functions (apiCall, getTokenFromPage, clearAuthState, createTest*)
+- [ ] Use test.beforeEach() to clear auth state
+- [ ] Name tests: `Scenario: [matching e2e-scenarios.md]`
+- [ ] Include Given/When/Then comments
+- [ ] Use flexible URL matchers with regex: `/\/path1|\/path2/`
+- [ ] Use network waits: `{ waitUntil: 'networkidle' }`
+- [ ] Create unique test data with Date.now()
+- [ ] Use semantic selectors: `button:has-text("...")` not `div:nth-child(3)`
+- [ ] Verify via assertions, not UI text (when possible)
+- [ ] Test on both browsers (Chromium + Firefox) - Playwright runs both by default
 
-### Tests timeout
-- Ensure backend is running on port 3001
-- Ensure frontend is running on port 5173
-- Check network connectivity between frontend and backend
+## Phase Implementation Order
 
-### Token not persisting
-- Verify localStorage is not being cleared between tests
-- Check that `beforeEach` hook is properly clearing auth state
-- Ensure API is returning valid JWT tokens
+1. **Phase 1: Authentication** ✅ Complete (uses all patterns established here)
+2. **Phase 2-10:** Follow the same structure and patterns
 
-### Navigation issues
-- Verify routes are correctly configured in App.tsx
-- Check that ProtectedRoute component is properly redirecting
-- Ensure page navigation waits for URL changes
-
-### Database state issues
-- Clear database before running tests: `rm -f db/tournament.db`
-- Check that backend is creating tables properly
-- Verify unique constraints on email field
-
-## CI/CD Integration
-
-For GitHub Actions or other CI systems:
-
-```yaml
-- name: Install dependencies
-  run: npm install
-
-- name: Build frontend
-  run: npm run build --workspace=packages/frontend
-
-- name: Start backend
-  run: npm run dev --workspace=packages/api &
-
-- name: Wait for services
-  run: sleep 5
-
-- name: Run E2E tests
-  run: npm run test:e2e
-
-- name: Upload test results
-  if: always()
-  uses: actions/upload-artifact@v3
-  with:
-    name: playwright-report
-    path: playwright-report/
-```
-
-## Performance Metrics
-
-All tests should complete in < 5 minutes with:
-- 2 browser profiles (Chromium, Firefox)
-- 40+ individual test cases
-- Real API calls to backend
-- Full DOM manipulation
-
-Typical runtime: 2-3 minutes total with parallel workers
-
-## Notes
-
-- Tests use dynamic email addresses with timestamps to avoid conflicts
-- Each test is independent and can run in isolation
-- Tests clean up their auth state before each test
-- Real API calls are made to backend (not mocked)
-- Screenshots and videos captured on failure for debugging
+Each phase should:
+- Create a new `.spec.ts` file in `packages/frontend/e2e/`
+- Include all helper functions and boilerplate
+- Follow Given/When/Then structure
+- Map 1:1 to scenarios in `e2e-scenarios.md`
+- Run with: `npm run test:e2e` (all) or `npx playwright test --grep "Feature: X"` (specific)
