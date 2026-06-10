@@ -12,7 +12,10 @@
     "clean": "rm -rf dist",
     "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts",
-    "dev:fresh": "rm -f ../../db/tournament.db && npm run dev"
+    "dev:fresh": "rm -f ../../db/tournament.db && npm run dev",
+    "seed": "npm run seed:accounts && npm run seed:tournaments",
+    "seed:accounts": "tsx scripts/seed-test-accounts.ts",
+    "seed:tournaments": "tsx scripts/seed-tournaments.ts"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
