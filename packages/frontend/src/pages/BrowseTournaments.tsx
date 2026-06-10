@@ -140,7 +140,7 @@ export const BrowseTournaments: React.FC = () => {
                 <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--court-600)', letterSpacing: '0.12em', marginBottom: 10 }}>
                   FEATURED
                 </div>
-                <div data-testid="tournament-list" style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', marginBottom: 20, display: 'flex', gap: 14, cursor: 'pointer' }} onClick={() => window.location.href = `/tournament/${filteredTournaments[0].id}/standings`}>
+                <div data-testid="tournament-list tournament-card" style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', marginBottom: 20, display: 'flex', gap: 14, cursor: 'pointer' }} onClick={() => window.location.href = `/tournament/${filteredTournaments[0].id}/standings`}>
                   <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[getColorForTournament(0)], flexShrink: 0 }} />
                   <div style={{ flex: 1 }}>
                     <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>{filteredTournaments[0].name}</h3>
