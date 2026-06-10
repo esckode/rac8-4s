@@ -18,6 +18,11 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
+    "test:e2e:auth": "playwright test auth.spec.ts",
+    "test:e2e:auth:ui": "playwright test auth.spec.ts --ui",
+    "test:e2e:auth:debug": "playwright test auth.spec.ts --debug",
+    "test:e2e:chromium": "playwright test --project=chromium",
+    "test:e2e:firefox": "playwright test --project=firefox",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "type-check": "tsc --noEmit"
