@@ -60,6 +60,29 @@ export async function validateMagicLinkToken(
   }
 }
 
+export async function validateMagicLinkTokenReadOnly(
+  token: string,
+  store: TokenStore
+): Promise<MagicLinkPayload> {
+  if (!token) {
+    throw new TokenInvalidError('Token cannot be empty')
+  }
+
+  const key = `${KEY_PREFIX}${token}`
+  const value = await store.get(key)
+
+  if (!value) {
+    throw new TokenInvalidError('Token is invalid or has expired')
+  }
+
+  try {
+    const payload = JSON.parse(value) as MagicLinkPayload
+    return payload
+  } catch {
+    throw new TokenInvalidError('Token value is corrupted')
+  }
+}
+
 export async function invalidateMagicLinkToken(
   token: string,
   store: TokenStore

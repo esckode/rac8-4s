@@ -24,16 +24,27 @@ export function Signup() {
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (token) {
-      try {
-        const decoded = atob(token);
-        const email = decoded.split(':')[0];
-        setFormData(prev => ({ ...prev, email }));
-      } catch {
-        setGeneralError('This link has expired or is invalid');
+    const validateAndFillMagicLink = async () => {
+      if (token) {
+        try {
+          // Fetch magic link data from backend
+          const response = await fetch(`/tournaments/auth/magic-link?token=${encodeURIComponent(token)}`);
+
+          if (!response.ok) {
+            throw new Error('Token is invalid or has expired');
+          }
+
+          const data = await response.json();
+          setFormData(prev => ({ ...prev, email: data.email }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'This link has expired or is invalid';
+          setGeneralError(message);
+        }
       }
-    }
-    emailInputRef.current?.focus();
+      emailInputRef.current?.focus();
+    };
+
+    validateAndFillMagicLink();
   }, [token]);
 
   const validateEmail = (email: string) => {

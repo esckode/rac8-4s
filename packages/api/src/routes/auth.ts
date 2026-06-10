@@ -53,6 +53,7 @@ export default function authRouter(deps: AppDependencies) {
   router.post('/signup', async (req: Request, res: Response, next: NextFunction) => {
     try {
       let { email, name, password, token } = req.body
+      let magicPayload: any = null
 
       // Step 1: Validate all inputs
       const validationErrors: string[] = []
@@ -86,7 +87,7 @@ export default function authRouter(deps: AppDependencies) {
 
       if (tokenProvided) {
         try {
-          const magicPayload = await validateMagicLinkToken(token, deps.tokenStore)
+          magicPayload = await validateMagicLinkToken(token, deps.tokenStore)
           // Use the provided email if given, otherwise use token email
           if (!email) {
             email = magicPayload.email
@@ -146,6 +147,15 @@ export default function authRouter(deps: AppDependencies) {
         deps.jwtConfig.secret
       )
 
+      // Step 7: If magic link was used, log the tournament registration
+      if (magicPayload && magicPayload.tournamentId) {
+        log.info('tournament.signup_magic_link', {
+          accountId: account.id,
+          email: account.email,
+          tournamentId: magicPayload.tournamentId
+        })
+      }
+
       // Step 8: Log success
       log.info('account.created', {
         accountId: account.id,
@@ -161,7 +171,8 @@ export default function authRouter(deps: AppDependencies) {
           name: name,
           role: account.role
         },
-        token: sessionToken
+        token: sessionToken,
+        ...(magicPayload && magicPayload.tournamentId && { tournamentId: magicPayload.tournamentId })
       })
     } catch (err) {
       next(err)

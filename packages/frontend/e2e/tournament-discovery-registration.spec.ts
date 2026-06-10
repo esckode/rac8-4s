@@ -377,29 +377,79 @@ test.describe('Tournament Discovery & Registration E2E', () => {
   test.describe('Feature: Magic Link Signup Integration', () => {
     test('Scenario: Completes signup via magic link for singles tournament', async ({ page }) => {
       // Given: I have a magic link token from tournament registration
-      const magicToken = 'test-token-123' // placeholder
+      // Create organizer account to create a tournament
+      const organizer = createTestUser()
+      const signupResponse = await apiCall(API_ENDPOINTS.AUTH.SIGNUP, 'POST', {
+        email: organizer.email,
+        name: organizer.name,
+        password: organizer.password,
+      })
+
+      if (!signupResponse.ok) {
+        throw new Error('Failed to create organizer account')
+      }
+
+      const userData = await signupResponse.json()
+      const organizerToken = userData.token
+
+      // Create a tournament as organizer
+      const tournament = createTestTournament()
+      const tournamentResponse = await apiCall(
+        API_ENDPOINTS.TOURNAMENTS.CREATE,
+        'POST',
+        {
+          ...tournament,
+          matchFormat: 'singles',
+        },
+        organizerToken
+      )
+
+      if (!tournamentResponse.ok) {
+        throw new Error('Failed to create tournament for magic link test')
+      }
+
+      const tournamentData = await tournamentResponse.json()
+      const tournamentId = tournamentData.id
+
+      // Register for the tournament to get a magic link token (as new user)
+      const registrationUser = createTestUser()
+      const registrationResponse = await apiCall(
+        `/tournaments/${tournamentId}/register`,
+        'POST',
+        {
+          email: registrationUser.email,
+          name: registrationUser.name,
+        }
+      )
+
+      if (!registrationResponse.ok) {
+        throw new Error('Failed to register for tournament')
+      }
+
+      const registrationData = await registrationResponse.json()
+      const magicToken = registrationData.magicLinkToken
 
       // When: I navigate to /signup?token=xyz
       await page.goto(`${ROUTES.SIGNUP}?token=${magicToken}`, { waitUntil: 'networkidle' })
 
-      // And: email is pre-filled
+      // And: email is pre-filled from the magic link
       const emailInput = page.locator(SELECTORS.EMAIL_INPUT)
       const emailValue = await emailInput.inputValue()
 
-      // Email should be pre-filled (or form should accept it)
-      expect(emailValue || emailValue === '').toBeTruthy()
+      // Email should be pre-filled from the magic link
+      expect(emailValue).toBe(registrationUser.email)
 
-      // And: I fill in name and password
-      const user = createTestUser()
+      // And: I fill in name and password (email is already filled)
       const nameInput = page.locator(SELECTORS.NAME_INPUT)
       if ((await nameInput.count()) > 0) {
-        await nameInput.fill(user.name)
+        await nameInput.fill(registrationUser.name)
       }
 
+      const password = TEST_DATA.USER.DEFAULT_PASSWORD
       const passwordInputs = page.locator(SELECTORS.PASSWORD_INPUT)
       if ((await passwordInputs.count()) >= 2) {
-        await passwordInputs.first().fill(user.password)
-        await passwordInputs.last().fill(user.password)
+        await passwordInputs.first().fill(password)
+        await passwordInputs.last().fill(password)
       }
 
       // And: I click "Create Account & Register" or similar
@@ -424,28 +474,80 @@ test.describe('Tournament Discovery & Registration E2E', () => {
 
     test('Scenario: Completes signup via magic link for doubles tournament', async ({ page }) => {
       // Given: I have a magic link token from a doubles tournament registration
-      const magicToken = 'test-token-456' // placeholder
+      // Create organizer account to create a tournament
+      const organizer = createTestUser()
+      const signupResponse = await apiCall(API_ENDPOINTS.AUTH.SIGNUP, 'POST', {
+        email: organizer.email,
+        name: organizer.name,
+        password: organizer.password,
+      })
+
+      if (!signupResponse.ok) {
+        throw new Error('Failed to create organizer account')
+      }
+
+      const userData = await signupResponse.json()
+      const organizerToken = userData.token
+
+      // Create a doubles tournament as organizer
+      const tournament = createTestTournament()
+      const tournamentResponse = await apiCall(
+        API_ENDPOINTS.TOURNAMENTS.CREATE,
+        'POST',
+        {
+          ...tournament,
+          matchFormat: 'doubles',
+        },
+        organizerToken
+      )
+
+      if (!tournamentResponse.ok) {
+        throw new Error('Failed to create doubles tournament for magic link test')
+      }
+
+      const tournamentData = await tournamentResponse.json()
+      const tournamentId = tournamentData.id
+
+      // Register for the doubles tournament to get a magic link token (as new user)
+      const registrationUser = createTestUser()
+      const registrationResponse = await apiCall(
+        `/tournaments/${tournamentId}/register`,
+        'POST',
+        {
+          email: registrationUser.email,
+          name: registrationUser.name,
+          partnerSelection: { type: 'invite', value: 'partner@example.com' },
+        }
+      )
+
+      if (!registrationResponse.ok) {
+        throw new Error('Failed to register for doubles tournament')
+      }
+
+      const registrationData = await registrationResponse.json()
+      const magicToken = registrationData.magicLinkToken
 
       // When: I navigate to /signup?token=xyz
       await page.goto(`${ROUTES.SIGNUP}?token=${magicToken}`, { waitUntil: 'networkidle' })
 
-      // And: I complete the signup
-      const user = createTestUser()
+      // And: I complete the signup with pre-filled email
       const emailInput = page.locator(SELECTORS.EMAIL_INPUT)
       const nameInput = page.locator(SELECTORS.NAME_INPUT)
       const passwordInputs = page.locator(SELECTORS.PASSWORD_INPUT)
 
-      if ((await emailInput.count()) > 0) {
-        await emailInput.fill(user.email)
-      }
+      // Email should already be pre-filled from the magic link
+      const emailValue = await emailInput.inputValue()
+      expect(emailValue).toBe(registrationUser.email)
 
+      // Fill in name and password (email is pre-filled)
       if ((await nameInput.count()) > 0) {
-        await nameInput.fill(user.name)
+        await nameInput.fill(registrationUser.name)
       }
 
+      const password = TEST_DATA.USER.DEFAULT_PASSWORD
       if ((await passwordInputs.count()) >= 2) {
-        await passwordInputs.first().fill(user.password)
-        await passwordInputs.last().fill(user.password)
+        await passwordInputs.first().fill(password)
+        await passwordInputs.last().fill(password)
       }
 
       const createButton = page.locator(

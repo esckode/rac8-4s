@@ -6,6 +6,7 @@ import {
   assertOrganizerOwnsTournament,
   generateMagicLinkToken,
   validateMagicLinkToken,
+  validateMagicLinkTokenReadOnly,
   generatePlayerSession,
   requirePlayerSessionAuth,
   assertPlayerInTournament,
@@ -1100,6 +1101,37 @@ export default function tournamentsRouter(deps: AppDependencies) {
         expiresIn: deps.config.auth.sessionTtlSeconds,
         playerId: magicPayload.playerId,
         tournamentId: magicPayload.tournamentId,
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /auth/magic-link - validate magic link token and return payload (for frontend pre-fill)
+  router.get('/auth/magic-link', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const token = req.query.token as string | undefined
+
+      if (!token) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'token query parameter is required' })
+      }
+
+      let magicPayload
+      try {
+        magicPayload = await validateMagicLinkTokenReadOnly(token, deps.tokenStore)
+      } catch (err) {
+        if (err instanceof TokenInvalidError) {
+          return res.status(401).json({ code: 'INVALID_TOKEN', message: 'Token is invalid or has expired' })
+        }
+        throw err
+      }
+
+      log.debug('magic_link.validated', { tournamentId: magicPayload.tournamentId, email: magicPayload.email })
+
+      res.status(200).json({
+        email: magicPayload.email,
+        tournamentId: magicPayload.tournamentId,
+        playerId: magicPayload.playerId,
       })
     } catch (err) {
       next(err)

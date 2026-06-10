@@ -1,7 +1,7 @@
 import { Pool } from 'pg'
-import { TournamentRepository, AccountRepository, openDatabase } from '../src/db'
+import { TournamentRepository, AccountRepository } from '../src/db'
 import { getLogger } from '../src/logger'
-import bcryptjs from 'bcryptjs'
+import * as bcryptjs from 'bcryptjs'
 
 const log = getLogger('seed-tournaments')
 
