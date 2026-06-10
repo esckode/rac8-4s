@@ -785,20 +785,23 @@ test.describe('Authentication E2E', () => {
     test('should be keyboard navigable on login page', async ({ page }) => {
       await page.goto('/login')
 
+      // Wait for form to be visible before keyboard navigation
+      await expect(page.locator('input[type="email"]')).toBeVisible()
+
       // Tab to email field and fill
       await page.keyboard.press('Tab')
-      const focusedElement = await page.evaluate(() => document.activeElement?.tagName)
-      expect(['INPUT', 'BUTTON']).toContain(focusedElement)
-
-      // Fill form using keyboard
       await page.keyboard.type('test@example.com')
+
+      // Tab to password field
       await page.keyboard.press('Tab')
       await page.keyboard.type('password123')
+
+      // Tab to sign in button
       await page.keyboard.press('Tab')
 
-      // Sign in button should be focused or Tab should reach it
-      const activeElement = await page.evaluate(() => document.activeElement?.textContent)
-      expect(activeElement).toBeTruthy()
+      // Sign in button should now be focused - verify by checking the element is focused
+      const focusedElement = await page.evaluate(() => document.activeElement?.tagName)
+      expect(focusedElement).toBe('BUTTON')
     })
 
     test('should have proper labels on form inputs', async ({ page }) => {
