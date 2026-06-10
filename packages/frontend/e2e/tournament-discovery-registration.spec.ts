@@ -97,13 +97,13 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       await page.waitForURL(ROUTES.BROWSE, { timeout: TIMEOUTS.PAGE_LOAD })
 
       // When: I navigate to /browse
-      await page.goto(ROUTES.BROWSE, { waitUntil: 'networkidle' })
+      await page.goto(ROUTES.BROWSE, { waitUntil: 'domcontentloaded' })
 
-      // Wait for tournament list to load via API
-      await page.waitForSelector(SELECTORS.TOURNAMENT_LIST, { timeout: TIMEOUTS.ELEMENT_VISIBLE })
+      // Wait for tournament cards to be visible (API fetch + render)
+      await page.waitForSelector('[data-testid="tournament-card"]', { timeout: TIMEOUTS.ELEMENT_VISIBLE })
 
       // Then: I should see a paginated list of tournaments
-      await expect(page.locator(SELECTORS.TOURNAMENT_LIST).first()).toBeVisible({
+      await expect(page.locator('[data-testid="tournament-card"]').first()).toBeVisible({
         timeout: TIMEOUTS.ELEMENT_VISIBLE,
       })
 
@@ -134,14 +134,14 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       await page.waitForURL(ROUTES.BROWSE, { timeout: TIMEOUTS.PAGE_LOAD })
 
       // When: I navigate to /browse
-      await page.goto(ROUTES.BROWSE, { waitUntil: 'networkidle' })
+      await page.goto(ROUTES.BROWSE, { waitUntil: 'domcontentloaded' })
 
-      // Wait for tournament list to load via API
-      await page.waitForSelector(SELECTORS.TOURNAMENT_LIST, { timeout: TIMEOUTS.ELEMENT_VISIBLE })
+      // Wait for tournament cards to be visible (API fetch + render)
+      await page.waitForSelector('[data-testid="tournament-card"]', { timeout: TIMEOUTS.ELEMENT_VISIBLE })
 
       // Then: I should see tournaments with matchFormat="doubles"
       // And: the card should indicate "Doubles" format
-      const doublesTournaments = page.locator(SELECTORS.TOURNAMENT_CARDS)
+      const doublesTournaments = page.locator('[data-testid="tournament-card"]')
       let foundDoubles = false
 
       const count = await doublesTournaments.count()
