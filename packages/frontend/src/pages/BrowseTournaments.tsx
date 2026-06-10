@@ -1,40 +1,14 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
-const MOCK_TOURNAMENTS = [
-  {
-    id: '1',
-    name: 'Greenwood Mixed Open',
-    date: 'Sat 25 May',
-    time: '1:00 PM',
-    venue: 'Greenwood BC',
-    cover: 'mint',
-    phase: 'featured',
-    players: 9,
-    capacity: 24,
-  },
-  {
-    id: '2',
-    name: 'Spring Singles Cup',
-    date: 'Sat 24 May',
-    time: '10:30 AM',
-    venue: 'Eastside Smash Hall',
-    cover: 'gold',
-    phase: 'reg-open',
-    players: 22,
-    capacity: 32,
-  },
-  {
-    id: '3',
-    name: 'Knockout Friday',
-    date: 'Fri 16 May',
-    time: '7:00 PM',
-    venue: 'North End Club',
-    cover: 'court',
-    phase: 'knockout',
-    players: 8,
-    capacity: 8,
-  },
-]
+interface Tournament {
+  id: string
+  name: string
+  sport: string
+  matchFormat: 'singles' | 'doubles'
+  maxPlayers: number
+  registrationDeadline: string
+  status: string
+}
 
 const coverColors: Record<string, string> = {
   court: '#FFD0B0',
@@ -46,10 +20,52 @@ const coverColors: Record<string, string> = {
 
 export const BrowseTournaments: React.FC = () => {
   const [filterActive, setFilterActive] = useState('All')
+  const [tournaments, setTournaments] = useState<Tournament[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleBracketClick = (tournamentId: string) => {
-    window.location.href = `/tournament/${tournamentId}/bracket`
+  useEffect(() => {
+    const fetchTournaments = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const response = await fetch('/api/tournaments/public', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch tournaments: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        setTournaments(data.tournaments || [])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load tournaments')
+        setTournaments([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchTournaments()
+  }, [])
+
+  const filteredTournaments = tournaments.filter(tournament => {
+    if (filterActive === 'All') return true
+    if (filterActive === 'Singles') return tournament.matchFormat === 'singles'
+    if (filterActive === 'Doubles') return tournament.matchFormat === 'doubles'
+    return true
+  })
+
+  const getColorForTournament = (index: number) => {
+    const colors = ['court', 'lavender', 'mint', 'peach', 'gold']
+    return colors[index % colors.length]
   }
+
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--surface)' }}>
@@ -97,61 +113,89 @@ export const BrowseTournaments: React.FC = () => {
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px 110px' }}>
-        {/* Featured */}
-        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--court-600)', letterSpacing: '0.12em', marginBottom: 10 }}>
-          FEATURED · THIS WEEK
-        </div>
-        <div style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', marginBottom: 20, display: 'flex', gap: 14 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[MOCK_TOURNAMENTS[0].cover], flexShrink: 0 }} />
-          <div style={{ flex: 1 }}>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>{MOCK_TOURNAMENTS[0].name}</h3>
-            <div style={{ fontSize: 11, color: 'var(--ink-500)', marginTop: 2 }}>{MOCK_TOURNAMENTS[0].date}, {MOCK_TOURNAMENTS[0].time} · {MOCK_TOURNAMENTS[0].venue}</div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-              <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>🎾 Badminton</span>
-              <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>Mixed</span>
-              <button
-                onClick={() => handleBracketClick(MOCK_TOURNAMENTS[0].id)}
-                style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', border: 'none', cursor: 'pointer' }}
-                title="View bracket"
-              >
-                🔀
-              </button>
-            </div>
+        {loading && (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--ink-500)' }}>
+            <p style={{ margin: 0 }}>Loading tournaments...</p>
           </div>
-        </div>
+        )}
 
-        {/* Coming up */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>Coming up</h3>
-          <span style={{ fontSize: 12, color: 'var(--ink-500)', fontWeight: 600 }}>{MOCK_TOURNAMENTS.length - 1} results</span>
-        </div>
+        {error && (
+          <div style={{ padding: '16px 12px', background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 'var(--r-md)', marginBottom: '20px' }}>
+            <p style={{ margin: 0, color: '#991B1B', fontSize: '14px' }}>⚠️ {error}</p>
+          </div>
+        )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {MOCK_TOURNAMENTS.slice(1).map(tournament => (
-            <div key={tournament.id} style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[tournament.cover], flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h4 style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 600, color: 'var(--ink-900)', letterSpacing: '-0.01em' }}>{tournament.name}</h4>
-                <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 8 }}>{tournament.date}, {tournament.time} · {tournament.venue}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>
-                    {tournament.phase === 'reg-open' ? 'Reg Open' : tournament.phase === 'knockout' ? 'Knockout' : tournament.phase}
-                  </span>
-                  <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>
-                    👥 {tournament.players}/{tournament.capacity}
-                  </span>
-                  <button
-                    onClick={() => handleBracketClick(tournament.id)}
-                    style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', border: 'none', cursor: 'pointer' }}
-                    title="View bracket"
-                  >
-                    🔀
-                  </button>
+        {!loading && filteredTournaments.length === 0 && !error && (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--ink-500)' }}>
+            <p style={{ margin: 0 }}>No tournaments available</p>
+            <p style={{ margin: '8px 0 0', fontSize: 14 }}>Check back later for upcoming tournaments</p>
+          </div>
+        )}
+
+        {!loading && filteredTournaments.length > 0 && (
+          <>
+            {/* Featured */}
+            {filteredTournaments.length > 0 && (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--court-600)', letterSpacing: '0.12em', marginBottom: 10 }}>
+                  FEATURED
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+                <div style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', marginBottom: 20, display: 'flex', gap: 14, cursor: 'pointer' }} onClick={() => window.location.href = `/tournament/${filteredTournaments[0].id}/standings`}>
+                  <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[getColorForTournament(0)], flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>{filteredTournaments[0].name}</h3>
+                    <div style={{ fontSize: 11, color: 'var(--ink-500)', marginTop: 2 }}>{filteredTournaments[0].sport}</div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                      <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
+                        🎾 {filteredTournaments[0].sport}
+                      </span>
+                      <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
+                        {filteredTournaments[0].matchFormat}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* All tournaments */}
+            {filteredTournaments.length > 1 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>All Tournaments</h3>
+                  <span style={{ fontSize: 12, color: 'var(--ink-500)', fontWeight: 600 }}>{filteredTournaments.length} results</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {filteredTournaments.slice(1).map((tournament, index) => (
+                    <div
+                      key={tournament.id}
+                      style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', display: 'flex', gap: 14, alignItems: 'flex-start', cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/tournament/${tournament.id}/standings`}
+                    >
+                      <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[getColorForTournament(index + 1)], flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h4 style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 600, color: 'var(--ink-900)', letterSpacing: '-0.01em' }}>{tournament.name}</h4>
+                        <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 8 }}>{tournament.sport}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
+                            {tournament.status === 'registration_open' ? 'Reg Open' : tournament.status}
+                          </span>
+                          <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
+                            {tournament.matchFormat}
+                          </span>
+                          <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>
+                            👥 Max {tournament.maxPlayers}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
       </div>
     </div>
   )
