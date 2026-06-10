@@ -557,10 +557,9 @@ test.describe('Tournament Discovery & Registration E2E', () => {
         const token = await getTokenFromPage(page)
         expect(token).toBeTruthy()
 
-        // And: I should see team/partner setup or confirmation page
-        // Or be redirected to tournament page
+        // And: I should be redirected to /browse or tournament page
         const currentUrl = page.url()
-        expect(currentUrl).toMatch(/signup|tournament|standings|partner|team/i)
+        expect(currentUrl).toMatch(/browse|tournament|standings/i)
       }
     })
   })
