@@ -48,10 +48,11 @@ function createTestTournament() {
   return {
     name: `Test Tournament ${timestamp}`,
     sport: 'pickleball',
-    format: 'singles',
+    matchFormat: 'singles',
     maxPlayers: 16,
     registrationDeadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
-    groupStageStartDate: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(), // 8 days from now
+    groupStageDeadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days from now
+    knockoutStageDeadline: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString(), // 21 days from now
   }
 }
 
@@ -377,30 +378,27 @@ test.describe('Tournament Discovery & Registration E2E', () => {
   test.describe('Feature: Magic Link Signup Integration', () => {
     test('Scenario: Completes signup via magic link for singles tournament', async ({ page }) => {
       // Given: I have a magic link token from tournament registration
-      // Create organizer account to create a tournament
-      const organizer = createTestUser()
-      const signupResponse = await apiCall(API_ENDPOINTS.AUTH.SIGNUP, 'POST', {
-        email: organizer.email,
-        name: organizer.name,
-        password: organizer.password,
+      // Use seeded organizer account to create a tournament
+      const organizerEmail = 'organizer@test.com'
+      const organizerPassword = 'testpass123'
+      const loginResponse = await apiCall(API_ENDPOINTS.AUTH.LOGIN, 'POST', {
+        email: organizerEmail,
+        password: organizerPassword,
       })
 
-      if (!signupResponse.ok) {
-        throw new Error('Failed to create organizer account')
+      if (!loginResponse.ok) {
+        throw new Error('Failed to login as organizer')
       }
 
-      const userData = await signupResponse.json()
+      const userData = await loginResponse.json()
       const organizerToken = userData.token
 
-      // Create a tournament as organizer
-      const tournament = createTestTournament()
+      // Create a singles tournament as organizer
+      const tournament = { ...createTestTournament(), matchFormat: 'singles' }
       const tournamentResponse = await apiCall(
         API_ENDPOINTS.TOURNAMENTS.CREATE,
         'POST',
-        {
-          ...tournament,
-          matchFormat: 'singles',
-        },
+        tournament,
         organizerToken
       )
 
@@ -474,30 +472,27 @@ test.describe('Tournament Discovery & Registration E2E', () => {
 
     test('Scenario: Completes signup via magic link for doubles tournament', async ({ page }) => {
       // Given: I have a magic link token from a doubles tournament registration
-      // Create organizer account to create a tournament
-      const organizer = createTestUser()
-      const signupResponse = await apiCall(API_ENDPOINTS.AUTH.SIGNUP, 'POST', {
-        email: organizer.email,
-        name: organizer.name,
-        password: organizer.password,
+      // Use seeded organizer account to create a tournament
+      const organizerEmail = 'organizer@test.com'
+      const organizerPassword = 'testpass123'
+      const loginResponse = await apiCall(API_ENDPOINTS.AUTH.LOGIN, 'POST', {
+        email: organizerEmail,
+        password: organizerPassword,
       })
 
-      if (!signupResponse.ok) {
-        throw new Error('Failed to create organizer account')
+      if (!loginResponse.ok) {
+        throw new Error('Failed to login as organizer')
       }
 
-      const userData = await signupResponse.json()
+      const userData = await loginResponse.json()
       const organizerToken = userData.token
 
       // Create a doubles tournament as organizer
-      const tournament = createTestTournament()
+      const tournament = { ...createTestTournament(), matchFormat: 'doubles' }
       const tournamentResponse = await apiCall(
         API_ENDPOINTS.TOURNAMENTS.CREATE,
         'POST',
-        {
-          ...tournament,
-          matchFormat: 'doubles',
-        },
+        tournament,
         organizerToken
       )
 
