@@ -120,3 +120,31 @@ This project uses **PostgreSQL 15+** for all persistent data storage. See [READM
 - Connection configured via environment variables
 - Requires Docker or local PostgreSQL installation before running the application
 
+## 8. End-to-End Testing
+
+**When the user asks to run e2e tests, run the `/e2e-testing` skill.** This skill guides the complete workflow for running browser-based e2e tests.
+
+The skill workflow:
+1. **Validates prerequisites** — checks if backend API and frontend dev servers are accessible
+2. **Starts missing servers** — optionally auto-starts API or frontend if not running
+3. **Validates frontend** — uses `node scripts/browser.js` to verify the webapp loads with persistent browser state
+4. **Runs tests** — provides commands for headless, UI, or debug modes
+5. **Reviews results** — guides analysis of test failures and HTML reports
+6. **Debugs failures** — documents troubleshooting steps for common issues
+
+**Quick commands (use after `/e2e-testing` workflow):**
+- Check prerequisites: `node scripts/e2e-setup.js`
+- Auto-start missing servers: `node scripts/e2e-setup.js --auto-start`
+- Run tests headless: `npm run test:e2e`
+- Run tests with UI: `npm run test:e2e:ui` (recommended for debugging)
+- Run tests in debug mode: `npm run test:e2e:debug`
+
+**Test file locations:**
+- E2E tests: `packages/frontend/e2e/auth.spec.ts`
+- Browser validation script: `scripts/browser.js`
+- Setup helper: `scripts/e2e-setup.js`
+
+**Important:** E2E tests require both servers running:
+- Backend API on port 3001 (requires PostgreSQL)
+- Frontend dev server on port 5173
+
