@@ -4,12 +4,11 @@
 // ============================================================================
 
 import { test, expect } from '@playwright/test'
-
-const API_BASE = 'http://localhost:3001'
+import { API_CONFIG, ROUTES, API_ENDPOINTS, TIMEOUTS, TEST_DATA, SELECTORS, UI_TEXT } from './config'
 
 // Make API calls (use for test preconditions)
 async function apiCall(path: string, method: string, body?: unknown) {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${API_CONFIG.BASE_URL}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
