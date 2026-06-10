@@ -62,6 +62,9 @@ npm run test:e2e              # Run all e2e tests on all browsers
 npm run test:e2e:auth         # Run all authentication tests
 npm run test:e2e:auth:ui      # Run authentication tests in interactive UI mode
 npm run test:e2e:auth:debug   # Run authentication tests in debug mode
+npm run test:e2e:tournament   # Run all tournament discovery & registration tests
+npm run test:e2e:tournament:ui # Run tournament tests in interactive UI mode
+npm run test:e2e:tournament:debug # Run tournament tests in debug mode
 npm run test:e2e:chromium     # Run all tests on Chromium only
 npm run test:e2e:firefox      # Run all tests on Firefox only
 npm run test:e2e:ui           # Run all tests in interactive UI mode
@@ -75,7 +78,7 @@ Tests are organized by feature groups matching this document:
 | Feature Group | Scenarios | Test File | Command |
 |---|---|---|---|
 | **Authentication & Authorization** | 27 | `auth.spec.ts` | `npm run test:e2e:auth` |
-| **Tournament Discovery & Registration** | 9 | `tournament-discovery.spec.ts` | `npx playwright test --grep "Tournament Discovery"` |
+| **Tournament Discovery & Registration** | 9 | `tournament-discovery-registration.spec.ts` | `npm run test:e2e:tournament` |
 | **Group Stage - Singles** | 10 | `group-stage-singles.spec.ts` | `npx playwright test --grep "Group Stage Singles"` |
 | **Group Stage - Doubles** | 4 | `group-stage-doubles.spec.ts` | `npx playwright test --grep "Group Stage Doubles"` |
 | **Partner Confirmation** | 5 | `partner-confirmation.spec.ts` | `npx playwright test --grep "Partner Confirmation"` |
@@ -119,7 +122,12 @@ npm run test:e2e
   - Tests: 32 implemented, all passing
   - Run: `npm run test:e2e:auth`
 
-⏳ **Phase 2: Tournament Discovery & Registration** (9 scenarios) — Planned  
+✅ **Phase 2: Tournament Discovery & Registration** (9 scenarios) — IMPLEMENTED  
+  - File: `packages/frontend/e2e/tournament-discovery-registration.spec.ts`
+  - Tests: 9 scenarios written in TDD format (pending feature implementation)
+  - Run: `npm run test:e2e:tournament`
+  - **Note:** Tests written to specification; features required for tests to pass
+
 ⏳ **Phase 3: Group Stage - Singles** (10 scenarios) — Planned  
 ⏳ **Phase 4: Group Stage - Doubles** (4 scenarios) — Planned  
 ⏳ **Phase 5: Partner Confirmation** (5 scenarios) — Planned  
