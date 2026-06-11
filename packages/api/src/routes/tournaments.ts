@@ -110,13 +110,6 @@ export default function tournamentsRouter(deps: AppDependencies) {
         creatorId: payload.sub,
       })
 
-      // Transition to registration_open if registration deadline is in the future
-      const registrationDeadline = new Date(req.body.registrationDeadline)
-      if (registrationDeadline > new Date()) {
-        await repo.updateStatus(tournament.id, 'registration_open')
-        tournament.status = 'registration_open'
-      }
-
       log.info('tournament.created', { tournamentId: tournament.id, name: tournament.name, organizerId: payload.sub, status: tournament.status })
 
       res.status(201).json({
