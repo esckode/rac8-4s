@@ -60,6 +60,9 @@ describe('Phase 4: Group Stage - Doubles', () => {
         .set('Authorization', `Bearer ${orgToken}`)
         .send({ numGroups: 1, advancingPerGroup: 1 })
 
+      if (groupRes.status !== 201) {
+        console.error('Group creation failed:', groupRes.status, groupRes.body)
+      }
       expect(groupRes.status).toBe(201)
       const groupId = groupRes.body.groups[0].id
 
