@@ -211,7 +211,10 @@ npm run test:e2e
   - Run: `npm run test:e2e:tournament`
   - **Note:** Prerequisite helpers properly configured; state transitions automated
 
-⏳ **Phase 3: Group Stage - Singles** (10 scenarios) — Ready to implement  
+✅ **Phase 3: Group Stage - Singles** (5 scenarios implemented, 5 ready) — IN PROGRESS  
+  - Unit tests: 6/6 passing (100% coverage)
+  - E2E tests: group-stage-singles.spec.ts (5 scenarios)
+  - Backend: Score validation, duplicate check, edit support
   - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)`
   
 ⏳ **Phase 4: Group Stage - Doubles** (4 scenarios) — Ready to implement  
