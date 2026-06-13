@@ -105,8 +105,11 @@ export interface GroupMatchRow {
   id: string
   group_id: string
   tournament_id: string
-  player1_id: string
-  player2_id: string
+  format: 'singles' | 'doubles'
+  player1_id?: string
+  player2_id?: string
+  team1_id?: string
+  team2_id?: string
   winner_id?: string
   score?: string
   status: string
@@ -635,6 +638,85 @@ export class GroupRepository {
     })
   }
 
+  async createGroupsForDoubles(tournamentId: string, numGroups: number, advancingCount: number, playerIds: string[]): Promise<GroupRow[]> {
+    return retryOnDeadlock(async () => {
+      const { client, isPoolClient } = await getClientFromConnection(this.pool)
+      try {
+        await client.query('BEGIN')
+
+        // Create teams from players
+        const now = new Date().toISOString()
+        const teamIds: string[] = []
+        const shuffled = [...playerIds].sort(() => Math.random() - 0.5)
+
+        for (let i = 0; i < shuffled.length - 1; i += 2) {
+          const player1Id = shuffled[i]
+          const player2Id = shuffled[i + 1]
+          const teamId = `team_${Date.now()}_${Math.random().toString(36).slice(2)}`
+
+          // Insert team
+          await client.query(
+            `INSERT INTO public.teams (id, tournament_id, player1_id, player2_id, created_at)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [teamId, tournamentId, player1Id, player2Id, now]
+          )
+          teamIds.push(teamId)
+        }
+
+        // Create groups
+        const groupIds: string[] = []
+        for (let i = 1; i <= numGroups; i++) {
+          const groupId = `group_${Date.now()}_${Math.random().toString(36).slice(2)}`
+          groupIds.push(groupId)
+
+          await client.query(
+            `INSERT INTO public.groups (id, tournament_id, name, advancing_count, created_at)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [groupId, tournamentId, `Group ${String.fromCharCode(64 + i)}`, advancingCount, now]
+          )
+        }
+
+        // Distribute teams evenly among groups
+        const teamsPerGroup = Math.ceil(teamIds.length / numGroups)
+        for (let i = 0; i < numGroups; i++) {
+          const groupId = groupIds[i]
+          const start = i * teamsPerGroup
+          const end = Math.min(start + teamsPerGroup, teamIds.length)
+          const groupTeams = teamIds.slice(start, end)
+
+          // Add teams to group_memberships
+          for (const teamId of groupTeams) {
+            await client.query(
+              `INSERT INTO public.group_memberships (group_id, team_id)
+               VALUES ($1, $2)`,
+              [groupId, teamId]
+            )
+          }
+
+          // Generate round-robin matches for teams
+          for (let j = 0; j < groupTeams.length; j++) {
+            for (let k = j + 1; k < groupTeams.length; k++) {
+              const matchId = `match_${Date.now()}_${Math.random().toString(36).slice(2)}`
+              await client.query(
+                `INSERT INTO public.group_matches (id, group_id, tournament_id, format, team1_id, team2_id, status, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                [matchId, groupId, tournamentId, 'doubles', groupTeams[j], groupTeams[k], 'pending', now, now]
+              )
+            }
+          }
+        }
+
+        await client.query('COMMIT')
+        return this.findGroupsByTournament(tournamentId)
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      } finally {
+        releaseClientIfNeeded(client, isPoolClient)
+      }
+    })
+  }
+
   async findGroupsByTournament(tournamentId: string): Promise<GroupRow[]> {
     const result = await this.pool.query(
       'SELECT * FROM public.groups WHERE tournament_id = $1 ORDER BY name',
@@ -673,6 +755,22 @@ export class GroupRepository {
       [groupId]
     )
     return result.rows as PlayerRow[]
+  }
+
+  async findTeamsByGroup(groupId: string): Promise<any[]> {
+    const result = await this.pool.query(
+      `SELECT t.id, t.tournament_id, t.player1_id, t.player2_id,
+              p1.name as player1_name, p2.name as player2_name,
+              t.created_at
+       FROM public.teams t
+       JOIN public.group_memberships gm ON gm.team_id = t.id
+       JOIN public.players p1 ON t.player1_id = p1.id
+       JOIN public.players p2 ON t.player2_id = p2.id
+       WHERE gm.group_id = $1
+       ORDER BY t.created_at`,
+      [groupId]
+    )
+    return result.rows
   }
 
   async findMatchById(matchId: string): Promise<GroupMatchRow | undefined> {
@@ -728,6 +826,33 @@ export class GroupRepository {
        WHERE gm.tournament_id = $1 AND (gm.player1_id = $2 OR gm.player2_id = $3)
        ORDER BY gm.created_at`,
       [tournamentId, playerId, playerId]
+    )
+    return (result.rows as any[]).map(row => ({
+      ...row,
+      player1_confirmed: !!row.player1_confirmed,
+      player2_confirmed: !!row.player2_confirmed,
+    }))
+  }
+
+  async findMatchesByPlayerForDoubles(tournamentId: string, playerId: string): Promise<GroupMatchWithPlayers[]> {
+    const result = await this.pool.query(
+      `SELECT gm.*,
+              t1.id as team1_id, t1.player1_id as t1_player1_id, t1.player2_id as t1_player2_id,
+              p1.name as player1_name, p1.email as player1_email, p1.share_contact as player1_share_contact,
+              p2.name as player2_name, p2.email as player2_email, p2.share_contact as player2_share_contact,
+              t2.id as team2_id, t2.player1_id as t2_player1_id, t2.player2_id as t2_player2_id,
+              p3.name as player3_name, p3.email as player3_email, p3.share_contact as player3_share_contact,
+              p4.name as player4_name, p4.email as player4_email, p4.share_contact as player4_share_contact
+       FROM public.group_matches gm
+       JOIN public.teams t1 ON gm.team1_id = t1.id
+       JOIN public.teams t2 ON gm.team2_id = t2.id
+       JOIN public.players p1 ON t1.player1_id = p1.id
+       JOIN public.players p2 ON t1.player2_id = p2.id
+       JOIN public.players p3 ON t2.player1_id = p3.id
+       JOIN public.players p4 ON t2.player2_id = p4.id
+       WHERE gm.tournament_id = $1 AND (t1.player1_id = $2 OR t1.player2_id = $2 OR t2.player1_id = $2 OR t2.player2_id = $2)
+       ORDER BY gm.created_at`,
+      [tournamentId, playerId]
     )
     return (result.rows as any[]).map(row => ({
       ...row,

@@ -63,7 +63,7 @@ describe('Phase 3: Group Stage - Singles', () => {
       // Player 1 submits a score
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
@@ -129,7 +129,7 @@ describe('Phase 3: Group Stage - Singles', () => {
 
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
@@ -189,7 +189,7 @@ describe('Phase 3: Group Stage - Singles', () => {
 
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
@@ -240,7 +240,7 @@ describe('Phase 3: Group Stage - Singles', () => {
 
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
@@ -300,7 +300,7 @@ describe('Phase 3: Group Stage - Singles', () => {
 
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
@@ -366,7 +366,7 @@ describe('Phase 3: Group Stage - Singles', () => {
 
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
