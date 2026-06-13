@@ -382,6 +382,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(409).json({ code: 'DEADLINE_PASSED', message: 'Group stage scoring deadline has passed' })
       }
 
+      if (match.status === 'completed') {
+        return res.status(409).json({ code: 'ALREADY_SCORED', message: 'This match has already been scored. Use PATCH to edit.' })
+      }
+
       if (typeof req.body.score !== 'string') {
         return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'score must be a non-empty string' })
       }
@@ -421,10 +425,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
     }
   })
 
-  // PATCH /:id/matches/:matchId/score - organizer overrides match score
+  // PATCH /:id/matches/:matchId/score - player edits score or organizer overrides
   router.patch('/:id/matches/:matchId/score', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
       const tournamentId = req.params.id as string
       const matchId = req.params.matchId as string
 
@@ -433,11 +436,39 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
       }
 
-      assertOrganizerOwnsTournament(payload, tournament.creator_id)
-
       const match = await groupRepo.findMatchById(matchId)
       if (!match || match.tournament_id !== tournamentId) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
+      }
+
+      // Try organizer auth first (always allowed)
+      let isOrganizer = false
+      let organizerError: Error | null = null
+
+      try {
+        const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+        assertOrganizerOwnsTournament(payload, tournament.creator_id)
+        isOrganizer = true
+      } catch (err) {
+        organizerError = err as Error
+      }
+
+      // If not organizer, must be player auth
+      if (!isOrganizer) {
+        try {
+          const playerPayload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+          assertPlayerInTournament(playerPayload, tournamentId)
+
+          // Player can only edit their own scores
+          validateMatchFormatConsistency(match)
+          const [participant1, participant2] = getMatchParticipantIds(match)
+          if (participant1 !== playerPayload.playerId && participant2 !== playerPayload.playerId) {
+            return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
+          }
+        } catch (err) {
+          // Neither organizer nor player auth succeeded
+          return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Unauthorized' })
+        }
       }
 
       if (typeof req.body.score !== 'string') {
@@ -454,7 +485,11 @@ export default function tournamentsRouter(deps: AppDependencies) {
       const winnerId = parsed.winner === 'player1' ? match.player1_id : match.player2_id
       const updated = await groupRepo.updateMatch(matchId, winnerId, req.body.score)
 
-      log.info('score.overridden', { tournamentId, matchId, score: req.body.score, winnerId, organizerId: payload.sub })
+      if (isOrganizer) {
+        log.info('score.overridden', { tournamentId, matchId, score: req.body.score, winnerId })
+      } else {
+        log.info('score.edited', { tournamentId, matchId, score: req.body.score, winnerId })
+      }
 
       res.json({
         match: {
