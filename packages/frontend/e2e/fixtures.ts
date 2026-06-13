@@ -251,11 +251,14 @@ export async function createTournamentWithGroups(
     throw new Error(`Failed to close registration: ${closeResponse.status} ${error}`)
   }
 
-  // Create groups
+  // Create groups - divide players into groups of ~2, with top 1 advancing
+  const numGroups = Math.ceil(playerCount / 2)
+  const advancingPerGroup = 1
+
   const groupsResponse = await apiCall(
     `/tournaments/${tournamentId}/groups`,
     'POST',
-    {},
+    { numGroups, advancingPerGroup },
     organizerToken
   )
 
