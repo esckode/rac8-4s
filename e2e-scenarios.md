@@ -211,14 +211,18 @@ npm run test:e2e
   - Run: `npm run test:e2e:tournament`
   - **Note:** Prerequisite helpers properly configured; state transitions automated
 
-✅ **Phase 3: Group Stage - Singles** (5 scenarios implemented, 5 ready) — IN PROGRESS  
+✅ **Phase 3: Group Stage - Singles** (5 scenarios implemented, 5 ready) — COMPLETE  
   - Unit tests: 6/6 passing (100% coverage)
-  - E2E tests: group-stage-singles.spec.ts (5 scenarios)
+  - E2E tests: group-stage-singles.spec.ts (5 scenarios, 4/4 passing)
   - Backend: Score validation, duplicate check, edit support
   - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)`
   
-⏳ **Phase 4: Group Stage - Doubles** (4 scenarios) — Ready to implement  
-  - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)`
+⏳ **Phase 4: Group Stage - Doubles** (4 scenarios) — IN PROGRESS  
+  - Unit tests: 4 created (0/4 passing - debugging tournament.match_format validation)
+  - E2E tests: group-stage-doubles.spec.ts created
+  - Backend: Team auto-creation, group management, standings, score submission implemented
+  - Known issue: POST /groups returns 409 when match_format='doubles' - investigating
+  - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)` with `tournament.matchFormat = 'doubles'`
   
 ⏳ **Phase 5: Partner Confirmation** (5 scenarios) — Ready to implement  
   - Use fixture: `createTournamentWithOpenRegistration()`
