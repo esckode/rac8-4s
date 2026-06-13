@@ -3,66 +3,15 @@
 // ============================================================================
 
 import { test, expect } from '@playwright/test'
-import { API_CONFIG, ROUTES, API_ENDPOINTS, TIMEOUTS, TEST_DATA, SELECTORS, UI_TEXT } from './config'
-
-// Make API calls (use for test preconditions and tournament creation)
-async function apiCall(path: string, method: string, body?: unknown, token?: string) {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (token) headers['Authorization'] = `Bearer ${token}`
-
-  const response = await fetch(`${API_CONFIG.BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return response
-}
-
-// Get auth token from localStorage
-async function getTokenFromPage(page: any): Promise<string | null> {
-  return await page.evaluate(() => localStorage.getItem('auth_token'))
-}
-
-// Clear auth state (logout) and reload
-async function clearAuthState(page: any) {
-  await page.evaluate(() => {
-    localStorage.removeItem('auth_token')
-    sessionStorage.clear()
-  })
-  await page.reload()
-}
-
-// Create unique test user
-function createTestUser() {
-  const timestamp = Date.now()
-  return {
-    email: `test-${timestamp}@example.com`,
-    name: 'Test User',
-    password: 'TestPassword123',
-  }
-}
-
-// Create unique tournament
-function createTestTournament() {
-  const timestamp = Date.now()
-  return {
-    name: `Test Tournament ${timestamp}`,
-    sport: 'pickleball',
-    matchFormat: 'singles',
-    maxPlayers: 16,
-    registrationDeadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
-    groupStageDeadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days from now
-    knockoutStageDeadline: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString(), // 21 days from now
-  }
-}
-
-// Create a tournament via API (requires auth token)
-async function createTournamentViaAPI(token: string): Promise<{ id: string; name: string }> {
-  const tournament = createTestTournament()
-  const response = await apiCall(API_ENDPOINTS.TOURNAMENTS.CREATE, 'POST', tournament, token)
-  const data = await response.json()
-  return { id: data.id, name: data.name }
-}
+import { API_ENDPOINTS, ROUTES, TIMEOUTS, TEST_DATA, SELECTORS, UI_TEXT } from './config'
+import {
+  apiCall,
+  getTokenFromPage,
+  clearAuthState,
+  createTestUser,
+  createTestTournament,
+  createTournamentWithOpenRegistration,
+} from './fixtures'
 
 // ============================================================================
 // Test Suite
@@ -393,21 +342,9 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       const userData = await loginResponse.json()
       const organizerToken = userData.token
 
-      // Create a singles tournament as organizer
+      // PREREQUISITE: Create a singles tournament with open registration
       const tournament = { ...createTestTournament(), matchFormat: 'singles' }
-      const tournamentResponse = await apiCall(
-        API_ENDPOINTS.TOURNAMENTS.CREATE,
-        'POST',
-        tournament,
-        organizerToken
-      )
-
-      if (!tournamentResponse.ok) {
-        throw new Error('Failed to create tournament for magic link test')
-      }
-
-      const tournamentData = await tournamentResponse.json()
-      const tournamentId = tournamentData.id
+      const { id: tournamentId } = await createTournamentWithOpenRegistration(tournament, organizerToken)
 
       // Register for the tournament to get a magic link token (as new user)
       const registrationUser = createTestUser()
@@ -421,7 +358,9 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       )
 
       if (!registrationResponse.ok) {
-        throw new Error('Failed to register for tournament')
+        const errorData = await registrationResponse.text()
+        console.error(`Registration failed: ${registrationResponse.status} ${registrationResponse.statusText}`, errorData)
+        throw new Error(`Failed to register for tournament: ${registrationResponse.status} ${errorData}`)
       }
 
       const registrationData = await registrationResponse.json()
@@ -487,21 +426,9 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       const userData = await loginResponse.json()
       const organizerToken = userData.token
 
-      // Create a doubles tournament as organizer
+      // PREREQUISITE: Create a doubles tournament with open registration
       const tournament = { ...createTestTournament(), matchFormat: 'doubles' }
-      const tournamentResponse = await apiCall(
-        API_ENDPOINTS.TOURNAMENTS.CREATE,
-        'POST',
-        tournament,
-        organizerToken
-      )
-
-      if (!tournamentResponse.ok) {
-        throw new Error('Failed to create doubles tournament for magic link test')
-      }
-
-      const tournamentData = await tournamentResponse.json()
-      const tournamentId = tournamentData.id
+      const { id: tournamentId } = await createTournamentWithOpenRegistration(tournament, organizerToken)
 
       // Register for the doubles tournament to get a magic link token (as new user)
       const registrationUser = createTestUser()
@@ -516,7 +443,9 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       )
 
       if (!registrationResponse.ok) {
-        throw new Error('Failed to register for doubles tournament')
+        const errorData = await registrationResponse.text()
+        console.error(`Doubles registration failed: ${registrationResponse.status} ${registrationResponse.statusText}`, errorData)
+        throw new Error(`Failed to register for doubles tournament: ${registrationResponse.status} ${errorData}`)
       }
 
       const registrationData = await registrationResponse.json()

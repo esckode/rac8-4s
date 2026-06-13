@@ -1,40 +1,6 @@
 import { test, expect } from '@playwright/test'
-
-const API_BASE = 'http://localhost:3001'
-
-// Helper to make API calls
-async function apiCall(path: string, method: string, body?: unknown) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return response
-}
-
-// Helper to extract token from localStorage
-async function getTokenFromPage(page: any): Promise<string | null> {
-  return await page.evaluate(() => localStorage.getItem('auth_token'))
-}
-
-// Helper to clear auth state
-async function clearAuthState(page: any) {
-  await page.evaluate(() => {
-    localStorage.removeItem('auth_token')
-    sessionStorage.clear()
-  })
-  await page.reload()
-}
-
-// Helper to create a unique test user
-function createTestUser() {
-  const timestamp = Date.now()
-  return {
-    email: `test-${timestamp}@example.com`,
-    name: 'Test User',
-    password: 'TestPassword123',
-  }
-}
+import { API_ENDPOINTS } from './config'
+import { apiCall, getTokenFromPage, clearAuthState, createTestUser } from './fixtures'
 
 test.describe('Authentication E2E', () => {
   // Clear localStorage before each test

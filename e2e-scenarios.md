@@ -7,6 +7,87 @@
 
 ---
 
+## Test Prerequisites & Fixtures
+
+**IMPORTANT:** Before writing e2e tests, understand the tournament state machine and use the shared prerequisite helpers.
+
+### Tournament State Machine
+
+Tournaments progress through states that must be transitioned in order:
+```
+draft → registration_open → registration_closed → group_stage_active → group_stage_complete → knockout_active → tournament_complete
+```
+
+### Shared Fixture Helpers (Required)
+
+All e2e tests must use the shared fixture helpers from `packages/frontend/e2e/fixtures.ts`. These handle prerequisite setup correctly:
+
+**Import in your test file:**
+```typescript
+import {
+  apiCall,
+  createTestUser,
+  createTestTournament,
+  createTournamentWithOpenRegistration,    // ← Use this for registration tests
+  createTournamentWithClosedRegistration,  // ← Use this for group stage tests
+  createTournamentWithGroups,              // ← Use this for group/bracket tests
+  getOrganizerToken,
+} from './fixtures'
+```
+
+**Common Patterns:**
+
+1. **Tests that need player registration (registration_open state)**
+   ```typescript
+   const tournament = createTestTournament()
+   const { id: tournamentId } = await createTournamentWithOpenRegistration(
+     tournament, 
+     organizerToken
+   )
+   // Now tournament is ready for players to register
+   ```
+
+2. **Tests that need closed registration (registration_closed state)**
+   ```typescript
+   const { id: tournamentId } = await createTournamentWithClosedRegistration(
+     tournament,
+     organizerToken
+   )
+   // Now registration is closed
+   ```
+
+3. **Tests that need groups (group_stage_active state)**
+   ```typescript
+   const { id: tournamentId } = await createTournamentWithGroups(
+     tournament,
+     organizerToken,
+     4 // number of players to register
+   )
+   // Now tournament has groups and is in group stage
+   ```
+
+**Why These Helpers Exist:**
+
+Tournaments are created in `draft` status by default. Tests that need registration require `registration_open`. The helpers encapsulate the state transition logic so:
+- ✅ Tests are cleaner and easier to read
+- ✅ State transitions are handled consistently
+- ✅ Changes to the state machine only need to be updated in one place
+- ✅ Future developers don't have to understand the state machine to write tests
+
+**Common Mistake:** Forgetting to transition tournament state
+```typescript
+// ❌ WRONG - This will fail with "Registration is not open for this tournament"
+const tournament = await apiCall(API_ENDPOINTS.TOURNAMENTS.CREATE, 'POST', data, token)
+const tournamentId = tournament.id
+const registration = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', ...)
+
+// ✅ CORRECT - Use the helper to handle state transition
+const { id: tournamentId } = await createTournamentWithOpenRegistration(tournament, token)
+const registration = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', ...)
+```
+
+---
+
 ## Running Individual Tests
 
 Each scenario in this document has a corresponding Playwright test in `packages/frontend/e2e/`. Tests are organized by feature and can be run individually, by feature group, or as a full suite.
@@ -119,19 +200,30 @@ npm run test:e2e
 
 ✅ **Phase 1: Authentication & Authorization** (27 scenarios) — COMPLETE  
   - File: `packages/frontend/e2e/auth.spec.ts`
-  - Tests: 32 implemented, all passing
+  - Tests: 64 implemented, all passing (32 on chromium, 32 on firefox)
+  - Uses shared fixtures: `createTestUser()`, `apiCall()`, etc.
   - Run: `npm run test:e2e:auth`
 
-✅ **Phase 2: Tournament Discovery & Registration** (9 scenarios) — IMPLEMENTED  
+✅ **Phase 2: Tournament Discovery & Registration** (10 scenarios) — COMPLETE  
   - File: `packages/frontend/e2e/tournament-discovery-registration.spec.ts`
-  - Tests: 9 scenarios written in TDD format (pending feature implementation)
+  - Tests: 20 implemented, all passing (10 on chromium, 10 on firefox)
+  - Uses prerequisite helper: `createTournamentWithOpenRegistration()`
   - Run: `npm run test:e2e:tournament`
-  - **Note:** Tests written to specification; features required for tests to pass
+  - **Note:** Prerequisite helpers properly configured; state transitions automated
 
-⏳ **Phase 3: Group Stage - Singles** (10 scenarios) — Planned  
-⏳ **Phase 4: Group Stage - Doubles** (4 scenarios) — Planned  
-⏳ **Phase 5: Partner Confirmation** (5 scenarios) — Planned  
-⏳ **Phases 6-10: Bracket, Real-Time, Offline, Mobile, Accessibility** (22 scenarios) — Planned  
+⏳ **Phase 3: Group Stage - Singles** (10 scenarios) — Ready to implement  
+  - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)`
+  
+⏳ **Phase 4: Group Stage - Doubles** (4 scenarios) — Ready to implement  
+  - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)`
+  
+⏳ **Phase 5: Partner Confirmation** (5 scenarios) — Ready to implement  
+  - Use fixture: `createTournamentWithOpenRegistration()`
+  
+⏳ **Phases 6-10: Bracket, Real-Time, Offline, Mobile, Accessibility** (22 scenarios) — Ready to implement  
+  - Use appropriate fixture based on required tournament state
+
+**Fixture Library:** `packages/frontend/e2e/fixtures.ts` (all shared helpers available)  
 
 ---
 
@@ -880,4 +972,51 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 
 ---
 
-**Next Step:** Convert Gherkin scenarios to TypeScript Playwright tests in `auth.spec.ts` (and split into separate files as needed)
+---
+
+## Fixture Library Reference
+
+**Location:** `packages/frontend/e2e/fixtures.ts`
+
+All e2e tests should import from this module. It provides:
+
+### API & Browser Helpers
+- `apiCall(path, method, body?, token?)` — Make authenticated API calls
+- `getTokenFromPage(page)` — Extract JWT from localStorage
+- `clearAuthState(page)` — Clear auth and reload page
+
+### Test Data Generators
+- `createTestUser()` — Generate unique test user (timestamp-based email)
+- `createTestTournament()` — Generate unique tournament with default settings
+
+### Tournament Prerequisite Helpers (State Management)
+| Helper | Creates State | Use When |
+|--------|---------------|----------|
+| `createTournamentWithOpenRegistration()` | `registration_open` | Testing player registration, magic links |
+| `createTournamentWithClosedRegistration()` | `registration_closed` | Testing group stage setup |
+| `createTournamentWithGroups()` | `group_stage_active` | Testing standings, matches, scores |
+
+### Auth Helpers
+- `getOrganizerToken()` — Login as seeded organizer (organizer@test.com / testpass123)
+
+**Example Usage:**
+```typescript
+import { createTestTournament, createTournamentWithOpenRegistration } from './fixtures'
+
+test('User can register for tournament', async ({ page }) => {
+  // PREREQUISITE: Create tournament and open registration
+  const tournament = createTestTournament()
+  const { id: tournamentId } = await createTournamentWithOpenRegistration(
+    tournament,
+    organizerToken
+  )
+  
+  // Now test registration flow
+  await page.goto(`/tournament/${tournamentId}/browse`)
+  // ... registration test steps
+})
+```
+
+---
+
+**Next Step:** When implementing Phase 3+ tests, use `createTournamentWithGroups()` to set up proper state
