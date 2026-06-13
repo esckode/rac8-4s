@@ -473,13 +473,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       // Determine winner ID based on format
-      let winnerId: string
-      if (match.format === 'doubles') {
-        winnerId = (parsed.winner === 'player1' ? match.team1_id : match.team2_id)!
-      } else {
-        winnerId = (parsed.winner === 'player1' ? match.player1_id : match.player2_id)!
-      }
-      const updated = await groupRepo.updateMatch(matchId, winnerId, req.body.score)
+      const winnerId = match.format === 'doubles'
+        ? (parsed.winner === 'player1' ? match.team1_id! : match.team2_id!)
+        : (parsed.winner === 'player1' ? match.player1_id! : match.player2_id!)
+      const updated = await groupRepo.updateMatch(matchId, winnerId as string, req.body.score)
 
       // Enqueue standings recalculation job if job queue is available
       if (deps.jobQueue) {
@@ -563,8 +560,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(400).json({ code: 'SCORE_INVALID', message: `Invalid score format: ${(err as Error).message}` })
       }
 
-      const winnerId = parsed.winner === 'player1' ? match.player1_id : match.player2_id
-      const updated = await groupRepo.updateMatch(matchId, winnerId, req.body.score)
+      const winnerId = match.format === 'doubles'
+        ? (parsed.winner === 'player1' ? match.team1_id! : match.team2_id!)
+        : (parsed.winner === 'player1' ? match.player1_id! : match.player2_id!)
+      const updated = await groupRepo.updateMatch(matchId, winnerId as string, req.body.score)
 
       if (isOrganizer) {
         log.info('score.overridden', { tournamentId, matchId, score: req.body.score, winnerId })
