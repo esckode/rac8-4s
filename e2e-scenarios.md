@@ -218,10 +218,11 @@ npm run test:e2e
   - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)`
   
 ⏳ **Phase 4: Group Stage - Doubles** (4 scenarios) — IN PROGRESS  
-  - Unit tests: 4 created (0/4 passing - debugging tournament.match_format validation)
-  - E2E tests: group-stage-doubles.spec.ts created
-  - Backend: Team auto-creation, group management, standings, score submission implemented
-  - Known issue: POST /groups returns 409 when match_format='doubles' - investigating
+  - Unit tests: 4 created + simplified (testing POST /groups team auto-creation)
+  - E2E tests: group-stage-doubles.spec.ts created + ready to run
+  - Backend: ✅ Team auto-creation, ✅ group management, ✅ standings, ✅ score submission
+  - Migrations: ✅ 021 (nullable player_id), ✅ 022 (unique constraints)
+  - Latest: Removed manual team creation from tests - endpoint handles auto-creation
   - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)` with `tournament.matchFormat = 'doubles'`
   
 ⏳ **Phase 5: Partner Confirmation** (5 scenarios) — Ready to implement  
