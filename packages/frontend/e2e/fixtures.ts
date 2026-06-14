@@ -76,10 +76,12 @@ export async function clearAuthState(page: any) {
  *   const user = createTestUser()
  *   // { email: 'test-1234567890@example.com', name: 'Test User', password: 'TestPassword123' }
  */
+let userCounter = 0
 export function createTestUser() {
   const timestamp = Date.now()
+  userCounter++
   return {
-    email: `test-${timestamp}@example.com`,
+    email: `test-${timestamp}-${userCounter}@example.com`,
     name: 'Test User',
     password: 'TestPassword123',
   }
@@ -209,6 +211,10 @@ export async function createTournamentWithClosedRegistration(
  * 3. Close registration
  * 4. Create groups
  *
+ * Supports both singles and doubles tournaments:
+ * - Singles: Register playerCount individual players
+ * - Doubles: Create playerCount/2 teams by pairing players
+ *
  * Usage:
  *   const { tournamentId, groups } = await createTournamentWithGroups(tournament, organizerToken, playerCount)
  */
@@ -223,18 +229,38 @@ export async function createTournamentWithGroups(
     organizerToken
   )
 
-  // Register players
-  for (let i = 0; i < playerCount; i++) {
-    const user = createTestUser()
-    const regResponse = await apiCall(
-      `/tournaments/${tournamentId}/register`,
-      'POST',
-      { email: user.email, name: user.name }
-    )
+  const isDoubles = tournamentConfig.matchFormat === 'doubles'
 
-    if (!regResponse.ok) {
-      const error = await regResponse.text()
-      throw new Error(`Failed to register player: ${regResponse.status} ${error}`)
+  if (isDoubles) {
+    // For doubles: register individual players
+    // The group creation endpoint will auto-create teams from these players
+    for (let i = 0; i < playerCount; i++) {
+      const user = createTestUser()
+      const regResponse = await apiCall(
+        `/tournaments/${tournamentId}/register`,
+        'POST',
+        { email: user.email, name: user.name }
+      )
+
+      if (!regResponse.ok) {
+        const error = await regResponse.text()
+        throw new Error(`Failed to register player: ${regResponse.status} ${error}`)
+      }
+    }
+  } else {
+    // For singles: register individual players
+    for (let i = 0; i < playerCount; i++) {
+      const user = createTestUser()
+      const regResponse = await apiCall(
+        `/tournaments/${tournamentId}/register`,
+        'POST',
+        { email: user.email, name: user.name }
+      )
+
+      if (!regResponse.ok) {
+        const error = await regResponse.text()
+        throw new Error(`Failed to register player: ${regResponse.status} ${error}`)
+      }
     }
   }
 
@@ -251,8 +277,11 @@ export async function createTournamentWithGroups(
     throw new Error(`Failed to close registration: ${closeResponse.status} ${error}`)
   }
 
-  // Create groups - divide players into groups of ~2, with top 1 advancing
-  const numGroups = Math.ceil(playerCount / 2)
+  // Create groups - divide players into groups with top 1 advancing
+  // For singles: ~2 players per group
+  // For doubles: ~4 players (2 teams) per group
+  const playersPerGroup = isDoubles ? 4 : 2
+  const numGroups = Math.ceil(playerCount / playersPerGroup)
   const advancingPerGroup = 1
 
   const groupsResponse = await apiCall(

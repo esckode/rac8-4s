@@ -28,8 +28,8 @@ export async function processStandingsRecalculate(
 
     const participants = members.map(m => ({ id: m.id, name: m.name }))
     const matchData = matches.map(m => ({
-      participant1Id: m.player1_id,
-      participant2Id: m.player2_id,
+      participant1Id: m.player1_id!,
+      participant2Id: m.player2_id!,
       winnerId: m.winner_id ?? null,
       score: m.score ?? null,
     }))

@@ -110,7 +110,7 @@ describe('Tournament Lifecycle Workflows', () => {
         for (const match of matches) {
           const scoreRes = await request(app)
             .post(`/tournaments/${tournamentId}/matches/${match.id}/score`)
-            .set('Authorization', `Bearer ${playerSessions[match.player1_id]}`)
+            .set('Authorization', `Bearer ${playerSessions[match.player1_id!]}`)
             .send({
               score: '6-3, 6-4',
             })
@@ -138,7 +138,7 @@ describe('Tournament Lifecycle Workflows', () => {
         if (match.player1_id && match.player2_id) {
           const scoreRes = await request(app)
             .post(`/tournaments/${tournamentId}/knockout/${match.id}/score`)
-            .set('Authorization', `Bearer ${playerSessions[match.player1_id]}`)
+            .set('Authorization', `Bearer ${playerSessions[match.player1_id!]}`)
             .send({
               score: '6-4, 6-3',
             })
@@ -336,7 +336,7 @@ describe('Tournament Lifecycle Workflows', () => {
         for (const match of matches) {
           await request(app)
             .post(`/tournaments/${tournamentId}/matches/${match.id}/score`)
-            .set('Authorization', `Bearer ${playerSessions[match.player1_id]}`)
+            .set('Authorization', `Bearer ${playerSessions[match.player1_id!]}`)
             .send({
               score: '6-2, 6-1',
             })
@@ -432,7 +432,7 @@ describe('Tournament Lifecycle Workflows', () => {
         for (const match of matches) {
           await request(app)
             .post(`/tournaments/${tournamentId}/matches/${match.id}/score`)
-            .set('Authorization', `Bearer ${playerSessions[match.player1_id]}`)
+            .set('Authorization', `Bearer ${playerSessions[match.player1_id!]}`)
             .send({
               score: '6-3, 6-4',
             })

@@ -37,10 +37,14 @@ describe('Format Column (Discriminated Union)', () => {
       expect(result.rows[0].column_default).toContain("'singles'")
     })
 
-    it('should migrate all existing matches to format=singles', async () => {
-      const singles = await db.query('SELECT COUNT(*) FROM group_matches WHERE format = $1', ['singles'])
-      const total = await db.query('SELECT COUNT(*) FROM group_matches')
-      expect(singles.rows[0].count).toBe(total.rows[0].count)
+    it('should assign a valid format to every match (existing rows default to singles)', async () => {
+      // Migration 020 adds a NOT NULL format column defaulting to 'singles', so every
+      // pre-existing row is backfilled. Doubles matches created later are legitimately
+      // 'doubles', so the guarantee is that no row is left without a valid format.
+      const invalid = await db.query(
+        "SELECT COUNT(*) FROM group_matches WHERE format IS NULL OR format NOT IN ('singles', 'doubles')"
+      )
+      expect(Number(invalid.rows[0].count)).toBe(0)
     })
 
     it('should be idempotent (safe to re-run)', async () => {

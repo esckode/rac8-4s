@@ -210,19 +210,28 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'advancingPerGroup must be an integer >= 1' })
       }
 
-      const registrations = await playerRepo.listTournamentsByPlayer(payload.sub, { offset: 0, limit: deps.config.limits.playerQueryLimit })
       const playerIds: string[] = []
 
       // Fetch all registered players for this tournament
+      log.debug('groups.fetching.players', { tournamentId: id, status: tournament.status })
       const result = await deps.db.query(
         'SELECT DISTINCT pr.player_id FROM public.player_registrations pr WHERE pr.tournament_id = $1',
         [id]
       )
       const allPlayers = result.rows as { player_id: string }[]
 
+      log.debug('groups.query.result', {
+        tournamentId: id,
+        rowCount: result.rowCount,
+        rows: allPlayers.length,
+        rawRows: JSON.stringify(allPlayers.slice(0, 5))
+      })
+
       for (const p of allPlayers) {
         playerIds.push(p.player_id)
       }
+
+      log.info('groups.fetched.players', { tournamentId: id, playerCount: playerIds.length, format: tournament.match_format })
 
       if (playerIds.length < numGroups * 2) {
         return res.status(400).json({
@@ -249,18 +258,14 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       log.info('groups.created', { tournamentId: id, numGroups: groups.length, playerCount: playerIds.length, organizerId: payload.sub })
 
-      // Fetch member counts for each group
+      // Fetch player counts for each group (resolves teams to players for doubles)
       const groupsWithCounts = await Promise.all(
         groups.map(async (g) => {
-          const countResult = await deps.db.query(
-            'SELECT COUNT(*) as count FROM public.group_memberships WHERE group_id = $1',
-            [g.id]
-          )
-          const count = Number(countResult.rows[0]?.count || 0)
+          const members = await groupRepo.findMembersByGroup(g.id)
           return {
             id: g.id,
             name: g.name,
-            playerCount: count,
+            playerCount: members.length,
             advancingCount: g.advancing_count,
           }
         })
@@ -439,7 +444,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
       // For singles, participant IDs are player IDs; verify player is one of them
       let isParticipant = false
       if (match.format === 'doubles') {
-        const { TeamRepository } = require('../../repositories/team-repository')
+        const { TeamRepository } = require('../repositories/team-repository')
         const teamRepo = new TeamRepository(deps.db)
         const team1 = await teamRepo.findTeamById(participant1)
         const team2 = await teamRepo.findTeamById(participant2)
@@ -514,38 +519,43 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
       }
 
+      // Authenticate before loading the match: an unauthenticated request must get 401,
+      // and a valid organizer who does not own this tournament must get 403 (rather than
+      // falling through to a generic 401). Player participation is checked after the match loads.
+      let isOrganizer = false
+      let organizerAuthenticated = false
+      let playerPayload: Awaited<ReturnType<typeof requirePlayerSessionAuth>> | null = null
+
+      try {
+        const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+        organizerAuthenticated = true
+        assertOrganizerOwnsTournament(payload, tournament.creator_id)
+        isOrganizer = true
+      } catch (err) {
+        if (organizerAuthenticated) {
+          // Valid organizer token, but not the owner of this tournament
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'You do not own this tournament' })
+        }
+        // Not an organizer token; fall back to player session auth
+        try {
+          playerPayload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+          assertPlayerInTournament(playerPayload, tournamentId)
+        } catch (err2) {
+          return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Unauthorized' })
+        }
+      }
+
       const match = await groupRepo.findMatchById(matchId)
       if (!match || match.tournament_id !== tournamentId) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
       }
 
-      // Try organizer auth first (always allowed)
-      let isOrganizer = false
-      let organizerError: Error | null = null
-
-      try {
-        const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
-        assertOrganizerOwnsTournament(payload, tournament.creator_id)
-        isOrganizer = true
-      } catch (err) {
-        organizerError = err as Error
-      }
-
-      // If not organizer, must be player auth
+      // Player can only edit their own scores
       if (!isOrganizer) {
-        try {
-          const playerPayload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
-          assertPlayerInTournament(playerPayload, tournamentId)
-
-          // Player can only edit their own scores
-          validateMatchFormatConsistency(match)
-          const [participant1, participant2] = getMatchParticipantIds(match)
-          if (participant1 !== playerPayload.playerId && participant2 !== playerPayload.playerId) {
-            return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
-          }
-        } catch (err) {
-          // Neither organizer nor player auth succeeded
-          return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Unauthorized' })
+        validateMatchFormatConsistency(match)
+        const [participant1, participant2] = getMatchParticipantIds(match)
+        if (participant1 !== playerPayload!.playerId && participant2 !== playerPayload!.playerId) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
         }
       }
 
@@ -1076,11 +1086,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(409).json({ code: 'TOURNAMENT_FULL', message: 'Tournament has reached maximum capacity' })
       }
 
-      // Validate partner selection for doubles tournaments
-      if (tournament.match_format === 'doubles') {
-        if (!req.body.partnerSelection) {
-          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Partner selection required for doubles tournament' })
-        }
+      // Handle partner selection for doubles tournaments (optional - teams auto-created during group creation)
+      if (tournament.match_format === 'doubles' && req.body.partnerSelection) {
 
         const { type, value } = req.body.partnerSelection
         if (!['select', 'invite'].includes(type)) {
@@ -1163,8 +1170,11 @@ export default function tournamentsRouter(deps: AppDependencies) {
           })
         }
       } else if (!existingReg) {
-        // Single registration (not doubles)
-        await playerRepo.createRegistration(player.id, tournamentId)
+        // Single registration (not doubles, or doubles without partner selection)
+        log.debug('registration.creating', { tournamentId, playerId: player.id, format: tournament.match_format })
+        const reg = await playerRepo.createRegistration(player.id, tournamentId)
+        log.debug('registration.created.db', { tournamentId, playerId: player.id, registrationId: reg.id })
+        log.info('registration.created', { tournamentId, playerId: player.id, format: tournament.match_format })
       }
 
       const magicLink = await generateMagicLinkToken(
@@ -1173,7 +1183,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         deps.tokenStore
       )
 
-      log.info('player.registered', { tournamentId, playerId: player.id })
+      log.info('player.registered', { tournamentId, playerId: player.id, format: tournament.match_format })
 
       res.status(202).json({
         message: `Registration email sent to ${player.email}`,

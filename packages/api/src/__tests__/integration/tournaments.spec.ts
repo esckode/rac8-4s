@@ -1261,7 +1261,7 @@ describe('Tournaments API', () => {
 
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
@@ -1360,7 +1360,7 @@ describe('Tournaments API', () => {
 
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
@@ -1452,7 +1452,7 @@ describe('Tournaments API', () => {
 
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
@@ -2535,7 +2535,7 @@ describe('Tournaments API', () => {
 
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
@@ -2582,7 +2582,7 @@ describe('Tournaments API', () => {
 
       const player1Session = await generatePlayerSession(
         {
-          playerId: match.player1_id,
+          playerId: match.player1_id!,
           tournamentId: tournament.id,
           email: `player${match.player1_id}@test.local`,
           createdAt: Date.now(),
@@ -3052,7 +3052,7 @@ describe('Tournaments API', () => {
       if (matches[0].player1_id) {
         const player1Session = await generatePlayerSession(
           {
-            playerId: matches[0].player1_id,
+            playerId: matches[0].player1_id!,
             tournamentId: tournament.id,
             email: `player${matches[0].player1_id}@test.local`,
             createdAt: Date.now(),
@@ -3110,7 +3110,7 @@ describe('Tournaments API', () => {
       if (matches[0].player1_id) {
         const player1Session = await generatePlayerSession(
           {
-            playerId: matches[0].player1_id,
+            playerId: matches[0].player1_id!,
             tournamentId: tournament.id,
             email: `player${matches[0].player1_id}@test.local`,
             createdAt: Date.now(),
@@ -3168,7 +3168,7 @@ describe('Tournaments API', () => {
       if (matches[0].player1_id) {
         const player1Session = await generatePlayerSession(
           {
-            playerId: matches[0].player1_id,
+            playerId: matches[0].player1_id!,
             tournamentId: tournament.id,
             email: `player${matches[0].player1_id}@test.local`,
             createdAt: Date.now(),
@@ -3226,7 +3226,7 @@ describe('Tournaments API', () => {
       if (matches[0].player1_id) {
         const player1Session = await generatePlayerSession(
           {
-            playerId: matches[0].player1_id,
+            playerId: matches[0].player1_id!,
             tournamentId: tournament.id,
             email: `player${matches[0].player1_id}@test.local`,
             createdAt: Date.now(),
@@ -3435,7 +3435,7 @@ describe('Tournaments API', () => {
       if (matches[0].player1_id) {
         const player1Session = await generatePlayerSession(
           {
-            playerId: matches[0].player1_id,
+            playerId: matches[0].player1_id!,
             tournamentId: tournament.id,
             email: `player${matches[0].player1_id}@test.local`,
             createdAt: Date.now(),
@@ -5190,7 +5190,7 @@ describe('Tournaments API', () => {
       if (matches.length > 0) {
         const playerSession = await generatePlayerSession(
           {
-            playerId: matches[0].player1_id,
+            playerId: matches[0].player1_id!,
             tournamentId: tournament.id,
             email: `player${matches[0].player1_id}@test.local`,
             createdAt: Date.now(),

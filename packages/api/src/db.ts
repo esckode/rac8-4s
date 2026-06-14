@@ -644,6 +644,17 @@ export class GroupRepository {
       try {
         await client.query('BEGIN')
 
+        // Validate all playerIds are present and non-null
+        if (!playerIds || playerIds.length < 2) {
+          throw new Error(`Not enough players for team creation: ${playerIds?.length || 0}`)
+        }
+
+        for (let i = 0; i < playerIds.length; i++) {
+          if (!playerIds[i] || typeof playerIds[i] !== 'string') {
+            throw new Error(`Invalid player ID at index ${i}: ${playerIds[i]}`)
+          }
+        }
+
         // Create teams from players
         const now = new Date().toISOString()
         const teamIds: string[] = []
@@ -652,6 +663,11 @@ export class GroupRepository {
         for (let i = 0; i < shuffled.length - 1; i += 2) {
           const player1Id = shuffled[i]
           const player2Id = shuffled[i + 1]
+
+          if (!player1Id || !player2Id) {
+            throw new Error(`Cannot create team: missing player ID at shuffle index ${i}`)
+          }
+
           const teamId = `team_${Date.now()}_${Math.random().toString(36).slice(2)}`
 
           // Insert team
@@ -747,11 +763,18 @@ export class GroupRepository {
   }
 
   async findMembersByGroup(groupId: string): Promise<PlayerRow[]> {
+    // group_memberships is polymorphic: singles store player_id, doubles store team_id.
+    // Resolve to players for both cases so callers always get the underlying players.
     const result = await this.pool.query(
       `SELECT p.* FROM public.players p
        JOIN public.group_memberships gm ON gm.player_id = p.id
        WHERE gm.group_id = $1
-       ORDER BY p.name`,
+       UNION
+       SELECT p.* FROM public.players p
+       JOIN public.teams t ON p.id = t.player1_id OR p.id = t.player2_id
+       JOIN public.group_memberships gm ON gm.team_id = t.id
+       WHERE gm.group_id = $1
+       ORDER BY name`,
       [groupId]
     )
     return result.rows as PlayerRow[]

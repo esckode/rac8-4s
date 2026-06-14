@@ -20,7 +20,7 @@ describe('Bracket Processor', () => {
     const groupRepo = new GroupRepository(pool)
     const matches = await groupRepo.findMatchesByGroup(groupId)
     for (const m of matches) {
-      await groupRepo.updateMatch(m.id, m.player1_id, '6-3 6-4')
+      await groupRepo.updateMatch(m.id, m.player1_id!, '6-3 6-4')
     }
   }
 

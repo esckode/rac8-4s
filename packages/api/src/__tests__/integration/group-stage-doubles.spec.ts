@@ -212,9 +212,8 @@ describe('Phase 4: Group Stage - Doubles', () => {
         .send({ score: '6-4, 6-3' })
 
       expect(scoreRes.status).toBe(200)
-      expect(scoreRes.body.match).toHaveProperty('team1_id')
-      expect(scoreRes.body.match).toHaveProperty('team2_id')
-      expect(scoreRes.body.match).toHaveProperty('winner_id') // Team ID, not player ID
+      // Score response contract: { id, score, winnerId, status }. For doubles winnerId is a team ID.
+      expect(scoreRes.body.match.winnerId).toBeTruthy()
       expect(scoreRes.body.match.status).toBe('completed')
     })
   })
@@ -271,6 +270,193 @@ describe('Phase 4: Group Stage - Doubles', () => {
       expect(standing.name).toBeTruthy()
       // Verify it's not a single player name (team names have specific format)
       expect(standing.name).not.toEqual(players[0].name)
+    })
+  })
+
+  describe('Scenario: Registration API + Group Creation Flow (doubles)', () => {
+    it('registers players via API without partner selection and creates groups', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId, { matchFormat: 'doubles' })
+      const repo = new TournamentRepository(pool)
+
+      // Open registration
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      // Register 4 players via API without partner selection
+      const emails = [
+        `api-player-1-${Date.now()}@test.local`,
+        `api-player-2-${Date.now()}@test.local`,
+        `api-player-3-${Date.now()}@test.local`,
+        `api-player-4-${Date.now()}@test.local`,
+      ]
+
+      for (let i = 0; i < emails.length; i++) {
+        const regRes = await request(app)
+          .post(`/tournaments/${tournament.id}/register`)
+          .send({
+            email: emails[i],
+            name: `API Player ${i + 1}`,
+          })
+
+        if (regRes.status !== 202) {
+          console.error(`Registration ${i} failed:`, regRes.status, regRes.body)
+        }
+        expect(regRes.status).toBe(202)
+      }
+
+      // Close registration
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      // Create groups
+      const groupRes = await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 1, advancingPerGroup: 1 })
+
+      if (groupRes.status !== 201) {
+        console.error('Group creation failed:', groupRes.status, groupRes.body)
+      }
+      expect(groupRes.status).toBe(201)
+      expect(groupRes.body.groups).toBeDefined()
+      expect(groupRes.body.groups.length).toBe(1)
+      expect(groupRes.body.groups[0].playerCount).toBeGreaterThan(0)
+    })
+
+    it('registers 8 players and creates 2 groups with 2 teams each', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId, { matchFormat: 'doubles' })
+      const repo = new TournamentRepository(pool)
+
+      // Open registration
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      // Register 8 players via API
+      const emails: string[] = []
+      for (let i = 0; i < 8; i++) {
+        const email = `api-8p-${i}-${Date.now()}@test.local`
+        emails.push(email)
+
+        const regRes = await request(app)
+          .post(`/tournaments/${tournament.id}/register`)
+          .send({
+            email,
+            name: `Player ${i + 1}`,
+          })
+
+        if (regRes.status !== 202) {
+          console.error(`Registration ${i} failed:`, regRes.status, regRes.body)
+        }
+        expect(regRes.status).toBe(202)
+      }
+
+      // Close registration
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      // Create groups (2 groups for 8 players = 4 per group = 2 teams per group)
+      const groupRes = await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 2, advancingPerGroup: 1 })
+
+      if (groupRes.status !== 201) {
+        console.error('Group creation failed:', groupRes.status, groupRes.body)
+      }
+      expect(groupRes.status).toBe(201)
+      expect(groupRes.body.groups.length).toBe(2)
+
+      // Each group should have 4 players (2 teams × 2 players)
+      for (const group of groupRes.body.groups) {
+        expect(group.playerCount).toBe(4)
+      }
+    })
+
+    it('registers 12 players and creates 3 groups', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId, { matchFormat: 'doubles', maxPlayers: 12 })
+      const repo = new TournamentRepository(pool)
+
+      // Open registration
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      // Register 12 players
+      for (let i = 0; i < 12; i++) {
+        const regRes = await request(app)
+          .post(`/tournaments/${tournament.id}/register`)
+          .send({
+            email: `api-12p-${i}-${Date.now()}@test.local`,
+            name: `Player ${i + 1}`,
+          })
+
+        if (regRes.status !== 202) {
+          console.error(`Registration ${i} failed:`, regRes.status, regRes.body)
+        }
+        expect(regRes.status).toBe(202)
+      }
+
+      // Close registration
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      // Create groups (3 groups for 12 players = 4 per group)
+      const groupRes = await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 3, advancingPerGroup: 1 })
+
+      if (groupRes.status !== 201) {
+        console.error('Group creation failed:', groupRes.status, groupRes.body)
+      }
+      expect(groupRes.status).toBe(201)
+      expect(groupRes.body.groups.length).toBe(3)
+
+      // Verify each group has correct player count
+      let totalPlayers = 0
+      for (const group of groupRes.body.groups) {
+        expect(group.playerCount).toBe(4)
+        totalPlayers += group.playerCount
+      }
+      expect(totalPlayers).toBe(12)
+    })
+
+    it('verifies group membership after group creation', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId, { matchFormat: 'doubles' })
+      const repo = new TournamentRepository(pool)
+
+      // Open and register players
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      for (let i = 0; i < 4; i++) {
+        await request(app)
+          .post(`/tournaments/${tournament.id}/register`)
+          .send({
+            email: `verify-${i}-${Date.now()}@test.local`,
+            name: `Verify Player ${i}`,
+          })
+      }
+
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      // Create groups
+      const groupRes = await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 1, advancingPerGroup: 1 })
+
+      expect(groupRes.status).toBe(201)
+      const groupId = groupRes.body.groups[0].id
+
+      // Fetch group details
+      const detailRes = await request(app)
+        .get(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      expect(detailRes.status).toBe(200)
+      expect(detailRes.body.groups).toBeDefined()
+
+      const group = detailRes.body.groups.find((g: any) => g.id === groupId)
+      expect(group).toBeDefined()
+      expect(group.players).toBeDefined()
+      expect(group.players.length).toBe(4)
     })
   })
 })
