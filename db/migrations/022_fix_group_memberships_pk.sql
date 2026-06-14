@@ -1,16 +1,5 @@
--- Fix group_memberships primary key to support both player and team membership
--- Drop the current primary key and recreate with a generated ID
+-- Add unique constraints to prevent duplicates within groups
+-- Null values in player_id and team_id are allowed per the check constraint
 
 ALTER TABLE public.group_memberships
-ADD COLUMN IF NOT EXISTS id TEXT PRIMARY KEY DEFAULT (gen_random_uuid()::text);
-
--- Drop old primary key constraint if it exists
-ALTER TABLE public.group_memberships
-DROP CONSTRAINT IF EXISTS group_memberships_pkey;
-
--- Add unique constraints for each membership type
-ALTER TABLE public.group_memberships
-ADD CONSTRAINT unique_group_player UNIQUE (group_id, player_id) WHERE player_id IS NOT NULL;
-
-ALTER TABLE public.group_memberships
-ADD CONSTRAINT unique_group_team UNIQUE (group_id, team_id) WHERE team_id IS NOT NULL;
+ADD CONSTRAINT unique_group_player_team UNIQUE (group_id, player_id, team_id);
