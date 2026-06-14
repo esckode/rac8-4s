@@ -36,7 +36,7 @@ describe('Phase 4: Group Stage - Doubles', () => {
 
       await repo.updateStatus(tournament.id, 'registration_closed')
 
-      // Create 4 players for 2 teams
+      // Create 4 players
       const players = await Promise.all([
         PlayerFactory.create(pool),
         PlayerFactory.create(pool),
@@ -49,20 +49,12 @@ describe('Phase 4: Group Stage - Doubles', () => {
         await playerRepo.createRegistration(player.id, tournament.id)
       }
 
-      // Create teams manually
-      const teamRepo = new TeamRepository(pool)
-      const team1 = await teamRepo.createTeam(tournament.id, players[0].id, players[1].id)
-      const team2 = await teamRepo.createTeam(tournament.id, players[2].id, players[3].id)
-
-      // Create groups with teams
+      // Create groups - endpoint will auto-create teams from players
       const groupRes = await request(app)
         .post(`/tournaments/${tournament.id}/groups`)
         .set('Authorization', `Bearer ${orgToken}`)
         .send({ numGroups: 1, advancingPerGroup: 1 })
 
-      if (groupRes.status !== 201) {
-        console.error('Group creation failed:', groupRes.status, groupRes.body)
-      }
       expect(groupRes.status).toBe(201)
       const groupId = groupRes.body.groups[0].id
 
@@ -129,9 +121,6 @@ describe('Phase 4: Group Stage - Doubles', () => {
         await playerRepo.createRegistration(player.id, tournament.id)
       }
 
-      const teamRepo = new TeamRepository(pool)
-      const team1 = await teamRepo.createTeam(tournament.id, players[0].id, players[1].id)
-      const team2 = await teamRepo.createTeam(tournament.id, players[2].id, players[3].id)
 
       const groupRes = await request(app)
         .post(`/tournaments/${tournament.id}/groups`)
@@ -193,9 +182,6 @@ describe('Phase 4: Group Stage - Doubles', () => {
         await playerRepo.createRegistration(player.id, tournament.id)
       }
 
-      const teamRepo = new TeamRepository(pool)
-      const team1 = await teamRepo.createTeam(tournament.id, players[0].id, players[1].id)
-      const team2 = await teamRepo.createTeam(tournament.id, players[2].id, players[3].id)
 
       const groupRes = await request(app)
         .post(`/tournaments/${tournament.id}/groups`)
@@ -253,9 +239,6 @@ describe('Phase 4: Group Stage - Doubles', () => {
         await playerRepo.createRegistration(player.id, tournament.id)
       }
 
-      const teamRepo = new TeamRepository(pool)
-      const team1 = await teamRepo.createTeam(tournament.id, players[0].id, players[1].id)
-      const team2 = await teamRepo.createTeam(tournament.id, players[2].id, players[3].id)
 
       const groupRes = await request(app)
         .post(`/tournaments/${tournament.id}/groups`)
