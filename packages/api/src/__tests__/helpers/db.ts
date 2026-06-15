@@ -2,22 +2,103 @@ import { Pool, PoolClient } from 'pg'
 import path from 'path'
 import { runMigrations } from '../../migrations'
 
-let testPool: Pool | null = null
-let transactionClient: PoolClient | null = null
+/**
+ * Test database harness with true per-suite isolation.
+ *
+ * A single real connection ("the suite connection") is opened in beginTransaction()
+ * and wrapped in an outer BEGIN. Everything in the suite — the app (via deps.db),
+ * factories, and direct repository reads — runs through this one connection so that
+ * reads always see writes, and afterAll's ROLLBACK discards everything. Nothing is
+ * ever committed to the shared database, so tests do not pollute it.
+ *
+ * Two facades sit in front of the suite connection:
+ *  - getTestPool() returns a Pool-shaped proxy (handed to factories and direct repos).
+ *  - getTransactionClient() returns a PoolClient-shaped facade (wired into the app as
+ *    deps.db, and used by repository transaction helpers).
+ * Both delegate to the same serialized, savepoint-translating executor below.
+ *
+ * Serialization: a single pg connection cannot run queries concurrently, but specs do
+ * `await Promise.all([Factory.create(pool), ...])`. All queries on the suite connection
+ * are funneled through one promise chain so they execute one at a time.
+ *
+ * Savepoint translation: repository transaction helpers issue BEGIN/COMMIT/ROLLBACK on
+ * whatever connection they are given. On the suite connection these are rewritten to
+ * SAVEPOINT / RELEASE SAVEPOINT / ROLLBACK TO SAVEPOINT so a nested repo "transaction"
+ * never commits or aborts the outer suite transaction.
+ */
+
+let realPool: Pool | null = null
+let proxyPool: Pool | null = null
+let suiteClient: PoolClient | null = null
+let txFacade: PoolClient | null = null
+let savepointDepth = 0
+let queue: Promise<unknown> = Promise.resolve()
+
+/** Run fns one at a time against the single suite connection. */
+function serialize<T>(fn: () => Promise<T>): Promise<T> {
+  const run = queue.then(() => fn(), () => fn())
+  queue = run.then(() => undefined, () => undefined)
+  return run
+}
+
+/** Execute one statement on the suite connection, translating transaction control. */
+async function execOnSuite(text: any, params?: any): Promise<any> {
+  const client = suiteClient!
+  if (typeof text === 'string') {
+    const norm = text.trim().replace(/;+$/, '').toUpperCase()
+    if (norm === 'BEGIN') {
+      savepointDepth++
+      return client.query(`SAVEPOINT sp_${savepointDepth}`)
+    }
+    if (norm === 'COMMIT') {
+      if (savepointDepth === 0) return { rows: [], rowCount: 0 }
+      const sp = savepointDepth--
+      return client.query(`RELEASE SAVEPOINT sp_${sp}`)
+    }
+    if (norm === 'ROLLBACK') {
+      if (savepointDepth === 0) return { rows: [], rowCount: 0 }
+      const sp = savepointDepth--
+      await client.query(`ROLLBACK TO SAVEPOINT sp_${sp}`)
+      return client.query(`RELEASE SAVEPOINT sp_${sp}`)
+    }
+  }
+  return client.query(text, params)
+}
+
+/** A PoolClient-shaped facade over the suite connection. release() is a no-op. */
+function getTxFacade(): PoolClient {
+  if (!txFacade) {
+    txFacade = {
+      query: (text: any, params?: any) => serialize(() => execOnSuite(text, params)),
+      release: () => { /* suite owns this connection; do not release mid-suite */ },
+    } as unknown as PoolClient
+  }
+  return txFacade
+}
+
+function createProxyPool(): Pool {
+  const proxy = {
+    query: (text: any, params?: any) =>
+      suiteClient ? getTxFacade().query(text, params) : realPool!.query(text, params),
+    connect: async () => (suiteClient ? getTxFacade() : realPool!.connect()),
+    end: () => realPool!.end(),
+  }
+  return proxy as unknown as Pool
+}
 
 /**
- * Get or create the test database pool.
- * Runs migrations on first call.
+ * Get or create the test database harness.
+ * Runs migrations on first call. Returns a transactional proxy pool.
  */
 export async function getTestPool(): Promise<Pool> {
-  if (testPool) {
-    return testPool
+  if (proxyPool) {
+    return proxyPool
   }
 
   const connectionString = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL ||
     'postgresql://tournament_user:tournament_pass@localhost:5432/tournament_app'
 
-  testPool = new Pool({
+  realPool = new Pool({
     connectionString,
     min: 0,
     max: 10,
@@ -25,68 +106,75 @@ export async function getTestPool(): Promise<Pool> {
 
   try {
     const migrationsDir = path.resolve(__dirname, '../../../../../db/migrations')
-    await runMigrations(testPool, migrationsDir)
+    await runMigrations(realPool, migrationsDir)
   } catch (err) {
-    await testPool.end()
-    testPool = null
+    await realPool.end()
+    realPool = null
     throw err
   }
 
-  return testPool
+  proxyPool = createProxyPool()
+  return proxyPool
 }
 
 /**
- * Begin a database transaction for test suite isolation.
- * All queries within the suite use the same transaction.
- * Provides true database-level isolation without truncation.
- * Call once in beforeAll.
+ * Begin the per-suite transaction. All queries within the suite run on a single
+ * connection wrapped in this outer transaction. Call once in beforeAll.
  */
-export async function beginTransaction(pool: Pool) {
-  if (transactionClient) {
+export async function beginTransaction(_pool?: Pool): Promise<PoolClient> {
+  if (suiteClient) {
     throw new Error('Transaction already active')
   }
-  transactionClient = await pool.connect()
-  await transactionClient.query('BEGIN')
-  return transactionClient
+  if (!realPool) {
+    throw new Error('Test pool not initialized; call getTestPool() first')
+  }
+  suiteClient = await realPool.connect()
+  savepointDepth = 0
+  queue = Promise.resolve()
+  txFacade = null
+  await suiteClient.query('BEGIN')
+  return getTxFacade()
 }
 
 /**
- * Rollback the active transaction.
- * All changes within the suite are discarded.
- * Call in afterAll.
+ * Roll back the per-suite transaction, discarding all changes. Call in afterAll.
  */
 export async function rollbackTransaction(): Promise<void> {
-  if (!transactionClient) {
+  if (!suiteClient) {
     throw new Error('No active transaction')
   }
+  // Let any in-flight serialized queries settle before rolling back.
+  await queue.catch(() => undefined)
   try {
-    await transactionClient.query('ROLLBACK')
+    await suiteClient.query('ROLLBACK')
   } finally {
-    transactionClient.release()
-    transactionClient = null
+    suiteClient.release()
+    suiteClient = null
+    txFacade = null
+    savepointDepth = 0
+    queue = Promise.resolve()
   }
 }
 
 /**
- * Get the active transaction client for this test suite.
- * If a transaction is active, returns the client.
- * Otherwise returns null (pool should be used instead).
+ * Get the active suite connection facade (PoolClient-shaped), or null if no
+ * transaction is active. Wired into the app as deps.db and used by repositories.
  */
 export function getTransactionClient(): PoolClient | null {
-  return transactionClient
+  return suiteClient ? getTxFacade() : null
 }
 
 /**
- * Close the test pool.
- * Call in global afterAll.
+ * Close the underlying real pool. Call in global afterAll.
  */
 export async function closeTestPool(): Promise<void> {
-  if (testPool) {
+  if (realPool) {
     try {
-      await testPool.end()
+      await realPool.end()
     } catch (err) {
       // Pool already closed, ignore
     }
-    testPool = null
+    realPool = null
+    proxyPool = null
   }
 }
