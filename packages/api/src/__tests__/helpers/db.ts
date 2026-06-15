@@ -32,6 +32,7 @@ let proxyPool: Pool | null = null
 let suiteClient: PoolClient | null = null
 let txFacade: PoolClient | null = null
 let savepointDepth = 0
+let statementCounter = 0
 let queue: Promise<unknown> = Promise.resolve()
 
 /** Run fns one at a time against the single suite connection. */
@@ -62,14 +63,40 @@ async function execOnSuite(text: any, params?: any): Promise<any> {
       return client.query(`RELEASE SAVEPOINT sp_${sp}`)
     }
   }
-  return client.query(text, params)
+
+  // Inside an explicit repo transaction (BEGIN issued), a failed statement is already
+  // recovered by that method's own ROLLBACK (translated to ROLLBACK TO SAVEPOINT), so
+  // pass through. A bare statement, however, would abort the whole shared suite
+  // transaction on error (e.g. a unique-constraint violation), cascading "current
+  // transaction is aborted" into every later test. Wrap it in its own savepoint so a
+  // failure rolls back only itself; the error still propagates to the caller.
+  if (savepointDepth > 0) {
+    return client.query(text, params)
+  }
+
+  const sp = `stmt_${++statementCounter}`
+  await client.query(`SAVEPOINT ${sp}`)
+  try {
+    const result = await client.query(text, params)
+    await client.query(`RELEASE SAVEPOINT ${sp}`)
+    return result
+  } catch (err) {
+    await client.query(`ROLLBACK TO SAVEPOINT ${sp}`)
+    await client.query(`RELEASE SAVEPOINT ${sp}`)
+    throw err
+  }
 }
 
-/** A PoolClient-shaped facade over the suite connection. release() is a no-op. */
+/**
+ * A PoolClient-shaped facade over the suite connection. release() is a no-op, and
+ * connect() returns the same facade, so repository code that calls `pool.connect()`
+ * to run a transaction joins the suite connection instead of opening a new one.
+ */
 function getTxFacade(): PoolClient {
   if (!txFacade) {
     txFacade = {
       query: (text: any, params?: any) => serialize(() => execOnSuite(text, params)),
+      connect: async () => getTxFacade(),
       release: () => { /* suite owns this connection; do not release mid-suite */ },
     } as unknown as PoolClient
   }
@@ -130,6 +157,7 @@ export async function beginTransaction(_pool?: Pool): Promise<PoolClient> {
   }
   suiteClient = await realPool.connect()
   savepointDepth = 0
+  statementCounter = 0
   queue = Promise.resolve()
   txFacade = null
   await suiteClient.query('BEGIN')

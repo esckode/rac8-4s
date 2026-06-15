@@ -366,16 +366,29 @@ export default function authRouter(deps: AppDependencies) {
       // Normalize email to lowercase
       const normalizedEmail = email.toLowerCase()
 
-      // Generate 6-digit reset code
-      const code = PasswordResetCodeRepository.generateCode()
+      // Generate 6-digit reset code (always, to avoid leaking account existence via timing)
+      let code = PasswordResetCodeRepository.generateCode()
 
       // Lookup account by email (may not exist)
       const account = await accountRepo.findByEmail(normalizedEmail)
 
       // If account exists, create reset code and send email
       if (account) {
-        // Create reset code with 15-minute expiration
-        const resetCode = await resetCodeRepo.create(account.id, code, 15)
+        // Create reset code with 15-minute expiration. Retry on the rare chance the
+        // random code collides with an existing one (unique constraint violation).
+        let resetCode
+        for (let attempt = 0; ; attempt++) {
+          try {
+            resetCode = await resetCodeRepo.create(account.id, code, 15)
+            break
+          } catch (err) {
+            if ((err as { code?: string })?.code === '23505' && attempt < 4) {
+              code = PasswordResetCodeRepository.generateCode()
+              continue
+            }
+            throw err
+          }
+        }
 
         // Log reset code generation
         log.info('reset_code.generated', {
