@@ -9,33 +9,6 @@ const log = getLogger('db')
 // Both have compatible query() method signatures
 export type DbConnection = Pool | PoolClient
 
-/**
- * Get a client from a Pool or return the PoolClient directly.
- * Used internally when code needs a dedicated client for transactions.
- */
-async function getClientFromConnection(
-  connection: DbConnection
-): Promise<{ client: any; isPoolClient: boolean }> {
-  // Check if it's already a PoolClient (has release method)
-  if (connection && typeof (connection as any).release === 'function') {
-    // Already a client, return as-is
-    return { client: connection, isPoolClient: true }
-  } else {
-    // It's a Pool, get a client from it
-    const client = await (connection as Pool).connect()
-    return { client, isPoolClient: false }
-  }
-}
-
-/**
- * Release a client only if it came from pool.connect() (not if it's a transaction client).
- */
-function releaseClientIfNeeded(client: any, isPoolClient: boolean): void {
-  if (!isPoolClient && client && typeof client.release === 'function') {
-    client.release()
-  }
-}
-
 async function retryOnDeadlock<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -576,7 +549,7 @@ export class GroupRepository {
 
   async createGroups(tournamentId: string, numGroups: number, advancingCount: number, playerIds: string[]): Promise<GroupRow[]> {
     return retryOnDeadlock(async () => {
-      const { client, isPoolClient } = await getClientFromConnection(this.pool)
+      const client = await (this.pool as Pool).connect()
       try {
         await client.query('BEGIN')
 
@@ -633,14 +606,14 @@ export class GroupRepository {
         await client.query('ROLLBACK')
         throw error
       } finally {
-        releaseClientIfNeeded(client, isPoolClient)
+        client.release()
       }
     })
   }
 
   async createGroupsForDoubles(tournamentId: string, numGroups: number, advancingCount: number, playerIds: string[]): Promise<GroupRow[]> {
     return retryOnDeadlock(async () => {
-      const { client, isPoolClient } = await getClientFromConnection(this.pool)
+      const client = await (this.pool as Pool).connect()
       try {
         await client.query('BEGIN')
 
@@ -728,7 +701,7 @@ export class GroupRepository {
         await client.query('ROLLBACK')
         throw error
       } finally {
-        releaseClientIfNeeded(client, isPoolClient)
+        client.release()
       }
     })
   }
@@ -957,7 +930,7 @@ export class KnockoutRepository {
 
   async setSeeds(tournamentId: string, seeds: Array<{ playerId: string; seedPosition: number }>): Promise<void> {
     return retryOnDeadlock(async () => {
-      const { client, isPoolClient } = await getClientFromConnection(this.pool)
+      const client = await (this.pool as Pool).connect()
       try {
         await client.query('BEGIN')
         await client.query('DELETE FROM public.bracket_seeds WHERE tournament_id = $1', [tournamentId])
@@ -974,7 +947,7 @@ export class KnockoutRepository {
         await client.query('ROLLBACK')
         throw error
       } finally {
-        releaseClientIfNeeded(client, isPoolClient)
+        client.release()
       }
     })
   }
@@ -992,7 +965,7 @@ export class KnockoutRepository {
 
   async createKnockoutMatches(tournamentId: string, bracket: any, seedMap: Map<number, string>): Promise<KnockoutMatchRow[]> {
     return retryOnDeadlock(async () => {
-      const { client, isPoolClient } = await getClientFromConnection(this.pool)
+      const client = await (this.pool as Pool).connect()
       try {
         await client.query('BEGIN')
 
@@ -1018,7 +991,7 @@ export class KnockoutRepository {
         await client.query('ROLLBACK')
         throw error
       } finally {
-        releaseClientIfNeeded(client, isPoolClient)
+        client.release()
       }
     })
   }
