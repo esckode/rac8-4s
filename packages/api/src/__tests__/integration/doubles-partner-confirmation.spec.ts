@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals'
 import { Pool } from 'pg'
-import { getTestPool, beginTransaction, rollbackTransaction, getTransactionClient } from '../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
 
 /**
  * Phase 2.5: Partner Registration & Confirmation Tests (RED)
@@ -36,7 +36,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
   async function createTestPlayer(email: string, name: string) {
     const playerId = `player_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const now = new Date()
-    const client = getTransactionClient() || pool
+    const client = pool
     await client.query(
       'INSERT INTO players (id, email, name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)',
       [playerId, email, name, now, now]
@@ -47,7 +47,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
   async function createTestTournament(matchFormat = 'doubles') {
     const tournamentId = `tournament_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const now = new Date()
-    const client = getTransactionClient() || pool
+    const client = pool
     await client.query(
       `INSERT INTO tournaments (id, name, creator_id, sport, match_format, max_players, status, registration_deadline, group_stage_deadline, knockout_stage_deadline, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
@@ -72,8 +72,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
   async function createRegistration(playerId: string, tournamentId: string, partnerId?: string | null) {
     const registrationId = `reg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const now = new Date()
-    const client = getTransactionClient()
-    const query = client || pool
+    const query = pool
     await query.query(
       `INSERT INTO player_registrations (id, player_id, tournament_id, partner_id, partner_confirmed, status, registered_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -84,7 +83,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
   }
 
   async function findRegistration(registrationId: string) {
-    const client = getTransactionClient() || pool
+    const client = pool
     const result = await client.query(
       'SELECT * FROM player_registrations WHERE id = $1',
       [registrationId]
@@ -93,7 +92,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
   }
 
   async function getPartnerRegistration(tournamentId: string, partnerId: string) {
-    const client = getTransactionClient() || pool
+    const client = pool
     const result = await client.query(
       'SELECT * FROM player_registrations WHERE tournament_id = $1 AND partner_id = $2',
       [tournamentId, partnerId]
@@ -112,7 +111,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
       const reg2 = await createRegistration(player2.id, tournament.id, player1.id)
 
       // Bob confirms his registration
-      const conn = getTransactionClient() || pool
+      const conn = pool
       await conn.query(
         `UPDATE player_registrations SET partner_confirmed = true WHERE id = $1`,
         [reg2.id]
@@ -144,7 +143,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
       const reg2 = await createRegistration(player2.id, tournament.id, player1.id)
 
       // Confirm both
-      const conn = getTransactionClient() || pool
+      const conn = pool
       await conn.query('UPDATE player_registrations SET partner_confirmed = true WHERE id = $1', [reg1.id])
       await conn.query('UPDATE player_registrations SET partner_confirmed = true WHERE id = $1', [reg2.id])
 
@@ -162,7 +161,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
 
       const reg1 = await createRegistration(player1.id, tournament.id, player2.id)
 
-      const conn = getTransactionClient() || pool
+      const conn = pool
       const now = new Date()
       await conn.query(
         `UPDATE player_registrations SET partner_confirmed = true, confirmed_at = $1 WHERE id = $2`,
@@ -180,7 +179,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
 
       const reg1 = await createRegistration(player1.id, tournament.id, player2.id)
 
-      const conn = getTransactionClient() || pool
+      const conn = pool
       // First confirmation
       await conn.query('UPDATE player_registrations SET partner_confirmed = true WHERE id = $1', [reg1.id])
       const first = await findRegistration(reg1.id)
@@ -244,7 +243,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
       const reg1 = await createRegistration(player1.id, tournament.id, player2.id)
 
       // Simulate concurrent updates (database should handle atomically)
-      const conn = getTransactionClient() || pool
+      const conn = pool
       await Promise.all([
         conn.query('UPDATE player_registrations SET partner_confirmed = true WHERE id = $1', [reg1.id]),
         conn.query('UPDATE player_registrations SET partner_confirmed = true WHERE id = $1', [reg1.id])
@@ -412,7 +411,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
 
       // Attempting to create same partnership again should fail
       // Database UNIQUE constraint should prevent duplicate
-      const client = getTransactionClient() || pool
+      const client = pool
       const result = await client.query(
         'SELECT COUNT(*) as count FROM player_registrations WHERE tournament_id = $1 AND player_id = $2 AND partner_id = $3',
         [tournament.id, player1.id, player2.id]
@@ -458,7 +457,7 @@ describe('Doubles: Partner Confirmation (RED)', () => {
       let reg1 = await createRegistration(player1.id, tournament.id, player2.id)
 
       // Confirm partnership
-      const conn = getTransactionClient() || pool
+      const conn = pool
       await conn.query('UPDATE player_registrations SET partner_confirmed = true, status = $1 WHERE id = $2', ['registered', reg1.id])
 
       reg1 = await findRegistration(reg1.id)

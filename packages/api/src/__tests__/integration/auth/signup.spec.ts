@@ -1,18 +1,15 @@
 import request from 'supertest'
 import { Express } from 'express'
-import { Pool, PoolClient } from 'pg'
+import { Pool } from 'pg'
 import crypto from 'crypto'
 import bcryptjs from 'bcryptjs'
-import { getTestPool, beginTransaction, rollbackTransaction, getTransactionClient } from '../../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../../helpers/db'
 import { createTestApp, JwtConfig } from '../../helpers/app'
 import { AccountRepository } from '../../../db'
 import { InMemoryTokenStore } from '../../../auth/token-store'
 import { generateMagicLinkToken, validateMagicLinkToken } from '../../../auth/magic-link'
 import jwt from 'jsonwebtoken'
 
-function getDb(pool: Pool): Pool | PoolClient {
-  return getTransactionClient() || pool
-}
 
 function uniqueEmail(prefix: string = ''): string {
   const id = crypto.randomUUID().slice(0, 8)
@@ -33,7 +30,7 @@ describe('POST /api/auth/signup', () => {
     app = deps.app
     tokenStore = deps.tokenStore
     jwtConfig = deps.jwtConfig
-    accountRepo = new AccountRepository(getDb(pool))
+    accountRepo = new AccountRepository(pool)
   })
 
   afterAll(async () => {

@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { Express } from 'express'
-import { Pool, PoolClient } from 'pg'
-import { getTestPool, beginTransaction, rollbackTransaction, getTransactionClient } from '../helpers/db'
+import { Pool } from 'pg'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { TournamentFactory, OrganizerFactory, PlayerFactory } from '../factories'
 import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../../db'
@@ -10,9 +10,6 @@ import { InMemoryTokenStore } from '../../auth/token-store'
 import { generateBracket } from '@core/index'
 
 // Helper to get the right database connection (transaction or pool)
-function getDb(pool: Pool): Pool | PoolClient {
-  return getTransactionClient() || pool
-}
 
 describe('Tournaments API', () => {
   let pool: Pool

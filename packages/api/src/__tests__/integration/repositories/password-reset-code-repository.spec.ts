@@ -1,5 +1,5 @@
 import { Pool } from 'pg'
-import { getTestPool, beginTransaction, rollbackTransaction, getTransactionClient } from '../../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../../helpers/db'
 import { PasswordResetCodeRepository } from '../../../db'
 
 describe('PasswordResetCodeRepository', () => {

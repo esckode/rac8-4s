@@ -1,5 +1,5 @@
 import { Pool } from 'pg'
-import { getTestPool, beginTransaction, rollbackTransaction, getTransactionClient } from '../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
 import {
   TournamentRepository,
   PlayerRepository,
@@ -10,11 +10,6 @@ import {
 } from '../../db'
 import { NotFoundError, CheckConstraintError } from '../../db/errors'
 import { TournamentFactory, PlayerFactory, OrganizerFactory, LocationFactory, CourtFactory } from '../factories'
-
-// Helper to get the right database connection (transaction or pool)
-function getDb(pool: Pool): Pool {
-  return (getTransactionClient() as any) || pool
-}
 
 describe('Database Layer - Error Cases and Constraint Violations', () => {
   let pool: Pool
@@ -30,19 +25,19 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
   describe('TournamentRepository - Error Cases', () => {
     it('throws NotFoundError when finding non-existent tournament by ID', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const result = await repo.findById('nonexistent_id')
       expect(result).toBeUndefined()
     })
 
     it('throws NotFoundError when finding non-existent tournament by name', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const result = await repo.findByName('nonexistent_tournament_name')
       expect(result).toBeUndefined()
     })
 
     it('throws CheckConstraintError on invalid match format', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const data = TournamentFactory.data()
 
@@ -59,7 +54,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('throws CheckConstraintError on invalid tournament status', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -72,7 +67,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('throws NotFoundError when updating non-existent tournament', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       try {
         await repo.update('nonexistent_id', { name: 'new name' })
         fail('Should have thrown NotFoundError')
@@ -82,7 +77,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('throws NotFoundError when updating status of non-existent tournament', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       try {
         await repo.updateStatus('nonexistent_id', 'registration_open')
         fail('Should have thrown NotFoundError')
@@ -92,7 +87,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles negative maxPlayers gracefully', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const data = TournamentFactory.data({ maxPlayers: -1 })
 
@@ -113,7 +108,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles very large maxPlayers value', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const data = TournamentFactory.data({ maxPlayers: 999999 })
 
@@ -122,7 +117,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles zero maxPlayers', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const data = TournamentFactory.data({ maxPlayers: 0 })
 
@@ -139,7 +134,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles null description', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const data = TournamentFactory.data()
 
@@ -149,7 +144,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('listByOrganizer returns empty list for organizer with no tournaments', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
 
       const result = await repo.listByOrganizer(organizerId)
@@ -158,7 +153,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('listByOrganizer respects limit and offset', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
 
       // Create 5 tournaments
@@ -173,7 +168,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('listPublic returns empty list when no tournaments published', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
 
       const result = await repo.listPublic()
       // May return existing tournaments; just verify structure
@@ -183,7 +178,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('listAvailable filters only registration_open tournaments', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
 
       // Create two tournaments, only open one for registration
@@ -198,7 +193,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('soft delete marks tournament as deleted_at', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -210,7 +205,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('soft deleted tournaments excluded from listByOrganizer', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -224,7 +219,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
   describe('PlayerRepository - Error Cases', () => {
     it('throws NotFoundError when updating non-existent player', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       try {
         await repo.updateShareContact('nonexistent_id', true)
         fail('Should have thrown NotFoundError')
@@ -234,19 +229,19 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('returns undefined when finding non-existent player by ID', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const result = await repo.findById('nonexistent_id')
       expect(result).toBeUndefined()
     })
 
     it('returns undefined when finding non-existent player by email', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const result = await repo.findByEmail('nonexistent@test.local')
       expect(result).toBeUndefined()
     })
 
     it('findOrCreatePlayerByEmail creates new player with unique email', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const email = `player_${Date.now()}@test.local`
 
       const player1 = await repo.findOrCreatePlayerByEmail(email, 'Player Name')
@@ -258,7 +253,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
 
     it('countRegistrationsForTournament returns 0 for tournament with no registrations', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -267,7 +262,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('countRegistrationsForTournament counts registrations correctly', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -284,13 +279,13 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
 
     it('returns undefined when finding non-existent registration', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const result = await repo.findRegistrationById('nonexistent_id')
       expect(result).toBeUndefined()
     })
 
     it('returns undefined when finding registration for non-existent player-tournament pair', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const player = await PlayerFactory.create(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
@@ -300,7 +295,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('throws CheckConstraintError on invalid registration status', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const player = await PlayerFactory.create(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
@@ -315,7 +310,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('throws NotFoundError when updating non-existent registration status', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       try {
         await repo.updateRegistrationStatus('nonexistent_id', 'withdrawn')
         fail('Should have thrown NotFoundError')
@@ -325,7 +320,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('throws NotFoundError when confirming non-existent registration partner', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       try {
         await repo.confirmPartner('nonexistent_id')
         fail('Should have thrown NotFoundError')
@@ -335,7 +330,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('throws NotFoundError when withdrawing non-existent registration', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       try {
         await repo.withdrawRegistration('nonexistent_id', true)
         fail('Should have thrown NotFoundError')
@@ -345,7 +340,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('listTournamentsByPlayer returns empty for player with no registrations', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const player = await PlayerFactory.create(pool)
 
       const result = await repo.listTournamentsByPlayer(player.id)
@@ -354,7 +349,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('listTournamentsByPlayer includes only active tournaments', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const player = await PlayerFactory.create(pool)
       const organizerId = OrganizerFactory.id()
 
@@ -365,7 +360,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
       await repo.createRegistration(player.id, tournament1.id)
       await repo.createRegistration(player.id, tournament2.id)
 
-      const tournamentRepo = new TournamentRepository(getDb(pool))
+      const tournamentRepo = new TournamentRepository(pool)
       await tournamentRepo.softDelete(tournament2.id)
 
       const result = await repo.listTournamentsByPlayer(player.id)
@@ -376,7 +371,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
 
     it('findRegistrationsByTournament returns empty list for tournament with no registrations', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -386,7 +381,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('findRegistrationsByTournament respects limit and offset', async () => {
-      const repo = new PlayerRepository(getDb(pool))
+      const repo = new PlayerRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -404,49 +399,49 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
   describe('GroupRepository - Error Cases', () => {
     it('returns empty list when finding groups for non-existent tournament', async () => {
-      const repo = new GroupRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
       const groups = await repo.findGroupsByTournament('nonexistent_id')
       expect(groups).toEqual([])
     })
 
     it('returns undefined when finding non-existent group by ID', async () => {
-      const repo = new GroupRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
       const result = await repo.findGroupById('nonexistent_id')
       expect(result).toBeUndefined()
     })
 
     it('returns empty list when finding matches in non-existent group', async () => {
-      const repo = new GroupRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
       const matches = await repo.findMatchesByGroup('nonexistent_id')
       expect(matches).toEqual([])
     })
 
     it('returns 0 for pending matches in non-existent tournament', async () => {
-      const repo = new GroupRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
       const count = await repo.countPendingMatchesByTournament('nonexistent_id')
       expect(count).toBe(0)
     })
 
     it('returns empty list when finding members in non-existent group', async () => {
-      const repo = new GroupRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
       const members = await repo.findMembersByGroup('nonexistent_id')
       expect(members).toEqual([])
     })
 
     it('returns undefined when finding non-existent match by ID', async () => {
-      const repo = new GroupRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
       const result = await repo.findMatchById('nonexistent_id')
       expect(result).toBeUndefined()
     })
 
     it('returns undefined when finding non-existent match with players', async () => {
-      const repo = new GroupRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
       const result = await repo.findMatchByIdWithPlayers('nonexistent_id')
       expect(result).toBeUndefined()
     })
 
     it('returns empty list when finding matches by non-existent player', async () => {
-      const repo = new GroupRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -455,8 +450,8 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles group creation with single player', async () => {
-      const repo = new GroupRepository(getDb(pool))
-      const playerRepo = new PlayerRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
+      const playerRepo = new PlayerRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -469,7 +464,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('countPendingMatchesByTournament returns 0 initially', async () => {
-      const repo = new GroupRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -478,8 +473,8 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('countPendingMatchesByTournament counts matches correctly after group creation', async () => {
-      const repo = new GroupRepository(getDb(pool))
-      const playerRepo = new PlayerRepository(getDb(pool))
+      const repo = new GroupRepository(pool)
+      const playerRepo = new PlayerRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -501,31 +496,31 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
   describe('KnockoutRepository - Error Cases', () => {
     it('returns empty list when finding seeds for non-existent tournament', async () => {
-      const repo = new KnockoutRepository(getDb(pool))
+      const repo = new KnockoutRepository(pool)
       const seeds = await repo.getSeeds('nonexistent_id')
       expect(seeds).toEqual([])
     })
 
     it('returns undefined when finding non-existent knockout match', async () => {
-      const repo = new KnockoutRepository(getDb(pool))
+      const repo = new KnockoutRepository(pool)
       const result = await repo.findKnockoutMatchById('nonexistent_id')
       expect(result).toBeUndefined()
     })
 
     it('returns undefined when finding non-existent knockout match with players', async () => {
-      const repo = new KnockoutRepository(getDb(pool))
+      const repo = new KnockoutRepository(pool)
       const result = await repo.findKnockoutMatchByIdWithPlayers('nonexistent_id')
       expect(result).toBeUndefined()
     })
 
     it('returns empty list when finding knockout matches for non-existent tournament', async () => {
-      const repo = new KnockoutRepository(getDb(pool))
+      const repo = new KnockoutRepository(pool)
       const matches = await repo.findKnockoutMatchesByTournament('nonexistent_id')
       expect(matches).toEqual([])
     })
 
     it('setSeeds handles empty seed array', async () => {
-      const repo = new KnockoutRepository(getDb(pool))
+      const repo = new KnockoutRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -536,7 +531,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('setSeeds overwrites previous seeds', async () => {
-      const repo = new KnockoutRepository(getDb(pool))
+      const repo = new KnockoutRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -563,20 +558,20 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
   describe('LocationRepository - Error Cases', () => {
     it('returns undefined when finding non-existent location by ID', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
       const result = await repo.findById('nonexistent_id')
       expect(result).toBeUndefined()
     })
 
     it('returns empty list when finding locations for non-existent sport', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
       const result = await repo.findBySport('nonexistent_sport')
       expect(result.total).toBe(0)
       expect(result.rows).toEqual([])
     })
 
     it('throws NotFoundError when updating non-existent location', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
       try {
         await repo.update('nonexistent_id', { name: 'new name' })
         fail('Should have thrown NotFoundError')
@@ -586,7 +581,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('listAll respects limit and offset', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
 
       // Create multiple locations
       const sport = `sport_${Date.now()}`
@@ -600,7 +595,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('findBySport respects limit and offset', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
       const sport = `sport_${Date.now()}`
 
       // Create multiple locations
@@ -614,13 +609,13 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('calculateCapacity returns 0 for non-existent location', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
       const capacity = await repo.calculateCapacity('nonexistent_id')
       expect(capacity).toBe(0)
     })
 
     it('soft deleted locations excluded from findBySport', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
       const sport = `sport_${Date.now()}`
       const location = await repo.create(LocationFactory.data({ sport }))
 
@@ -632,7 +627,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('soft deleted locations excluded from listAll', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
       const sport = `sport_${Date.now()}_${Math.random()}`
 
       // Create two locations with unique sport
@@ -660,7 +655,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('findNearby returns locations within radius', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
 
       const location = await repo.create(
         LocationFactory.data({
@@ -675,7 +670,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('findNearby returns empty list for distant coordinates', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
 
       await repo.create(
         LocationFactory.data({
@@ -691,7 +686,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
   describe('CourtRepository - Error Cases', () => {
     it('throws error on invalid court status', async () => {
-      const repo = new CourtRepository(getDb(pool))
+      const repo = new CourtRepository(pool)
       const location = await LocationFactory.create(pool)
 
       try {
@@ -706,7 +701,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('throws CheckConstraintError when updating to invalid status', async () => {
-      const repo = new CourtRepository(getDb(pool))
+      const repo = new CourtRepository(pool)
       const location = await LocationFactory.create(pool)
       const court = await repo.create({ locationId: location.id })
 
@@ -719,13 +714,13 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('returns undefined when finding non-existent court', async () => {
-      const repo = new CourtRepository(getDb(pool))
+      const repo = new CourtRepository(pool)
       const result = await repo.findById('nonexistent_id')
       expect(result).toBeUndefined()
     })
 
     it('throws NotFoundError when updating non-existent court', async () => {
-      const repo = new CourtRepository(getDb(pool))
+      const repo = new CourtRepository(pool)
       try {
         await repo.updateStatus('nonexistent_id', 'available')
         fail('Should have thrown NotFoundError')
@@ -735,26 +730,26 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('returns empty list when finding courts for non-existent location', async () => {
-      const repo = new CourtRepository(getDb(pool))
+      const repo = new CourtRepository(pool)
       const courts = await repo.findByLocation('nonexistent_id')
       expect(courts).toEqual([])
     })
 
     it('returns 0 count for courts in non-existent location', async () => {
-      const repo = new CourtRepository(getDb(pool))
+      const repo = new CourtRepository(pool)
       const count = await repo.countByLocation('nonexistent_id')
       expect(count).toBe(0)
     })
 
     it('returns 0 count for unavailable courts in non-existent location', async () => {
-      const repo = new CourtRepository(getDb(pool))
+      const repo = new CourtRepository(pool)
       const count = await repo.countByLocationAndStatus('nonexistent_id', 'unavailable')
       expect(count).toBe(0)
     })
 
 
     it('countByLocationAndStatus counts correctly by status', async () => {
-      const repo = new CourtRepository(getDb(pool))
+      const repo = new CourtRepository(pool)
       const location = await LocationFactory.create(pool)
 
       const court1 = await repo.create({ locationId: location.id, status: 'available' })
@@ -772,7 +767,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('updateStatus allows valid transitions', async () => {
-      const repo = new CourtRepository(getDb(pool))
+      const repo = new CourtRepository(pool)
       const location = await LocationFactory.create(pool)
       let court = await repo.create({ locationId: location.id, status: 'available' })
 
@@ -789,7 +784,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
   describe('Transaction and Deadlock Handling', () => {
     it('KnockoutRepository.setSeeds handles empty seed array with transaction', async () => {
-      const repo = new KnockoutRepository(getDb(pool))
+      const repo = new KnockoutRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -804,7 +799,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
   describe('Data Type Edge Cases', () => {
     it('handles very long tournament name', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const longName = 'a'.repeat(500)
 
@@ -817,7 +812,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles very long tournament name in update', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
       const longName = 'Name '.repeat(100)
@@ -828,7 +823,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles special characters in tournament name', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const specialName = "Tournament @#$%^&*()_+-=[]{}|;':\",./<>?"
 
@@ -841,7 +836,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles empty sport string', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
 
       const tournament = await repo.create({
@@ -853,7 +848,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles NULL in optional nullable fields', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
 
       const location = await repo.create(
         LocationFactory.data({ entryConditions: undefined })
@@ -863,7 +858,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles very large numbers in court totals', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
 
       const location = await repo.create(
         LocationFactory.data({ totalCourts: 999999 })
@@ -875,7 +870,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
 
   describe('Boundary Conditions', () => {
     it('handles update with no changes', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
       const tournament = await TournamentFactory.create(pool, organizerId)
 
@@ -886,7 +881,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles list query with zero limit', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
 
       // Create a tournament
@@ -897,7 +892,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles list query with large offset beyond total', async () => {
-      const repo = new TournamentRepository(getDb(pool))
+      const repo = new TournamentRepository(pool)
       const organizerId = OrganizerFactory.id()
 
       const result = await repo.listByOrganizer(organizerId, { limit: 10, offset: 99999 })
@@ -906,7 +901,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles negative latitude/longitude values', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
 
       const location = await repo.create(
         LocationFactory.data({
@@ -920,7 +915,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles maximum latitude/longitude values', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
 
       const location = await repo.create(
         LocationFactory.data({
@@ -934,7 +929,7 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
     })
 
     it('handles fractional latitude/longitude values', async () => {
-      const repo = new LocationRepository(getDb(pool))
+      const repo = new LocationRepository(pool)
 
       const location = await repo.create(
         LocationFactory.data({

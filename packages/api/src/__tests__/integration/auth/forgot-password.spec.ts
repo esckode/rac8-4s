@@ -1,14 +1,11 @@
 import request from 'supertest'
 import { Express } from 'express'
-import { Pool, PoolClient } from 'pg'
+import { Pool } from 'pg'
 import crypto from 'crypto'
-import { getTestPool, beginTransaction, rollbackTransaction, getTransactionClient } from '../../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../../helpers/db'
 import { createTestApp } from '../../helpers/app'
 import { AccountRepository, PasswordResetCodeRepository } from '../../../db'
 
-function getDb(pool: Pool): Pool | PoolClient {
-  return getTransactionClient() || pool
-}
 
 function uniqueEmail(prefix: string = ''): string {
   const id = crypto.randomUUID().slice(0, 8)
@@ -28,8 +25,8 @@ describe('POST /api/auth/forgot-password', () => {
     const deps = createTestApp(pool)
     app = deps.app
     emailAdapter = deps.emailAdapter
-    accountRepo = new AccountRepository(getDb(pool))
-    resetCodeRepo = new PasswordResetCodeRepository(getDb(pool))
+    accountRepo = new AccountRepository(pool)
+    resetCodeRepo = new PasswordResetCodeRepository(pool)
   })
 
   afterAll(async () => {
@@ -178,7 +175,7 @@ describe('POST /api/auth/forgot-password', () => {
       const unknownEmail = uniqueEmail('no-code-created')
 
       // Get initial count of reset codes
-      const client = getDb(pool) as any
+      const client = pool as any
       const countBefore = await client.query(
         'SELECT COUNT(*) as count FROM auth.password_reset_codes'
       )

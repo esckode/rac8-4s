@@ -1,19 +1,16 @@
 import request from 'supertest'
 import { Express } from 'express'
-import { Pool, PoolClient } from 'pg'
+import { Pool } from 'pg'
 import bcryptjs from 'bcryptjs'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
-import { getTestPool, beginTransaction, rollbackTransaction, getTransactionClient } from '../../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../../helpers/db'
 import { createTestApp, JwtConfig } from '../../helpers/app'
 import { AccountRepository, PasswordResetCodeRepository } from '../../../db'
 import { generateMagicLinkToken } from '../../../auth/magic-link'
 import { InMemoryTokenStore } from '../../../auth/token-store'
 import { clearRateLimitStore } from '../../../middleware/rate-limit'
 
-function getDb(pool: Pool): Pool | PoolClient {
-  return getTransactionClient() || pool
-}
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -45,8 +42,8 @@ describe('Complete Authentication Flows', () => {
     app = deps.app
     tokenStore = deps.tokenStore
     jwtConfig = deps.jwtConfig
-    accountRepo = new AccountRepository(getDb(pool))
-    resetCodeRepo = new PasswordResetCodeRepository(getDb(pool))
+    accountRepo = new AccountRepository(pool)
+    resetCodeRepo = new PasswordResetCodeRepository(pool)
   })
 
   afterAll(async () => {

@@ -1,15 +1,12 @@
 import request from 'supertest'
 import { Express } from 'express'
-import { Pool, PoolClient } from 'pg'
+import { Pool } from 'pg'
 import bcryptjs from 'bcryptjs'
 import crypto from 'crypto'
-import { getTestPool, beginTransaction, rollbackTransaction, getTransactionClient } from '../../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../../helpers/db'
 import { createTestApp } from '../../helpers/app'
 import { AccountRepository, PasswordResetCodeRepository } from '../../../db'
 
-function getDb(pool: Pool): Pool | PoolClient {
-  return getTransactionClient() || pool
-}
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -31,8 +28,8 @@ describe('POST /api/auth/reset-password', () => {
     await beginTransaction(pool)
     const deps = createTestApp(pool)
     app = deps.app
-    accountRepo = new AccountRepository(getDb(pool))
-    resetCodeRepo = new PasswordResetCodeRepository(getDb(pool))
+    accountRepo = new AccountRepository(pool)
+    resetCodeRepo = new PasswordResetCodeRepository(pool)
   })
 
   afterAll(async () => {
@@ -363,7 +360,7 @@ describe('POST /api/auth/reset-password', () => {
       const id = `prc_${Date.now()}_${Math.random().toString(36).slice(2)}`
       const code = PasswordResetCodeRepository.generateCode()
 
-      const dbConnection = getDb(pool)
+      const dbConnection = pool
       await dbConnection.query(
         `INSERT INTO auth.password_reset_codes (id, account_id, code, attempts, expires_at, created_at)
          VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -391,7 +388,7 @@ describe('POST /api/auth/reset-password', () => {
       const id = `prc_${Date.now()}_${Math.random().toString(36).slice(2)}`
       const code = PasswordResetCodeRepository.generateCode()
 
-      const dbConnection = getDb(pool)
+      const dbConnection = pool
       await dbConnection.query(
         `INSERT INTO auth.password_reset_codes (id, account_id, code, attempts, expires_at, created_at)
          VALUES ($1, $2, $3, $4, $5, $6)`,

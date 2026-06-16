@@ -1,16 +1,13 @@
 import request from 'supertest'
 import { Express } from 'express'
-import { Pool, PoolClient } from 'pg'
-import { getTestPool, beginTransaction, rollbackTransaction, getTransactionClient } from '../helpers/db'
+import { Pool } from 'pg'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { TournamentFactory, OrganizerFactory, PlayerFactory } from '../factories'
 import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../../db'
 import { generatePlayerSession } from '../../auth/magic-link'
 import { InMemoryTokenStore } from '../../auth/token-store'
 
-function getDb(pool: Pool): Pool | PoolClient {
-  return getTransactionClient() || pool
-}
 
 describe('Tournament Lifecycle Workflows', () => {
   let pool: Pool
@@ -51,7 +48,7 @@ describe('Tournament Lifecycle Workflows', () => {
       expect(createRes.body.status).toBe('draft')
 
       // 1b. Open registration
-      const tourneyRepo = new TournamentRepository(getDb(pool))
+      const tourneyRepo = new TournamentRepository(pool)
       await tourneyRepo.updateStatus(tournamentId, 'registration_open')
 
       // 2. Register 8 players
@@ -86,7 +83,7 @@ describe('Tournament Lifecycle Workflows', () => {
       }
 
       // 3. Close registration (direct repo update for setup)
-      const tournamentRepo = new TournamentRepository(getDb(pool))
+      const tournamentRepo = new TournamentRepository(pool)
       await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
 
       // 4. Create groups
@@ -102,7 +99,7 @@ describe('Tournament Lifecycle Workflows', () => {
       expect(groupsRes.body.groups.length).toBe(2)
 
       // 5. Score group matches
-      const groupRepo = new GroupRepository(getDb(pool))
+      const groupRepo = new GroupRepository(pool)
       const groups = await groupRepo.findGroupsByTournament(tournamentId)
 
       for (const group of groups) {
@@ -131,7 +128,7 @@ describe('Tournament Lifecycle Workflows', () => {
       expect(bracketRes.body.bracket).toBeDefined()
 
       // 8. Score knockout matches
-      const knockoutRepo = new KnockoutRepository(getDb(pool))
+      const knockoutRepo = new KnockoutRepository(pool)
       const knockoutMatches = await knockoutRepo.findKnockoutMatchesByTournament(tournamentId)
 
       for (const match of knockoutMatches) {
@@ -177,7 +174,7 @@ describe('Tournament Lifecycle Workflows', () => {
       expect(createRes.body.status).toBe('draft')
 
       // Open registration
-      const regTournamentRepo = new TournamentRepository(getDb(pool))
+      const regTournamentRepo = new TournamentRepository(pool)
       await regTournamentRepo.updateStatus(tournamentId, 'registration_open')
 
       // Register 8 players as 4 teams (pairs)
@@ -215,7 +212,7 @@ describe('Tournament Lifecycle Workflows', () => {
       }
 
       // Close registration
-      const tournamentRepo = new TournamentRepository(getDb(pool))
+      const tournamentRepo = new TournamentRepository(pool)
       await tournamentRepo.updateStatus(tournamentId, 'registration_closed')
     })
   })
@@ -238,7 +235,7 @@ describe('Tournament Lifecycle Workflows', () => {
       expect(createRes.body.status).toBe('draft')
 
       // Open and register players
-      const tournamentRepo = new TournamentRepository(getDb(pool))
+      const tournamentRepo = new TournamentRepository(pool)
       await tournamentRepo.updateStatus(tournamentId, 'registration_open')
 
       for (let i = 0; i < 4; i++) {
@@ -285,7 +282,7 @@ describe('Tournament Lifecycle Workflows', () => {
       const playerSessions: { [key: string]: string } = {}
 
       // Open registration
-      const multiGroupTournamentRepo = new TournamentRepository(getDb(pool))
+      const multiGroupTournamentRepo = new TournamentRepository(pool)
       await multiGroupTournamentRepo.updateStatus(tournamentId, 'registration_open')
 
       // Register 12 players
@@ -328,7 +325,7 @@ describe('Tournament Lifecycle Workflows', () => {
       expect(groupsRes.body.groups.length).toBe(3)
 
       // Score all group matches
-      const groupRepo = new GroupRepository(getDb(pool))
+      const groupRepo = new GroupRepository(pool)
       const groups = await groupRepo.findGroupsByTournament(tournamentId)
 
       for (const group of groups) {
@@ -344,7 +341,7 @@ describe('Tournament Lifecycle Workflows', () => {
       }
 
       // Advance to group stage complete
-      const multiGroupRepo = new TournamentRepository(getDb(pool))
+      const multiGroupRepo = new TournamentRepository(pool)
       await multiGroupRepo.updateStatus(tournamentId, 'group_stage_complete')
 
       // Generate bracket - should have 6 players (2 from each group)
@@ -385,7 +382,7 @@ describe('Tournament Lifecycle Workflows', () => {
       const playerSessions: { [key: string]: string } = {}
 
       // Open registration
-      const bracketTournamentRepo = new TournamentRepository(getDb(pool))
+      const bracketTournamentRepo = new TournamentRepository(pool)
       await bracketTournamentRepo.updateStatus(tournamentId, 'registration_open')
 
       // Register 8 players
@@ -424,7 +421,7 @@ describe('Tournament Lifecycle Workflows', () => {
           advancingPerGroup: 1,
         })
 
-      const groupRepo = new GroupRepository(getDb(pool))
+      const groupRepo = new GroupRepository(pool)
       const groups = await groupRepo.findGroupsByTournament(tournamentId)
 
       for (const group of groups) {
@@ -440,7 +437,7 @@ describe('Tournament Lifecycle Workflows', () => {
       }
 
       // Advance and generate bracket
-      const bracketPubTourneyRepo = new TournamentRepository(getDb(pool))
+      const bracketPubTourneyRepo = new TournamentRepository(pool)
       await bracketPubTourneyRepo.updateStatus(tournamentId, 'group_stage_complete')
 
       const bracketRes = await request(app)

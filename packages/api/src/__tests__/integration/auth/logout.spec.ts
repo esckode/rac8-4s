@@ -4,14 +4,11 @@ import { Pool } from 'pg'
 import bcryptjs from 'bcryptjs'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
-import { getTestPool, beginTransaction, rollbackTransaction, getTransactionClient } from '../../helpers/db'
+import { getTestPool, beginTransaction, rollbackTransaction } from '../../helpers/db'
 import { createTestApp, JwtConfig } from '../../helpers/app'
 import { AccountRepository } from '../../../db'
 import { InMemoryTokenStore } from '../../../auth/token-store'
 
-function getDb(pool: Pool) {
-  return getTransactionClient() || pool
-}
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -36,7 +33,7 @@ describe('POST /api/auth/logout', () => {
     app = deps.app
     tokenStore = deps.tokenStore
     jwtConfig = deps.jwtConfig
-    accountRepo = new AccountRepository(getDb(pool))
+    accountRepo = new AccountRepository(pool)
   })
 
   afterAll(async () => {
