@@ -73,8 +73,11 @@ export function useTournament(tournamentId: string): TournamentHookState {
     queryFn: async () => {
       if (!authState.user) throw new Error('Not authenticated')
 
+      const token = localStorage.getItem('auth_token')
+      if (!token) throw new Error('Not authenticated')
+
       const apiStart = performance.now()
-      const bundle = await fetchTournamentBundle(tournamentId, authState.user.id)
+      const bundle = await fetchTournamentBundle(tournamentId, token)
       const apiEnd = performance.now()
 
       // Measure render time using requestAnimationFrame

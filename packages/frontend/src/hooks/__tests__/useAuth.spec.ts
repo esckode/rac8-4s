@@ -107,10 +107,10 @@ describe('useAuth', () => {
     })
 
     it('clears invalid token on 401 response', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-      })
+      // /me rejects it, and the /player/session fallback also rejects it
+      ;(global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ ok: false, status: 401 })
+        .mockResolvedValueOnce({ ok: false, status: 401 })
 
       localStorage.setItem('auth_token', 'invalid-token')
 

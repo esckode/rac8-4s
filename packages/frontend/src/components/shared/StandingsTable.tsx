@@ -207,7 +207,7 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
   }
 
   return (
-    <div className={`bg-white rounded-[--r-lg] border border-[--border] overflow-hidden ${className}`}>
+    <div data-testid="standings-table" className={`bg-white rounded-[--r-lg] border border-[--border] overflow-hidden ${className}`}>
       {/* Header */}
       <div className="bg-[--ink-100] px-[--s-4] py-[--s-3] border-b border-[--border] grid grid-cols-auto gap-0 sticky top-0 z-10">
         <div className="w-16 text-center">

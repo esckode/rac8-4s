@@ -50,6 +50,26 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Try a magic-link player session when the token is not an account JWT.
+    // Returns true if the token is a valid player session (user is set).
+    const restorePlayerSession = async (token: string): Promise<boolean> => {
+      const response = await fetch(`${API_BASE_URL}/player/session`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        return false
+      }
+
+      const data = (await response.json()) as { playerId: string; tournamentId: string }
+      setUser({ id: data.playerId, email: '', role: 'player' })
+      return true
+    }
+
     const restoreSession = async (token: string): Promise<void> => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
@@ -68,9 +88,12 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
             role: userData.role as 'player' | 'organizer',
           })
         } else if (response.status === 401) {
-          // Invalid token, clear it
-          localStorage.removeItem(TOKEN_KEY)
-          setUser(null)
+          // Not an account JWT — fall back to a magic-link player session
+          const playerRestored = await restorePlayerSession(token)
+          if (!playerRestored) {
+            localStorage.removeItem(TOKEN_KEY)
+            setUser(null)
+          }
         } else {
           throw new Error(`Unexpected response status: ${response.status}`)
         }

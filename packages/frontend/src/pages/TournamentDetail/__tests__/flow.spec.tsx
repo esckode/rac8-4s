@@ -119,6 +119,7 @@ describe('TournamentDetail - Integration Flow Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    localStorage.setItem('auth_token', 'test-session-token')
     queryClient = new QueryClient({
       defaultOptions: {
         queries: {

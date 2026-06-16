@@ -161,6 +161,7 @@ Tests are organized by feature groups matching this document:
 | **Authentication & Authorization** | 27 | `auth.spec.ts` | `npm run test:e2e:auth` |
 | **Tournament Discovery & Registration** | 9 | `tournament-discovery-registration.spec.ts` | `npm run test:e2e:tournament` |
 | **Group Stage - Singles** | 10 | `group-stage-singles.spec.ts` | `npx playwright test --grep "Group Stage Singles"` |
+| **Group Stage - Singles (Player view)** | 2 | `group-stage-singles-player.spec.ts` | `npx playwright test group-stage-singles-player` |
 | **Group Stage - Doubles** | 4 | `group-stage-doubles.spec.ts` | `npx playwright test --grep "Group Stage Doubles"` |
 | **Partner Confirmation** | 5 | `partner-confirmation.spec.ts` | `npx playwright test --grep "Partner Confirmation"` |
 | **Bracket - Singles** | 3 | `bracket-singles.spec.ts` | `npx playwright test --grep "Bracket Singles"` |
@@ -214,6 +215,8 @@ npm run test:e2e
 ✅ **Phase 3: Group Stage - Singles** (5 scenarios implemented, 5 ready) — COMPLETE  
   - Unit tests: 6/6 passing (100% coverage)
   - E2E tests: group-stage-singles.spec.ts (5 scenarios, 4/4 passing)
+  - Player-view E2E: group-stage-singles-player.spec.ts (standings + matches via
+    magic-link player session; chromium + firefox passing)
   - Backend: Score validation, duplicate check, edit support
   - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)`
   

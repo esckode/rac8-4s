@@ -10,6 +10,22 @@ export default function playerRouter(deps: AppDependencies) {
   const router = Router()
   const playerRepo = new PlayerRepository(deps.db)
 
+  // GET /player/session - validate a player-session token and return identity
+  // Used by the frontend to restore a magic-link player session (no account JWT).
+  router.get('/session', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+
+      res.json({
+        playerId: payload.playerId,
+        tournamentId: payload.tournamentId,
+        role: 'player',
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // GET /player/tournaments - list player's tournaments
   router.get('/tournaments', async (req: Request, res: Response, next: NextFunction) => {
     try {

@@ -32,6 +32,7 @@ describe('useTournament - Request Deduplication (Integration Tests)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    localStorage.setItem('auth_token', 'test-session-token')
     queryClient = new QueryClient({
       defaultOptions: {
         queries: {

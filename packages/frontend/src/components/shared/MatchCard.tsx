@@ -59,6 +59,7 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
 
   return (
     <div
+      data-testid="match-card"
       onClick={onClick}
       className={`
         relative
