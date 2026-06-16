@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './packages/frontend/e2e',
+  // TEMPLATE.spec.ts is a copy-this scaffold for new specs, not a real test.
+  testIgnore: '**/TEMPLATE.spec.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
