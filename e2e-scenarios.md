@@ -651,44 +651,49 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
   - Match status
   - [Submit Score] button
 
+> **Score format:** scores are real game scores per the parser — comma-space
+> separated sets, `games-games` each, best-of-3, tied sets rejected (pickleball
+> max 21). E.g. `11-9, 11-7`. (The earlier `2-1`/`2-2` set-count examples were
+> not valid parser input.)
+
 ### Scenario: User submits score for completed match (Singles)
 - **Type:** Happy path
 - **Given** I have a pending match against another player
 - **When** I click [Submit Score] on a match card
-- **And** I fill in score "2-1" (my sets, opponent sets)
+- **And** I fill in the score "11-9, 11-7"
 - **And** I click [Submit]
-- **Then** I should see success message "Score submitted"
-- **And** the match status should change to "Completed"
+- **Then** the form should close and the match should show the submitted score
 - **And** standings should update (asynchronously via SSE)
 
 ### Scenario: User cannot submit score after deadline
 - **Type:** Error path
 - **Given** the group stage deadline has passed
-- **When** I try to submit a score
-- **Then** I should see error "Scoring deadline exceeded"
-- **And** the [Submit Score] button should be disabled
+- **When** I submit a valid score
+- **Then** I should see an error mentioning the deadline (DEADLINE_PASSED)
+- **And** the form should stay open
 
-### Scenario: User cannot submit tied score
+### Scenario: User cannot submit an invalid (tied) score
 - **Type:** Validation
 - **Given** I have a pending match
-- **When** I try to submit score "2-2"
-- **Then** I should see error "Score cannot be tied"
-- **And** the [Submit] button should be disabled
+- **When** I submit a score with a tied set, e.g. "11-11, 11-7"
+- **Then** I should see an "invalid score" error (SCORE_INVALID)
+- **And** the form should stay open so I can correct it
 
 ### Scenario: User cannot submit duplicate score
-- **Type:** Validation
-- **Given** I have already submitted a score for a match
-- **When** I try to submit again
-- **Then** I should see message "Match already scored"
-- **And** allow option to [Edit Score]
+- **Type:** Validation (covered by ScoreSubmitForm unit test)
+- **Given** the match has already been scored
+- **When** the submit returns ALREADY_SCORED
+- **Then** I should see "already scored" and an option to edit instead
+- **Note:** not an e2e scenario — once a match is completed the UI shows an
+  Edit affordance, so a second POST is not reachable via the happy path.
 
 ### Scenario: User can edit previously submitted score
 - **Type:** Happy path
-- **Given** I have submitted a score "2-1"
+- **Given** I have submitted a score "11-9, 11-7"
 - **When** I click [Edit Score]
-- **And** I change it to "2-0"
+- **And** I change it to "11-9, 11-5"
 - **And** I click [Submit]
-- **Then** standings should recalculate with new score
+- **Then** the match should show the new score (standings recalculate)
 
 ---
 

@@ -316,7 +316,8 @@ export async function createTournamentWithGroups(
  */
 export async function createSinglesTournamentInGroupStage(
   organizerToken: string,
-  playerCount: number = 2
+  playerCount: number = 2,
+  opts: { pastGroupDeadline?: boolean } = {}
 ): Promise<{
   tournamentId: string
   name: string
@@ -326,6 +327,16 @@ export async function createSinglesTournamentInGroupStage(
   playerName: string
 }> {
   const config = { ...createTestTournament(), matchFormat: 'singles' }
+
+  // Registration is gated by status (registration_open), not the deadline
+  // timestamp — so we can put the group-stage deadline in the past to exercise
+  // DEADLINE_PASSED while still registering players. Ordering must hold:
+  // registrationDeadline < groupStageDeadline < knockoutStageDeadline.
+  if (opts.pastGroupDeadline) {
+    config.registrationDeadline = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    config.groupStageDeadline = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
+    config.knockoutStageDeadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  }
   const { id: tournamentId, name } = await createTournamentWithOpenRegistration(
     config,
     organizerToken
