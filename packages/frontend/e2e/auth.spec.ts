@@ -402,8 +402,8 @@ test.describe('Authentication E2E', () => {
       await page.goto('/login')
       await clearAuthState(page)
 
-      // When: I navigate to /browse (a protected route)
-      await page.goto('/browse', { waitUntil: 'networkidle' })
+      // When: I navigate to /matches (a protected route; /browse is public discovery)
+      await page.goto('/matches', { waitUntil: 'networkidle' })
 
       // Then: I should be redirected to /login
       await expect(page).toHaveURL('/login')
@@ -416,8 +416,8 @@ test.describe('Authentication E2E', () => {
         localStorage.setItem('auth_token', 'invalid.token.here')
       })
 
-      // When: I navigate to /browse (a protected route)
-      await page.goto('/browse', { waitUntil: 'networkidle' })
+      // When: I navigate to /matches (a protected route; /browse is public discovery)
+      await page.goto('/matches', { waitUntil: 'networkidle' })
 
       // Then: I should be redirected to /login
       await expect(page).toHaveURL('/login')
@@ -437,15 +437,28 @@ test.describe('Authentication E2E', () => {
       // Wait for redirect to protected route
       await expect(page).toHaveURL(/\/browse|\/dashboard/)
 
-      // When: I navigate to /browse
-      await page.goto('/browse', { waitUntil: 'networkidle' })
+      // When: I navigate to /matches (a protected route)
+      await page.goto('/matches', { waitUntil: 'networkidle' })
 
-      // Then: I should remain on /browse
-      await expect(page).toHaveURL(/\/browse|\/dashboard/)
+      // Then: I should remain on /matches
+      await expect(page).toHaveURL(/\/matches/)
 
       // And: I should not be redirected to /login
       const token = await getTokenFromPage(page)
       expect(token).toBeTruthy()
+    })
+
+    test('Scenario: Unauthenticated user can access /browse (public discovery)', async ({ page }) => {
+      // Given: I am not authenticated
+      await page.goto('/login')
+      await clearAuthState(page)
+
+      // When: I navigate to /browse (a PUBLIC route per the discovery design)
+      await page.goto('/browse', { waitUntil: 'networkidle' })
+
+      // Then: I stay on /browse (not redirected to /login) and see the browse page
+      await expect(page).toHaveURL(/\/browse/)
+      await expect(page.locator('h1')).toContainText('Browse')
     })
 
     test('Scenario: Authenticated user is redirected from login page', async ({ page }) => {

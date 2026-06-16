@@ -175,10 +175,16 @@ describe('Route Constants', () => {
     expect(ROUTES.RESET_PASSWORD).toBe('/reset-password')
   })
 
+  it('should expose /browse as a public discovery route', () => {
+    const { ROUTES } = require('../constants/routes')
+
+    // Per rac8-4s-HL.md, tournament discovery is public (no auth required).
+    expect(ROUTES.BROWSE).toBe('/browse')
+  })
+
   it('should have correct protected route paths', () => {
     const { ROUTES } = require('../constants/routes')
 
-    expect(ROUTES.BROWSE).toBe('/browse')
     expect(ROUTES.MATCHES).toBe('/matches')
     expect(ROUTES.STANDINGS).toBe('/standings')
   })

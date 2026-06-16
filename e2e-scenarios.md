@@ -217,12 +217,11 @@ npm run test:e2e
   - Backend: Score validation, duplicate check, edit support
   - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)`
   
-⏳ **Phase 4: Group Stage - Doubles** (4 scenarios) — IN PROGRESS  
-  - Unit tests: 4 created + simplified (testing POST /groups team auto-creation)
-  - E2E tests: group-stage-doubles.spec.ts created + ready to run
-  - Backend: ✅ Team auto-creation, ✅ group management, ✅ standings, ✅ score submission
-  - Migrations: ✅ 021 (nullable player_id), ✅ 022 (unique constraints)
-  - Latest: Removed manual team creation from tests - endpoint handles auto-creation
+✅ **Phase 4: Group Stage - Doubles** (4 scenarios) — COMPLETE  
+  - Browser e2e: `packages/frontend/e2e/group-stage-doubles.spec.ts` — 8/8 passing (4 scenarios × chromium + firefox)
+  - API integration tests: `packages/api/src/__tests__/integration/group-stage-doubles.spec.ts` — 8/8 passing
+  - Backend: ✅ Team auto-creation, ✅ group management, ✅ standings, ✅ score submission, ✅ group-membership listing (players resolved via teams)
+  - Migrations: ✅ 021 (nullable player_id), ✅ 022 (unique constraints), ✅ 023 (nullable group_matches player columns), ✅ 024 (dropped winner_id→players FK so team IDs can be winners)
   - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)` with `tournament.matchFormat = 'doubles'`
   
 ⏳ **Phase 5: Partner Confirmation** (5 scenarios) — Ready to implement  
@@ -400,14 +399,21 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 ### Scenario: User cannot access protected routes without authentication
 - **Type:** Security (EXISTING TEST)
 - **Given** I am not authenticated
-- **When** I navigate to /browse (a protected route)
+- **When** I navigate to /matches (a protected route — /browse is public discovery)
 - **Then** I should be redirected to /login
 
 ### Scenario: User cannot access protected routes with invalid token
 - **Type:** Security (EXISTING TEST)
 - **Given** I set localStorage auth_token to an invalid value
-- **When** I navigate to /browse
+- **When** I navigate to /matches
 - **Then** I should be redirected to /login
+
+### Scenario: Unauthenticated user can access /browse (public discovery)
+- **Type:** Security / Discovery
+- **Given** I am not authenticated
+- **When** I navigate to /browse
+- **Then** I should remain on /browse (not redirected to /login)
+- **And** I should see the "Browse" page with the list of open tournaments
 
 ### Scenario: User can access protected routes with valid token
 - **Type:** Happy path (EXISTING TEST)
@@ -490,6 +496,43 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 ---
 
 ## Feature: Tournament Discovery & Registration
+
+> **Discovery is public** (per `rac8-4s-HL.md`): `/browse` and the tournament details page
+> `/tournament/:id/browse` are reachable without logging in, and unauthenticated visitors can
+> register by email. The scenarios below that say "authenticated" also work logged out — auth is optional for discovery.
+
+### Scenario: Unauthenticated visitor browses open tournaments
+- **Type:** Happy path / Public
+- **Given** I am NOT authenticated
+- **When** I navigate to /browse
+- **Then** I should remain on /browse (not redirected to /login)
+- **And** I should see the list of open tournaments (name, sport, format, status)
+
+### Scenario: Visitor opens a tournament's public details page
+- **Type:** Navigation / Public
+- **Given** I am on /browse (authenticated or not)
+- **When** I click a tournament card
+- **Then** I should navigate to /tournament/:id/browse
+- **And** I should see the tournament details and a registration section
+
+### Scenario: Guest registers for a tournament with email and name
+- **Type:** Happy path / Public
+- **Given** I am an unauthenticated visitor on /tournament/:id/browse for an open tournament
+- **When** I enter my email and name and click "Register for Tournament"
+- **Then** the backend creates a registration and sends a magic-link email (POST /tournaments/:id/register)
+- **And** I should see a "check your email" confirmation
+
+### Scenario: Guest with an existing account can choose to sign in
+- **Type:** Navigation / Public
+- **Given** I am on /tournament/:id/browse
+- **When** I click "Already have an account? Sign In"
+- **Then** I should navigate to /login
+
+### Scenario: Guest registration with an already-registered email is rejected
+- **Type:** Error path
+- **Given** an email is already registered for the tournament
+- **When** I submit that email on the public registration form
+- **Then** I should see an "already registered" error (409), not a crash
 
 ### Scenario: User browses public tournaments (Singles)
 - **Type:** Happy path
