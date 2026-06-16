@@ -15,6 +15,53 @@ before merging.
 
 ---
 
+## PREREQUISITES — identity model gaps (resolve before Activity 1)
+
+These two gaps underlie the whole player flow and were found by tracing the player-identity
+path (`PlayerRepository`, `AccountRepository`, the register + signup routes). The durable,
+email-keyed player identity is built correctly (`public.players.email` is `UNIQUE`;
+`findOrCreatePlayerByEmail` dedups across tournaments) — but two things are missing.
+
+### P1. No account↔player bridge — "claim-on-register" does not exist
+- `public.players` (keyed by email) and `auth.accounts` (keyed by email) are **separate tables
+  with no FK and no `player_id`/`account_id` column.** The only relation is the shared email
+  string, and **no code ever joins on it.**
+- **Signup never touches the players table.** `POST /api/auth/signup` (`auth.ts:122-176`) creates
+  an `auth.accounts` row + JWT only — no `findOrCreatePlayerByEmail`, no link. So "register to
+  keep your stats" performs no claim.
+- The two tokens identify you differently and nothing translates: magic-link **player session** →
+  `payload.playerId` = `players.id` (required by every player-data endpoint, e.g. `player.ts:21`);
+  account **JWT** → `sub` = `account.id`, no `playerId`. **A fully-registered player therefore
+  cannot reach the player pages either** — a second, distinct break the read scenarios will hit.
+- **Fix (recommended — explicit link):** on signup, `findOrCreatePlayerByEmail`, store the
+  resolved `player_id` on the account (one migration adds the column/FK), and carry `playerId` in
+  the session JWT so the account session can act as the player everywhere. (Lighter alternative:
+  resolve `players` by the account email at request time — no migration, but implicit.)
+- This is **not a schema-shape problem** — email-as-natural-key is enough; the bridge is missing
+  code. It also confirms the auth decision below is **Option A** (a player session must satisfy
+  auth), since the account-JWT path can't carry the player identity today.
+
+### P2. Player email is not normalized — dedup forks on capitalization
+- The register route passes `req.body.email.trim()` (`tournaments.ts:1112`) — trimmed but **not
+  lowercased** — and `PlayerRepository.findByEmail` matches exactly: `WHERE email = $1`
+  (`db.ts:379`). The accounts side normalizes everywhere (`LOWER(email)`, stores
+  `email.toLowerCase()` — `db.ts:1346,1364`).
+- Consequence: a guest entered as `John@x.com` in one tournament and `john@x.com` in another gets
+  **two distinct `player_id`s**, splitting their identity and stats on a capitalization
+  difference. (Same email, same casing → one `player_id`, zero `account_id`, one player-session
+  token per tournament — the intended behavior.)
+- **Fix:** store `email.toLowerCase()` in `findOrCreatePlayerByEmail` and match on `LOWER(email)`
+  in `findByEmail`; one backfill migration to lowercase existing `public.players.email` and merge
+  any already-forked duplicates.
+- **Prerequisite for P1:** the account↔player bridge joins on email, so both tables must normalize
+  identically or the join misses exactly the forked cases.
+
+**TDD note:** both fixes are behavior changes — write the failing unit/integration tests first
+(P1: signup links/creates the player and the session carries `playerId`; P2: mixed-case emails
+resolve to one `player_id`), commit red, then implement.
+
+---
+
 ## CRITICAL SHARED CONTEXT (read before either activity)
 
 ### Auth model — the crux of why the player flow is broken
@@ -69,7 +116,10 @@ How should the frontend hold/use the player-session token?
   `playerToken` only for the player data/score calls. More moving parts.
 
 Recommend deciding this first; it shapes both the fixture (what to inject into the browser) and the
-`useAuth`/`useTournament` changes.
+`useAuth`/`useTournament` changes. **Update:** prerequisite P1 (above) settles this as **Option A** —
+the account-JWT path carries no `playerId`, so a player session must be able to satisfy auth on its
+own. P1's account↔player bridge is what makes a *registered* player work; Option A is what makes a
+*guest* (magic-link-only) player work. Both are needed.
 
 ### E2E conventions (CLAUDE.md §8 + `packages/frontend/e2e/README.md`)
 Seed your own data via fixtures (`getOrganizerToken`, `createTournamentWithOpenRegistration`,
