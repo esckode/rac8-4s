@@ -128,7 +128,18 @@ protected routes; `TEMPLATE.spec.ts` is excluded via `testIgnore`.
 
 ---
 
-## ACTIVITY 1 (Cycle 1) — Read scenarios + wiring fixes  [achievable]
+## ACTIVITY 1 (Cycle 1) — Read scenarios + wiring fixes  ✅ COMPLETE (merged to main @ 9c2a051)
+
+**Done:** a magic-link player can view standings and matches in the browser. Shipped Option A via a
+new `GET /player/session` validate endpoint, a `useAuth` player-session fallback (so `ProtectedRoute`
+no longer bounces magic-link players), the `useTournament` token fix (sends the stored `auth_token`,
+not `user.id`), a `/player` Vite proxy, and `data-testid`s on `StandingsTable`/`MatchCard`. New
+fixture `createSinglesTournamentInGroupStage` + e2e `group-stage-singles-player.spec.ts` (2 scenarios,
+chromium + firefox). Verified: API 1411/1411, frontend unit 780/780, full e2e 130/130.
+
+**Note:** this covered the *guest* (magic-link) read path. Prerequisites **P1** (account↔player
+bridge) and **P2** (email normalization) remain open — they're needed for the *registered* player
+path, not for the guest read flow.
 
 **Scenarios:** "User views tournament standings (Singles)", "User views upcoming matches (Singles)".
 
