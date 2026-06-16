@@ -302,6 +302,101 @@ export async function createTournamentWithGroups(
   return { id: tournamentId, name }
 }
 
+/**
+ * PREREQUISITE: Create a singles tournament advanced into group stage, with a
+ * focus player who holds a usable player-session token.
+ *
+ * Steps: create open singles tournament → register the focus player (capturing
+ * the magicLinkToken from the 202 body) → register filler players →
+ * CLOSE_REGISTRATION → POST /groups (moves to group_stage_active) →
+ * GET /:id/auth/verify to exchange the magic link for a player-session token.
+ *
+ * The returned playerToken authenticates a real participant via the magic-link
+ * (guest) flow: Authorization: Bearer <playerToken>.
+ */
+export async function createSinglesTournamentInGroupStage(
+  organizerToken: string,
+  playerCount: number = 2
+): Promise<{
+  tournamentId: string
+  name: string
+  playerToken: string
+  playerId: string
+  playerEmail: string
+  playerName: string
+}> {
+  const config = { ...createTestTournament(), matchFormat: 'singles' }
+  const { id: tournamentId, name } = await createTournamentWithOpenRegistration(
+    config,
+    organizerToken
+  )
+
+  // Register the focus player first and capture their magic link token
+  const focus = createTestUser()
+  const focusReg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
+    email: focus.email,
+    name: focus.name,
+  })
+  if (!focusReg.ok) {
+    throw new Error(`Failed to register focus player: ${focusReg.status} ${await focusReg.text()}`)
+  }
+  const { magicLinkToken } = await focusReg.json()
+  if (!magicLinkToken) {
+    throw new Error('Register response did not include magicLinkToken')
+  }
+
+  // Register the remaining players so a group + match can be formed
+  for (let i = 1; i < playerCount; i++) {
+    const filler = createTestUser()
+    const reg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
+      email: filler.email,
+      name: filler.name,
+    })
+    if (!reg.ok) {
+      throw new Error(`Failed to register filler player: ${reg.status} ${await reg.text()}`)
+    }
+  }
+
+  // Close registration and form groups (moves tournament to group_stage_active)
+  const close = await apiCall(
+    `/tournaments/${tournamentId}/advance`,
+    'POST',
+    { action: 'CLOSE_REGISTRATION' },
+    organizerToken
+  )
+  if (!close.ok) {
+    throw new Error(`Failed to close registration: ${close.status} ${await close.text()}`)
+  }
+  const groups = await apiCall(
+    `/tournaments/${tournamentId}/groups`,
+    'POST',
+    { numGroups: 1, advancingPerGroup: 1 },
+    organizerToken
+  )
+  if (!groups.ok) {
+    throw new Error(`Failed to create groups: ${groups.status} ${await groups.text()}`)
+  }
+
+  // Exchange the magic link for a player-session token
+  const verify = await apiCall(
+    `/tournaments/${tournamentId}/auth/verify?token=${encodeURIComponent(magicLinkToken)}`,
+    'GET'
+  )
+  if (!verify.ok) {
+    throw new Error(`Failed to verify magic link: ${verify.status} ${await verify.text()}`)
+  }
+  const { playerToken, playerId } = await verify.json()
+
+  return {
+    tournamentId,
+    name,
+    playerToken,
+    playerId,
+    playerEmail: focus.email,
+    playerName: focus.name,
+  }
+}
+
 // ============================================================================
 // Organizer Authentication Helper
 // ============================================================================

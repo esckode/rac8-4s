@@ -46,6 +46,36 @@ describe('Players API', () => {
     return { player, sessionToken: session.token }
   }
 
+  describe('GET /player/session', () => {
+    it('returns the player identity for a valid session token', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const { player, sessionToken } = await createPlayerWithToken(tournament.id)
+
+      const res = await request(app)
+        .get('/player/session')
+        .set('Authorization', `Bearer ${sessionToken}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body).toMatchObject({
+        playerId: player.id,
+        tournamentId: tournament.id,
+      })
+    })
+
+    it('returns 401 when the Authorization header is missing', async () => {
+      const res = await request(app).get('/player/session')
+      expect(res.status).toBe(401)
+    })
+
+    it('returns 401 for an invalid session token', async () => {
+      const res = await request(app)
+        .get('/player/session')
+        .set('Authorization', 'Bearer not-a-real-token')
+      expect(res.status).toBe(401)
+    })
+  })
+
   describe('GET /player/tournaments', () => {
     it('lists player tournaments', async () => {
       const { sub: organizerId } = OrganizerFactory.token(jwtConfig)

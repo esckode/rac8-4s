@@ -141,6 +141,57 @@ describe('useAuth', () => {
       expect(result.current.user).toBeNull()
       expect(localStorage.getItem('auth_token')).toBeNull()
     })
+
+    it('restores a magic-link player session when /me does not recognize the token', async () => {
+      // First call: /api/auth/me rejects the player-session token (not an account JWT)
+      ;(global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ ok: false, status: 401 })
+        // Second call: /player/session validates it and returns the player identity
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ playerId: 'player-789', tournamentId: 'tourn-1' }),
+        })
+
+      localStorage.setItem('auth_token', 'player-session-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false)
+      })
+
+      expect(result.current.isAuthenticated).toBe(true)
+      expect(result.current.user).toMatchObject({ id: 'player-789', role: 'player' })
+      // A valid player session must be retained, not cleared
+      expect(localStorage.getItem('auth_token')).toBe('player-session-token')
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/player/session',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer player-session-token',
+          }),
+        })
+      )
+    })
+
+    it('clears the token only when neither /me nor /player/session validate it', async () => {
+      ;(global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ ok: false, status: 401 })
+        .mockResolvedValueOnce({ ok: false, status: 401 })
+
+      localStorage.setItem('auth_token', 'bogus-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false)
+      })
+
+      expect(result.current.user).toBeNull()
+      expect(result.current.isAuthenticated).toBe(false)
+      expect(localStorage.getItem('auth_token')).toBeNull()
+    })
   })
 
   describe('login', () => {
