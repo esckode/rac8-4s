@@ -1,5 +1,10 @@
 import { closeTestPool } from './helpers/db'
 
+// Default per-test timeout for this project. Set here (not via the config's
+// testTimeout option) because testTimeout is a global/root option that Jest does
+// not recognize in a per-project config under the root `projects` array.
+jest.setTimeout(30000)
+
 // Set LOG_LEVEL for testing logger.ts coverage
 if (!process.env.LOG_LEVEL) {
   process.env.LOG_LEVEL = 'debug'

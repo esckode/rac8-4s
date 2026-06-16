@@ -2,7 +2,8 @@ module.exports = {
   displayName: 'api',
   preset: 'ts-jest',
   testEnvironment: 'node',
-  testTimeout: 30000,
+  // Per-test timeout is set via jest.setTimeout(30000) in src/__tests__/setup.ts,
+  // because testTimeout is a global option Jest rejects in a per-project config.
   // Transactional isolation strategy: each test suite runs in its own transaction.
   // All queries within a suite use the same transaction client (database-level isolation).
   // Transactions are rolled back after the suite, avoiding deadlocks and cleanup issues.
