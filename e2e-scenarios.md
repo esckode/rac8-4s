@@ -536,7 +536,7 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 
 ### Scenario: User browses public tournaments (Singles)
 - **Type:** Happy path
-- **Given** I am authenticated
+- **Given** I am authenticated (or browsing as a guest — discovery is public)
 - **When** I navigate to /browse
 - **Then** I should see a paginated list of tournaments
 - **And** each tournament card should show:
@@ -549,7 +549,7 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 
 ### Scenario: User browses public tournaments (Doubles)
 - **Type:** Happy path
-- **Given** I am authenticated
+- **Given** I am authenticated (or browsing as a guest — discovery is public)
 - **When** I navigate to /browse
 - **Then** I should see tournaments with matchFormat="doubles"
 - **And** the card should indicate "Doubles" format
