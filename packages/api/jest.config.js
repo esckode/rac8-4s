@@ -4,10 +4,10 @@ module.exports = {
   testEnvironment: 'node',
   // Per-test timeout is set via jest.setTimeout(30000) in src/__tests__/setup.ts,
   // because testTimeout is a global option Jest rejects in a per-project config.
-  // Transactional isolation strategy: each test suite runs in its own transaction.
-  // All queries within a suite use the same transaction client (database-level isolation).
-  // Transactions are rolled back after the suite, avoiding deadlocks and cleanup issues.
-  // With maxWorkers: 4+, suites run in parallel safely because transactions don't conflict.
+  // Test isolation: getTestPool() (src/__tests__/helpers/db.ts) returns a transactional
+  // proxy that routes all queries through one per-suite connection, translates BEGIN/COMMIT
+  // to savepoints, and rolls back in afterAll — so tests never commit to the shared DB.
+  // Workers run in separate processes, each with its own connection.
   maxWorkers: 4,
   rootDir: '.',
   testMatch: [

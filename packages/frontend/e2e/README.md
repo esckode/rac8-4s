@@ -2,6 +2,17 @@
 
 This document outlines the patterns, helpers, and conventions established in Phase 1 (Authentication) that should be used consistently across all subsequent phases.
 
+## Conventions (must-follow)
+
+These are non-negotiable; ignoring them is how specs rot or flake:
+
+1. **Seed your own data.** Never assume tournaments/users already exist in the DB. Create what you need via the fixtures (`getOrganizerToken`, `createTournamentWithOpenRegistration`, `createTournamentWithGroups`, …) in `beforeAll`/`beforeEach`. Tests that depend on ambient DB state fail in clean environments.
+2. **Use stable selectors.** Prefer `data-testid` and the constants in `config.ts` (`SELECTORS`, `UI_TEXT`, `ROUTES`). Don't target emoji, `:nth-child`, or guessed `role` text — they drift with the UI.
+3. **Unique test data.** Generate emails/names with a timestamp **and** a random suffix (`createTestUser()` does this). Playwright runs each browser project (chromium, firefox) in a separate worker process, so timestamp-only values collide across projects → `409 DUPLICATE_VALUE`.
+4. **Respect route access (it follows `rac8-4s-HL.md`).** Public: `/browse`, `/tournament/:id/browse` (guest registration). Auth-gated: `/matches`, `/standings`, tournament detail. **Authenticate before visiting protected routes**; for "must redirect to login" assertions use a protected route like `/matches` (not `/browse`, which is public).
+5. **Match the real API contract.** `GET /tournaments/:id/groups` returns a `players` array (not `playerCount`); the score endpoint returns `{ winnerId, status }`. Assert what the API actually returns — verify against the route, don't guess field names.
+6. **`TEMPLATE.spec.ts` is a scaffold,** excluded from runs via `testIgnore` in `playwright.config.ts`. Copy it to a real filename to use it; don't add assertions to the template itself.
+
 ## Core Helper Functions
 
 All e2e tests should include these helpers at the top of the file:

@@ -60,6 +60,8 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+**Tests come first (TDD).** For features and behavior changes, write/update the tests — unit *and* e2e — and the scenario docs (`e2e-scenarios.md`) before implementing. Confirm they fail for the right reason, then make them pass. Commit the failing tests separately from the implementation (see §11).
+
 ## 5. Skill organization
 
 Skills are organized into bucket folders under `skills/`:
@@ -79,8 +81,6 @@ Each bucket folder has a `README.md` that lists every skill in the bucket with a
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
-
-## 5. Skills organization
 
 ## 6. Logging Standards
 
@@ -120,6 +120,10 @@ This project uses **PostgreSQL 15+** for all persistent data storage. See [READM
 - Connection configured via environment variables
 - Requires Docker or local PostgreSQL installation before running the application
 
+**Test isolation (integration tests):**
+- Integration tests run through the transactional test harness (`getTestPool()` in `packages/api/src/__tests__/helpers/db.ts`), which routes every query through one per-suite connection and rolls it back. **Never autocommit or write directly to the shared DB in tests** — a full run must leave row counts unchanged.
+- Repository methods that need a transaction use plain `this.pool.connect()` + `BEGIN/COMMIT/ROLLBACK`. In production `this.pool` is a real Pool; in tests the harness proxy translates these to savepoints (and wraps each bare statement in a savepoint so a single error can't poison the suite). **Do not reintroduce test-only branching (e.g. `isPoolClient`) in `db.ts`.**
+
 ## 8. End-to-End Testing
 
 **When the user asks to run e2e tests, run the `/e2e-testing` skill.** This skill guides the complete workflow for running browser-based e2e tests.
@@ -147,4 +151,30 @@ The skill workflow:
 **Important:** E2E tests require both servers running:
 - Backend API on port 3001 (requires PostgreSQL)
 - Frontend dev server on port 5173
+
+**E2E conventions** (details in `packages/frontend/e2e/README.md`):
+- **Seed your own data** via the fixtures (`createTournamentWithOpenRegistration`, `getOrganizerToken`, …) — never depend on ambient DB state.
+- Select with **`data-testid` and the constants in `e2e/config.ts`**, not emoji/`role` guesses.
+- Use **unique test data** (e.g. a random email suffix) so parallel browser projects don't collide.
+- **Authenticate before visiting protected routes.** `/browse` and `/tournament/:id/browse` are public; `/matches`, `/standings`, and tournament detail require auth.
+- `TEMPLATE.spec.ts` is a scaffold, excluded via `testIgnore` — copy it to a real filename to use it.
+
+## 9. Frontend & Routing
+
+**`rac8-4s-HL.md` is the source of truth for product behavior and route access (public vs protected).** Keep frontend routes aligned with it:
+- Tournament **discovery is public**: `/browse` and `/tournament/:id/browse` (details + guest registration by email → magic link). `POST /tournaments/:id/register` is public.
+- Auth-gated: `/matches`, `/standings`, tournament detail/admin.
+- When you change a route's protection, **update the security tests in the same change** (`auth.spec.ts` + `route-protection.spec.tsx`), and use a still-protected route (e.g. `/matches`) as the example in "must redirect to login" tests.
+
+## 10. API Route Ordering
+
+Express matches routes in registration order. **Register literal/static paths before parameterized ones** so a param doesn't shadow them — e.g. `GET /tournaments/:id` must come after `/tournaments/public`, `/tournaments/available`, and `/tournaments/organizer`.
+
+## 11. Git & Commits
+
+- Commit **only when asked**. If on the default branch (`main`), **create a branch first**.
+- **One logical change per commit** — don't mix verified fixes with new or intentionally-failing work.
+- **TDD history:** commit failing tests as their own commit, then the implementation as the next.
+- **Run the relevant test suite before merging**; prefer fast-forward merges.
+- End commit messages with the `Co-Authored-By` trailer.
 
