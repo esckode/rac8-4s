@@ -80,8 +80,11 @@ let userCounter = 0
 export function createTestUser() {
   const timestamp = Date.now()
   userCounter++
+  // Include a random suffix: Playwright runs each browser project in its own worker
+  // process, so timestamp + per-process counter can collide across parallel projects.
+  const rand = Math.random().toString(36).slice(2, 8)
   return {
-    email: `test-${timestamp}-${userCounter}@example.com`,
+    email: `test-${timestamp}-${userCounter}-${rand}@example.com`,
     name: 'Test User',
     password: 'TestPassword123',
   }

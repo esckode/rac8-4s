@@ -60,9 +60,9 @@ test.describe('Feature: Tournament Participation - Group Stage (Doubles)', () =>
     // Each group should have team membership structure
     expect(group).toHaveProperty('id')
     expect(group).toHaveProperty('name')
-    // API returns memberCount (which is count of teams in group for doubles)
-    expect(group).toHaveProperty('playerCount')
-    expect(group.playerCount).toBeGreaterThan(0)
+    // GET /groups returns the resolved players for each group (doubles: 2 teams = 4 players)
+    expect(group).toHaveProperty('players')
+    expect(group.players.length).toBeGreaterThan(0)
   })
 
   test('Scenario: Tournament fixture handles larger player counts for doubles', async () => {
