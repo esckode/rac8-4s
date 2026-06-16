@@ -1409,6 +1409,26 @@ export default function tournamentsRouter(deps: AppDependencies) {
     })
   })
 
+  // GET /:id - public tournament details (for discovery / guest registration page).
+  // Registered after all literal GET routes (/public, /organizer, /available) so the
+  // ':id' param does not shadow them.
+  router.get('/:id', async (req: Request, res: Response) => {
+    const id = req.params.id as string
+    const tournament = await repo.findById(id)
+    if (!tournament || tournament.deleted_at) {
+      return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+    }
+    res.json({
+      id: tournament.id,
+      name: tournament.name,
+      sport: tournament.sport,
+      matchFormat: tournament.match_format,
+      maxPlayers: tournament.max_players,
+      registrationDeadline: tournament.registration_deadline,
+      status: tournament.status,
+    })
+  })
+
   // GET /:tournamentId/players - list players registered for tournament
   router.get('/:tournamentId/players', async (req: Request, res: Response, next: NextFunction) => {
     try {

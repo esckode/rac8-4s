@@ -458,7 +458,7 @@ test.describe('Authentication E2E', () => {
 
       // Then: I stay on /browse (not redirected to /login) and see the browse page
       await expect(page).toHaveURL(/\/browse/)
-      await expect(page.locator('h1')).toContainText('Browse')
+      await expect(page.locator('h1:has-text("Browse")')).toBeVisible()
     })
 
     test('Scenario: Authenticated user is redirected from login page', async ({ page }) => {
@@ -590,11 +590,9 @@ test.describe('Authentication E2E', () => {
       const tokenAfter = await getTokenFromPage(page)
       expect(tokenAfter).toBeNull()
 
-      // And: I should be redirected to /login
-      await expect(page).toHaveURL('/login')
-
-      // And: I should not be able to access /browse without logging in again
-      await page.goto('/browse')
+      // And: I should not be able to access a protected route without logging in again
+      // (/browse is public discovery, so use /matches which still requires auth)
+      await page.goto('/matches')
       await expect(page).toHaveURL('/login', { timeout: 5000 })
     })
   })

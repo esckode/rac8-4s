@@ -51,7 +51,7 @@ test.describe('Public Tournament Registration (guest)', () => {
     await page.click('button:has-text("Register")')
 
     // Then: a success / check-your-email confirmation is shown (magic link sent)
-    await expect(page.locator('text=/check your email|registration|sent|success/i').first()).toBeVisible()
+    await expect(page.locator('text=/check your email/i').first()).toBeVisible()
   })
 
   test('Scenario: Registering an already-registered email shows a clear error', async ({ page }) => {

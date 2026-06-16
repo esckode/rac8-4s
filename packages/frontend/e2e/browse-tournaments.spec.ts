@@ -36,13 +36,13 @@ test.describe('Browse Tournaments E2E (public discovery)', () => {
     test('Scenario: Unauthenticated visitor can open /browse (no redirect to login)', async ({ page }) => {
       // Then: I stay on /browse and am NOT redirected to /login
       await expect(page).toHaveURL(/\/browse/)
-      await expect(page.locator('h1')).toContainText('Browse')
+      await expect(page.locator('h1:has-text("Browse")')).toBeVisible()
     })
   })
 
   test.describe('Feature: Tournament Discovery', () => {
     test('Scenario: Visitor sees browse header and search', async ({ page }) => {
-      await expect(page.locator('h1')).toContainText('Browse')
+      await expect(page.locator('h1:has-text("Browse")')).toBeVisible()
       await expect(page.locator('text=Find a night, find a tournament')).toBeVisible()
       await expect(page.locator('text=Search clubs, players, venues')).toBeVisible()
     })

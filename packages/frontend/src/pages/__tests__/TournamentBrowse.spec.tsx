@@ -36,10 +36,11 @@ function renderPage() {
 describe('TournamentBrowse (public details + guest registration)', () => {
   afterEach(() => {
     jest.restoreAllMocks()
+    delete (global as any).fetch
   })
 
   function mockFetch(registerStatus = 202) {
-    return jest.spyOn(global, 'fetch').mockImplementation((input: any, init?: any) => {
+    const fn = jest.fn((input: any, init?: any) => {
       const url = typeof input === 'string' ? input : input.url
       const method = (init?.method || 'GET').toUpperCase()
       if (method === 'POST' && url.includes('/register')) {
@@ -58,6 +59,8 @@ describe('TournamentBrowse (public details + guest registration)', () => {
         json: async () => TOURNAMENT,
       } as Response)
     })
+    ;(global as any).fetch = fn
+    return fn
   }
 
   it('renders the tournament name and status', async () => {
@@ -92,7 +95,7 @@ describe('TournamentBrowse (public details + guest registration)', () => {
         expect.objectContaining({ method: 'POST' })
       )
     })
-    expect(await screen.findByText(/check your email|sent|registration|success/i)).toBeInTheDocument()
+    expect(await screen.findByText(/check your email/i)).toBeInTheDocument()
   })
 
   it('surfaces a clear error when the email is already registered (409)', async () => {

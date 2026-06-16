@@ -11,6 +11,7 @@ import { ForgotPassword } from './pages/ForgotPassword'
 import { ResetPassword } from './pages/ResetPassword'
 import { Signout } from './pages/Signout'
 import { BrowseTournaments } from './pages/BrowseTournaments'
+import { TournamentBrowse } from './pages/TournamentBrowse'
 import { Matches } from './pages/Matches'
 import { TournamentDetail } from './pages/TournamentDetail'
 import { ROUTES } from './constants/routes'
@@ -155,17 +156,21 @@ export const App: React.FC = () => {
           <Route path={ROUTES.RESET_PASSWORD} element={<PublicRoute><ResetPassword /></PublicRoute>} />
           <Route path="/signout" element={<Signout />} />
 
-          {/* Protected routes (require authentication) */}
+          {/* Public discovery (no auth required) — per rac8-4s-HL.md */}
           <Route
             path={ROUTES.BROWSE}
             element={
-              <ProtectedRoute>
-                <ResponsiveLayout showHeader showNav>
-                  <BrowseTournaments />
-                </ResponsiveLayout>
-              </ProtectedRoute>
+              <ResponsiveLayout showHeader showNav>
+                <BrowseTournaments />
+              </ResponsiveLayout>
             }
           />
+          <Route
+            path="/tournament/:tournamentId/browse"
+            element={<TournamentBrowse />}
+          />
+
+          {/* Protected routes (require authentication) */}
           <Route
             path={ROUTES.MATCHES}
             element={
