@@ -61,7 +61,7 @@ export interface RegistrationRow {
   registered_at: string
   partner_id?: string
   partner_confirmed: boolean
-  status: 'registered' | 'pending_partner_confirm' | 'withdrawn' | 'withdrawal_pending'
+  status: 'registered' | 'pending_partner_confirm' | 'withdrawn' | 'withdrawal_pending' | 'unpaired'
   withdrawal_requested_at?: string
   confirmed_at?: string
 }
@@ -554,7 +554,7 @@ export class PlayerRepository {
   }
 
   async updateRegistrationStatus(registrationId: string, status: string): Promise<RegistrationRow> {
-    const validStatuses = ['registered', 'pending_partner_confirm', 'withdrawn', 'withdrawal_pending']
+    const validStatuses = ['registered', 'pending_partner_confirm', 'withdrawn', 'withdrawal_pending', 'unpaired']
     if (!validStatuses.includes(status)) {
       throw new CheckConstraintError('status')
     }
@@ -668,7 +668,7 @@ export class GroupRepository {
     })
   }
 
-  async createGroupsForDoubles(tournamentId: string, numGroups: number, advancingCount: number, playerIds: string[]): Promise<GroupRow[]> {
+  async createGroupsForDoubles(tournamentId: string, numGroups: number, advancingCount: number, playerIds: string[], pairUnpaired: boolean = true): Promise<GroupRow[]> {
     return retryOnDeadlock(async () => {
       const client = await (this.pool as Pool).connect()
       try {
@@ -685,28 +685,65 @@ export class GroupRepository {
           }
         }
 
-        // Create teams from players
         const now = new Date().toISOString()
         const teamIds: string[] = []
-        const shuffled = [...playerIds].sort(() => Math.random() - 0.5)
+        const teamed = new Set<string>()
 
-        for (let i = 0; i < shuffled.length - 1; i += 2) {
-          const player1Id = shuffled[i]
-          const player2Id = shuffled[i + 1]
-
-          if (!player1Id || !player2Id) {
-            throw new Error(`Cannot create team: missing player ID at shuffle index ${i}`)
-          }
-
+        const createTeam = async (p1: string, p2: string) => {
           const teamId = `team_${Date.now()}_${Math.random().toString(36).slice(2)}`
-
-          // Insert team
           await client.query(
             `INSERT INTO public.teams (id, tournament_id, player1_id, player2_id, created_at)
              VALUES ($1, $2, $3, $4, $5)`,
-            [teamId, tournamentId, player1Id, player2Id, now]
+            [teamId, tournamentId, p1, p2, now]
           )
           teamIds.push(teamId)
+          teamed.add(p1)
+          teamed.add(p2)
+        }
+
+        const markUnpaired = async (p: string) => {
+          await client.query(
+            `UPDATE public.player_registrations SET status = 'unpaired' WHERE tournament_id = $1 AND player_id = $2`,
+            [tournamentId, p]
+          )
+        }
+
+        // 1) Honor confirmed partnerships (mutual partner_id) first.
+        const regResult = await client.query(
+          `SELECT player_id, partner_id FROM public.player_registrations
+           WHERE tournament_id = $1 AND player_id = ANY($2::text[])`,
+          [tournamentId, playerIds]
+        )
+        const partnerOf = new Map<string, string | null>()
+        for (const r of regResult.rows as any[]) partnerOf.set(r.player_id, r.partner_id || null)
+
+        for (const playerId of playerIds) {
+          if (teamed.has(playerId)) continue
+          const partner = partnerOf.get(playerId)
+          if (partner && !teamed.has(partner) && partnerOf.get(partner) === playerId) {
+            await createTeam(playerId, partner)
+          }
+        }
+
+        // 2) Handle solo registrants: auto-pair (default) or drop as 'unpaired'.
+        const leftovers = playerIds.filter(p => !teamed.has(p))
+        if (pairUnpaired) {
+          const shuffled = [...leftovers].sort(() => Math.random() - 0.5)
+          for (let i = 0; i < shuffled.length - 1; i += 2) {
+            await createTeam(shuffled[i], shuffled[i + 1])
+          }
+          // An odd one out can't be teamed — mark them unpaired rather than drop silently.
+          for (const p of playerIds.filter(x => !teamed.has(x))) {
+            await markUnpaired(p)
+          }
+        } else {
+          for (const p of leftovers) {
+            await markUnpaired(p)
+          }
+        }
+
+        if (teamIds.length < numGroups) {
+          throw new Error(`Not enough teams (${teamIds.length}) for ${numGroups} group(s)`)
         }
 
         // Create groups

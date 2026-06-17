@@ -281,7 +281,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
             message: `Not enough players for doubles: need at least ${numGroups * 4} for ${numGroups} groups (2 teams × 2 players per group)`,
           })
         }
-        groups = await groupRepo.createGroupsForDoubles(id, numGroups, advancingPerGroup, playerIds)
+        // Organizer may opt out of auto-pairing leftover solo registrants
+        // (default: pair them). Confirmed partnerships are always honored first.
+        const pairUnpaired = req.body.pairUnpaired !== false
+        groups = await groupRepo.createGroupsForDoubles(id, numGroups, advancingPerGroup, playerIds, pairUnpaired)
       } else {
         groups = await groupRepo.createGroups(id, numGroups, advancingPerGroup, playerIds)
       }
