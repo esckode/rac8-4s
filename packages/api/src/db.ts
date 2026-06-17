@@ -356,7 +356,10 @@ export class PlayerRepository {
     phone?: string,
     preferredContact?: string
   ): Promise<PlayerRow> {
-    const existing = await this.findByEmail(email)
+    // Normalize email so casing differences resolve to one durable player
+    const normalizedEmail = email.toLowerCase()
+
+    const existing = await this.findByEmail(normalizedEmail)
     if (existing) {
       return existing
     }
@@ -367,7 +370,7 @@ export class PlayerRepository {
     await this.pool.query(
       `INSERT INTO public.players (id, email, name, phone, preferred_contact, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, email, name, phone || null, preferredContact || null, now, now]
+      [id, normalizedEmail, name, phone || null, preferredContact || null, now, now]
     )
 
     const player = await this.findById(id)
@@ -376,7 +379,7 @@ export class PlayerRepository {
   }
 
   async findByEmail(email: string): Promise<PlayerRow | undefined> {
-    const result = await this.pool.query('SELECT * FROM public.players WHERE email = $1', [email])
+    const result = await this.pool.query('SELECT * FROM public.players WHERE LOWER(email) = LOWER($1)', [email])
     const row = result.rows[0] as any
     if (!row) return undefined
     return { ...row, share_contact: !!row.share_contact }
