@@ -83,6 +83,37 @@ export default function tournamentsRouter(deps: AppDependencies) {
   const knockoutRepo = new KnockoutRepository(deps.db)
   const sseConnectionCount = new Map<string, number>()
 
+  // Resolve the acting player for a tournament from either a magic-link player
+  // session (tournament-scoped) or a registered player's account JWT (verified
+  // by DB registration, since account JWTs are not tournament-scoped). Throws
+  // ForbiddenError if authenticated but not a participant, or rethrows the auth
+  // error (→ 401) if neither path authenticates.
+  async function resolveTournamentPlayer(
+    authHeader: string | undefined,
+    tournamentId: string
+  ): Promise<{ playerId: string }> {
+    try {
+      const session = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
+      assertPlayerInTournament(session, tournamentId)
+      return { playerId: session.playerId }
+    } catch (sessionErr) {
+      let account
+      try {
+        account = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
+      } catch {
+        throw sessionErr
+      }
+      if (account.role !== 'player' || !account.playerId) {
+        throw sessionErr
+      }
+      const reg = await playerRepo.findRegistration(account.playerId, tournamentId)
+      if (!reg) {
+        throw new ForbiddenError('tournament')
+      }
+      return { playerId: account.playerId }
+    }
+  }
+
   // POST /tournaments - create tournament
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -421,11 +452,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
   // POST /:id/matches/:matchId/score - player submits match score
   router.post('/:id/matches/:matchId/score', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
       const tournamentId = req.params.id as string
       const matchId = req.params.matchId as string
 
-      assertPlayerInTournament(payload, tournamentId)
+      const { playerId } = await resolveTournamentPlayer(req.headers.authorization, tournamentId)
 
       const tournament = await repo.findById(tournamentId)
       if (!tournament) {
@@ -448,10 +478,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
         const teamRepo = new TeamRepository(deps.db)
         const team1 = await teamRepo.findTeamById(participant1)
         const team2 = await teamRepo.findTeamById(participant2)
-        isParticipant = (team1 && (team1.player1Id === payload.playerId || team1.player2Id === payload.playerId)) ||
-                       (team2 && (team2.player1Id === payload.playerId || team2.player2Id === payload.playerId))
+        isParticipant = (team1 && (team1.player1Id === playerId || team1.player2Id === playerId)) ||
+                       (team2 && (team2.player1Id === playerId || team2.player2Id === playerId))
       } else {
-        isParticipant = participant1 === payload.playerId || participant2 === payload.playerId
+        isParticipant = participant1 === playerId || participant2 === playerId
       }
 
       if (!isParticipant) {
@@ -493,7 +523,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         })
       }
 
-      log.info('score.submitted', { tournamentId, matchId, score: req.body.score, winnerId, playerId: payload.playerId })
+      log.info('score.submitted', { tournamentId, matchId, score: req.body.score, winnerId, playerId })
 
       res.json({
         match: {
@@ -523,24 +553,33 @@ export default function tournamentsRouter(deps: AppDependencies) {
       // and a valid organizer who does not own this tournament must get 403 (rather than
       // falling through to a generic 401). Player participation is checked after the match loads.
       let isOrganizer = false
-      let organizerAuthenticated = false
-      let playerPayload: Awaited<ReturnType<typeof requirePlayerSessionAuth>> | null = null
+      let actingPlayerId: string | null = null
 
+      // Only an organizer-role account token is treated as an organizer (must own
+      // the tournament). A player-role account JWT or a magic-link session is
+      // resolved as a participant.
+      let orgPayload = null
       try {
-        const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
-        organizerAuthenticated = true
-        assertOrganizerOwnsTournament(payload, tournament.creator_id)
-        isOrganizer = true
-      } catch (err) {
-        if (organizerAuthenticated) {
-          // Valid organizer token, but not the owner of this tournament
+        orgPayload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      } catch {
+        orgPayload = null
+      }
+
+      if (orgPayload && orgPayload.role === 'organizer') {
+        try {
+          assertOrganizerOwnsTournament(orgPayload, tournament.creator_id)
+          isOrganizer = true
+        } catch {
           return res.status(403).json({ code: 'FORBIDDEN', message: 'You do not own this tournament' })
         }
-        // Not an organizer token; fall back to player session auth
+      } else {
         try {
-          playerPayload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
-          assertPlayerInTournament(playerPayload, tournamentId)
+          const resolved = await resolveTournamentPlayer(req.headers.authorization, tournamentId)
+          actingPlayerId = resolved.playerId
         } catch (err2) {
+          if (err2 instanceof ForbiddenError) {
+            return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not registered in this tournament' })
+          }
           return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Unauthorized' })
         }
       }
@@ -554,7 +593,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
       if (!isOrganizer) {
         validateMatchFormatConsistency(match)
         const [participant1, participant2] = getMatchParticipantIds(match)
-        if (participant1 !== playerPayload!.playerId && participant2 !== playerPayload!.playerId) {
+        if (participant1 !== actingPlayerId && participant2 !== actingPlayerId) {
           return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
         }
       }
@@ -1859,8 +1898,17 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       let isOrganizer = false
+      // An organizer-role account token must own the tournament. Everything else
+      // (a player-role account JWT or a magic-link player session) is resolved as
+      // a participant.
+      let orgPayload = null
       try {
-        const orgPayload = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
+        orgPayload = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
+      } catch {
+        orgPayload = null
+      }
+
+      if (orgPayload && orgPayload.role === 'organizer') {
         const tournament = await repo.findById(tournamentId)
         if (!tournament) {
           return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
@@ -1870,11 +1918,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
         }
         isOrganizer = true
         userId = orgPayload.sub
-      } catch (err) {
+      } else {
         try {
-          const playerPayload = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
-          assertPlayerInTournament(playerPayload, tournamentId)
-          userId = playerPayload.playerId
+          const { playerId } = await resolveTournamentPlayer(authHeader, tournamentId)
+          userId = playerId
         } catch (playerErr) {
           if (playerErr instanceof ForbiddenError) {
             return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not registered in this tournament' })

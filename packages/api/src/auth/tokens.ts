@@ -6,7 +6,10 @@ import { TokenExpiredError, TokenInvalidError } from './errors'
 export interface OrganizerPayload {
   sub: string
   email: string
-  role: 'organizer'
+  // Account JWTs are issued for both organizers and players; a player account's
+  // token carries the linked playerId so it can act on player-scoped endpoints.
+  role: 'organizer' | 'player'
+  playerId?: string
   jti?: string
   iat?: number
   exp?: number
