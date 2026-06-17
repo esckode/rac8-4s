@@ -163,7 +163,27 @@ path, not for the guest read flow.
 
 ---
 
-## ACTIVITY 2 (Cycle 2) — Build score submission (Task 4.6e) + 5 scenarios  [feature build]
+## ACTIVITY 2 (Cycle 2) — Build score submission (Task 4.6e) + 5 scenarios  ✅ COMPLETE (merged to main @ e813619)
+
+**Done:** participants can submit and edit a match score from the Matches page. Built `ScoreSubmitForm`
+(single text field for the real game-score string, e.g. `11-9, 11-7`), calling the API client directly
+with the stored session token (no auto-retry); `submitScore` (POST) for a pending match, `editScore`
+(new PATCH client fn) for a completed one. Backend error codes map to friendly messages
+(DEADLINE_PASSED / SCORE_INVALID / ALREADY_SCORED → edit affordance). Wired into
+`TournamentDetail/Matches` (Submit/Edit buttons on `MatchCard`, refetch on success). New e2e
+`group-stage-singles-score.spec.ts` (submit, tied/invalid, deadline, edit — chromium + firefox);
+duplicate covered in the `ScoreSubmitForm` unit test. Verified: frontend unit 786/786.
+
+**Decisions:** single text field (not per-set inputs); the form calls the client directly rather than
+reusing `useScoreSubmit` (left untouched). `tournamentId` is passed as a prop — the bundle's match
+objects omit it.
+
+**Bug found (out of scope, flagged):** deadline columns are `TIMESTAMP`, not `TIMESTAMPTZ`, so stored
+deadlines shift by the server's UTC offset. The pickleball `2-1`/`2-2` scenario formats were also
+invalid parser input (corrected to real game scores). The `ScoreSubmissionForm` orphaned prototype
+remains dead code (superseded by `ScoreSubmitForm`).
+
+**Original plan (for reference):**
 
 **Scenarios:** submit score; cannot submit after deadline; cannot submit tied score; cannot submit
 duplicate; edit previously submitted score.
