@@ -17,6 +17,14 @@ before merging.
 
 ## PREREQUISITES — identity model gaps (resolve before Activity 1)
 
+> ✅ **BOTH RESOLVED.** P2 — email normalization — shipped (migration 026, `PlayerRepository`
+> lowercases + matches case-insensitively). P1 — account↔player bridge — shipped via **Approach A**:
+> migration 027 (`auth.accounts.player_id`), signup claims/links the player by normalized email and
+> the session JWT carries `playerId`, and the player endpoints (bundle / POST+PATCH score) accept a
+> registered player's account JWT (participation verified by DB registration) via
+> `resolveTournamentPlayer`. No frontend change was needed. The original analysis is kept below for
+> context.
+
 These two gaps underlie the whole player flow and were found by tracing the player-identity
 path (`PlayerRepository`, `AccountRepository`, the register + signup routes). The durable,
 email-keyed player identity is built correctly (`public.players.email` is `UNIQUE`;
