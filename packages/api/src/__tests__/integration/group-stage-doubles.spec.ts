@@ -216,6 +216,63 @@ describe('Phase 4: Group Stage - Doubles', () => {
       expect(scoreRes.body.match.winnerId).toBeTruthy()
       expect(scoreRes.body.match.status).toBe('completed')
     })
+
+    it('allows a team member to edit a doubles score via PATCH', async () => {
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId, { matchFormat: 'doubles' })
+      const repo = new TournamentRepository(pool)
+
+      await repo.updateStatus(tournament.id, 'registration_closed')
+
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      const groupRes = await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 1, advancingPerGroup: 1 })
+
+      await repo.updateStatus(tournament.id, 'group_stage_active')
+
+      const groupRepo = new GroupRepository(pool)
+      const matches = await groupRepo.findMatchesByGroup(groupRes.body.groups[0].id)
+      const match = matches[0]
+
+      const player1Session = await generatePlayerSession(
+        {
+          playerId: players[0].id,
+          tournamentId: tournament.id,
+          email: `player${players[0].id}@test.local`,
+          createdAt: Date.now(),
+        },
+        3600,
+        tokenStore
+      )
+
+      // Submit, then edit via PATCH as a team member
+      await request(app)
+        .post(`/tournaments/${tournament.id}/matches/${match.id}/score`)
+        .set('Authorization', `Bearer ${player1Session.token}`)
+        .send({ score: '6-4, 6-3' })
+
+      const editRes = await request(app)
+        .patch(`/tournaments/${tournament.id}/matches/${match.id}/score`)
+        .set('Authorization', `Bearer ${player1Session.token}`)
+        .send({ score: '6-4, 6-2' })
+
+      expect(editRes.status).toBe(200)
+      expect(editRes.body.match.score).toBe('6-4, 6-2')
+      expect(editRes.body.match.winnerId).toBeTruthy()
+    })
   })
 
   describe('Scenario: Team stands in standings with correct name (Doubles)', () => {

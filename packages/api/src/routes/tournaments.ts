@@ -593,7 +593,22 @@ export default function tournamentsRouter(deps: AppDependencies) {
       if (!isOrganizer) {
         validateMatchFormatConsistency(match)
         const [participant1, participant2] = getMatchParticipantIds(match)
-        if (participant1 !== actingPlayerId && participant2 !== actingPlayerId) {
+
+        // For doubles, participant IDs are team IDs — verify team membership.
+        // For singles, participant IDs are player IDs.
+        let isParticipant = false
+        if (match.format === 'doubles') {
+          const { TeamRepository } = require('../repositories/team-repository')
+          const teamRepo = new TeamRepository(deps.db)
+          const team1 = await teamRepo.findTeamById(participant1)
+          const team2 = await teamRepo.findTeamById(participant2)
+          isParticipant = (team1 && (team1.player1Id === actingPlayerId || team1.player2Id === actingPlayerId)) ||
+                         (team2 && (team2.player1Id === actingPlayerId || team2.player2Id === actingPlayerId))
+        } else {
+          isParticipant = participant1 === actingPlayerId || participant2 === actingPlayerId
+        }
+
+        if (!isParticipant) {
           return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
         }
       }
