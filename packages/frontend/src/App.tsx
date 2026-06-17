@@ -12,9 +12,8 @@ import { ResetPassword } from './pages/ResetPassword'
 import { Signout } from './pages/Signout'
 import { BrowseTournaments } from './pages/BrowseTournaments'
 import { TournamentBrowse } from './pages/TournamentBrowse'
-import { Matches } from './pages/Matches'
 import { TournamentDetail } from './pages/TournamentDetail'
-import { Standings } from './pages/Standings'
+import { MyTournamentsHub } from './pages/MyTournamentsHub'
 import { ROUTES } from './constants/routes'
 import './styles/globals.css'
 
@@ -55,7 +54,7 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ResponsiveLayout showHeader showNav>
-                  <Matches />
+                  <MyTournamentsHub tab="matches" />
                 </ResponsiveLayout>
               </ProtectedRoute>
             }
@@ -81,7 +80,7 @@ export const App: React.FC = () => {
             element={
               <ProtectedRoute>
                 <ResponsiveLayout showHeader showNav>
-                  <Standings />
+                  <MyTournamentsHub tab="standings" />
                 </ResponsiveLayout>
               </ProtectedRoute>
             }

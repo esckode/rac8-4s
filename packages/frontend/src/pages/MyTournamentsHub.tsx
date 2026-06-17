@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { fetchPlayerTournaments, type PlayerTournamentSummary } from '../api/client'
 import '../styles/globals.css'
 
-// Friendly label for a backend tournament status.
+type HubTab = 'standings' | 'matches'
+
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Draft',
   registration_open: 'Upcoming',
@@ -15,14 +16,22 @@ const STATUS_LABEL: Record<string, string> = {
   tournament_complete: 'Completed',
 }
 
+const COPY: Record<HubTab, { title: string; subtitle: string }> = {
+  standings: { title: 'My Standings', subtitle: 'Pick a tournament to see its standings' },
+  matches: { title: 'My Matches', subtitle: 'Pick a tournament to see its matches' },
+}
+
 /**
- * "My Tournaments" hub (rendered at /standings): lists the tournaments the
- * authenticated player is in, each linking to that tournament's standings tab.
- * Real data via GET /player/tournaments (works for magic-link and registered
- * players).
+ * Cross-tournament hub for the /standings and /matches tabs, with a 0/1/2+ rule:
+ * - 0 tournaments → empty state
+ * - 1 tournament  → go straight to that tournament's {tab} (no picker click)
+ * - 2+            → list the tournaments, each linking to its {tab}
+ *
+ * Real data via GET /player/tournaments (magic-link or registered players).
  */
-export const Standings: React.FC = () => {
+export const MyTournamentsHub: React.FC<{ tab: HubTab }> = ({ tab }) => {
   const { isAuthenticated } = useAuth()
+  const navigate = useNavigate()
   const [tournaments, setTournaments] = useState<PlayerTournamentSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -32,7 +41,6 @@ export const Standings: React.FC = () => {
       setLoading(false)
       return
     }
-
     const token = localStorage.getItem('auth_token')
     if (!token) {
       setLoading(false)
@@ -44,7 +52,13 @@ export const Standings: React.FC = () => {
     setError(null)
     fetchPlayerTournaments(token)
       .then(list => {
-        if (!cancelled) setTournaments(list)
+        if (cancelled) return
+        // 1 tournament: skip the picker and go straight to its view.
+        if (list.length === 1) {
+          navigate(`/tournament/${list[0].id}/${tab}`, { replace: true })
+          return
+        }
+        setTournaments(list)
       })
       .catch(() => {
         if (!cancelled) setError('Failed to load your tournaments')
@@ -56,7 +70,7 @@ export const Standings: React.FC = () => {
     return () => {
       cancelled = true
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, tab, navigate])
 
   if (!isAuthenticated) {
     return (
@@ -66,11 +80,13 @@ export const Standings: React.FC = () => {
     )
   }
 
+  const copy = COPY[tab]
+
   return (
     <div className="space-y-[--s-6]" data-testid="my-tournaments">
       <div className="space-y-[--s-1]">
-        <h1 className="text-3xl font-bold text-[--ink-900]">My Tournaments</h1>
-        <p className="text-[--ink-600]">Tournaments you're in — tap one to see its standings</p>
+        <h1 className="text-3xl font-bold text-[--ink-900]">{copy.title}</h1>
+        <p className="text-[--ink-600]">{copy.subtitle}</p>
       </div>
 
       {loading && <p className="text-[--ink-600]">Loading your tournaments...</p>}
@@ -93,7 +109,7 @@ export const Standings: React.FC = () => {
           {tournaments.map(t => (
             <Link
               key={t.id}
-              to={`/tournament/${t.id}/standings`}
+              to={`/tournament/${t.id}/${tab}`}
               data-testid="tournament-row"
               className="flex items-center justify-between p-[--s-4] bg-white border border-[--border] rounded-[--r-xl] hover:shadow-md transition-shadow"
             >
