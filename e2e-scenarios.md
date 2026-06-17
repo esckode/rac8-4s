@@ -233,8 +233,10 @@ npm run test:e2e
   - Migrations: ✅ 021 (nullable player_id), ✅ 022 (unique constraints), ✅ 023 (nullable group_matches player columns), ✅ 024 (dropped winner_id→players FK so team IDs can be winners)
   - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)` with `tournament.matchFormat = 'doubles'`
   
-⏳ **Phase 5: Partner Confirmation** (5 scenarios) — Ready to implement  
-  - Use fixture: `createTournamentWithOpenRegistration()`
+🔄 **Phase 5: Partner Requests & Confirmation** (Doubles) — Backend COMPLETE, frontend pending  
+  - Model revised to partner-*requests* (optional partner; solo registrants request each other in-tournament). See the feature section below.
+  - Backend ✅: `partner-requests.spec.ts` (discovery/request/two-sided confirm) + partner-aware team formation & `pairUnpaired` drop (`group-stage-doubles.spec.ts`); `unpaired` status (migration 028)
+  - Frontend ⏳ (Slice 2): partner-finder UI + `/registrations/:id/confirm` page + e2e — see `assets/planning/phase5-partner-requests.md`
   
 ⏳ **Phases 6-10: Bracket, Real-Time, Offline, Mobile, Accessibility** (22 scenarios) — Ready to implement  
   - Use appropriate fixture based on required tournament state
@@ -737,51 +739,50 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 
 ---
 
-## Feature: Partner Selection & Confirmation (Doubles)
+## Feature: Partner Requests & Confirmation (Doubles)
 
-### Scenario: User selects existing partner during doubles registration
+> **Model (revised):** doubles partner selection is **optional**. Players register
+> solo; a solo registrant can then find another *solo* registrant *within the
+> tournament* and send a partnership request the other player confirms. At group
+> creation, confirmed partnerships are honored first, then leftover solo
+> registrants are auto-paired (default) or dropped (organizer opt-out). This
+> replaces the earlier "select/invite at registration + mandatory partner +
+> email" scenarios, which contradicted the implemented auto-team model.
+>
+> **Backend:** ✅ implemented + integration-tested (`partner-requests.spec.ts`,
+> `group-stage-doubles.spec.ts`). **Frontend (Slice 2):** ⏳ partner-finder UI +
+> confirm page — see `assets/planning/phase5-partner-requests.md`.
+
+### Scenario: Solo registrant views available partners (Doubles)
 - **Type:** Happy path
-- **Given** I am registering for a doubles tournament
-- **When** I fill in my email and name
-- **And** I see partner selection options
-- **And** I select "Select from existing players"
-- **And** I choose a partner from the dropdown
-- **And** I click [Register]
-- **Then** I should see success message
+- **Given** I am a solo registrant in a doubles tournament
+- **When** I open the partner finder
+- **Then** I should see the other solo (unpaired) registrants, excluding myself
 
-### Scenario: User invites new partner via email during doubles registration
+### Scenario: Solo registrant sends a partnership request (Doubles)
 - **Type:** Happy path
-- **Given** I am registering for a doubles tournament
-- **When** I fill in my email and name
-- **And** I select "Invite by email"
-- **And** I fill in partner email "partner@example.com"
-- **And** I click [Register]
-- **Then** I should see success message
-- **And** partner should receive invitation email
+- **Given** I am a solo registrant viewing available partners
+- **When** I send a partnership request to another solo registrant
+- **Then** the request should be pending and they should see it
 
-### Scenario: Partner confirms team registration (Doubles)
+### Scenario: Partner confirms the request → team formed (Doubles)
 - **Type:** Happy path
-- **Given** my partner has been invited to team
-- **And** they receive confirmation email with link
-- **When** they click the confirmation link
-- **And** they navigate to /registrations/:registrationId/confirm
-- **And** they click [Confirm Partnership]
-- **Then** their status should change from "pending_partner_confirm" to "registered"
-- **And** we should both see the team in tournament standings
+- **Given** someone has sent me a partnership request
+- **When** I open `/registrations/:registrationId/confirm` and confirm
+- **Then** both registrations become a confirmed team (status "registered")
 
-### Scenario: Partner confirmation times out (Doubles)
-- **Type:** Error path
-- **Given** my partner has not confirmed after X days
-- **When** the tournament advances to group stage
-- **Then** the team should be dissolved or marked as incomplete
-- **And** we should see error message
+### Scenario: Confirmed partnerships are honored at group creation (Doubles)
+- **Type:** Happy path
+- **Given** confirmed partnerships exist
+- **When** the organizer creates groups
+- **Then** confirmed partners are teamed together (not randomly re-paired)
+- **And** leftover solo registrants are auto-paired by default
 
-### Scenario: User cannot register for doubles without partner (Doubles)
-- **Type:** Validation
-- **Given** I am registering for a doubles tournament
-- **When** I try to submit registration without selecting/inviting a partner
-- **Then** I should see error "Partner selection required"
-- **And** the [Register] button should be disabled
+### Scenario: Organizer drops unpaired registrants at group creation (Doubles)
+- **Type:** Validation / organizer option
+- **Given** some registrants never found a partner
+- **When** the organizer creates groups with `pairUnpaired: false`
+- **Then** only confirmed teams advance and the solo registrants are marked "unpaired"
 
 ---
 
