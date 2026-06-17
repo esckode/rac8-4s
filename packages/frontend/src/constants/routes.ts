@@ -21,4 +21,5 @@ export const ROUTES = {
   STANDINGS: '/standings',
   TOURNAMENT_DETAIL: '/tournament/:tournamentId',
   TOURNAMENT_TAB: '/tournament/:tournamentId/:tab',
+  REGISTRATION_CONFIRM: '/registrations/:registrationId/confirm',
 }

@@ -176,5 +176,56 @@ export async function editScore(
   await apiFetch<{ match: unknown }>(path, { method: 'PATCH', token, body: { score } })
 }
 
+export interface AvailablePartner {
+  id: string
+  name: string
+}
+
+export interface IncomingPartnerRequest {
+  registrationId: string
+  requesterId: string
+  requesterName: string
+}
+
+export async function fetchAvailablePartners(
+  tournamentId: string,
+  token: string
+): Promise<AvailablePartner[]> {
+  const response = await apiFetch<{ players: AvailablePartner[] }>(
+    `/tournaments/${tournamentId}/available-partners`,
+    { token }
+  )
+  return response.players
+}
+
+export async function fetchIncomingPartnerRequests(
+  tournamentId: string,
+  token: string
+): Promise<IncomingPartnerRequest[]> {
+  const response = await apiFetch<{ requests: IncomingPartnerRequest[] }>(
+    `/tournaments/${tournamentId}/partner-requests`,
+    { token }
+  )
+  return response.requests
+}
+
+export async function sendPartnerRequest(
+  tournamentId: string,
+  targetPlayerId: string,
+  token: string
+): Promise<void> {
+  await apiFetch<{ registrationId: string }>(
+    `/tournaments/${tournamentId}/partner-requests`,
+    { method: 'POST', token, body: { targetPlayerId } }
+  )
+}
+
+export async function confirmPartner(registrationId: string, token: string): Promise<void> {
+  await apiFetch<{ registrationId: string }>(
+    `/tournaments/registrations/${registrationId}/confirm`,
+    { method: 'PATCH', token }
+  )
+}
+
 // Import MatchWithOpponent from types for proper typing
 import type { MatchWithOpponent } from '../types'

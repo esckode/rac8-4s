@@ -14,6 +14,7 @@ import { BrowseTournaments } from './pages/BrowseTournaments'
 import { TournamentBrowse } from './pages/TournamentBrowse'
 import { TournamentDetail } from './pages/TournamentDetail'
 import { MyTournamentsHub } from './pages/MyTournamentsHub'
+import { PartnerRequestConfirm } from './pages/PartnerRequestConfirm'
 import { ROUTES } from './constants/routes'
 import './styles/globals.css'
 
@@ -82,6 +83,14 @@ export const App: React.FC = () => {
                 <ResponsiveLayout showHeader showNav>
                   <MyTournamentsHub tab="standings" />
                 </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.REGISTRATION_CONFIRM}
+            element={
+              <ProtectedRoute>
+                <PartnerRequestConfirm />
               </ProtectedRoute>
             }
           />

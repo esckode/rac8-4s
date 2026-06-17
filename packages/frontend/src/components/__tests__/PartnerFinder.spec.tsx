@@ -80,8 +80,8 @@ describe('PartnerFinder', () => {
 
     render(<PartnerFinder tournamentId="t1" />)
 
-    await waitFor(() => expect(screen.getByTestId('partner-finder')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/no.*partners/i)).toBeInTheDocument())
     expect(screen.queryByTestId('partner-row')).not.toBeInTheDocument()
-    expect(screen.getByText(/no.*partners/i)).toBeInTheDocument()
+    expect(screen.getByTestId('partner-finder')).toBeInTheDocument()
   })
 })

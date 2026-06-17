@@ -1,6 +1,7 @@
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import { useTournament } from '../../hooks/useTournament'
+import { PartnerFinder } from '../../components/PartnerFinder'
 import '../../styles/globals.css'
 
 export const Details: React.FC = () => {
@@ -71,6 +72,11 @@ export const Details: React.FC = () => {
         <h2 className="text-2xl font-bold text-[--ink-900]">Tournament Details</h2>
         <p className="text-sm text-[--ink-600] mt-[--s-1]">{tournament.name}</p>
       </div>
+
+      {/* Partner finder — doubles only, while registration is open */}
+      {tournament.matchFormat === 'doubles' && tournament.status === 'registration_open' && (
+        <PartnerFinder tournamentId={tournamentId || ''} />
+      )}
 
       {/* Tournament Info Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-[--s-4]">
