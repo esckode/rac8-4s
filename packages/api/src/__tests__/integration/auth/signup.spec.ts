@@ -5,7 +5,7 @@ import crypto from 'crypto'
 import bcryptjs from 'bcryptjs'
 import { getTestPool, beginTransaction, rollbackTransaction } from '../../helpers/db'
 import { createTestApp, JwtConfig } from '../../helpers/app'
-import { AccountRepository } from '../../../db'
+import { AccountRepository, PlayerRepository } from '../../../db'
 import { InMemoryTokenStore } from '../../../auth/token-store'
 import { generateMagicLinkToken, validateMagicLinkToken } from '../../../auth/magic-link'
 import jwt from 'jsonwebtoken'
@@ -699,6 +699,45 @@ describe('POST /api/auth/signup', () => {
       } else {
         expect(res.status).toBe(400)
       }
+    })
+  })
+
+  describe('Account ↔ player linkage (P1)', () => {
+    it('claims an existing guest player by email and links it to the account, carrying playerId in the JWT', async () => {
+      const playerRepo = new PlayerRepository(pool)
+      const email = uniqueEmail('claim')
+
+      // An existing guest player (e.g. previously registered for a tournament)
+      const guest = await playerRepo.findOrCreatePlayerByEmail(email, 'Guest Name')
+
+      // Signing up with the same email (different casing) must claim that player
+      const res = await request(app)
+        .post('/api/auth/signup')
+        .send({ email: email.toUpperCase(), name: 'Account Name', password: 'password123' })
+
+      expect(res.status).toBe(201)
+
+      const account = await accountRepo.findByEmail(email)
+      expect((account as any)?.player_id).toBe(guest.id)
+
+      const decoded = jwt.verify(res.body.token, jwtConfig.secret) as any
+      expect(decoded.playerId).toBe(guest.id)
+    })
+
+    it('creates and links a new player when none exists yet', async () => {
+      const playerRepo = new PlayerRepository(pool)
+      const email = uniqueEmail('newlink')
+
+      const res = await request(app)
+        .post('/api/auth/signup')
+        .send({ email, name: 'Fresh User', password: 'password123' })
+
+      expect(res.status).toBe(201)
+
+      const account = await accountRepo.findByEmail(email)
+      const player = await playerRepo.findByEmail(email)
+      expect(player).toBeDefined()
+      expect((account as any)?.player_id).toBe(player?.id)
     })
   })
 })
