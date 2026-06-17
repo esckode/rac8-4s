@@ -99,6 +99,19 @@ describe('Registered player (account JWT) access to player endpoints (P1)', () =
     expect(res.body.match.status).toBe('completed')
   })
 
+  it('lists the player tournaments with the account JWT', async () => {
+    const { sub: orgId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+    const player = await signupAccount()
+    const tournamentId = await tournamentInGroupStage(orgToken, orgId, [player.email, `other-${uid()}@test.local`])
+
+    const res = await request(app)
+      .get('/player/tournaments')
+      .set('Authorization', `Bearer ${player.token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.tournaments.map((t: any) => t.id)).toContain(tournamentId)
+  })
+
   it('forbids the bundle for an account whose player is not registered in the tournament', async () => {
     const { sub: orgId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
     const outsider = await signupAccount()
