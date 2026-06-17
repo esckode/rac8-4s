@@ -137,6 +137,30 @@ export const TournamentDetail: React.FC = () => {
         <h1 className="responsive-heading text-[--ink-900]">
           Tournament Details
         </h1>
+        {permissions.canManageGroups && (
+          <button
+            data-testid="manage-link"
+            onClick={() => navigate(`/tournament/${tournamentId}/manage`)}
+            className={`
+              ml-auto
+              px-[--s-3]
+              py-[--s-2]
+              text-sm
+              font-medium
+              bg-[--court-600]
+              text-white
+              rounded-[--r-md]
+              hover:bg-[--court-700]
+              focus:outline-none
+              focus:ring-2
+              focus:ring-[--court-400]
+              focus:ring-offset-2
+            `}
+            aria-label="Manage tournament"
+          >
+            Manage
+          </button>
+        )}
       </div>
 
       {/* Tab Navigation */}

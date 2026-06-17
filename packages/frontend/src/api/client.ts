@@ -227,5 +227,70 @@ export async function confirmPartner(registrationId: string, token: string): Pro
   )
 }
 
+export type TransitionAction =
+  | 'OPEN_REGISTRATION'
+  | 'CLOSE_REGISTRATION'
+  | 'START_GROUP_STAGE'
+  | 'COMPLETE_GROUP_STAGE'
+  | 'START_KNOCKOUT'
+  | 'COMPLETE_TOURNAMENT'
+
+export interface AdvanceResult {
+  status: string
+  previousStatus: string
+  message: string
+}
+
+export async function advanceTournament(
+  tournamentId: string,
+  action: TransitionAction,
+  token: string,
+  forceAdvance?: boolean
+): Promise<AdvanceResult> {
+  const body: Record<string, unknown> = { action }
+  if (forceAdvance) body.forceAdvance = true
+  return apiFetch<AdvanceResult>(`/tournaments/${tournamentId}/advance`, {
+    method: 'POST',
+    token,
+    body,
+  })
+}
+
+export interface CreateGroupsBody {
+  numGroups: number
+  advancingPerGroup: number
+  pairUnpaired?: boolean
+}
+
+export interface CreateGroupsResult {
+  groups: { id: string; name: string; playerCount: number; advancingCount: number }[]
+}
+
+export async function createGroups(
+  tournamentId: string,
+  body: CreateGroupsBody,
+  token: string
+): Promise<CreateGroupsResult> {
+  return apiFetch<CreateGroupsResult>(`/tournaments/${tournamentId}/groups`, {
+    method: 'POST',
+    token,
+    body: body as unknown as Record<string, unknown>,
+  })
+}
+
+export async function generateBracket(tournamentId: string, token: string): Promise<void> {
+  await apiFetch<{ bracket: unknown }>(`/tournaments/${tournamentId}/bracket/generate`, {
+    method: 'POST',
+    token,
+  })
+}
+
+export async function publishBracket(tournamentId: string, token: string): Promise<void> {
+  await apiFetch<{ matches: unknown }>(`/tournaments/${tournamentId}/bracket/publish`, {
+    method: 'POST',
+    token,
+  })
+}
+
 // Import MatchWithOpponent from types for proper typing
 import type { MatchWithOpponent } from '../types'
