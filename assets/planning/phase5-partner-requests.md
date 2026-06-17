@@ -17,6 +17,9 @@ Endpoints (under `/tournaments`, in `routes/tournaments.ts`), participant-auth v
 - Tests: `packages/api/src/__tests__/integration/partner-requests.spec.ts`; doubles formation in `group-stage-doubles.spec.ts`.
 
 ## ⏳ Slice 2 — Frontend + e2e (TODO)
+
+> **Authoritative task list + success criteria:** `phase5-remaining-tasks.md` (repo root). The summary
+> below is context; follow that file for the TDD-first build.
 Existing but **unwired** components: `PartnerSelection.tsx`, `PartnerDropdown.tsx`, `PartnerInviteInput.tsx`
 (they target the old register-time model — adapt or replace for the request model).
 
