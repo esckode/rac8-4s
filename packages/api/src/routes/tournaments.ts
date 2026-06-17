@@ -1561,6 +1561,85 @@ export default function tournamentsRouter(deps: AppDependencies) {
     }
   })
 
+  // GET /:id/available-partners - solo doubles registrants available to partner with
+  router.get('/:id/available-partners', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.id as string
+      const { playerId } = await resolveTournamentPlayer(req.headers.authorization, tournamentId)
+      const players = await playerRepo.findAvailablePartners(tournamentId, playerId)
+      res.json({ players })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /:id/partner-requests - incoming partner requests for the caller
+  router.get('/:id/partner-requests', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.id as string
+      const { playerId } = await resolveTournamentPlayer(req.headers.authorization, tournamentId)
+      const requests = await playerRepo.findIncomingPartnerRequests(tournamentId, playerId)
+      res.json({ requests })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /:id/partner-requests - request a solo registrant as your doubles partner
+  router.post('/:id/partner-requests', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.id as string
+      const { playerId } = await resolveTournamentPlayer(req.headers.authorization, tournamentId)
+      const targetPlayerId = req.body.targetPlayerId
+
+      if (typeof targetPlayerId !== 'string' || !targetPlayerId.trim()) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'targetPlayerId is required' })
+      }
+      if (targetPlayerId === playerId) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Cannot partner with yourself' })
+      }
+
+      const tournament = await repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+      if (tournament.match_format !== 'doubles') {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Partner requests are only for doubles tournaments' })
+      }
+      if (tournament.status !== 'registration_open') {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'Registration is not open for this tournament' })
+      }
+
+      const target = await playerRepo.findById(targetPlayerId)
+      if (!target) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Partner player not found' })
+      }
+
+      const requesterReg = await playerRepo.findRegistration(playerId, tournamentId)
+      const targetReg = await playerRepo.findRegistration(targetPlayerId, tournamentId)
+      if (!requesterReg) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'You are not registered in this tournament' })
+      }
+      if (!targetReg) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'That player is not registered in this tournament' })
+      }
+      if (requesterReg.partner_id) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'You already have a partner' })
+      }
+      if (targetReg.partner_id) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'That player already has a partner' })
+      }
+
+      await playerRepo.updateRegistrationWithPartner(requesterReg.id, targetPlayerId)
+
+      log.info('partner.requested', { tournamentId, playerId, targetPlayerId })
+
+      res.status(201).json({ registrationId: requesterReg.id, targetPlayerId, status: 'pending_partner_confirm' })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // PATCH /registrations/:registrationId/confirm - partner confirms doubles registration
   router.patch('/registrations/:registrationId/confirm', async (req: Request, res: Response, next: NextFunction) => {
     try {

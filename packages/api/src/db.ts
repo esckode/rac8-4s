@@ -489,15 +489,68 @@ export class PlayerRepository {
 
   async confirmPartner(registrationId: string): Promise<RegistrationRow> {
     const now = new Date().toISOString()
+
+    // Confirm the requester's registration.
     await this.pool.query(
       `UPDATE public.player_registrations
        SET partner_confirmed = $1, status = $2, confirmed_at = $3
        WHERE id = $4`,
       [true, 'registered', now, registrationId]
     )
+
     const registration = await this.findRegistrationById(registrationId)
     if (!registration) throw new NotFoundError('Registration')
+
+    // Link the partner's registration back so both sides form a confirmed team.
+    if (registration.partner_id) {
+      const partnerReg = await this.findRegistration(registration.partner_id, registration.tournament_id)
+      if (partnerReg) {
+        await this.pool.query(
+          `UPDATE public.player_registrations
+           SET partner_id = $1, partner_confirmed = $2, status = $3, confirmed_at = $4
+           WHERE id = $5`,
+          [registration.player_id, true, 'registered', now, partnerReg.id]
+        )
+      }
+    }
+
     return registration
+  }
+
+  async findAvailablePartners(tournamentId: string, excludePlayerId: string): Promise<{ id: string; name: string }[]> {
+    const result = await this.pool.query(
+      `SELECT p.id, p.name
+       FROM public.player_registrations pr
+       JOIN public.players p ON p.id = pr.player_id
+       WHERE pr.tournament_id = $1
+         AND pr.player_id <> $2
+         AND pr.partner_id IS NULL
+         AND pr.status = 'registered'
+       ORDER BY p.name`,
+      [tournamentId, excludePlayerId]
+    )
+    return result.rows.map((r: any) => ({ id: r.id, name: r.name }))
+  }
+
+  async findIncomingPartnerRequests(
+    tournamentId: string,
+    targetPlayerId: string
+  ): Promise<{ registrationId: string; requesterId: string; requesterName: string }[]> {
+    const result = await this.pool.query(
+      `SELECT pr.id AS registration_id, pr.player_id AS requester_id, p.name AS requester_name
+       FROM public.player_registrations pr
+       JOIN public.players p ON p.id = pr.player_id
+       WHERE pr.tournament_id = $1
+         AND pr.partner_id = $2
+         AND pr.status = 'pending_partner_confirm'
+       ORDER BY p.name`,
+      [tournamentId, targetPlayerId]
+    )
+    return result.rows.map((r: any) => ({
+      registrationId: r.registration_id,
+      requesterId: r.requester_id,
+      requesterName: r.requester_name,
+    }))
   }
 
   async updateRegistrationStatus(registrationId: string, status: string): Promise<RegistrationRow> {

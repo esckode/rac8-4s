@@ -91,7 +91,7 @@ describe('Doubles partner requests', () => {
 
     // B confirms
     const confirm = await request(app)
-      .patch(`/registrations/${fromA.registrationId}/confirm`)
+      .patch(`/tournaments/registrations/${fromA.registrationId}/confirm`)
       .set('Authorization', `Bearer ${await session(b.id, tournamentId)}`)
     expect(confirm.status).toBe(200)
 
