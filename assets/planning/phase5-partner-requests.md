@@ -16,10 +16,16 @@ Endpoints (under `/tournaments`, in `routes/tournaments.ts`), participant-auth v
 - Group creation: `createGroupsForDoubles(..., pairUnpaired=true)` honors confirmed pairs first, then auto-pairs or drops leftovers (`POST /:id/groups { pairUnpaired }`). New `unpaired` status (migration 028).
 - Tests: `packages/api/src/__tests__/integration/partner-requests.spec.ts`; doubles formation in `group-stage-doubles.spec.ts`.
 
-## ⏳ Slice 2 — Frontend + e2e (TODO)
+## ✅ Slice 2 — Frontend + e2e (DONE, merged)
+Built TDD-first: API client partner fns; `PartnerFinder` (Details tab, doubles + registration_open);
+`PartnerRequestConfirm` page at `/registrations/:registrationId/confirm`. Unit:
+`api-client-partners.spec.ts`, `PartnerFinder.spec.tsx`, `PartnerRequestConfirm.spec.tsx`. E2E:
+`partner-requests.spec.ts` (6/6, chromium+firefox) + `createDoublesTournamentWithSoloRegistrants` fixture.
+Organizer `pairUnpaired` toggle deliberately not surfaced — no frontend create-groups UI exists (groups
+are created via the API, which already supports the flag).
 
-> **Authoritative task list + success criteria:** `phase5-remaining-tasks.md` (repo root). The summary
-> below is context; follow that file for the TDD-first build.
+> **Original task list + success criteria:** `phase5-remaining-tasks.md` (repo root). The summary
+> below is the original plan, now implemented.
 Existing but **unwired** components: `PartnerSelection.tsx`, `PartnerDropdown.tsx`, `PartnerInviteInput.tsx`
 (they target the old register-time model — adapt or replace for the request model).
 

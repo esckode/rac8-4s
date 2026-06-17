@@ -529,7 +529,9 @@ export async function createDoublesTournamentWithSoloRegistrants(
 
   const players: { token: string; playerId: string; email: string; name: string }[] = []
   for (let i = 0; i < count; i++) {
-    const user = createTestUser()
+    // Distinct names so tests can tell registrants apart by name in the UI
+    // (createTestUser's default name is shared across users).
+    const user = { ...createTestUser(), name: `Solo ${i}-${Math.random().toString(36).slice(2, 7)}` }
     const reg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
       email: user.email,
       name: user.name,

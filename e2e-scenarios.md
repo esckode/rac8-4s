@@ -166,7 +166,7 @@ Tests are organized by feature groups matching this document:
 | **Group Stage - Singles (Score submission)** | 4 | `group-stage-singles-score.spec.ts` | `npx playwright test group-stage-singles-score` |
 | **Group Stage - Doubles** | 4 | `group-stage-doubles.spec.ts` | `npx playwright test --grep "Group Stage Doubles"` |
 | **Group Stage - Doubles (Score submission)** | 2 | `group-stage-doubles-score.spec.ts` | `npx playwright test group-stage-doubles-score` |
-| **Partner Confirmation** | 5 | `partner-confirmation.spec.ts` | `npx playwright test --grep "Partner Confirmation"` |
+| **Partner Confirmation** | 5 | `partner-requests.spec.ts` | `npx playwright test partner-requests` |
 | **Bracket - Singles** | 3 | `bracket-singles.spec.ts` | `npx playwright test --grep "Bracket Singles"` |
 | **Bracket - Doubles** | 2 | `bracket-doubles.spec.ts` | `npx playwright test --grep "Bracket Doubles"` |
 | **Real-Time Updates** | 4 | `real-time-updates.spec.ts` | `npx playwright test --grep "Real-Time Updates"` |
@@ -233,10 +233,13 @@ npm run test:e2e
   - Migrations: ✅ 021 (nullable player_id), ✅ 022 (unique constraints), ✅ 023 (nullable group_matches player columns), ✅ 024 (dropped winner_id→players FK so team IDs can be winners)
   - Use fixture: `createTournamentWithGroups(tournament, token, playerCount)` with `tournament.matchFormat = 'doubles'`
   
-🔄 **Phase 5: Partner Requests & Confirmation** (Doubles) — Backend COMPLETE, frontend pending  
-  - Model revised to partner-*requests* (optional partner; solo registrants request each other in-tournament). See the feature section below.
+✅ **Phase 5: Partner Requests & Confirmation** (Doubles) — COMPLETE  
+  - Model: partner-*requests* (optional partner; solo registrants request each other in-tournament). See the feature section below.
   - Backend ✅: `partner-requests.spec.ts` (discovery/request/two-sided confirm) + partner-aware team formation & `pairUnpaired` drop (`group-stage-doubles.spec.ts`); `unpaired` status (migration 028)
-  - Frontend ⏳ (Slice 2): partner-finder UI + `/registrations/:id/confirm` page + e2e — see `assets/planning/phase5-partner-requests.md`
+  - Frontend ✅ (Slice 2): PartnerFinder UI (Details tab, doubles + registration_open) + `/registrations/:registrationId/confirm` page; API client partner fns
+  - Browser e2e: `packages/frontend/e2e/partner-requests.spec.ts` — 6/6 passing (3 scenarios × chromium + firefox); fixture `createDoublesTournamentWithSoloRegistrants`
+  - Component/client unit: `PartnerFinder.spec.tsx`, `PartnerRequestConfirm.spec.tsx`, `api-client-partners.spec.ts`
+  - Note: organizer `pairUnpaired` toggle not surfaced in the UI (no frontend create-groups screen exists; groups are created via the API, which already supports `pairUnpaired`)
   
 ⏳ **Phases 6-10: Bracket, Real-Time, Offline, Mobile, Accessibility** (22 scenarios) — Ready to implement  
   - Use appropriate fixture based on required tournament state
