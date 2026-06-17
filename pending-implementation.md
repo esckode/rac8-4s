@@ -178,10 +178,11 @@ duplicate covered in the `ScoreSubmitForm` unit test. Verified: frontend unit 78
 reusing `useScoreSubmit` (left untouched). `tournamentId` is passed as a prop — the bundle's match
 objects omit it.
 
-**Bug found (out of scope, flagged):** deadline columns are `TIMESTAMP`, not `TIMESTAMPTZ`, so stored
-deadlines shift by the server's UTC offset. The pickleball `2-1`/`2-2` scenario formats were also
-invalid parser input (corrected to real game scores). The `ScoreSubmissionForm` orphaned prototype
-remains dead code (superseded by `ScoreSubmitForm`).
+**Bug found & FIXED:** deadline columns were `TIMESTAMP` (naive), so stored deadlines shifted by the
+server's UTC offset and `DEADLINE_PASSED` fired at the wrong time. Fixed via migration 025
+(→ `TIMESTAMPTZ`), with a 60s-past regression test in `group-stage.spec.ts`. The pickleball
+`2-1`/`2-2` scenario formats were also invalid parser input (corrected to real game scores). The
+`ScoreSubmissionForm` orphaned prototype remains dead code (superseded by `ScoreSubmitForm`).
 
 **Original plan (for reference):**
 
