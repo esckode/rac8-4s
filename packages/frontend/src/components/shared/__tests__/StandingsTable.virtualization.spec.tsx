@@ -46,7 +46,7 @@ jest.mock('../SkeletonLoader', () => ({
 
 const generateLargeStandingsList = (count: number): Standing[] => {
   return Array.from({ length: count }, (_, i) => ({
-    playerId: `player_${i}`,
+    participantId: `player_${i}`,
     rank: i + 1,
     wins: Math.max(0, 50 - i),
     losses: i,
@@ -319,7 +319,7 @@ describe('StandingsTable - Virtualization Performance', () => {
   describe('Edge cases with large datasets', () => {
     it('should handle standings with extreme win/loss ratios', () => {
       const standings = Array.from({ length: 500 }, (_, i) => ({
-        playerId: `player_${i}`,
+        participantId: `player_${i}`,
         rank: i + 1,
         wins: i === 0 ? 500 : 0, // First player has all wins
         losses: i === 0 ? 0 : 500, // Others have all losses
@@ -337,7 +337,7 @@ describe('StandingsTable - Virtualization Performance', () => {
 
     it('should maintain virtualization with duplicate standings', () => {
       const singleStanding: Standing = {
-        playerId: 'player_1',
+        participantId: 'player_1',
         rank: 1,
         wins: 5,
         losses: 2,

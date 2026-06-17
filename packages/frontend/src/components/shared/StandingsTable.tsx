@@ -124,13 +124,13 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
 
   const RowRenderer = ({ index, style }: { index: number; style: React.CSSProperties; ariaAttributes?: any }) => {
     const standing = sortedStandings[index]
-    const player = playerCache.get(standing.playerId)
+    const player = playerCache.get(standing.participantId)
     const isEven = index % 2 === 0
 
     return (
       <div
         style={style}
-        onClick={() => onRowClick?.(standing.playerId)}
+        onClick={() => onRowClick?.(standing.participantId)}
         className={`
           flex
           items-center
@@ -149,7 +149,7 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
         <div className="w-16 text-center font-semibold text-[--ink-900]">{standing.rank}</div>
 
         {/* Team Name */}
-        <div className="flex-1 font-medium text-[--ink-900]">{player?.name || standing.playerId}</div>
+        <div className="flex-1 font-medium text-[--ink-900]">{player?.name || standing.participantId}</div>
 
         {/* Matches */}
         <div className="w-20 text-center text-[--ink-600]">{standing.wins + standing.losses}</div>
@@ -171,7 +171,7 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
               size="sm"
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation()
-                onOverride?.(standing.playerId)
+                onOverride?.(standing.participantId)
               }}
             >
               Override

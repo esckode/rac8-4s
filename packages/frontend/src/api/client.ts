@@ -6,7 +6,6 @@ import type {
   PlayerMatchesResponse,
   BracketData,
 } from '../types'
-import type { Standing } from '../../../shared/src/types'
 
 const API_BASE = ''  // Use relative paths with Vite proxy (/api)
 
@@ -109,7 +108,7 @@ export async function fetchStandings(
   tournamentId: string,
   groupId: string,
   token: string
-): Promise<Standing[]> {
+): Promise<GroupStandingsResponse['standings']> {
   const response = await apiFetch<GroupStandingsResponse>(
     `/tournaments/${tournamentId}/groups/${groupId}/standings`,
     { token }

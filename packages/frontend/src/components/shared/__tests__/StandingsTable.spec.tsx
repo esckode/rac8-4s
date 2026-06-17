@@ -45,7 +45,7 @@ jest.mock('../SkeletonLoader', () => ({
 }))
 
 const mockStanding = (overrides?: Partial<Standing>): Standing => ({
-  playerId: 'player_1',
+  participantId: 'player_1',
   rank: 1,
   wins: 5,
   losses: 2,
@@ -56,7 +56,7 @@ const mockStanding = (overrides?: Partial<Standing>): Standing => ({
 
 const createStandings = (count: number): Standing[] => {
   return Array.from({ length: count }, (_, i) => ({
-    playerId: `player_${i}`,
+    participantId: `player_${i}`,
     rank: i + 1,
     wins: Math.max(0, 5 - i),
     losses: i,
@@ -84,7 +84,7 @@ describe('StandingsTable', () => {
     })
 
     it('renders player name in row', () => {
-      const standings = [mockStanding({ playerId: 'player_123' })]
+      const standings = [mockStanding({ participantId: 'player_123' })]
       render(<StandingsTable standings={standings} />)
 
       expect(screen.getByText('Player player_123')).toBeInTheDocument()
@@ -355,9 +355,9 @@ describe('StandingsTable', () => {
 
     it('sorts wins in ascending order by default', () => {
       const standings = [
-        mockStanding({ playerId: 'p1', wins: 5 }),
-        mockStanding({ playerId: 'p2', wins: 2 }),
-        mockStanding({ playerId: 'p3', wins: 8 }),
+        mockStanding({ participantId: 'p1', wins: 5 }),
+        mockStanding({ participantId: 'p2', wins: 2 }),
+        mockStanding({ participantId: 'p3', wins: 8 }),
       ]
       render(<StandingsTable standings={standings} />)
 
@@ -371,7 +371,7 @@ describe('StandingsTable', () => {
   describe('Row Interaction', () => {
     it('calls onRowClick when row is clicked', () => {
       const onRowClick = jest.fn()
-      const standings = [mockStanding({ playerId: 'player_123' })]
+      const standings = [mockStanding({ participantId: 'player_123' })]
       const { container } = render(
         <StandingsTable standings={standings} onRowClick={onRowClick} />
       )
@@ -385,7 +385,7 @@ describe('StandingsTable', () => {
 
     it('passes correct playerId to onRowClick', () => {
       const onRowClick = jest.fn()
-      const standings = [mockStanding({ playerId: 'specific_player_id' })]
+      const standings = [mockStanding({ participantId: 'specific_player_id' })]
       const { container } = render(
         <StandingsTable standings={standings} onRowClick={onRowClick} />
       )
@@ -401,7 +401,7 @@ describe('StandingsTable', () => {
     it('override button click does not propagate row click', () => {
       const onRowClick = jest.fn()
       const onOverride = jest.fn()
-      const standings = [mockStanding({ playerId: 'player_1' })]
+      const standings = [mockStanding({ participantId: 'player_1' })]
       render(
         <StandingsTable
           standings={standings}
@@ -419,7 +419,7 @@ describe('StandingsTable', () => {
 
     it('clicking override button calls onOverride with playerId', () => {
       const onOverride = jest.fn()
-      const standings = [mockStanding({ playerId: 'player_xyz' })]
+      const standings = [mockStanding({ participantId: 'player_xyz' })]
       render(
         <StandingsTable standings={standings} userRole="organizer" onOverride={onOverride} />
       )
@@ -444,8 +444,8 @@ describe('StandingsTable', () => {
 
   describe('Data Updates', () => {
     it('updates when standings change', () => {
-      const standings1 = [mockStanding({ playerId: 'player_1', rank: 1 })]
-      const standings2 = [mockStanding({ playerId: 'player_2', rank: 1 })]
+      const standings1 = [mockStanding({ participantId: 'player_1', rank: 1 })]
+      const standings2 = [mockStanding({ participantId: 'player_2', rank: 1 })]
 
       const { rerender } = render(<StandingsTable standings={standings1} />)
       expect(screen.getByText('Player player_1')).toBeInTheDocument()
@@ -456,8 +456,8 @@ describe('StandingsTable', () => {
 
     it('handles standings with same rank', () => {
       const standings = [
-        mockStanding({ playerId: 'p1', rank: 1 }),
-        mockStanding({ playerId: 'p2', rank: 1 }),
+        mockStanding({ participantId: 'p1', rank: 1 }),
+        mockStanding({ participantId: 'p2', rank: 1 }),
       ]
       render(<StandingsTable standings={standings} />)
 
@@ -630,16 +630,16 @@ describe('StandingsTable', () => {
     it('handles undefined player name', () => {
       ;(playerCacheModule.playerCache.get as jest.Mock).mockReturnValueOnce(null)
 
-      const standings = [mockStanding({ playerId: 'missing_player' })]
+      const standings = [mockStanding({ participantId: 'missing_player' })]
       render(<StandingsTable standings={standings} />)
 
       expect(screen.getByText('missing_player')).toBeInTheDocument()
     })
 
     it('handles rapid prop changes', () => {
-      const standings1 = [mockStanding({ playerId: 'p1' })]
-      const standings2 = [mockStanding({ playerId: 'p2' })]
-      const standings3 = [mockStanding({ playerId: 'p3' })]
+      const standings1 = [mockStanding({ participantId: 'p1' })]
+      const standings2 = [mockStanding({ participantId: 'p2' })]
+      const standings3 = [mockStanding({ participantId: 'p3' })]
 
       const { rerender } = render(<StandingsTable standings={standings1} />)
       rerender(<StandingsTable standings={standings2} />)
