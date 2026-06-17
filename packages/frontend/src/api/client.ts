@@ -147,6 +147,22 @@ export async function submitScore(
   await apiFetch<{ message: string }>(path, { method: 'POST', token, body: { score } })
 }
 
+export interface PlayerTournamentSummary {
+  id: string
+  name: string
+  sport: string
+  status: string
+  registeredAt: string
+}
+
+export async function fetchPlayerTournaments(token: string): Promise<PlayerTournamentSummary[]> {
+  const response = await apiFetch<{ tournaments: PlayerTournamentSummary[] }>(
+    '/player/tournaments',
+    { token }
+  )
+  return response.tournaments
+}
+
 export async function editScore(
   tournamentId: string,
   matchId: string,

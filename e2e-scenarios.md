@@ -160,6 +160,7 @@ Tests are organized by feature groups matching this document:
 |---|---|---|---|
 | **Authentication & Authorization** | 27 | `auth.spec.ts` | `npm run test:e2e:auth` |
 | **Tournament Discovery & Registration** | 9 | `tournament-discovery-registration.spec.ts` | `npm run test:e2e:tournament` |
+| **My Tournaments hub (/standings)** | 1 | `my-tournaments-hub.spec.ts` | `npx playwright test my-tournaments-hub` |
 | **Group Stage - Singles** | 10 | `group-stage-singles.spec.ts` | `npx playwright test --grep "Group Stage Singles"` |
 | **Group Stage - Singles (Player view)** | 2 | `group-stage-singles-player.spec.ts` | `npx playwright test group-stage-singles-player` |
 | **Group Stage - Singles (Score submission)** | 4 | `group-stage-singles-score.spec.ts` | `npx playwright test group-stage-singles-score` |

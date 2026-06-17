@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
 import { PlayerRepository } from '../db'
-import { requirePlayerSessionAuth } from '../auth'
+import { requirePlayerSessionAuth, requireOrganizerAuth } from '../auth'
 import { getLogger } from '../logger'
 
 const log = getLogger('player')
@@ -9,6 +9,27 @@ const log = getLogger('player')
 export default function playerRouter(deps: AppDependencies) {
   const router = Router()
   const playerRepo = new PlayerRepository(deps.db)
+
+  // Resolve the acting player's id from either a magic-link player session or a
+  // registered player's account JWT (role 'player', carries playerId). Used by
+  // the cross-tournament player views, which aren't tournament-scoped.
+  async function resolvePlayerId(authHeader: string | undefined): Promise<string> {
+    try {
+      const session = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
+      return session.playerId
+    } catch (sessionErr) {
+      let account
+      try {
+        account = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
+      } catch {
+        throw sessionErr
+      }
+      if (account.role === 'player' && account.playerId) {
+        return account.playerId
+      }
+      throw sessionErr
+    }
+  }
 
   // GET /player/session - validate a player-session token and return identity
   // Used by the frontend to restore a magic-link player session (no account JWT).
@@ -29,12 +50,12 @@ export default function playerRouter(deps: AppDependencies) {
   // GET /player/tournaments - list player's tournaments
   router.get('/tournaments', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const playerId = await resolvePlayerId(req.headers.authorization)
 
       const offset = req.query.offset ? parseInt(req.query.offset as string) : 0
       const limit = req.query.limit ? parseInt(req.query.limit as string) : deps.config.limits.paginationDefaults.tournaments
 
-      const result = await playerRepo.listTournamentsByPlayer(payload.playerId, { offset, limit })
+      const result = await playerRepo.listTournamentsByPlayer(playerId, { offset, limit })
 
       res.json({
         tournaments: result.rows.map(row => ({
