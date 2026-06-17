@@ -44,7 +44,7 @@ describe('ScoreSubmitForm', () => {
   })
 
   it('renders a score input and submit button', () => {
-    render(<ScoreSubmitForm match={pendingMatch} onSuccess={jest.fn()} onClose={jest.fn()} />)
+    render(<ScoreSubmitForm tournamentId="tourn_1" match={pendingMatch} onSuccess={jest.fn()} onClose={jest.fn()} />)
     expect(screen.getByTestId('score-input')).toBeInTheDocument()
     expect(screen.getByTestId('score-submit')).toBeInTheDocument()
   })
@@ -53,7 +53,7 @@ describe('ScoreSubmitForm', () => {
     mockSubmitScore.mockResolvedValueOnce(undefined as any)
     const onSuccess = jest.fn()
 
-    render(<ScoreSubmitForm match={pendingMatch} onSuccess={onSuccess} onClose={jest.fn()} />)
+    render(<ScoreSubmitForm tournamentId="tourn_1" match={pendingMatch} onSuccess={onSuccess} onClose={jest.fn()} />)
 
     fireEvent.change(screen.getByTestId('score-input'), { target: { value: '11-9, 11-7' } })
     fireEvent.click(screen.getByTestId('score-submit'))
@@ -66,7 +66,7 @@ describe('ScoreSubmitForm', () => {
     mockSubmitScore.mockRejectedValueOnce(apiError('SCORE_INVALID'))
     const onSuccess = jest.fn()
 
-    render(<ScoreSubmitForm match={pendingMatch} onSuccess={onSuccess} onClose={jest.fn()} />)
+    render(<ScoreSubmitForm tournamentId="tourn_1" match={pendingMatch} onSuccess={onSuccess} onClose={jest.fn()} />)
 
     fireEvent.change(screen.getByTestId('score-input'), { target: { value: '11-11, 11-7' } })
     fireEvent.click(screen.getByTestId('score-submit'))
@@ -78,7 +78,7 @@ describe('ScoreSubmitForm', () => {
   it('shows a deadline message when the backend reports DEADLINE_PASSED', async () => {
     mockSubmitScore.mockRejectedValueOnce(apiError('DEADLINE_PASSED'))
 
-    render(<ScoreSubmitForm match={pendingMatch} onSuccess={jest.fn()} onClose={jest.fn()} />)
+    render(<ScoreSubmitForm tournamentId="tourn_1" match={pendingMatch} onSuccess={jest.fn()} onClose={jest.fn()} />)
 
     fireEvent.change(screen.getByTestId('score-input'), { target: { value: '11-9, 11-7' } })
     fireEvent.click(screen.getByTestId('score-submit'))
@@ -91,7 +91,7 @@ describe('ScoreSubmitForm', () => {
     mockEditScore.mockResolvedValueOnce(undefined as any)
     const onSuccess = jest.fn()
 
-    render(<ScoreSubmitForm match={pendingMatch} onSuccess={onSuccess} onClose={jest.fn()} />)
+    render(<ScoreSubmitForm tournamentId="tourn_1" match={pendingMatch} onSuccess={onSuccess} onClose={jest.fn()} />)
 
     fireEvent.change(screen.getByTestId('score-input'), { target: { value: '11-9, 11-7' } })
     fireEvent.click(screen.getByTestId('score-submit'))
@@ -110,7 +110,7 @@ describe('ScoreSubmitForm', () => {
     mockEditScore.mockResolvedValueOnce(undefined as any)
     const onSuccess = jest.fn()
 
-    render(<ScoreSubmitForm match={completedMatch} onSuccess={onSuccess} onClose={jest.fn()} />)
+    render(<ScoreSubmitForm tournamentId="tourn_1" match={completedMatch} onSuccess={onSuccess} onClose={jest.fn()} />)
 
     const input = screen.getByTestId('score-input') as HTMLInputElement
     expect(input.value).toBe('11-9, 11-7')

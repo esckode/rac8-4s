@@ -332,10 +332,15 @@ export async function createSinglesTournamentInGroupStage(
   // timestamp — so we can put the group-stage deadline in the past to exercise
   // DEADLINE_PASSED while still registering players. Ordering must hold:
   // registrationDeadline < groupStageDeadline < knockoutStageDeadline.
+  // NOTE: deadlines are stored in TIMESTAMP (not TIMESTAMPTZ) columns, so the
+  // stored value is shifted by the server's UTC offset (a pre-existing bug). We
+  // use multi-day offsets so the group deadline stays firmly in the past
+  // regardless of the server timezone.
   if (opts.pastGroupDeadline) {
-    config.registrationDeadline = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-    config.groupStageDeadline = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
-    config.knockoutStageDeadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    const day = 24 * 60 * 60 * 1000
+    config.registrationDeadline = new Date(Date.now() - 3 * day).toISOString()
+    config.groupStageDeadline = new Date(Date.now() - 2 * day).toISOString()
+    config.knockoutStageDeadline = new Date(Date.now() + 7 * day).toISOString()
   }
   const { id: tournamentId, name } = await createTournamentWithOpenRegistration(
     config,

@@ -148,5 +148,18 @@ export async function submitScore(
   await apiFetch<{ message: string }>(path, { method: 'POST', token, body: { score } })
 }
 
+export async function editScore(
+  tournamentId: string,
+  matchId: string,
+  score: string,
+  token: string,
+  matchType: 'group' | 'knockout' = 'group'
+): Promise<void> {
+  const path = matchType === 'knockout'
+    ? `/tournaments/${tournamentId}/knockout/${matchId}/score`
+    : `/tournaments/${tournamentId}/matches/${matchId}/score`
+  await apiFetch<{ match: unknown }>(path, { method: 'PATCH', token, body: { score } })
+}
+
 // Import MatchWithOpponent from types for proper typing
 import type { MatchWithOpponent } from '../types'

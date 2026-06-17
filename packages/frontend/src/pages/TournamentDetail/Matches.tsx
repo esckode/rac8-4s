@@ -5,6 +5,7 @@ import { useTournament } from '../../hooks/useTournament'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useAuth } from '../../hooks/useAuth'
 import { MatchCard } from '../../components/shared/MatchCard'
+import { ScoreSubmitForm } from '../../components/ScoreSubmitForm'
 import '../../styles/globals.css'
 
 type FilterStatus = 'all' | 'pending' | 'completed'
@@ -16,6 +17,7 @@ export const Matches: React.FC = () => {
   const { organizerRole } = usePermissions(tournamentId || '')
   const [selectedStatus, setSelectedStatus] = useState<FilterStatus>('all')
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null)
+  const [scoringMatchId, setScoringMatchId] = useState<string | null>(null)
 
   if (!isAuthenticated) {
     return (
@@ -54,8 +56,10 @@ export const Matches: React.FC = () => {
   }
 
   const handleSubmitScore = (matchId: string) => {
-    // TODO: Open score submission form (Task 4.6e)
+    setScoringMatchId(matchId)
   }
+
+  const scoringMatch = allMatches.find((m) => m.id === scoringMatchId) || null
 
   const handleOverride = (matchId: string) => {
     // TODO: Open score override form (Task 4.6e)
@@ -152,6 +156,26 @@ export const Matches: React.FC = () => {
               onOverride={handleOverride}
             />
           ))}
+        </div>
+      )}
+
+      {/* Score submission / edit form */}
+      {scoringMatch && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-[--s-4]"
+          onClick={() => setScoringMatchId(null)}
+        >
+          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <ScoreSubmitForm
+              tournamentId={tournamentId || ''}
+              match={scoringMatch}
+              onSuccess={() => {
+                setScoringMatchId(null)
+                refetch()
+              }}
+              onClose={() => setScoringMatchId(null)}
+            />
+          </div>
         </div>
       )}
     </div>

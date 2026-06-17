@@ -55,6 +55,7 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
   }
 
   const canSubmitScore = userRole === 'player' && match.status === 'pending'
+  const canEditScore = userRole === 'player' && match.status === 'completed'
   const canOverride = userRole === 'organizer'
 
   return (
@@ -115,6 +116,7 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
           <Button
             variant="primary"
             size="sm"
+            data-testid="submit-score-button"
             onClick={(e: React.MouseEvent) => {
               e.stopPropagation()
               onSubmitScore(match.id)
@@ -122,6 +124,21 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
             className="flex-1"
           >
             Submit Score
+          </Button>
+        )}
+
+        {canEditScore && onSubmitScore && (
+          <Button
+            variant="soft"
+            size="sm"
+            data-testid="edit-score-button"
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation()
+              onSubmitScore(match.id)
+            }}
+            className="flex-1"
+          >
+            Edit Score
           </Button>
         )}
 
@@ -139,7 +156,7 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
           </Button>
         )}
 
-        {!canSubmitScore && !canOverride && (
+        {!canSubmitScore && !canEditScore && !canOverride && (
           <div className="flex-1" />
         )}
       </div>
