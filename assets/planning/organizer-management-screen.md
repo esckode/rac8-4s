@@ -189,7 +189,7 @@ Inject the **organizer** `auth_token`.
 
 ## Out of scope (separate follow-up): dual-role / organizer-as-participant
 Not part of this screen — captured here so the management screen doesn't accidentally pre-empt it.
-The question "can one logged-in user be both organizer and player?" was investigated; conclusions:
+**Full scope:** `assets/planning/dual-role-organizer-participant.md`. Summary of the conclusions:
 
 - **No new role.** Do **not** add an `organizer_player` role — it conflates two orthogonal axes
   (authority vs. participation) and explodes combinatorially. `auth.accounts.role` stays a single
