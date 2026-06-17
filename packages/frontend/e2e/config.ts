@@ -231,6 +231,15 @@ export const SELECTORS = {
   TOURNAMENT_LIST: '[data-testid="tournament-list"], .tournament-list',
   STANDINGS_TABLE: '[data-testid="standings-table"], .standings-table',
   BRACKET_MATCHES: '[data-testid="match-card"], .match-card',
+
+  // Partner requests (doubles)
+  PARTNER_FINDER: '[data-testid="partner-finder"]',
+  PARTNER_ROW: '[data-testid="partner-row"]',
+  REQUEST_PARTNER_BUTTON: '[data-testid="request-partner-button"]',
+  PARTNER_ERROR: '[data-testid="partner-error"]',
+  CONFIRM_PARTNERSHIP_BUTTON: '[data-testid="confirm-partnership-button"]',
+  CONFIRM_SUCCESS: '[data-testid="confirm-success"]',
+  CONFIRM_ERROR: '[data-testid="confirm-error"]',
 }
 
 // ============================================================================

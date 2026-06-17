@@ -502,6 +502,60 @@ export async function createDoublesTournamentInGroupStage(
   }
 }
 
+/**
+ * PREREQUISITE: Create a doubles tournament left in registration_open with N solo
+ * registrants, each holding a usable magic-link player-session token.
+ *
+ * Unlike createDoublesTournamentInGroupStage (which auto-forms teams at group
+ * creation), this stops at registration_open so the partner-request flow can run:
+ * every returned registrant is solo (no partner) and can find/request another.
+ *
+ * Each registrant is registered, then their magicLinkToken is exchanged via
+ * GET /:id/auth/verify for a player-session token (Authorization: Bearer <token>).
+ */
+export async function createDoublesTournamentWithSoloRegistrants(
+  organizerToken: string,
+  count: number = 2
+): Promise<{
+  tournamentId: string
+  name: string
+  players: { token: string; playerId: string; email: string; name: string }[]
+}> {
+  const config = { ...createTestTournament(), matchFormat: 'doubles' }
+  const { id: tournamentId, name } = await createTournamentWithOpenRegistration(
+    config,
+    organizerToken
+  )
+
+  const players: { token: string; playerId: string; email: string; name: string }[] = []
+  for (let i = 0; i < count; i++) {
+    const user = createTestUser()
+    const reg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
+      email: user.email,
+      name: user.name,
+    })
+    if (!reg.ok) {
+      throw new Error(`Failed to register solo player: ${reg.status} ${await reg.text()}`)
+    }
+    const { magicLinkToken } = await reg.json()
+    if (!magicLinkToken) {
+      throw new Error('Register response did not include magicLinkToken')
+    }
+
+    const verify = await apiCall(
+      `/tournaments/${tournamentId}/auth/verify?token=${encodeURIComponent(magicLinkToken)}`,
+      'GET'
+    )
+    if (!verify.ok) {
+      throw new Error(`Failed to verify magic link: ${verify.status} ${await verify.text()}`)
+    }
+    const { playerToken, playerId } = await verify.json()
+    players.push({ token: playerToken, playerId, email: user.email, name: user.name })
+  }
+
+  return { tournamentId, name, players }
+}
+
 // ============================================================================
 // Organizer Authentication Helper
 // ============================================================================
