@@ -167,6 +167,7 @@ Tests are organized by feature groups matching this document:
 | **Group Stage - Doubles** | 4 | `group-stage-doubles.spec.ts` | `npx playwright test --grep "Group Stage Doubles"` |
 | **Group Stage - Doubles (Score submission)** | 2 | `group-stage-doubles-score.spec.ts` | `npx playwright test group-stage-doubles-score` |
 | **Partner Confirmation** | 5 | `partner-requests.spec.ts` | `npx playwright test partner-requests` |
+| **Organizer Tournament Management** | 3 | `organizer-management.spec.ts` | `npx playwright test organizer-management` |
 | **Bracket - Singles** | 3 | `bracket-singles.spec.ts` | `npx playwright test --grep "Bracket Singles"` |
 | **Bracket - Doubles** | 2 | `bracket-doubles.spec.ts` | `npx playwright test --grep "Bracket Doubles"` |
 | **Real-Time Updates** | 4 | `real-time-updates.spec.ts` | `npx playwright test --grep "Real-Time Updates"` |
@@ -786,6 +787,42 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 - **Given** some registrants never found a partner
 - **When** the organizer creates groups with `pairUnpaired: false`
 - **Then** only confirmed teams advance and the solo registrants are marked "unpaired"
+
+---
+
+## Feature: Organizer Tournament Management
+
+> Organizer-only screen at `/tournament/:tournamentId/manage` (gated on
+> `canManageGroups` = creator). Drives the lifecycle: most steps via
+> `POST /:id/advance`, but **group creation** (`POST /:id/groups`) performs the
+> `registration_closed → group_stage_active` transition and **bracket publish**
+> (`POST /:id/bracket/publish`) performs `group_stage_complete → knockout_active`.
+> Scope/decisions: `assets/planning/organizer-management-screen.md`.
+
+### Scenario: Organizer walks a tournament through the full lifecycle
+- **Type:** Happy path
+- **Given** I am the organizer (creator) viewing the management screen for my draft tournament
+- **When** I open registration, close it, create groups, complete the group stage (forcing past the
+  pending-scores guard), generate & publish the bracket, and complete the tournament
+- **Then** the visible status advances draft → ... → tournament_complete at each step
+
+### Scenario: Organizer creates groups with the pairUnpaired toggle (Doubles)
+- **Type:** Happy path / organizer option
+- **Given** a doubles tournament in registration_closed
+- **When** I fill the create-groups form (numGroups, advancingPerGroup) and choose the pairUnpaired option
+- **Then** groups are created and the tournament moves to group_stage_active
+
+### Scenario: Non-owner cannot operate the controls
+- **Type:** Security
+- **Given** I am not the tournament's creator (a player session or a different organizer)
+- **When** I open `/tournament/:id/manage`
+- **Then** I see a not-authorized state and no lifecycle controls
+
+### Scenario: Manage link routes the owner to the management screen
+- **Type:** Navigation
+- **Given** I am the creator viewing my tournament
+- **When** I click the "Manage" affordance
+- **Then** I navigate to `/tournament/:id/manage`
 
 ---
 

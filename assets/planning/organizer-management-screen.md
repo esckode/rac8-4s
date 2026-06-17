@@ -55,12 +55,14 @@ All organizer-only: `requireOrganizerAuth` + `assertOrganizerOwnsTournament` (mu
 - `GET /tournaments/:id` → status, `createdBy` (creator_id), `match_format`; surfaced by the
   `useTournament` hook as `tournament.status`, `tournament.creatorId`, `tournament.matchFormat`.
 
-### 4. Bracket (dependency of `START_KNOCKOUT`) — DECIDED: include (option a)
-`START_KNOCKOUT` is guarded by `bracketGenerated`, a separate flow:
-`POST /:id/bracket/generate` → `POST /:id/bracket/publish` (+ `PATCH /:id/bracket` for seeding, *not*
-in scope). **Decision:** include a single **"Generate bracket"** action on the `group_stage_complete`
-step (generate + publish) so the organizer can reach knockout; then "Start knockout" (advance) succeeds.
-This is the only extra endpoint set beyond advance + groups.
+### 4. Bracket (the `group_stage_complete → knockout_active` transition) — DECIDED: include (option a)
+Both endpoints require `status === 'group_stage_complete'`:
+`POST /:id/bracket/generate` (computes seeds from standings, returns the bracket) → `POST
+/:id/bracket/publish` (creates knockout matches **and sets status to `knockout_active`**). So **publish
+_is_ the transition** — the `START_KNOCKOUT` advance action is *not* the path (mirrors how group
+creation, not `START_GROUP_STAGE`, performs the prior transition). `PATCH /:id/bracket` (seeding) is
+*not* in scope. **Decision:** include a single **"Generate & publish bracket"** action on the
+`group_stage_complete` step (generate then publish). Only extra endpoint set beyond advance + groups.
 
 ---
 
@@ -73,8 +75,8 @@ Drive the visible action(s) off `tournament.status`:
 | `registration_open` | **Close registration** (`advance CLOSE_REGISTRATION`) |
 | `registration_closed` | **Create groups** form: `numGroups`, `advancingPerGroup`, and (doubles only) a `pairUnpaired` toggle → `POST /groups` |
 | `group_stage_active` | **Complete group stage** (`advance COMPLETE_GROUP_STAGE`; offer `forceAdvance` if `GUARD_FAILED`) |
-| `group_stage_complete` | **Generate bracket** then **Start knockout** (per decision above) |
-| `knockout_active` | **Complete tournament** (`advance COMPLETE_TOURNAMENT`) |
+| `group_stage_complete` | **Generate & publish bracket** (`POST /bracket/generate` then `/bracket/publish`; publish → `knockout_active`) |
+| `knockout_active` | **Complete tournament** (`advance COMPLETE_TOURNAMENT`; `forceAdvance` if needed) |
 | `tournament_complete` | Read-only "Tournament complete" |
 
 `GUARD_FAILED` responses should surface the reason and offer an explicit **Force advance** confirm
