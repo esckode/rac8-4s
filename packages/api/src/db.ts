@@ -109,6 +109,7 @@ export interface AccountRow {
   password_hash: string | null
   role: string
   status: string
+  player_id: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -1391,6 +1392,7 @@ export class AccountRepository {
       password_hash: row.password_hash,
       role: row.role,
       status: row.status,
+      player_id: row.player_id ?? null,
       created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
       updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
       deleted_at: row.deleted_at instanceof Date ? row.deleted_at.toISOString() : row.deleted_at,
@@ -1405,6 +1407,17 @@ export class AccountRepository {
     await this.pool.query(
       'UPDATE auth.accounts SET password_hash = $1, updated_at = $2 WHERE id = $3',
       [hash, now, id]
+    )
+  }
+
+  async linkPlayer(id: string, playerId: string): Promise<void> {
+    const now = new Date().toISOString()
+
+    log.debug('account.query', { method: 'linkPlayer' })
+
+    await this.pool.query(
+      'UPDATE auth.accounts SET player_id = $1, updated_at = $2 WHERE id = $3',
+      [playerId, now, id]
     )
   }
 

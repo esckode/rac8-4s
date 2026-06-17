@@ -3,7 +3,7 @@ import bcryptjs from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { randomUUID } from 'crypto'
 import { AppDependencies } from '../app'
-import { AccountRepository, PasswordResetCodeRepository } from '../db'
+import { AccountRepository, PasswordResetCodeRepository, PlayerRepository } from '../db'
 import { hashPassword } from '../auth/password'
 import { issueOrganizerToken } from '../auth/tokens'
 import { validateMagicLinkToken } from '../auth/magic-link'
@@ -23,7 +23,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
  * Similar to issueOrganizerToken but role-agnostic.
  */
 function issueSessionToken(
-  payload: { sub: string; email: string },
+  payload: { sub: string; email: string; playerId?: string },
   role: string,
   expiresInSeconds: number,
   secret: string
@@ -48,6 +48,7 @@ export default function authRouter(deps: AppDependencies) {
   const router = Router()
   const accountRepo = new AccountRepository(deps.db)
   const resetCodeRepo = new PasswordResetCodeRepository(deps.db)
+  const playerRepo = new PlayerRepository(deps.db)
 
   // POST /api/auth/signup - Create a new account
   router.post('/signup', async (req: Request, res: Response, next: NextFunction) => {
@@ -136,11 +137,19 @@ export default function authRouter(deps: AppDependencies) {
       // Step 5b: Update password hash
       await accountRepo.updatePasswordHash(account.id, passwordHash)
 
-      // Step 6: Generate JWT session token
+      // Step 5c: Claim/create the durable player identity by email and link it.
+      // This makes a registered user act as one player across tournaments and
+      // claims any prior guest play under the same (normalized) email.
+      const player = await playerRepo.findOrCreatePlayerByEmail(email, name)
+      await accountRepo.linkPlayer(account.id, player.id)
+
+      // Step 6: Generate JWT session token (carries playerId so the account can
+      // act as the player on player-scoped endpoints)
       const sessionToken = issueSessionToken(
         {
           sub: account.id,
           email: account.email,
+          playerId: player.id,
         },
         account.role,
         deps.config.auth.sessionTtlSeconds,
