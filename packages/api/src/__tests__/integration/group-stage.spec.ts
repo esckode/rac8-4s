@@ -383,5 +383,59 @@ describe('Phase 3: Group Stage - Singles', () => {
       expect(scoreRes.status).toBe(409)
       expect(scoreRes.body.code).toBe('DEADLINE_PASSED')
     })
+
+    it('rejects a score when the deadline passed only moments ago (timezone-correct)', async () => {
+      // A deadline 60s in the past must be enforced regardless of server timezone.
+      // With naive TIMESTAMP columns the stored value is shifted by the server's
+      // UTC offset, so a recently-passed deadline reads as still in the future.
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const pastDeadline = new Date(Date.now() - 60_000) // 60 seconds ago
+
+      const tournament = await TournamentFactory.create(pool, organizerId, {
+        groupStageDeadline: pastDeadline.toISOString(),
+      })
+      const repo = new TournamentRepository(pool)
+
+      await repo.updateStatus(tournament.id, 'registration_closed')
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      const groupRes = await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 1, advancingPerGroup: 1 })
+
+      await repo.updateStatus(tournament.id, 'group_stage_active')
+
+      const groupRepo = new GroupRepository(pool)
+      const matches = await groupRepo.findMatchesByGroup(groupRes.body.groups[0].id)
+      const match = matches[0]
+
+      const player1Session = await generatePlayerSession(
+        {
+          playerId: match.player1_id!,
+          tournamentId: tournament.id,
+          email: `player${match.player1_id}@test.local`,
+          createdAt: Date.now(),
+        },
+        3600,
+        tokenStore
+      )
+
+      const scoreRes = await request(app)
+        .post(`/tournaments/${tournament.id}/matches/${match.id}/score`)
+        .set('Authorization', `Bearer ${player1Session.token}`)
+        .send({ score: '6-4, 6-3' })
+
+      expect(scoreRes.status).toBe(409)
+      expect(scoreRes.body.code).toBe('DEADLINE_PASSED')
+    })
   })
 })
