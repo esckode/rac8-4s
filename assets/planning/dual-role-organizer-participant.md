@@ -1,5 +1,14 @@
 # Dual-Role: Organizer-as-Participant — TDD-first scope
 
+> **STATUS: ✅ implemented & merged.** Backend: login/`/me` (and login/signup responses)
+> carry the linked `playerId`; `resolveTournamentPlayer` (tournaments) and `resolvePlayerId`
+> (player) accept any account JWT with a `playerId` + registration (not just role `player`);
+> `POST /:id/register` links `account.player_id` when an authenticated account registers with its
+> own email. Frontend: `useAuth` surfaces `playerId`; `usePermissions` exposes `canOrganize`
+> /`canParticipate`. Tests: `packages/api/src/__tests__/integration/dual-role.spec.ts` +
+> `usePermissions-capabilities.spec.ts`. **No frontend e2e** — see "E2E" note below.
+
+
 **Goal:** Let a single registered account act as **both** an organizer and a participant — e.g. an
 organizer who also plays in a tournament — without a new role value and without a schema change.
 Capabilities are derived from the two columns that already exist. **TDD-first** (CLAUDE.md §4, §11):
@@ -89,11 +98,17 @@ scenario docs + unit + e2e tests written and red-committed before implementation
   already-linked account is unchanged.
 - **`/api/auth/me`:** returns `player_id` (or null).
 
-### E2E scenarios to write first (red)
-New `packages/frontend/e2e/dual-role.spec.ts` (chromium + firefox):
-- An **organizer who has registered as a player** sees *both* their organizer "Manage" affordance and
-  their participant standings/matches for the same tournament.
-- (If toggle built) toggling switches the view; a single-capability user sees **no** toggle.
+### E2E — intentionally omitted (justified)
+No frontend e2e was added for dual-role:
+- There is **no organizer-signup API**, so an e2e can't create an isolated organizer account; the only
+  organizer credential available to e2e is the **shared seeded `organizer@test.com`**. Linking a
+  `player_id` to it and registering it in tournaments would **permanently mutate the shared account**
+  (the e2e DB is the real dev DB, not transactional) and could pollute every other spec.
+- The capability is fundamentally backend/permission behaviour: it is proven end-to-end by the
+  **integration tests** (isolated, transactional accounts) and the **usePermissions unit test**. There
+  is no distinct dual-role *screen* to drive — the only frontend change is capability derivation.
+- The optional toggle was **not built** (YAGNI — no consumer yet); when built it would gate inline on
+  `canOrganize && canParticipate`.
 
 ---
 
