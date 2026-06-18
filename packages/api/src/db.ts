@@ -977,6 +977,9 @@ export interface KnockoutMatchRow {
   position: number
   player1_id: string | null
   player2_id: string | null
+  team1_id: string | null
+  team2_id: string | null
+  format: string
   winner_id: string | null
   score: string | null
   status: string
