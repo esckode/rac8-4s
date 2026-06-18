@@ -243,7 +243,14 @@ npm run test:e2e
   - Component/client unit: `PartnerFinder.spec.tsx`, `PartnerRequestConfirm.spec.tsx`, `api-client-partners.spec.ts`
   - Note: organizer `pairUnpaired` toggle not surfaced in the UI (no frontend create-groups screen exists; groups are created via the API, which already supports `pairUnpaired`)
   
-⏳ **Phases 6-10: Bracket, Real-Time, Offline, Mobile, Accessibility** (22 scenarios) — Ready to implement  
+✅ **Phase 6: Bracket - Singles + Doubles** (5 scenarios) — COMPLETE  
+  - Browser e2e: `bracket-singles.spec.ts` (3: pending-generation, published Semifinals→Final tree, knockout score submit) + `bracket-doubles.spec.ts` (2: team names, team knockout score submit) — all passing on chromium
+  - Frontend: `BracketTree` connector-line tree (round columns, reuses MatchCard testids), `Bracket` knockout score modal; names resolved by seeding `playerCache` from bundle standings + doubles `teams` map (`playersFromBundleStandings`)
+  - Backend (doubles knockout, previously unimplemented — generated as singles): team-based bracket generation, team `knockout_matches` (team1_id/team2_id, format=doubles), team-membership knockout scoring, bundle `teams` name-map. Migration 029 drops the `bracket_seeds.player_id` + `knockout_matches.winner_id` → players FKs so team ids are allowed.
+  - API integration: `bracket-doubles.spec.ts` (3 passing)
+  - Use fixture: `createTournamentInKnockoutStage(organizerToken, { format, publish })`
+
+⏳ **Phases 7-10: Real-Time, Offline, Mobile, Accessibility** (17 scenarios) — Ready to implement  
   - Use appropriate fixture based on required tournament state
 
 **Fixture Library:** `packages/frontend/e2e/fixtures.ts` (all shared helpers available)  

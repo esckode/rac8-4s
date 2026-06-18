@@ -247,6 +247,28 @@ describe('useTournament', () => {
       })
     })
 
+    it('seeds the player cache with doubles team names when present', () => {
+      const tournamentId = 'tourn_123'
+      const teams = [{ id: 'team_1', name: 'Alice & Bob' }]
+
+      mockUseAuth.mockReturnValue({
+        user: { id: 'user_1', email: 'test@test.com', role: 'player' },
+        isAuthenticated: true,
+        loading: false,
+      })
+
+      mockUseQuery.mockReturnValue({
+        data: { ...mockTournamentData, teams },
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      } as any)
+
+      renderHook(() => useTournament(tournamentId))
+
+      expect(stores.playerCache.setMany).toHaveBeenCalledWith(teams)
+    })
+
     it('updates match store on successful fetch', () => {
       const tournamentId = 'tourn_123'
 

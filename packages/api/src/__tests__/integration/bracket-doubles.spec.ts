@@ -60,7 +60,7 @@ describe('Bracket API - Doubles knockout', () => {
     const gen = await request(app)
       .post(`/tournaments/${tournamentId}/bracket/generate`)
       .set('Authorization', `Bearer ${orgToken}`)
-    expect(gen.status).toBe(200)
+    if (gen.status !== 200) throw new Error(`generate ${gen.status}: ${JSON.stringify(gen.body)}`)
     const pub = await request(app)
       .post(`/tournaments/${tournamentId}/bracket/publish`)
       .set('Authorization', `Bearer ${orgToken}`)
@@ -106,8 +106,9 @@ describe('Bracket API - Doubles knockout', () => {
     const res = await request(app)
       .post(`/tournaments/${tournament.id}/knockout/${match.id}/score`)
       .set('Authorization', `Bearer ${session.token}`)
-      .send({ score: '11-9, 11-7' })
+      .send({ score: '6-4, 6-3' }) // factory tournaments are tennis
 
+    if (res.status !== 200) throw new Error(`score ${res.status}: ${JSON.stringify(res.body)}`)
     expect(res.status).toBe(200)
     expect(res.body.match.winnerId).toBe(match.team1_id)
   })

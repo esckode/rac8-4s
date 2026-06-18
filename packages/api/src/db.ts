@@ -1060,24 +1060,33 @@ export class KnockoutRepository {
     }))
   }
 
-  async createKnockoutMatches(tournamentId: string, bracket: any, seedMap: Map<number, string>): Promise<KnockoutMatchRow[]> {
+  async createKnockoutMatches(tournamentId: string, bracket: any, seedMap: Map<number, string>, format: string = 'singles'): Promise<KnockoutMatchRow[]> {
     return retryOnDeadlock(async () => {
       const client = await (this.pool as Pool).connect()
       try {
         await client.query('BEGIN')
 
         const now = new Date().toISOString()
+        const isDoubles = format === 'doubles'
 
         for (const round of bracket.rounds) {
           for (const match of round.matches) {
             const id = `km_${Date.now()}_${Math.random().toString(36).slice(2)}`
-            const player1Id = match.player1 ? seedMap.get(parseInt(match.player1.replace('seed_', ''))) ?? null : null
-            const player2Id = match.player2 ? seedMap.get(parseInt(match.player2.replace('seed_', ''))) ?? null : null
-            const status = player2Id === null && player1Id !== null ? 'bye' : 'pending'
+            const seat1 = match.player1 ? seedMap.get(parseInt(match.player1.replace('seed_', ''))) ?? null : null
+            const seat2 = match.player2 ? seedMap.get(parseInt(match.player2.replace('seed_', ''))) ?? null : null
+            const status = seat2 === null && seat1 !== null ? 'bye' : 'pending'
+            // For doubles, seats are team ids stored in team columns (a check
+            // constraint forbids mixing player + team ids, and requires both team
+            // columns null-or-set together — so a bye keeps both null).
+            const bothTeams = isDoubles && seat1 !== null && seat2 !== null
+            const player1Id = isDoubles ? null : seat1
+            const player2Id = isDoubles ? null : seat2
+            const team1Id = bothTeams ? seat1 : null
+            const team2Id = bothTeams ? seat2 : null
             await client.query(
-              `INSERT INTO public.knockout_matches (id, tournament_id, round, position, format, player1_id, player2_id, status, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-              [id, tournamentId, match.round, match.position, 'singles', player1Id, player2Id, status, now, now]
+              `INSERT INTO public.knockout_matches (id, tournament_id, round, position, format, player1_id, player2_id, team1_id, team2_id, status, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+              [id, tournamentId, match.round, match.position, isDoubles ? 'doubles' : 'singles', player1Id, player2Id, team1Id, team2Id, status, now, now]
             )
           }
         }

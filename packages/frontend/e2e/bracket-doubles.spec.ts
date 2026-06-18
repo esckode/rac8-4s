@@ -28,14 +28,12 @@ test.describe('Bracket Doubles', () => {
     const fx = await createTournamentInKnockoutStage(organizerToken, { format: 'doubles' })
     await inject(page, fx.organizerToken)
 
-    // Pull a real team name from standings to assert it surfaces in the tree.
+    // Pull a real team name from the bundle's team name-map to assert it surfaces.
     const bundleRes = await apiCall(`/tournaments/${fx.tournamentId}/bundle`, 'GET', undefined, fx.organizerToken)
     const bundle = await bundleRes.json()
-    const teamName: string | undefined = (bundle.standings ?? [])
-      .flatMap((g: any) => g.standings ?? [])
-      .map((s: any) => s.name)
-      .find((n: string) => !!n)
+    const teamName: string | undefined = (bundle.teams ?? []).map((t: any) => t.name).find((n: string) => !!n)
     expect(teamName).toBeTruthy()
+    expect(teamName).toMatch(/&/) // "P1 & P2"
 
     await page.goto(`/tournament/${fx.tournamentId}/bracket`)
     await expect(page.locator(SELECTORS.BRACKET_TREE)).toBeVisible()

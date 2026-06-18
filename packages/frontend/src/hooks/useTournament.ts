@@ -22,6 +22,8 @@ export interface TournamentBundle {
     knockout: Match[]
   }
   bracket: BracketData['bracket'] | null
+  // Doubles only: teamId → display-name map for resolving team names in the bracket.
+  teams?: { id: string; name: string }[]
 }
 
 export interface TournamentHookState extends TournamentBundle {
@@ -158,9 +160,14 @@ export function useTournament(tournamentId: string): TournamentHookState {
         groupId: 'all',
         standings: bundle.standings,
       })
-      // Seed the player cache so display names (incl. doubles team names) resolve
-      // for matches and the bracket, which carry only participant ids.
+      // Seed the player cache so display names resolve for matches and the
+      // bracket, which carry only participant ids.
       playerCache.setMany(playersFromBundleStandings(bundle.standings))
+    }
+
+    // Doubles: knockout/bracket participants are teams; seed their names too.
+    if (bundle.teams && bundle.teams.length > 0) {
+      playerCache.setMany(bundle.teams as unknown as Player[])
     }
 
     if (bundle.matches) {

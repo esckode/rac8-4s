@@ -16,7 +16,7 @@ import { ForbiddenError } from '../auth/errors'
 import { TournamentStateMachine, type TournamentState, type TransitionAction } from '@core/state-machine'
 import { calculateStandings, generateBracket } from '@core/index'
 import { parseScore, type SportFormat } from '@core/score-parser'
-import { isSinglesMatch, getMatchParticipantIds, validateMatchFormatConsistency } from '../utils/match-format'
+import { isSinglesMatch, isDoublesMatch, getMatchParticipantIds, validateMatchFormatConsistency } from '../utils/match-format'
 import { getLogger } from '../logger'
 
 const log = getLogger('tournaments')
@@ -743,21 +743,41 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'No groups exist for this tournament' })
       }
 
-      // Calculate standings for each group and collect advancing players
+      // Calculate standings for each group and collect advancing participants.
+      // Doubles advances TEAMS (seeds are team ids); singles advances players.
+      const isDoubles = tournament.match_format === 'doubles'
       const advancingByGroup: string[][] = []
       for (const group of groups) {
-        const members = await groupRepo.findMembersByGroup(group.id)
         const matches = await groupRepo.findMatchesByGroup(group.id)
 
-        const standings = calculateStandings(
-          members.map((m) => ({ id: m.id, name: m.name })),
-          matches.map((m) => ({
-            participant1Id: m.player1_id!,
-            participant2Id: m.player2_id!,
-            winnerId: m.winner_id ?? null,
-            score: m.score ?? null,
-          }))
-        )
+        let standings
+        if (isDoubles) {
+          const teams = await groupRepo.findTeamsByGroup(group.id)
+          standings = calculateStandings(
+            teams.map((t) => ({ id: t.id, name: `${t.player1_name} & ${t.player2_name}` })),
+            matches.map((m) => {
+              validateMatchFormatConsistency(m)
+              const [participant1, participant2] = getMatchParticipantIds(m)
+              return {
+                participant1Id: participant1,
+                participant2Id: participant2,
+                winnerId: m.winner_id ?? null,
+                score: m.score ?? null,
+              }
+            })
+          )
+        } else {
+          const members = await groupRepo.findMembersByGroup(group.id)
+          standings = calculateStandings(
+            members.map((m) => ({ id: m.id, name: m.name })),
+            matches.map((m) => ({
+              participant1Id: m.player1_id!,
+              participant2Id: m.player2_id!,
+              winnerId: m.winner_id ?? null,
+              score: m.score ?? null,
+            }))
+          )
+        }
 
         const advancing = standings.slice(0, group.advancing_count).map((s) => s.participantId)
         advancingByGroup.push(advancing)
@@ -915,7 +935,12 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       const seedMap = new Map(seeds.map((s) => [s.seedPosition, s.playerId]))
       const bracket = generateBracket(seeds.length)
-      const knockoutMatches = await knockoutRepo.createKnockoutMatches(tournamentId, bracket, seedMap)
+      const knockoutMatches = await knockoutRepo.createKnockoutMatches(
+        tournamentId,
+        bracket,
+        seedMap,
+        tournament.match_format
+      )
 
       await repo.updateStatus(tournamentId, 'knockout_active')
 
@@ -926,8 +951,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
           id: m.id,
           round: m.round,
           position: m.position,
-          player1Id: m.player1_id,
-          player2Id: m.player2_id,
+          player1Id: m.player1_id ?? m.team1_id,
+          player2Id: m.player2_id ?? m.team2_id,
           winnerId: m.winner_id,
           score: m.score,
           status: m.status,
@@ -963,7 +988,22 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       validateMatchFormatConsistency(match)
       const [participant1, participant2] = getMatchParticipantIds(match)
-      if (participant1 !== payload.playerId && participant2 !== payload.playerId) {
+
+      // For doubles, participants are team ids: verify the player is on one of the
+      // teams (mirrors the group score endpoint). For singles, compare player ids.
+      let isParticipant: boolean
+      if (isDoublesMatch(match)) {
+        const { TeamRepository } = require('../repositories/team-repository')
+        const teamRepo = new TeamRepository(deps.db)
+        const team1 = await teamRepo.findTeamById(participant1)
+        const team2 = await teamRepo.findTeamById(participant2)
+        isParticipant =
+          !!(team1 && (team1.player1Id === payload.playerId || team1.player2Id === payload.playerId)) ||
+          !!(team2 && (team2.player1Id === payload.playerId || team2.player2Id === payload.playerId))
+      } else {
+        isParticipant = participant1 === payload.playerId || participant2 === payload.playerId
+      }
+      if (!isParticipant) {
         return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
       }
 
@@ -982,7 +1022,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(400).json({ code: 'SCORE_INVALID', message: `Invalid score format: ${(err as Error).message}` })
       }
 
-      const winnerId = parsed.winner === 'player1' ? match.player1_id : match.player2_id
+      const winnerId = isDoublesMatch(match)
+        ? (parsed.winner === 'player1' ? match.team1_id : match.team2_id)
+        : (parsed.winner === 'player1' ? match.player1_id : match.player2_id)
       if (!winnerId) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'Cannot determine winner' })
       }
@@ -2147,8 +2189,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
             id: m.id,
             round: m.round,
             position: m.position,
-            player1Id: m.player1_id,
-            player2Id: m.player2_id,
+            player1Id: m.player1_id ?? m.team1_id,
+            player2Id: m.player2_id ?? m.team2_id,
             winnerId: m.winner_id || null,
             score: m.score || null,
             status: m.status,
@@ -2171,8 +2213,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
                   id: dbMatch.id,
                   round: dbMatch.round,
                   position: dbMatch.position,
-                  player1Id: dbMatch.player1_id,
-                  player2Id: dbMatch.player2_id,
+                  player1Id: dbMatch.player1_id ?? dbMatch.team1_id,
+                  player2Id: dbMatch.player2_id ?? dbMatch.team2_id,
                   winnerId: dbMatch.winner_id || null,
                   score: dbMatch.score,
                   status: dbMatch.status,
@@ -2201,6 +2243,19 @@ export default function tournamentsRouter(deps: AppDependencies) {
         } else {
           response.bracket = null
         }
+      }
+
+      // Doubles knockout matches carry team ids; surface a teamId → display-name
+      // map so clients can resolve names (group standings are keyed per-player).
+      if (tournament.match_format === 'doubles' && (fields.has('bracket') || fields.has('matches'))) {
+        const teamMap = new Map<string, string>()
+        for (const g of groups) {
+          const groupTeams = await groupRepo.findTeamsByGroup(g.id)
+          for (const t of groupTeams) {
+            teamMap.set(t.id, `${t.player1_name} & ${t.player2_name}`)
+          }
+        }
+        response.teams = Array.from(teamMap, ([id, name]) => ({ id, name }))
       }
 
       log.info('tournament.bundle.fetched', { tournamentId, userId })
