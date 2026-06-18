@@ -178,7 +178,8 @@ export default function authRouter(deps: AppDependencies) {
           id: account.id,
           email: account.email,
           name: name,
-          role: account.role
+          role: account.role,
+          playerId: player.id
         },
         token: sessionToken,
         ...(magicPayload && magicPayload.tournamentId && { tournamentId: magicPayload.tournamentId })
@@ -245,11 +246,13 @@ export default function authRouter(deps: AppDependencies) {
         })
       }
 
-      // Generate session token
+      // Generate session token (carries the linked playerId, if any, so the
+      // account can act on player-scoped endpoints — dual-role capability)
       const token = issueSessionToken(
         {
           sub: account.id,
           email: account.email,
+          playerId: account.player_id ?? undefined,
         },
         account.role,
         deps.config.auth.sessionTtlSeconds,
@@ -268,6 +271,7 @@ export default function authRouter(deps: AppDependencies) {
           id: account.id,
           email: account.email,
           role: account.role,
+          playerId: account.player_id ?? null,
         },
         token,
       })
@@ -305,6 +309,7 @@ export default function authRouter(deps: AppDependencies) {
         id: account.id,
         email: account.email,
         role: account.role,
+        playerId: account.player_id ?? null,
       })
     } catch (err) {
       next(err)

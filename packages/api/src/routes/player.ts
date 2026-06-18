@@ -24,7 +24,9 @@ export default function playerRouter(deps: AppDependencies) {
       } catch {
         throw sessionErr
       }
-      if (account.role === 'player' && account.playerId) {
+      // Participation depends on a linked playerId, not the authority role —
+      // an organizer who also plays qualifies (dual-role).
+      if (account.playerId) {
         return account.playerId
       }
       throw sessionErr

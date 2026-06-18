@@ -16,6 +16,9 @@ export interface Permissions {
   canPublishBracket: boolean
   canManageGroups: boolean
   canViewAllStandings: boolean
+  // Dual-role capabilities (orthogonal axes): authority vs. participation.
+  canOrganize: boolean
+  canParticipate: boolean
 }
 
 export function usePermissions(tournamentId: string): Permissions {
@@ -30,6 +33,11 @@ export function usePermissions(tournamentId: string): Permissions {
     const isOrganizer = user?.role === 'organizer'
     const isCreator = isOrganizer && user && tournament && user.id === tournament.creatorId
 
+    // Capabilities: authority (role) and participation (linked playerId) are
+    // independent — an organizer with a playerId can do both.
+    const canOrganize = user?.role === 'organizer' || user?.role === 'admin'
+    const canParticipate = !!user?.playerId
+
     return {
       playerRole: isPlayer ?? false,
       organizerRole: isOrganizer ?? false,
@@ -37,6 +45,8 @@ export function usePermissions(tournamentId: string): Permissions {
       canPublishBracket: isCreator ?? false,
       canManageGroups: isCreator ?? false,
       canViewAllStandings: isOrganizer ?? false,
+      canOrganize,
+      canParticipate,
     }
   }, [authState.user, tournamentState.tournament])
 

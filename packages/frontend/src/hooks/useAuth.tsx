@@ -7,7 +7,10 @@ export interface AuthUser {
   id: string
   email: string
   name?: string
-  role: 'player' | 'organizer'
+  role: 'player' | 'organizer' | 'admin'
+  // Linked durable player identity, if any. Presence = participation capability
+  // (an organizer with a playerId can also play). null/undefined = organize-only.
+  playerId?: string | null
 }
 
 export interface AuthContextType {
@@ -41,6 +44,7 @@ interface MeResponse {
   id: string
   email: string
   role: string
+  playerId?: string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -66,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
       }
 
       const data = (await response.json()) as { playerId: string; tournamentId: string }
-      setUser({ id: data.playerId, email: '', role: 'player' })
+      setUser({ id: data.playerId, email: '', role: 'player', playerId: data.playerId })
       return true
     }
 
@@ -85,7 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
           setUser({
             id: userData.id,
             email: userData.email,
-            role: userData.role as 'player' | 'organizer',
+            role: userData.role as AuthUser['role'],
+            playerId: userData.playerId ?? null,
           })
         } else if (response.status === 401) {
           // Not an account JWT — fall back to a magic-link player session

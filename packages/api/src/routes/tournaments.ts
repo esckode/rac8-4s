@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
-import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository, RegistrationRow, PlayerRow, GroupMatchRow } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository, AccountRepository, RegistrationRow, PlayerRow, GroupMatchRow } from '../db'
 import {
   requireOrganizerAuth,
   assertOrganizerOwnsTournament,
@@ -81,6 +81,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
   const playerRepo = new PlayerRepository(deps.db)
   const groupRepo = new GroupRepository(deps.db)
   const knockoutRepo = new KnockoutRepository(deps.db)
+  const accountRepo = new AccountRepository(deps.db)
   const sseConnectionCount = new Map<string, number>()
 
   // Resolve the acting player for a tournament from either a magic-link player
@@ -103,7 +104,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
       } catch {
         throw sessionErr
       }
-      if (account.role !== 'player' || !account.playerId) {
+      // Participation is a capability of having a linked playerId (+ registration),
+      // independent of authority role — an organizer who also plays qualifies.
+      if (!account.playerId) {
         throw sessionErr
       }
       const reg = await playerRepo.findRegistration(account.playerId, tournamentId)
@@ -1171,6 +1174,24 @@ export default function tournamentsRouter(deps: AppDependencies) {
         req.body.phone,
         req.body.preferredContact
       )
+
+      // Dual-role: if the request is authenticated as the account whose own email
+      // is being registered, link that account to this player so it can act as a
+      // participant (e.g. an organizer registering themselves). Best-effort.
+      try {
+        const acct = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+        const account = await accountRepo.findById(acct.sub)
+        if (
+          account &&
+          !account.player_id &&
+          account.email.toLowerCase() === req.body.email.trim().toLowerCase()
+        ) {
+          await accountRepo.linkPlayer(account.id, player.id)
+          log.info('account.player_linked', { accountId: account.id, playerId: player.id, tournamentId })
+        }
+      } catch {
+        // Unauthenticated (guest) registration — no account to link.
+      }
 
       const existingReg = await playerRepo.findRegistration(player.id, tournamentId)
 

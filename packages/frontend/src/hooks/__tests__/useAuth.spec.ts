@@ -35,6 +35,7 @@ describe('useAuth', () => {
         id: 'user-123',
         email: 'test@example.com',
         role: 'player',
+        playerId: null,
       }
 
       ;(global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -73,6 +74,7 @@ describe('useAuth', () => {
         id: 'user-123',
         email: 'test@example.com',
         role: 'player',
+        playerId: null,
       }
 
       ;(global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -92,6 +94,7 @@ describe('useAuth', () => {
         id: 'user-123',
         email: 'test@example.com',
         role: 'player',
+        playerId: null,
       })
       expect(result.current.isAuthenticated).toBe(true)
 
@@ -404,6 +407,7 @@ describe('useAuth', () => {
         id: 'user-123',
         email: 'test@example.com',
         role: 'player',
+        playerId: null,
       }
 
       ;(global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -642,6 +646,7 @@ describe('useAuth', () => {
         id: 'user-123',
         email: 'test@example.com',
         role: 'player',
+        playerId: null,
       }
 
       ;(global.fetch as jest.Mock).mockResolvedValueOnce({

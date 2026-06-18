@@ -78,6 +78,7 @@ describe('POST /api/auth/login', () => {
         id: account.id,
         email,
         role: 'organizer',
+        playerId: null,
       })
     })
 

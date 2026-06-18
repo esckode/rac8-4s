@@ -77,6 +77,8 @@ describe('usePermissions', () => {
         canPublishBracket: false,
         canManageGroups: false,
         canViewAllStandings: false,
+        canOrganize: false,
+        canParticipate: false,
       })
     })
   })
@@ -130,6 +132,8 @@ describe('usePermissions', () => {
         canPublishBracket: true,
         canManageGroups: true,
         canViewAllStandings: true,
+        canOrganize: true,
+        canParticipate: false,
       })
     })
 
@@ -182,6 +186,8 @@ describe('usePermissions', () => {
         canPublishBracket: false, // Only creator can publish
         canManageGroups: false, // Only creator can manage
         canViewAllStandings: true, // All organizers can view
+        canOrganize: true, // organizer authority regardless of ownership
+        canParticipate: false,
       })
     })
   })
@@ -372,6 +378,8 @@ describe('usePermissions', () => {
         canPublishBracket: false,
         canManageGroups: false,
         canViewAllStandings: false,
+        canOrganize: false,
+        canParticipate: false,
       })
     })
 
@@ -409,6 +417,8 @@ describe('usePermissions', () => {
         canPublishBracket: false,
         canManageGroups: false,
         canViewAllStandings: false,
+        canOrganize: false,
+        canParticipate: false,
       })
     })
 
@@ -455,6 +465,8 @@ describe('usePermissions', () => {
         canPublishBracket: false,
         canManageGroups: false,
         canViewAllStandings: false,
+        canOrganize: false,
+        canParticipate: false,
       })
     })
   })
