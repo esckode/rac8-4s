@@ -558,6 +558,171 @@ export async function createDoublesTournamentWithSoloRegistrants(
   return { tournamentId, name, players }
 }
 
+/**
+ * PREREQUISITE: Create a tournament advanced into the knockout stage with a
+ * published bracket, plus a focus player who participates in a pending knockout
+ * match and holds a usable player-session token.
+ *
+ * Singles (default): 4 players → 2 groups (advancing 2 each) → 4-participant
+ *   knockout (Semifinals + Final). Every player advances, so the focus is
+ *   guaranteed to be in a first-round match.
+ * Doubles: 8 players → 4 auto-formed teams → 2 groups (advancing 1) → 2-team
+ *   knockout (Final). The focus team is forced to advance by scoring its group
+ *   match as a win, so the focus player participates in the final.
+ *
+ * With opts.publish = false, stops at group_stage_complete with NO bracket
+ * generated — for the "bracket pending generation" scenario.
+ */
+export async function createTournamentInKnockoutStage(
+  organizerToken: string,
+  opts: { format?: 'singles' | 'doubles'; publish?: boolean } = {}
+): Promise<{
+  tournamentId: string
+  name: string
+  organizerToken: string
+  focusToken: string
+  focusPlayerId: string
+  focusName: string
+  knockoutMatch: {
+    id: string
+    round: number
+    position: number
+    player1Id: string | null
+    player2Id: string | null
+    status: string
+  } | null
+}> {
+  const format = opts.format ?? 'singles'
+  const publish = opts.publish ?? true
+  const isDoubles = format === 'doubles'
+  const playerCount = isDoubles ? 8 : 4
+
+  const config = { ...createTestTournament(), matchFormat: format }
+  const { id: tournamentId, name } = await createTournamentWithOpenRegistration(config, organizerToken)
+
+  const fetchBundle = async (): Promise<any> => {
+    const res = await apiCall(`/tournaments/${tournamentId}/bundle`, 'GET', undefined, organizerToken)
+    if (!res.ok) throw new Error(`Failed to fetch bundle: ${res.status} ${await res.text()}`)
+    return res.json()
+  }
+
+  // Register players, exchanging each magic link for a player-session token.
+  const players: { playerId: string; token: string; name: string }[] = []
+  for (let i = 0; i < playerCount; i++) {
+    const user = { ...createTestUser(), name: `KO ${i}-${Math.random().toString(36).slice(2, 7)}` }
+    const reg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
+      email: user.email,
+      name: user.name,
+    })
+    if (!reg.ok) throw new Error(`Failed to register player: ${reg.status} ${await reg.text()}`)
+    const { magicLinkToken } = await reg.json()
+    if (!magicLinkToken) throw new Error('Register response did not include magicLinkToken')
+    const verify = await apiCall(
+      `/tournaments/${tournamentId}/auth/verify?token=${encodeURIComponent(magicLinkToken)}`,
+      'GET'
+    )
+    if (!verify.ok) throw new Error(`Failed to verify magic link: ${verify.status} ${await verify.text()}`)
+    const { playerToken, playerId } = await verify.json()
+    players.push({ playerId, token: playerToken, name: user.name })
+  }
+
+  // Close registration and form groups.
+  const close = await apiCall(
+    `/tournaments/${tournamentId}/advance`,
+    'POST',
+    { action: 'CLOSE_REGISTRATION' },
+    organizerToken
+  )
+  if (!close.ok) throw new Error(`Failed to close registration: ${close.status} ${await close.text()}`)
+
+  const advancingPerGroup = isDoubles ? 1 : 2
+  const groupsRes = await apiCall(
+    `/tournaments/${tournamentId}/groups`,
+    'POST',
+    { numGroups: 2, advancingPerGroup },
+    organizerToken
+  )
+  if (!groupsRes.ok) throw new Error(`Failed to create groups: ${groupsRes.status} ${await groupsRes.text()}`)
+
+  let focus = players[0]
+
+  if (isDoubles) {
+    // Force the focus team to advance: locate the focus's group (players are
+    // resolved via teams in the listing), score its single group match as a win.
+    const groupsList = await apiCall(`/tournaments/${tournamentId}/groups`, 'GET', undefined, organizerToken)
+    if (!groupsList.ok) throw new Error(`Failed to list groups: ${groupsList.status} ${await groupsList.text()}`)
+    const { groups } = await groupsList.json()
+    const focusGroup = groups.find((g: any) => (g.players ?? []).some((p: any) => p.id === focus.playerId))
+    if (!focusGroup) throw new Error('Could not locate the focus player group')
+
+    const bundle = await fetchBundle()
+    const focusGroupMatch = (bundle.matches?.group ?? []).find(
+      (m: any) => m.groupId === focusGroup.id && m.status === 'pending'
+    )
+    if (!focusGroupMatch) throw new Error('Could not locate the focus group match')
+    const sc = await apiCall(
+      `/tournaments/${tournamentId}/matches/${focusGroupMatch.id}/score`,
+      'POST',
+      { score: '11-2, 11-3' },
+      focus.token
+    )
+    if (!sc.ok) throw new Error(`Failed to submit focus group score: ${sc.status} ${await sc.text()}`)
+  }
+
+  // Complete the group stage (force past the pending-scores guard).
+  const complete = await apiCall(
+    `/tournaments/${tournamentId}/advance`,
+    'POST',
+    { action: 'COMPLETE_GROUP_STAGE', forceAdvance: true },
+    organizerToken
+  )
+  if (!complete.ok) throw new Error(`Failed to complete group stage: ${complete.status} ${await complete.text()}`)
+
+  if (!publish) {
+    return {
+      tournamentId,
+      name,
+      organizerToken,
+      focusToken: focus.token,
+      focusPlayerId: focus.playerId,
+      focusName: focus.name,
+      knockoutMatch: null,
+    }
+  }
+
+  // Generate + publish the bracket (publish performs group_stage_complete → knockout_active).
+  const gen = await apiCall(`/tournaments/${tournamentId}/bracket/generate`, 'POST', undefined, organizerToken)
+  if (!gen.ok) throw new Error(`Failed to generate bracket: ${gen.status} ${await gen.text()}`)
+  const pub = await apiCall(`/tournaments/${tournamentId}/bracket/publish`, 'POST', undefined, organizerToken)
+  if (!pub.ok) throw new Error(`Failed to publish bracket: ${pub.status} ${await pub.text()}`)
+
+  // Read the published bracket to pick a pending knockout match the focus plays.
+  const bundle = await fetchBundle()
+  const knockout: any[] = bundle.matches?.knockout ?? []
+
+  let knockoutMatch: any = null
+  if (isDoubles) {
+    // The focus team is one of the two finalists; there is a single pending match.
+    knockoutMatch = knockout.find((m: any) => m.status === 'pending') ?? null
+  } else {
+    // Singles: the focus is a real player id in a first-round match.
+    knockoutMatch =
+      knockout.find(
+        (m: any) => m.status === 'pending' && (m.player1Id === focus.playerId || m.player2Id === focus.playerId)
+      ) ?? null
+  }
+
+  return {
+    tournamentId,
+    name,
+    organizerToken,
+    focusToken: focus.token,
+    focusPlayerId: focus.playerId,
+    focusName: focus.name,
+    knockoutMatch,
+  }
+}
+
 // ============================================================================
 // Organizer Authentication Helper
 // ============================================================================

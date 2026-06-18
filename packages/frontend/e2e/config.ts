@@ -232,6 +232,11 @@ export const SELECTORS = {
   STANDINGS_TABLE: '[data-testid="standings-table"], .standings-table',
   BRACKET_MATCHES: '[data-testid="match-card"], .match-card',
 
+  // Bracket (knockout)
+  BRACKET_TREE: '[data-testid="bracket-tree"]',
+  BRACKET_ROUND: '[data-testid="bracket-round"]',
+  BRACKET_PENDING: '[data-testid="bracket-pending"]',
+
   // Partner requests (doubles)
   PARTNER_FINDER: '[data-testid="partner-finder"]',
   PARTNER_ROW: '[data-testid="partner-row"]',
