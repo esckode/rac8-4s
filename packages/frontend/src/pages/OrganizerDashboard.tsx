@@ -1,16 +1,31 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { Tournament } from '@shared/types'
-import { TournamentCard } from '../components/shared'
+import { fetchOrganizerTournaments } from '../api/client'
 import { useAuth } from '../hooks/useAuth'
 import { usePermissions } from '../hooks/usePermissions'
 import '../styles/globals.css'
 
+/**
+ * OrganizerDashboard — an organizer's home (/organizer). Lists the organizer's own
+ * tournaments (GET /tournaments/organizer) and links each into the management
+ * screen (/tournament/:id/manage). Reached via the organizer-only "Organizer
+ * Dashboard" nav entry. Tournament *creation* has no UI yet, so no create control
+ * is shown (no dead links).
+ */
+
+interface OrganizerTournamentRow {
+  id: string
+  name: string
+  sport: string
+  status: string
+  createdAt: string
+}
+
 export const OrganizerDashboard: React.FC = () => {
   const navigate = useNavigate()
-  const { user, isAuthenticated } = useAuth()
-  const permissions = usePermissions('') // Tournament ID not needed for role check
-  const [tournaments, setTournaments] = useState<Tournament[]>([])
+  const { isAuthenticated } = useAuth()
+  const permissions = usePermissions('') // tournament-agnostic role check
+  const [tournaments, setTournaments] = useState<OrganizerTournamentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -20,48 +35,35 @@ export const OrganizerDashboard: React.FC = () => {
       return
     }
 
-    const loadTournaments = async () => {
+    let cancelled = false
+    const load = async () => {
       setLoading(true)
       setError(null)
       try {
-        // TODO: Replace with actual API call to fetch organizer's tournaments
-        // const response = await fetchOrganizerTournaments(user?.id)
-        // setTournaments(response.tournaments)
-
-        // Placeholder: mock data for now
-        setTournaments([])
+        const token = localStorage.getItem('auth_token') || ''
+        const res = await fetchOrganizerTournaments(token, { offset: 0, limit: 50 })
+        if (!cancelled) setTournaments(res.tournaments)
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load tournaments'
-        setError(message)
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load tournaments')
+        }
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, permissions.organizerRole])
 
-    loadTournaments()
-  }, [isAuthenticated, permissions.organizerRole, user?.id])
-
-  const handleTournamentClick = (tournamentId: string) => {
-    navigate(`/tournament/${tournamentId}/edit`)
-  }
-
-  const handleCreateTournament = () => {
-    navigate('/tournaments/create')
+  const openManage = (tournamentId: string) => {
+    navigate(`/tournament/${tournamentId}/manage`)
   }
 
   if (!isAuthenticated) {
     return (
-      <div
-        className={`
-          text-center
-          py-[--s-12]
-          rounded-[--r-lg]
-          border
-          border-dashed
-          border-[--border]
-          bg-[--ink-50]
-        `}
-      >
+      <div className="text-center py-[--s-12] rounded-[--r-lg] border border-dashed border-[--border] bg-[--ink-50]">
         <p className="text-lg text-[--ink-600]">Sign in to manage tournaments</p>
         <p className="text-sm text-[--ink-500] mt-[--s-2]">
           Log in to your account to create and organize tournaments
@@ -72,17 +74,7 @@ export const OrganizerDashboard: React.FC = () => {
 
   if (!permissions.organizerRole) {
     return (
-      <div
-        className={`
-          text-center
-          py-[--s-12]
-          rounded-[--r-lg]
-          border
-          border-dashed
-          border-[--border]
-          bg-[--ink-50]
-        `}
-      >
+      <div className="text-center py-[--s-12] rounded-[--r-lg] border border-dashed border-[--border] bg-[--ink-50]">
         <p className="text-lg text-[--ink-600]">Organizer access required</p>
         <p className="text-sm text-[--ink-500] mt-[--s-2]">
           Only tournament organizers can manage tournaments here
@@ -101,16 +93,7 @@ export const OrganizerDashboard: React.FC = () => {
 
   if (error) {
     return (
-      <div
-        className={`
-          bg-[--rose-50]
-          border
-          border-[--rose-200]
-          rounded-[--r-lg]
-          p-[--s-4]
-          text-[--rose-800]
-        `}
-      >
+      <div className="bg-[--rose-50] border border-[--rose-200] rounded-[--r-lg] p-[--s-4] text-[--rose-800]">
         <p className="font-medium">Error loading tournaments</p>
         <p className="text-sm">{error}</p>
       </div>
@@ -119,105 +102,43 @@ export const OrganizerDashboard: React.FC = () => {
 
   return (
     <div className="space-y-[--s-6]">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-[--s-4]">
-        <div className="space-y-[--s-2]">
-          <h1 className="text-3xl font-bold text-[--ink-900]">Organizer Dashboard</h1>
-          <p className="text-[--ink-600]">Create and manage your tournaments</p>
-        </div>
-        <button
-          onClick={handleCreateTournament}
-          className={`
-            px-[--s-6]
-            py-[--s-3]
-            bg-[--court-500]
-            text-white
-            rounded-[--r-lg]
-            font-medium
-            text-sm
-            sm:text-base
-            transition-all
-            duration-[--duration-normal]
-            hover:bg-[--court-600]
-            active:scale-95
-            focus:outline-none
-            focus:ring-2
-            focus:ring-[--court-400]
-            focus:ring-offset-2
-            whitespace-nowrap
-          `}
-        >
-          Create Tournament
-        </button>
+      <div className="space-y-[--s-2]">
+        <h1 className="text-3xl font-bold text-[--ink-900]">Organizer Dashboard</h1>
+        <p className="text-[--ink-600]">Manage your tournaments</p>
       </div>
 
       {tournaments.length === 0 ? (
         <div
-          className={`
-            text-center
-            py-[--s-12]
-            rounded-[--r-lg]
-            border
-            border-dashed
-            border-[--border]
-            bg-[--ink-50]
-          `}
+          data-testid="organizer-empty"
+          className="text-center py-[--s-12] rounded-[--r-lg] border border-dashed border-[--border] bg-[--ink-50]"
         >
           <p className="text-lg text-[--ink-600]">No tournaments yet</p>
           <p className="text-sm text-[--ink-500] mt-[--s-2]">
-            Create your first tournament to get started
+            Tournaments you organize will appear here
           </p>
-          <button
-            onClick={handleCreateTournament}
-            className={`
-              mt-[--s-4]
-              px-[--s-4]
-              py-[--s-2]
-              bg-[--court-500]
-              text-white
-              rounded-[--r-md]
-              font-medium
-              text-sm
-              transition-all
-              duration-[--duration-normal]
-              hover:bg-[--court-600]
-              focus:outline-none
-              focus:ring-2
-              focus:ring-[--court-400]
-              focus:ring-offset-2
-            `}
-          >
-            Create Your First Tournament
-          </button>
         </div>
       ) : (
-        <div
-          className={`
-            grid
-            grid-cols-1
-            md:grid-cols-2
-            lg:grid-cols-3
-            gap-[--s-4]
-          `}
-        >
-          {tournaments.map((tournament) => (
-            <div
-              key={tournament.id}
-              onClick={() => handleTournamentClick(tournament.id)}
+        <ul data-testid="organizer-tournament-list" className="space-y-[--s-3]">
+          {tournaments.map((t) => (
+            <li
+              key={t.id}
+              data-testid="organizer-tournament-row"
               role="button"
               tabIndex={0}
+              onClick={() => openManage(t.id)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  handleTournamentClick(tournament.id)
-                }
+                if (e.key === 'Enter' || e.key === ' ') openManage(t.id)
               }}
+              className="flex items-center justify-between gap-[--s-4] bg-white border border-[--border] rounded-[--r-lg] p-[--s-4] cursor-pointer hover:bg-[--ink-50] focus:outline-none focus:ring-2 focus:ring-[--court-400]"
             >
-              <TournamentCard
-                tournament={tournament}
-                onClick={() => handleTournamentClick(tournament.id)}
-              />
-            </div>
+              <div>
+                <p className="font-medium text-[--ink-900]">{t.name}</p>
+                <p className="text-sm text-[--ink-500]">{t.sport}</p>
+              </div>
+              <span className="text-sm text-[--ink-600]">{t.status}</span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   )

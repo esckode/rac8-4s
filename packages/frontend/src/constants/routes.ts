@@ -17,6 +17,7 @@ export const ROUTES = {
 
   // Protected routes (require authentication)
   BROWSE: '/browse',
+  ORGANIZER: '/organizer',
   MATCHES: '/matches',
   STANDINGS: '/standings',
   TOURNAMENT_DETAIL: '/tournament/:tournamentId',

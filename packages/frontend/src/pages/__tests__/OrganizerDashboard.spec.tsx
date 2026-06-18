@@ -64,10 +64,13 @@ describe('OrganizerDashboard', () => {
 
   it('loads and lists the organizer tournaments from the API with the stored token', async () => {
     asOrganizer()
-    mockFetch.mockResolvedValueOnce([
-      { id: 't1', name: 'Spring Open', sport: 'pickleball', status: 'registration_open', createdAt: '2026-01-01' },
-      { id: 't2', name: 'Fall Cup', sport: 'tennis', status: 'draft', createdAt: '2026-02-01' },
-    ] as any)
+    mockFetch.mockResolvedValueOnce({
+      tournaments: [
+        { id: 't1', name: 'Spring Open', sport: 'pickleball', status: 'registration_open', createdAt: '2026-01-01' },
+        { id: 't2', name: 'Fall Cup', sport: 'tennis', status: 'draft', createdAt: '2026-02-01' },
+      ],
+      pagination: { offset: 0, limit: 50, total: 2, hasMore: false },
+    } as any)
 
     render_()
 
@@ -79,9 +82,12 @@ describe('OrganizerDashboard', () => {
 
   it('navigates to the management screen when a tournament row is clicked', async () => {
     asOrganizer()
-    mockFetch.mockResolvedValueOnce([
-      { id: 't1', name: 'Spring Open', sport: 'pickleball', status: 'registration_open', createdAt: '2026-01-01' },
-    ] as any)
+    mockFetch.mockResolvedValueOnce({
+      tournaments: [
+        { id: 't1', name: 'Spring Open', sport: 'pickleball', status: 'registration_open', createdAt: '2026-01-01' },
+      ],
+      pagination: { offset: 0, limit: 50, total: 1, hasMore: false },
+    } as any)
 
     render_()
 
@@ -92,7 +98,7 @@ describe('OrganizerDashboard', () => {
 
   it('shows an empty state when the organizer has no tournaments', async () => {
     asOrganizer()
-    mockFetch.mockResolvedValueOnce([] as any)
+    mockFetch.mockResolvedValueOnce({ tournaments: [], pagination: { offset: 0, limit: 50, total: 0, hasMore: false } } as any)
     render_()
     await waitFor(() => expect(screen.getByTestId('organizer-empty')).toBeInTheDocument())
     expect(screen.queryByTestId('organizer-tournament-row')).not.toBeInTheDocument()
@@ -107,7 +113,7 @@ describe('OrganizerDashboard', () => {
 
   it('does not render a Create Tournament control (no create screen yet)', async () => {
     asOrganizer()
-    mockFetch.mockResolvedValueOnce([] as any)
+    mockFetch.mockResolvedValueOnce({ tournaments: [], pagination: { offset: 0, limit: 50, total: 0, hasMore: false } } as any)
     render_()
     await waitFor(() => expect(screen.getByTestId('organizer-empty')).toBeInTheDocument())
     expect(screen.queryByText(/create tournament/i)).not.toBeInTheDocument()

@@ -16,6 +16,7 @@ import { TournamentDetail } from './pages/TournamentDetail'
 import { MyTournamentsHub } from './pages/MyTournamentsHub'
 import { PartnerRequestConfirm } from './pages/PartnerRequestConfirm'
 import { OrganizerManage } from './pages/OrganizerManage'
+import { OrganizerDashboard } from './pages/OrganizerDashboard'
 import { ROUTES } from './constants/routes'
 import './styles/globals.css'
 
@@ -51,6 +52,16 @@ export const App: React.FC = () => {
           />
 
           {/* Protected routes (require authentication) */}
+          <Route
+            path={ROUTES.ORGANIZER}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <OrganizerDashboard />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
           <Route
             path={ROUTES.MATCHES}
             element={
