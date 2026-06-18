@@ -85,6 +85,9 @@ jest.mock('../../../state', () => ({
   matchStore: {
     setMatches: jest.fn(),
   },
+  playerCache: {
+    setMany: jest.fn(),
+  },
 }))
 
 import { useAuth } from '../../../hooks/useAuth'

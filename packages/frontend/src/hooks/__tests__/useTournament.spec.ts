@@ -23,7 +23,7 @@ jest.mock('../../state', () => ({
   tournamentStore: { set: jest.fn() },
   standingsStore: { update: jest.fn() },
   matchStore: { setMatches: jest.fn() },
-  playerCache: {},
+  playerCache: { setMany: jest.fn() },
 }))
 
 const mockUseQuery = useQuery as jest.MockedFunction<typeof useQuery>

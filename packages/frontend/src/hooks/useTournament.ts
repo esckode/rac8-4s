@@ -9,7 +9,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Tournament, Standing, Match } from '@shared/types'
 import type { BracketData, MatchWithOpponent } from '../types'
-import { tournamentStore, standingsStore, matchStore } from '../state'
+import { tournamentStore, standingsStore, matchStore, playerCache } from '../state'
+import { playersFromBundleStandings } from '../utils/standings-players'
 import { useAuth } from './useAuth'
 import { useAnalytics } from './useAnalytics'
 
@@ -157,6 +158,9 @@ export function useTournament(tournamentId: string): TournamentHookState {
         groupId: 'all',
         standings: bundle.standings,
       })
+      // Seed the player cache so display names (incl. doubles team names) resolve
+      // for matches and the bracket, which carry only participant ids.
+      playerCache.setMany(playersFromBundleStandings(bundle.standings))
     }
 
     if (bundle.matches) {

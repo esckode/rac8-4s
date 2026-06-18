@@ -1,6 +1,6 @@
 /// <reference types="@testing-library/jest-dom" />
 import React from 'react'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { Player } from '@shared/types'
 import { Bracket } from '../Bracket'
 import type { BracketRound } from '../../../types'
@@ -13,6 +13,11 @@ jest.mock('../../../hooks/useTournament')
 jest.mock('../../../hooks/usePermissions')
 jest.mock('../../../hooks/useAuth')
 jest.mock('react-router-dom', () => ({ useParams: () => ({ tournamentId: 't1' }) }))
+jest.mock('../../../api/client', () => ({
+  submitScore: jest.fn().mockResolvedValue(undefined),
+  editScore: jest.fn().mockResolvedValue(undefined),
+}))
+const { submitScore } = jest.requireMock('../../../api/client')
 
 const mockUseTournament = TournamentHook.useTournament as jest.MockedFunction<typeof TournamentHook.useTournament>
 const mockUsePermissions = PermissionsHook.usePermissions as jest.MockedFunction<typeof PermissionsHook.usePermissions>
@@ -95,10 +100,11 @@ describe('Bracket', () => {
 
   it('shows the error state with a retry control', () => {
     const refetch = jest.fn()
-    mockTournament({ error: { code: 'FETCH_ERROR', message: 'Failed to load bracket' }, refetch })
+    mockTournament({ error: { code: 'FETCH_ERROR', message: 'Network down' }, refetch })
     asRole('player')
     render(<Bracket />)
     expect(screen.getByText('Failed to load bracket')).toBeInTheDocument()
+    expect(screen.getByText('Network down')).toBeInTheDocument()
     fireEvent.click(screen.getByText(/try again/i))
     expect(refetch).toHaveBeenCalled()
   })
@@ -131,5 +137,34 @@ describe('Bracket', () => {
 
     fireEvent.click(screen.getAllByTestId('submit-score-button')[0])
     expect(screen.getByTestId('score-submit-form')).toBeInTheDocument()
+  })
+
+  it('closes the score form via its cancel control', () => {
+    mockTournament({ bracket: { rounds, totalPlayers: 4, byeCount: 0 } })
+    asRole('player')
+    render(<Bracket />)
+
+    fireEvent.click(screen.getAllByTestId('submit-score-button')[0])
+    expect(screen.getByTestId('score-submit-form')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(screen.queryByTestId('score-submit-form')).not.toBeInTheDocument()
+  })
+
+  it('submits a knockout score and refetches on success', async () => {
+    const refetch = jest.fn()
+    localStorage.setItem('auth_token', 'tok')
+    mockTournament({ bracket: { rounds, totalPlayers: 4, byeCount: 0 }, refetch })
+    asRole('player')
+    render(<Bracket />)
+
+    fireEvent.click(screen.getAllByTestId('submit-score-button')[0])
+    fireEvent.change(screen.getByTestId('score-input'), { target: { value: '11-9, 11-7' } })
+    fireEvent.click(screen.getByTestId('score-submit'))
+
+    await waitFor(() => expect(refetch).toHaveBeenCalled())
+    // The bracket tags knockout matches so the correct endpoint is hit.
+    expect(submitScore).toHaveBeenCalledWith('t1', 'sf1', '11-9, 11-7', 'tok', 'knockout')
+    localStorage.clear()
   })
 })

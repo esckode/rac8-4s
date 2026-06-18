@@ -67,4 +67,37 @@ describe('BracketTree', () => {
     render(<BracketTree rounds={rounds} userRole="organizer" onSubmitScore={jest.fn()} />)
     expect(screen.queryByTestId('submit-score-button')).not.toBeInTheDocument()
   })
+
+  it('labels deeper brackets (Round N, Quarterfinals, Semifinals, Final)', () => {
+    const deep: BracketRound[] = [1, 2, 3, 4].map((round) => ({
+      round,
+      matches: [
+        { id: `r${round}`, round, position: 0, player1Id: null, player2Id: null, winnerId: null, score: null, status: 'pending' },
+      ],
+    }))
+    render(<BracketTree rounds={deep} userRole="organizer" onSubmitScore={jest.fn()} />)
+    expect(screen.getByText('Round 1')).toBeInTheDocument()
+    expect(screen.getByText('Quarterfinals')).toBeInTheDocument()
+    expect(screen.getByText('Semifinals')).toBeInTheDocument()
+    expect(screen.getByText('Final')).toBeInTheDocument()
+  })
+
+  it('renders a completed match score and an edit affordance for a player', () => {
+    const completed: BracketRound[] = [
+      {
+        round: 1,
+        matches: [
+          { id: 'm', round: 1, position: 0, player1Id: 'p1', player2Id: 'unknownId', winnerId: 'p1', score: '11-9, 11-7', status: 'completed' },
+        ],
+      },
+    ]
+    const onSubmitScore = jest.fn()
+    render(<BracketTree rounds={completed} userRole="player" onSubmitScore={onSubmitScore} />)
+
+    expect(screen.getByText('11-9, 11-7')).toBeInTheDocument()
+    // An id with no cache entry falls back to TBD (never a raw id)
+    expect(screen.getByText('TBD')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('edit-score-button'))
+    expect(onSubmitScore).toHaveBeenCalledWith('m')
+  })
 })
