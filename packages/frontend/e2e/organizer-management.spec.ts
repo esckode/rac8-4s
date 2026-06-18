@@ -71,9 +71,8 @@ test.describe('Organizer Tournament Management', () => {
     await page.getByTestId('generate-bracket-button').click()
     await expect(page.getByTestId('complete-tournament-button')).toBeVisible()
 
-    // knockout_active → complete (scores pending → GUARD_FAILED → force) → complete
+    // knockout_active → complete tournament (advance COMPLETE_TOURNAMENT)
     await page.getByTestId('complete-tournament-button').click()
-    await page.getByTestId('force-advance-button').click()
     await expect(page.getByTestId('manage-status')).toContainText('tournament_complete')
   })
 

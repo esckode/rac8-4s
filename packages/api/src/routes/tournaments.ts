@@ -2070,6 +2070,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
           sport: tournament.sport,
           matchFormat: tournament.match_format,
           status: tournament.status,
+          creatorId: tournament.creator_id,
           maxPlayers: tournament.max_players,
           description: tournament.description,
           registrationDeadline: tournament.registration_deadline,
