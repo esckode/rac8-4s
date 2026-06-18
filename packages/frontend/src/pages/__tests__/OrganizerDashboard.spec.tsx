@@ -1,211 +1,115 @@
 /// <reference types="@testing-library/jest-dom" />
 import React from 'react'
-import { render, screen, fireEvent } from '@testing-library/react'
-import { BrowserRouter } from 'react-router-dom'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { OrganizerDashboard } from '../OrganizerDashboard'
 
-jest.mock('../../hooks/useAuth', () => ({
-  useAuth: jest.fn(),
-}))
+jest.mock('../../hooks/useAuth', () => ({ useAuth: jest.fn() }))
+jest.mock('../../hooks/usePermissions', () => ({ usePermissions: jest.fn() }))
+jest.mock('../../api/client')
 
-jest.mock('../../hooks/usePermissions', () => ({
-  usePermissions: jest.fn(),
+const mockNavigate = jest.fn()
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
 }))
 
 import { useAuth } from '../../hooks/useAuth'
 import { usePermissions } from '../../hooks/usePermissions'
+import * as apiClient from '../../api/client'
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>
 const mockUsePermissions = usePermissions as jest.MockedFunction<typeof usePermissions>
+const mockFetch = apiClient.fetchOrganizerTournaments as jest.MockedFunction<
+  typeof apiClient.fetchOrganizerTournaments
+>
+
+function asOrganizer() {
+  mockUseAuth.mockReturnValue({
+    user: { id: 'org1', email: 'o@t.com', role: 'organizer' },
+    isAuthenticated: true,
+    loading: false,
+  } as any)
+  mockUsePermissions.mockReturnValue({ organizerRole: true } as any)
+}
+
+function render_() {
+  return render(<MemoryRouter><OrganizerDashboard /></MemoryRouter>)
+}
 
 describe('OrganizerDashboard', () => {
-  const renderWithRouter = (component: React.ReactElement) => {
-    return render(<BrowserRouter>{component}</BrowserRouter>)
-  }
-
   beforeEach(() => {
     jest.clearAllMocks()
+    localStorage.clear()
+    localStorage.setItem('auth_token', 'org-token')
   })
 
-  it('renders page title and description for organizers', () => {
-    mockUseAuth.mockReturnValue({
-      user: {
-        id: '123',
-        email: 'organizer@example.com',
-        role: 'organizer',
-      },
-      isAuthenticated: true,
-      loading: false,
-    })
-
-    mockUsePermissions.mockReturnValue({
-      organizerRole: true,
-      playerRole: false,
-      canEditScores: false,
-      canPublishBracket: false,
-      canManageGroups: false,
-      canViewAllStandings: false,
-    } as any)
-
-    renderWithRouter(<OrganizerDashboard />)
-
-    expect(screen.getByText('Organizer Dashboard')).toBeInTheDocument()
-    expect(screen.getByText('Create and manage your tournaments')).toBeInTheDocument()
-  })
-
-  it('shows sign-in message when not authenticated', () => {
-    mockUseAuth.mockReturnValue({
-      user: null,
-      isAuthenticated: false,
-      loading: false,
-    })
-
-    mockUsePermissions.mockReturnValue({
-      organizerRole: false,
-      playerRole: false,
-      canEditScores: false,
-      canPublishBracket: false,
-      canManageGroups: false,
-      canViewAllStandings: false,
-    } as any)
-
-    renderWithRouter(<OrganizerDashboard />)
-
+  it('shows a sign-in message when not authenticated', () => {
+    mockUseAuth.mockReturnValue({ user: null, isAuthenticated: false, loading: false } as any)
+    mockUsePermissions.mockReturnValue({ organizerRole: false } as any)
+    render_()
     expect(screen.getByText('Sign in to manage tournaments')).toBeInTheDocument()
   })
 
-  it('shows access denied message for non-organizers', () => {
+  it('shows access-required for non-organizers', () => {
     mockUseAuth.mockReturnValue({
-      user: {
-        id: '123',
-        email: 'player@example.com',
-        role: 'player',
-      },
+      user: { id: 'p1', email: 'p@t.com', role: 'player' },
       isAuthenticated: true,
       loading: false,
-    })
-
-    mockUsePermissions.mockReturnValue({
-      organizerRole: false,
-      playerRole: true,
-      canEditScores: false,
-      canPublishBracket: false,
-      canManageGroups: false,
-      canViewAllStandings: false,
     } as any)
-
-    renderWithRouter(<OrganizerDashboard />)
-
+    mockUsePermissions.mockReturnValue({ organizerRole: false } as any)
+    render_()
     expect(screen.getByText('Organizer access required')).toBeInTheDocument()
   })
 
-  it('shows Create Tournament button for organizers', () => {
-    mockUseAuth.mockReturnValue({
-      user: {
-        id: '123',
-        email: 'organizer@example.com',
-        role: 'organizer',
-      },
-      isAuthenticated: true,
-      loading: false,
-    })
+  it('loads and lists the organizer tournaments from the API with the stored token', async () => {
+    asOrganizer()
+    mockFetch.mockResolvedValueOnce([
+      { id: 't1', name: 'Spring Open', sport: 'pickleball', status: 'registration_open', createdAt: '2026-01-01' },
+      { id: 't2', name: 'Fall Cup', sport: 'tennis', status: 'draft', createdAt: '2026-02-01' },
+    ] as any)
 
-    mockUsePermissions.mockReturnValue({
-      organizerRole: true,
-      playerRole: false,
-      canEditScores: false,
-      canPublishBracket: false,
-      canManageGroups: false,
-      canViewAllStandings: false,
-    } as any)
+    render_()
 
-    renderWithRouter(<OrganizerDashboard />)
-
-    const buttons = screen.getAllByText('Create Tournament')
-    expect(buttons.length).toBeGreaterThan(0)
+    await waitFor(() => expect(screen.getAllByTestId('organizer-tournament-row')).toHaveLength(2))
+    expect(mockFetch).toHaveBeenCalledWith('org-token', expect.any(Object))
+    expect(screen.getByText('Spring Open')).toBeInTheDocument()
+    expect(screen.getByText('Fall Cup')).toBeInTheDocument()
   })
 
-  it('shows empty state when organizer has no tournaments', () => {
-    mockUseAuth.mockReturnValue({
-      user: {
-        id: '123',
-        email: 'organizer@example.com',
-        role: 'organizer',
-      },
-      isAuthenticated: true,
-      loading: false,
-    })
+  it('navigates to the management screen when a tournament row is clicked', async () => {
+    asOrganizer()
+    mockFetch.mockResolvedValueOnce([
+      { id: 't1', name: 'Spring Open', sport: 'pickleball', status: 'registration_open', createdAt: '2026-01-01' },
+    ] as any)
 
-    mockUsePermissions.mockReturnValue({
-      organizerRole: true,
-      playerRole: false,
-      canEditScores: false,
-      canPublishBracket: false,
-      canManageGroups: false,
-      canViewAllStandings: false,
-    } as any)
+    render_()
 
-    renderWithRouter(<OrganizerDashboard />)
-
-    expect(screen.getByText('No tournaments yet')).toBeInTheDocument()
-    expect(
-      screen.getByText('Create your first tournament to get started')
-    ).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('organizer-tournament-row')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('organizer-tournament-row'))
+    expect(mockNavigate).toHaveBeenCalledWith('/tournament/t1/manage')
   })
 
-  it('calls handleCreateTournament when Create button is clicked', () => {
-    mockUseAuth.mockReturnValue({
-      user: {
-        id: '123',
-        email: 'organizer@example.com',
-        role: 'organizer',
-      },
-      isAuthenticated: true,
-      loading: false,
-    })
-
-    mockUsePermissions.mockReturnValue({
-      organizerRole: true,
-      playerRole: false,
-      canEditScores: false,
-      canPublishBracket: false,
-      canManageGroups: false,
-      canViewAllStandings: false,
-    } as any)
-
-    renderWithRouter(<OrganizerDashboard />)
-
-    const createButton = screen.getAllByText('Create Tournament')[0]
-    fireEvent.click(createButton)
-
-    // Navigation would happen, but we're just testing the click works
-    expect(createButton).toBeInTheDocument()
+  it('shows an empty state when the organizer has no tournaments', async () => {
+    asOrganizer()
+    mockFetch.mockResolvedValueOnce([] as any)
+    render_()
+    await waitFor(() => expect(screen.getByTestId('organizer-empty')).toBeInTheDocument())
+    expect(screen.queryByTestId('organizer-tournament-row')).not.toBeInTheDocument()
   })
 
-  it('renders component structure for authenticated organizers', () => {
-    mockUseAuth.mockReturnValue({
-      user: {
-        id: '123',
-        email: 'organizer@example.com',
-        role: 'organizer',
-      },
-      isAuthenticated: true,
-      loading: false,
-    })
+  it('shows an error state when the fetch fails', async () => {
+    asOrganizer()
+    mockFetch.mockRejectedValueOnce({ code: 'NETWORK_ERROR', message: 'boom', status: 500 })
+    render_()
+    await waitFor(() => expect(screen.getByText(/error/i)).toBeInTheDocument())
+  })
 
-    mockUsePermissions.mockReturnValue({
-      organizerRole: true,
-      playerRole: false,
-      canEditScores: false,
-      canPublishBracket: false,
-      canManageGroups: false,
-      canViewAllStandings: false,
-    } as any)
-
-    const { container } = renderWithRouter(<OrganizerDashboard />)
-
-    // Verify the component renders with proper structure
-    const headings = container.querySelectorAll('h1')
-    expect(headings.length).toBeGreaterThan(0)
+  it('does not render a Create Tournament control (no create screen yet)', async () => {
+    asOrganizer()
+    mockFetch.mockResolvedValueOnce([] as any)
+    render_()
+    await waitFor(() => expect(screen.getByTestId('organizer-empty')).toBeInTheDocument())
+    expect(screen.queryByText(/create tournament/i)).not.toBeInTheDocument()
   })
 })

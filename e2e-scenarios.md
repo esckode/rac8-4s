@@ -168,6 +168,7 @@ Tests are organized by feature groups matching this document:
 | **Group Stage - Doubles (Score submission)** | 2 | `group-stage-doubles-score.spec.ts` | `npx playwright test group-stage-doubles-score` |
 | **Partner Confirmation** | 5 | `partner-requests.spec.ts` | `npx playwright test partner-requests` |
 | **Organizer Tournament Management** | 3 | `organizer-management.spec.ts` | `npx playwright test organizer-management` |
+| **Organizer Home** | 1 | `organizer-home.spec.ts` | `npx playwright test organizer-home` |
 | **Bracket - Singles** | 3 | `bracket-singles.spec.ts` | `npx playwright test --grep "Bracket Singles"` |
 | **Bracket - Doubles** | 2 | `bracket-doubles.spec.ts` | `npx playwright test --grep "Bracket Doubles"` |
 | **Real-Time Updates** | 4 | `real-time-updates.spec.ts` | `npx playwright test --grep "Real-Time Updates"` |
@@ -823,6 +824,22 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 - **Given** I am the creator viewing my tournament
 - **When** I click the "Manage" affordance
 - **Then** I navigate to `/tournament/:id/manage`
+
+---
+
+## Feature: Organizer Home
+
+> Organizer-only landing at `/organizer` (reached via the existing organizer-only
+> "Organizer Dashboard" nav entry). Lists the organizer's own tournaments
+> (`GET /tournaments/organizer`) and links each into `/tournament/:id/manage`.
+> Scope: `assets/planning/organizer-home.md`.
+
+### Scenario: Organizer sees their tournaments and opens one to manage
+- **Type:** Happy path / Navigation
+- **Given** I am an authenticated organizer with at least one tournament
+- **When** I open `/organizer`
+- **Then** I see my tournaments listed
+- **And** clicking one navigates to its management screen `/tournament/:id/manage`
 
 ---
 
