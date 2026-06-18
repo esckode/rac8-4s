@@ -1,5 +1,18 @@
 # Organizer Home (revive OrganizerDashboard) — TDD-first scope
 
+> **STATUS: ✅ implemented & merged.** `OrganizerDashboard` now fetches real data via
+> `fetchOrganizerTournaments` (stored token) and lists rows linking to
+> `/tournament/:id/manage`, with loading/empty/error states. Routed at **`/organizer`**
+> (`ROUTES.ORGANIZER`) behind `ProtectedRoute`. Decisions that differ from the original draft:
+> - **Route is `/organizer`** (not `/organize`) to match the **existing organizer-only nav entry**
+>   in `ResponsiveLayout` (`MORE_ITEMS`), which already pointed there — discovery for free.
+> - **No login redirect** — that nav entry is the discovery path; avoids touching Login/PublicRoute
+>   and the auth e2e.
+> - **Create-tournament control removed** (not hidden behind a dead link) — there is no
+>   create-tournament screen yet; building one is a separate future piece.
+> Tests: `OrganizerDashboard.spec.tsx` (rewritten) + `organizer-home.spec.ts`.
+
+
 **Goal:** Give organizers a real landing page that lists **their** tournaments and links each into the
 management screen — replacing the current dead stub. **TDD-first** (CLAUDE.md §4, §11): scenario docs +
 unit + e2e written and red-committed before implementation.
