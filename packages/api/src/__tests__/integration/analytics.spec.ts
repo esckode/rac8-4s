@@ -338,5 +338,49 @@ describe('Analytics API', () => {
         expect(res.status).toBe(204)
       })
     })
+
+    describe('Locale capture', () => {
+      it('stores the client locale on the event row', async () => {
+        const { sub: organizerId } = OrganizerFactory.token({
+          secret: 'test-secret-key-at-least-32-chars-long-for-testing-purposes!',
+          expiresInSeconds: 3600,
+        })
+        const tournament = await TournamentFactory.create(pool, organizerId)
+        const { player, sessionToken } = await createPlayerWithToken(tournament.id)
+
+        const res = await request(app)
+          .post('/api/analytics/events')
+          .set('Authorization', `Bearer ${sessionToken}`)
+          .send({
+            events: [
+              { timestamp: Date.now(), userId: player.id, eventType: 'page_view', screen: '/standings', locale: 'es-419' },
+            ],
+          })
+
+        expect(res.status).toBe(204)
+
+        const rows = await pool.query('SELECT locale FROM public.user_events WHERE user_id = $1', [player.id])
+        expect(rows.rows[0].locale).toBe('es-419')
+      })
+
+      it('stores null locale when the client omits it', async () => {
+        const { sub: organizerId } = OrganizerFactory.token({
+          secret: 'test-secret-key-at-least-32-chars-long-for-testing-purposes!',
+          expiresInSeconds: 3600,
+        })
+        const tournament = await TournamentFactory.create(pool, organizerId)
+        const { player, sessionToken } = await createPlayerWithToken(tournament.id)
+
+        const res = await request(app)
+          .post('/api/analytics/events')
+          .set('Authorization', `Bearer ${sessionToken}`)
+          .send({ events: [{ timestamp: Date.now(), userId: player.id, eventType: 'page_view' }] })
+
+        expect(res.status).toBe(204)
+
+        const rows = await pool.query('SELECT locale FROM public.user_events WHERE user_id = $1', [player.id])
+        expect(rows.rows[0].locale).toBeNull()
+      })
+    })
   })
 })
