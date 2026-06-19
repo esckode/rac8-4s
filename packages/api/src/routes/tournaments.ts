@@ -17,6 +17,7 @@ import { TournamentStateMachine, type TournamentState, type TransitionAction } f
 import { calculateStandings, generateBracket } from '@core/index'
 import { parseScore, type SportFormat } from '@core/score-parser'
 import { isSinglesMatch, isDoublesMatch, getMatchParticipantIds, validateMatchFormatConsistency } from '../utils/match-format'
+import { processStandingsRecalculate } from '../workers/standings-processor'
 import { getLogger } from '../logger'
 
 const log = getLogger('tournaments')
@@ -529,6 +530,16 @@ export default function tournamentsRouter(deps: AppDependencies) {
         })
       }
 
+      // Recalculate + broadcast standings now so connected clients refresh live
+      // (the in-memory job queue has no consumer; standings are otherwise only
+      // recomputed at read time in the bundle endpoint).
+      if (deps.broadcastBus && match.group_id) {
+        await processStandingsRecalculate(
+          { tournamentId, groupId: match.group_id },
+          { groupRepo, broadcastBus: deps.broadcastBus }
+        )
+      }
+
       log.info('score.submitted', { tournamentId, matchId, score: req.body.score, winnerId, playerId })
 
       res.json({
@@ -634,6 +645,14 @@ export default function tournamentsRouter(deps: AppDependencies) {
         ? (parsed.winner === 'player1' ? match.team1_id! : match.team2_id!)
         : (parsed.winner === 'player1' ? match.player1_id! : match.player2_id!)
       const updated = await groupRepo.updateMatch(matchId, winnerId as string, req.body.score)
+
+      // Broadcast the recalculated standings so connected clients refresh live.
+      if (deps.broadcastBus && match.group_id) {
+        await processStandingsRecalculate(
+          { tournamentId, groupId: match.group_id },
+          { groupRepo, broadcastBus: deps.broadcastBus }
+        )
+      }
 
       if (isOrganizer) {
         log.info('score.overridden', { tournamentId, matchId, score: req.body.score, winnerId })

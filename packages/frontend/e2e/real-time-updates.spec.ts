@@ -18,13 +18,15 @@ import { SELECTORS } from './config'
  *   - "User reconnects after SSE disconnect"
  *
  * Each viewer holds an open EventSource on GET /tournaments/:id/events. A score
- * is submitted out-of-band via the API (a different actor than the viewer's
- * page), so the only way the viewer learns of the change is the SSE broadcast:
- *   score submit → standings.recalculate job → broadcastBus standings.updated
+ * is submitted out-of-band via the API (not through the viewer's page), so the
+ * only way the viewer learns of the change is the SSE broadcast:
+ *   group score submit    → standings.recalculate job → broadcastBus standings.updated
  *   knockout score submit → broadcastBus bracket.updated
  * which the frontend turns into a bundle refetch that re-renders the view.
  *
- * Tournaments default to pickleball, so scores use pickleball game scores.
+ * Standings assertions are name-independent: with one match scored exactly one
+ * participant has a single win, so the count of wins cells reading "1" goes
+ * 0 → 1. Tournaments default to pickleball, so scores use pickleball games.
  */
 test.describe('Real-Time Updates', () => {
   let organizerToken: string
@@ -37,7 +39,7 @@ test.describe('Real-Time Updates', () => {
     await page.addInitScript(t => localStorage.setItem('auth_token', t as string), token)
   }
 
-  // Submit the single group match's score so the focus player wins (wins: 1).
+  // Submit the single group match's score so the focus player wins.
   async function submitGroupWinForFocus(tournamentId: string, token: string, focusPlayerId: string) {
     const res = await apiCall(`/tournaments/${tournamentId}/bundle`, 'GET', undefined, token)
     if (!res.ok) throw new Error(`bundle ${res.status}: ${await res.text()}`)
@@ -49,23 +51,23 @@ test.describe('Real-Time Updates', () => {
     if (!sub.ok) throw new Error(`score ${sub.status}: ${await sub.text()}`)
   }
 
-  function focusWins(page: Page, focusName: string) {
-    return page.locator(SELECTORS.STANDINGS_ROW).filter({ hasText: focusName }).locator(SELECTORS.STANDINGS_WINS)
-  }
+  const winsCells = (page: Page) => page.locator(SELECTORS.STANDINGS_WINS)
+  const wonCells = (page: Page) => page.locator(SELECTORS.STANDINGS_WINS).filter({ hasText: '1' })
 
   test('standings update live when another actor submits a score', async ({ page }) => {
     const fx = await createSinglesTournamentInGroupStage(organizerToken, 2)
     await inject(page, fx.playerToken)
     await page.goto(`/tournament/${fx.tournamentId}/standings`)
 
-    // Baseline: the focus player has no wins yet.
-    await expect(focusWins(page, fx.playerName)).toHaveText('0')
+    // Baseline: two participants, nobody has a win yet.
+    await expect(winsCells(page)).toHaveCount(2)
+    await expect(wonCells(page)).toHaveCount(0)
 
     // A score is submitted out-of-band (not through this page).
     await submitGroupWinForFocus(fx.tournamentId, fx.playerToken, fx.playerId)
 
     // The table reflects the new standing via SSE, with no manual reload.
-    await expect(focusWins(page, fx.playerName)).toHaveText('1', { timeout: 15000 })
+    await expect(wonCells(page)).toHaveCount(1, { timeout: 15000 })
   })
 
   test('multiple connected clients see synchronized standings', async ({ page, browser }) => {
@@ -74,20 +76,20 @@ test.describe('Real-Time Updates', () => {
     // Viewer A: the focus player.
     await inject(page, fx.playerToken)
     await page.goto(`/tournament/${fx.tournamentId}/standings`)
-    await expect(focusWins(page, fx.playerName)).toHaveText('0')
+    await expect(wonCells(page)).toHaveCount(0)
 
     // Viewer B: the organizer, a distinct authenticated client/session.
     const ctxB: BrowserContext = await browser.newContext()
     const pageB = await ctxB.newPage()
     await inject(pageB, organizerToken)
     await pageB.goto(`/tournament/${fx.tournamentId}/standings`)
-    await expect(focusWins(pageB, fx.playerName)).toHaveText('0')
+    await expect(wonCells(pageB)).toHaveCount(0)
 
     // One score submission should reach both clients.
     await submitGroupWinForFocus(fx.tournamentId, fx.playerToken, fx.playerId)
 
-    await expect(focusWins(page, fx.playerName)).toHaveText('1', { timeout: 15000 })
-    await expect(focusWins(pageB, fx.playerName)).toHaveText('1', { timeout: 15000 })
+    await expect(wonCells(page)).toHaveCount(1, { timeout: 15000 })
+    await expect(wonCells(pageB)).toHaveCount(1, { timeout: 15000 })
 
     await ctxB.close()
   })
@@ -96,13 +98,14 @@ test.describe('Real-Time Updates', () => {
     const fx = await createTournamentInKnockoutStage(organizerToken, { format: 'singles' })
     expect(fx.knockoutMatch).not.toBeNull()
 
-    // Viewer: the organizer watching the bracket (not the scorer).
-    await inject(page, organizerToken)
+    // Viewer: the focus participant watching the bracket (the page does not
+    // submit — the score arrives via the API below, observed only over SSE).
+    // Players see the match-focused bracket (MatchCards), not the organizer tree.
+    await inject(page, fx.focusToken)
     await page.goto(`/tournament/${fx.tournamentId}/bracket`)
-    await expect(page.locator(SELECTORS.BRACKET_TREE)).toBeVisible()
+    await expect(page.locator(SELECTORS.BRACKET_MATCHES).first()).toBeVisible()
     await expect(page.getByText('11-9, 11-7')).toHaveCount(0)
 
-    // The focus participant submits their knockout score via the API.
     const sub = await apiCall(
       `/tournaments/${fx.tournamentId}/knockout/${fx.knockoutMatch!.id}/score`,
       'POST',
@@ -119,17 +122,18 @@ test.describe('Real-Time Updates', () => {
     const fx = await createSinglesTournamentInGroupStage(organizerToken, 2)
     await inject(page, fx.playerToken)
     await page.goto(`/tournament/${fx.tournamentId}/standings`)
-    await expect(focusWins(page, fx.playerName)).toHaveText('0')
+    await expect(winsCells(page)).toHaveCount(2)
+    await expect(wonCells(page)).toHaveCount(0)
 
     // Drop the network so the EventSource disconnects and the broadcast is missed.
     await context.setOffline(true)
     await submitGroupWinForFocus(fx.tournamentId, fx.playerToken, fx.playerId)
 
     // The page is still showing stale data while offline.
-    await expect(focusWins(page, fx.playerName)).toHaveText('0')
+    await expect(wonCells(page)).toHaveCount(0)
 
     // On reconnect, the hook refetches the authoritative bundle (no data loss).
     await context.setOffline(false)
-    await expect(focusWins(page, fx.playerName)).toHaveText('1', { timeout: 20000 })
+    await expect(wonCells(page)).toHaveCount(1, { timeout: 20000 })
   })
 })
