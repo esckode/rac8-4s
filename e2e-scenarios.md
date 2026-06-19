@@ -250,7 +250,17 @@ npm run test:e2e
   - API integration: `bracket-doubles.spec.ts` (3 passing)
   - Use fixture: `createTournamentInKnockoutStage(organizerToken, { format, publish })`
 
-⏳ **Phases 7-10: Real-Time, Offline, Mobile, Accessibility** (17 scenarios) — Ready to implement  
+✅ **Phase 7: Real-Time Updates (SSE)** (4 scenarios) — COMPLETE  
+  - Browser e2e: `packages/frontend/e2e/real-time-updates.spec.ts` — 4/4 passing on chromium
+    (live standings, multi-client sync, live bracket, reconnect refresh).
+  - API integration: `standings-sse.spec.ts` (standings.updated on group score),
+    `bracket-sse.spec.ts` (bracket.updated on knockout score).
+  - Wiring fixed along the way: EventSource now authenticates via `?token=`;
+    `useSSE` refetches the bundle on every data event; group-score routes emit
+    `standings.updated` synchronously (the in-memory job queue has no consumer);
+    `useTournament` flattens the grouped bundle standings for StandingsTable.
+
+⏳ **Phases 8-10: Offline, Mobile, Accessibility** (13 scenarios) — Ready to implement  
   - Use appropriate fixture based on required tournament state
 
 **Fixture Library:** `packages/frontend/e2e/fixtures.ts` (all shared helpers available)  
