@@ -68,6 +68,10 @@ export function useSSE(tournamentId: string): SSEState {
             const payload: StandingsUpdatedPayload = JSON.parse(event.data)
             standingsStore.update(payload)
 
+            // Refetch the authoritative bundle so the rendered standings reflect
+            // the update (the store is per-group; the view reads the bundle).
+            refetchTournament()
+
             // Track SSE update latency
             const latency = eventTimestampRef.current ? receivedAt - eventTimestampRef.current : 0
             track('sse_update', {
@@ -88,8 +92,9 @@ export function useSSE(tournamentId: string): SSEState {
           if (event instanceof MessageEvent) {
             const receivedAt = Date.now()
             const payload: BracketPublishedPayload = JSON.parse(event.data)
-            // TODO: Update bracket store when available
-            // For now, just log that we received it
+
+            // Refetch so the bracket appears as soon as it is published.
+            refetchTournament()
 
             // Track SSE update
             const latency = eventTimestampRef.current ? receivedAt - eventTimestampRef.current : 0
@@ -100,6 +105,28 @@ export function useSSE(tournamentId: string): SSEState {
           }
         } catch (err) {
           console.error('Failed to parse bracket.published event', err)
+          // Don't crash on malformed data
+        }
+      })
+
+      // Handle bracket.updated event (a knockout score was submitted)
+      eventSource.addEventListener('bracket.updated', (event: Event) => {
+        try {
+          if (event instanceof MessageEvent) {
+            const receivedAt = Date.now()
+            JSON.parse(event.data)
+
+            // Refetch so the bracket advances live with the new result.
+            refetchTournament()
+
+            const latency = eventTimestampRef.current ? receivedAt - eventTimestampRef.current : 0
+            track('sse_update', {
+              eventType: 'bracket.updated',
+              latency,
+            })
+          }
+        } catch (err) {
+          console.error('Failed to parse bracket.updated event', err)
           // Don't crash on malformed data
         }
       })

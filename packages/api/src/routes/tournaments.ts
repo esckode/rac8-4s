@@ -1030,6 +1030,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
       const updated = await knockoutRepo.updateKnockoutMatch(matchId, winnerId, req.body.score)
 
+      // Broadcast so connected clients advance the bracket live (mirrors the
+      // bracket.published broadcast from the generation job).
+      deps.broadcastBus?.emit(tournamentId, 'bracket.updated', { matchId, round: updated.round, winnerId })
+
       log.info('score.submitted', { tournamentId, matchId, round: updated.round, score: req.body.score, winnerId, playerId: payload.playerId })
 
       res.json({
@@ -1086,6 +1090,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'Cannot determine winner' })
       }
       const updated = await knockoutRepo.updateKnockoutMatch(matchId, winnerId, req.body.score)
+
+      deps.broadcastBus?.emit(tournamentId, 'bracket.updated', { matchId, round: updated.round, winnerId })
 
       log.info('score.overridden', { tournamentId, matchId, round: updated.round, score: req.body.score, winnerId, organizerId: payload.sub })
 
