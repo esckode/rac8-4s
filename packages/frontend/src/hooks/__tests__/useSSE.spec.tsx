@@ -115,6 +115,26 @@ describe('useSSE', () => {
       expect(mockEventSourceInstance?.url).toContain(`/tournaments/${tournamentId}/events`)
     })
 
+    it('includes the auth token as a query param (EventSource cannot set headers)', () => {
+      localStorage.setItem('auth_token', 'tok_abc123')
+      mockUseTournament.mockReturnValue({
+        tournament: null,
+        standings: [],
+        matches: { group: [], knockout: [] },
+        bracket: null,
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+        retryIn: null,
+        cancelAutoRetry: jest.fn(),
+      })
+
+      renderHook(() => useSSE('tourn_123'), { wrapper: Wrapper })
+
+      expect(mockEventSourceInstance?.url).toContain('token=tok_abc123')
+      localStorage.removeItem('auth_token')
+    })
+
     it('closes EventSource on unmount', () => {
       const tournamentId = 'tourn_123'
 

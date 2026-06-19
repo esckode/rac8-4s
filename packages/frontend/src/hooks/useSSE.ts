@@ -38,7 +38,12 @@ export function useSSE(tournamentId: string): SSEState {
     }
 
     const apiBase = ''  // Use relative paths with Vite proxy (/api)
-    const eventSourceUrl = `${apiBase}/tournaments/${tournamentId}/events`
+    // EventSource cannot send an Authorization header, so the token is passed as
+    // a query param — the /events route accepts ?token= for this reason.
+    const token = localStorage.getItem('auth_token')
+    const eventSourceUrl = `${apiBase}/tournaments/${tournamentId}/events${
+      token ? `?token=${encodeURIComponent(token)}` : ''
+    }`
 
     try {
       const eventSource = new ReconnectingEventSource(eventSourceUrl, {
