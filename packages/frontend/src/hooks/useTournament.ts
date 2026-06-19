@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { Tournament, Standing, Match } from '@shared/types'
+import type { Tournament, Standing, Match, Player } from '@shared/types'
 import type { BracketData, MatchWithOpponent } from '../types'
 import { tournamentStore, standingsStore, matchStore, playerCache } from '../state'
 import { playersFromBundleStandings, flattenBundleStandings } from '../utils/standings-players'
