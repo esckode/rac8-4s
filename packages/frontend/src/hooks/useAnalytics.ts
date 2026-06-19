@@ -13,6 +13,8 @@ export interface AnalyticsEvent {
   timestamp: number
   userId: string
   eventType: string
+  /** Client locale (navigator.language), used to rank language usage. */
+  locale?: string
   screen?: string
   duration?: number
   data?: Record<string, any>
@@ -76,6 +78,7 @@ export function useAnalytics() {
         timestamp: Date.now(),
         userId: user.id,
         eventType,
+        locale: typeof navigator !== 'undefined' ? navigator.language : undefined,
         ...data,
       }
 

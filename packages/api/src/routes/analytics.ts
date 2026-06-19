@@ -9,6 +9,7 @@ interface AnalyticsEventInput {
   timestamp: number
   userId: string
   eventType: string
+  locale?: string
   screen?: string
   duration?: number
   data?: Record<string, any>
@@ -42,8 +43,8 @@ export default function analyticsRouter(deps: AppDependencies) {
 
         const eventId = `event_${Date.now()}_${Math.random().toString(36).slice(2)}`
         await deps.db.query(
-          `INSERT INTO public.user_events (id, user_id, event_type, screen, duration, data, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          `INSERT INTO public.user_events (id, user_id, event_type, screen, duration, data, locale, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
           [
             eventId,
             payload.playerId,
@@ -51,6 +52,7 @@ export default function analyticsRouter(deps: AppDependencies) {
             typedEvent.screen || null,
             typedEvent.duration || null,
             typedEvent.data ? JSON.stringify(typedEvent.data) : null,
+            typeof typedEvent.locale === 'string' ? typedEvent.locale.slice(0, 35) : null,
           ]
         )
       }
