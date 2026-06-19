@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: type-check + coverage gate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: tournament_user
+          POSTGRES_PASSWORD: tournament_pass
+          POSTGRES_DB: tournament_app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tournament_user -d tournament_app"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # The transactional test harness reads TEST_DATABASE_URL (helpers/db.ts)
+      # and runs migrations itself on first connection.
+      TEST_DATABASE_URL: postgresql://tournament_user:tournament_pass@localhost:5432/tournament_app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      # Enforces the per-package coverage thresholds (api/frontend 80,
+      # worker 90, core-logic 100) via jest coverageThreshold — fails the
+      # build if any package drops below its gate.
+      - name: Test + coverage gate
+        run: npm run test:coverage
