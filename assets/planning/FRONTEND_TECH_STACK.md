@@ -83,7 +83,23 @@ Recommended modern, lightweight, open-source tech stack for implementing Task #1
 
 ---
 
-### 3. **Bracket Visualization: @g-loot/react-tournament-brackets**
+### 3. **Bracket Visualization: @xyflow/react (React Flow)** — supersedes @g-loot
+
+> **⚠️ SUPERSEDED (2026-06-18).** The original choice below — `@g-loot/react-tournament-brackets` — was
+> abandoned and is incompatible with this project's React 19:
+> - Latest published is `1.0.31-rc` (the `^2.0.0` cited below was never published); last release Dec 2023.
+> - Peer-deps `react@^18` + `styled-components@^4` + `react-svg-pan-zoom@^3` — all stale; styled-components 4 on React 19 is known-broken.
+> - The whole single-elim bracket ecosystem is dead (`react-brackets` React ^17 / 2022, `react-tournament-bracket` 2022).
+>
+> **Decision:** the organizer bracket tree uses **`@xyflow/react` (React Flow) v12** — actively maintained
+> (peer `react>=17`, native React 19), light deps (`zustand`/`classcat`), real SVG connector edges + pan/zoom,
+> mobile-friendly. Single-elimination is laid out by a small pure transform (`bracketToFlow`: round → x column,
+> position → y, edges feed each match into the next round). Player view stays match-focused (no tree).
+> Implementation: `OrganizerBracket.tsx` + `bracketToFlow.ts`. Install: `npm install @xyflow/react`.
+
+---
+
+#### Original (superseded) recommendation
 
 **Package:** `@g-loot/react-tournament-brackets@^2.0.0`  
 **License:** MIT (open-source)  

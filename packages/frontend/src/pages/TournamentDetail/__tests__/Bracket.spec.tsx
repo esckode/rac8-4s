@@ -13,6 +13,13 @@ jest.mock('../../../hooks/useTournament')
 jest.mock('../../../hooks/usePermissions')
 jest.mock('../../../hooks/useAuth')
 jest.mock('react-router-dom', () => ({ useParams: () => ({ tournamentId: 't1' }) }))
+// The organizer tree is a React Flow canvas; stub it (covered by its own unit
+// tests + e2e). Here we only assert it is the chosen organizer view.
+jest.mock('../../../components/shared/OrganizerBracket', () => ({
+  OrganizerBracket: ({ rounds }: { rounds: unknown[] }) => (
+    <div data-testid="bracket-tree">tree:{rounds.length}</div>
+  ),
+}))
 jest.mock('../../../api/client', () => ({
   submitScore: jest.fn().mockResolvedValue(undefined),
   editScore: jest.fn().mockResolvedValue(undefined),
@@ -113,40 +120,31 @@ describe('Bracket', () => {
     mockTournament({ bracket: null })
     asRole('player')
     render(<Bracket />)
-    const pending = screen.getByTestId('bracket-pending')
-    expect(pending).toBeInTheDocument()
-    expect(pending).toHaveTextContent(/group stage completes/i)
+    expect(screen.getByTestId('bracket-pending')).toHaveTextContent(/group stage completes/i)
   })
 
-  it('renders the bracket tree with round labels when generated', () => {
+  it('renders the React Flow tree for an organizer', () => {
     mockTournament({ bracket: { rounds, totalPlayers: 4, byeCount: 0 } })
     asRole('organizer')
     render(<Bracket />)
-
     expect(screen.getByTestId('bracket-tree')).toBeInTheDocument()
-    expect(screen.getAllByTestId('bracket-round')).toHaveLength(2)
-    expect(screen.getByText('Semifinals')).toBeInTheDocument()
-    expect(screen.getByText('Final')).toBeInTheDocument()
-    expect(screen.getByText('Player 1')).toBeInTheDocument()
   })
 
-  it('opens the score form when a participant submits a knockout score', () => {
+  it('shows a match-focused list with submit for a player (only playable matches)', () => {
     mockTournament({ bracket: { rounds, totalPlayers: 4, byeCount: 0 } })
     asRole('player')
     render(<Bracket />)
-
-    fireEvent.click(screen.getAllByTestId('submit-score-button')[0])
-    expect(screen.getByTestId('score-submit-form')).toBeInTheDocument()
+    // sf1 + sf2 are playable; the TBD final is hidden
+    expect(screen.getAllByTestId('match-card')).toHaveLength(2)
+    expect(screen.queryByTestId('bracket-tree')).not.toBeInTheDocument()
   })
 
-  it('closes the score form via its cancel control', () => {
+  it('closes the score form via cancel', () => {
     mockTournament({ bracket: { rounds, totalPlayers: 4, byeCount: 0 } })
     asRole('player')
     render(<Bracket />)
-
     fireEvent.click(screen.getAllByTestId('submit-score-button')[0])
     expect(screen.getByTestId('score-submit-form')).toBeInTheDocument()
-
     fireEvent.click(screen.getByText('Cancel'))
     expect(screen.queryByTestId('score-submit-form')).not.toBeInTheDocument()
   })
@@ -163,7 +161,6 @@ describe('Bracket', () => {
     fireEvent.click(screen.getByTestId('score-submit'))
 
     await waitFor(() => expect(refetch).toHaveBeenCalled())
-    // The bracket tags knockout matches so the correct endpoint is hit.
     expect(submitScore).toHaveBeenCalledWith('t1', 'sf1', '11-9, 11-7', 'tok', 'knockout')
     localStorage.clear()
   })

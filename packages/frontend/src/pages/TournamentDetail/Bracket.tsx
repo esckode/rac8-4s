@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import type { Match } from '@shared/types'
 import { useTournament } from '../../hooks/useTournament'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useAuth } from '../../hooks/useAuth'
-import { BracketTree } from '../../components/shared/BracketTree'
+import { MatchCard } from '../../components/shared/MatchCard'
+import { OrganizerBracket } from '../../components/shared/OrganizerBracket'
 import { ScoreSubmitForm } from '../../components/ScoreSubmitForm'
 import '../../styles/globals.css'
 
@@ -17,6 +19,11 @@ export const Bracket: React.FC = () => {
   const knockoutMatches = useMemo(
     () => (bracket?.rounds ?? []).flatMap((r) => r.matches),
     [bracket]
+  )
+  // Player view is match-focused: only matches ready to play (both slots filled).
+  const playableMatches = useMemo(
+    () => knockoutMatches.filter((m) => m.player1Id && m.player2Id),
+    [knockoutMatches]
   )
   const scoringMatch = knockoutMatches.find((m) => m.id === scoringMatchId) || null
 
@@ -71,13 +78,24 @@ export const Bracket: React.FC = () => {
     )
   }
 
-  const userRole = organizerRole ? 'organizer' : 'player'
-
   return (
     <div className="space-y-[--s-6]">
       <h2 className="text-2xl font-bold text-[--ink-900]">Bracket</h2>
 
-      <BracketTree rounds={bracket.rounds} userRole={userRole} onSubmitScore={setScoringMatchId} />
+      {organizerRole ? (
+        <OrganizerBracket rounds={bracket.rounds} />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-[--s-4]">
+          {playableMatches.map((m) => (
+            <MatchCard
+              key={m.id}
+              match={m as unknown as Match}
+              userRole="player"
+              onSubmitScore={setScoringMatchId}
+            />
+          ))}
+        </div>
+      )}
 
       {scoringMatch && (
         <div
