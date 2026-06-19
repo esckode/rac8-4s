@@ -28,10 +28,16 @@ test.describe('Bracket Doubles', () => {
     const fx = await createTournamentInKnockoutStage(organizerToken, { format: 'doubles' })
     await inject(page, fx.organizerToken)
 
-    // Pull a real team name from the bundle's team name-map to assert it surfaces.
+    // Resolve a name for a team that is actually IN the bracket (a finalist), so
+    // the assertion is deterministic — the tree only renders the advancing teams.
     const bundleRes = await apiCall(`/tournaments/${fx.tournamentId}/bundle`, 'GET', undefined, fx.organizerToken)
     const bundle = await bundleRes.json()
-    const teamName: string | undefined = (bundle.teams ?? []).map((t: any) => t.name).find((n: string) => !!n)
+    const bracketTeamId: string | undefined = (bundle.bracket?.rounds ?? [])
+      .flatMap((r: any) => r.matches)
+      .flatMap((m: any) => [m.player1Id, m.player2Id])
+      .find((id: string | null) => !!id)
+    expect(bracketTeamId).toBeTruthy()
+    const teamName: string | undefined = (bundle.teams ?? []).find((t: any) => t.id === bracketTeamId)?.name
     expect(teamName).toBeTruthy()
     expect(teamName).toMatch(/&/) // "P1 & P2"
 

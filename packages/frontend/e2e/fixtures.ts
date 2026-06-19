@@ -646,30 +646,9 @@ export async function createTournamentInKnockoutStage(
 
   let focus = players[0]
 
-  if (isDoubles) {
-    // Force the focus team to advance: locate the focus's group (players are
-    // resolved via teams in the listing), score its single group match as a win.
-    const groupsList = await apiCall(`/tournaments/${tournamentId}/groups`, 'GET', undefined, organizerToken)
-    if (!groupsList.ok) throw new Error(`Failed to list groups: ${groupsList.status} ${await groupsList.text()}`)
-    const { groups } = await groupsList.json()
-    const focusGroup = groups.find((g: any) => (g.players ?? []).some((p: any) => p.id === focus.playerId))
-    if (!focusGroup) throw new Error('Could not locate the focus player group')
-
-    const bundle = await fetchBundle()
-    const focusGroupMatch = (bundle.matches?.group ?? []).find(
-      (m: any) => m.groupId === focusGroup.id && m.status === 'pending'
-    )
-    if (!focusGroupMatch) throw new Error('Could not locate the focus group match')
-    const sc = await apiCall(
-      `/tournaments/${tournamentId}/matches/${focusGroupMatch.id}/score`,
-      'POST',
-      { score: '11-2, 11-3' },
-      focus.token
-    )
-    if (!sc.ok) throw new Error(`Failed to submit focus group score: ${sc.status} ${await sc.text()}`)
-  }
-
-  // Complete the group stage (force past the pending-scores guard).
+  // Complete the group stage (force past the pending-scores guard). For doubles
+  // we do not force a particular team to advance here — the focus is re-resolved
+  // after publish onto an actual member of a finalist team (see below).
   const complete = await apiCall(
     `/tournaments/${tournamentId}/advance`,
     'POST',
@@ -702,8 +681,18 @@ export async function createTournamentInKnockoutStage(
 
   let knockoutMatch: any = null
   if (isDoubles) {
-    // The focus team is one of the two finalists; there is a single pending match.
-    knockoutMatch = knockout.find((m: any) => m.status === 'pending') ?? null
+    // Pick the single playable pending knockout match (the final) and re-resolve
+    // the focus onto a real member of one of its teams, so the focus is always a
+    // participant. Team names embed member names, so match the team name (from
+    // the bundle's team map) against the registered players.
+    knockoutMatch = knockout.find((m: any) => m.player1Id && m.player2Id && m.status === 'pending') ?? null
+    if (knockoutMatch) {
+      const teams: any[] = bundle.teams ?? []
+      const teamName: string = teams.find((t: any) => t.id === knockoutMatch.player1Id)?.name ?? ''
+      const member = players.find((p) => teamName.includes(p.name))
+      if (!member) throw new Error('Could not resolve a finalist team member for the focus')
+      focus = member
+    }
   } else {
     // Singles: the focus is a real player id in a first-round match.
     knockoutMatch =
