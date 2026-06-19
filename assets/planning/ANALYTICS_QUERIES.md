@@ -24,6 +24,31 @@ CREATE TABLE user_events (
 
 ## Quick Queries
 
+### 0. Language Usage (Localization Prioritization)
+
+**Question:** "Which languages receive the highest usage?" — drives which locales to translate first.
+
+Locale is captured from the client's `navigator.language` on every event (migration 030,
+`user_events.locale`).
+
+```sql
+-- Top full locales by event volume (e.g. en-US, es-419, pt-BR)
+SELECT locale, COUNT(*) AS events, COUNT(DISTINCT user_id) AS users
+FROM user_events
+WHERE locale IS NOT NULL
+GROUP BY locale
+ORDER BY events DESC;
+
+-- Collapsed to primary language subtag (en, es, pt, …) for a higher-level view
+SELECT split_part(locale, '-', 1) AS language,
+       COUNT(*) AS events,
+       COUNT(DISTINCT user_id) AS users
+FROM user_events
+WHERE locale IS NOT NULL
+GROUP BY 1
+ORDER BY events DESC;
+```
+
 ### 1. User's Navigation Path (Screen Sequence)
 
 **Question:** "Which screens did user X visit, in what order?"
