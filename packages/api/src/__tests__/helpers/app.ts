@@ -4,6 +4,7 @@ import { createApp } from '../../app'
 import { InMemoryTokenStore } from '../../auth/token-store'
 import { DEFAULT_APP_CONFIG } from '../../config'
 import { InMemoryEmailAdapter } from '../../email-adapter'
+import type { BroadcastBus } from '../../broadcast-bus'
 import { getTransactionClient } from './db'
 
 export interface JwtConfig {
@@ -23,7 +24,7 @@ export interface TestAppDeps {
  * If a transaction is active, uses the transaction client for all queries.
  * Otherwise uses the pool.
  */
-export function createTestApp(pool: Pool): TestAppDeps {
+export function createTestApp(pool: Pool, overrides: { broadcastBus?: BroadcastBus } = {}): TestAppDeps {
   const tokenStore = new InMemoryTokenStore()
   const emailAdapter = new InMemoryEmailAdapter()
   const jwtConfig = {
@@ -40,6 +41,7 @@ export function createTestApp(pool: Pool): TestAppDeps {
     tokenStore,
     config: DEFAULT_APP_CONFIG,
     emailAdapter,
+    broadcastBus: overrides.broadcastBus,
   })
 
   return { app, tokenStore, emailAdapter, jwtConfig }

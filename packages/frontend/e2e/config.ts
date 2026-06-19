@@ -230,6 +230,8 @@ export const SELECTORS = {
   TOURNAMENT_CARDS: '[data-testid="tournament-card"], .tournament-card',
   TOURNAMENT_LIST: '[data-testid="tournament-list"], .tournament-list',
   STANDINGS_TABLE: '[data-testid="standings-table"], .standings-table',
+  STANDINGS_ROW: '[data-testid="standings-row"]',
+  STANDINGS_WINS: '[data-testid="standings-wins"]',
   BRACKET_MATCHES: '[data-testid="match-card"], .match-card',
 
   // Bracket (knockout)

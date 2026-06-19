@@ -130,6 +130,7 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
     return (
       <div
         style={style}
+        data-testid="standings-row"
         onClick={() => onRowClick?.(standing.participantId)}
         className={`
           flex
@@ -155,7 +156,7 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
         <div className="w-20 text-center text-[--ink-600]">{standing.wins + standing.losses}</div>
 
         {/* Wins */}
-        <div className="w-16 text-center text-[--ink-600]">{standing.wins}</div>
+        <div data-testid="standings-wins" className="w-16 text-center text-[--ink-600]">{standing.wins}</div>
 
         {/* Losses */}
         <div className="w-20 text-center text-[--ink-600]">{standing.losses}</div>

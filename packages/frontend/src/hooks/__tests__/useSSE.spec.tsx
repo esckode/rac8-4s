@@ -420,6 +420,76 @@ describe('useSSE', () => {
     })
   })
 
+  describe('Live refresh on data events', () => {
+    const baseTournament = {
+      tournament: null,
+      standings: [],
+      matches: { group: [], knockout: [] },
+      bracket: null,
+      isLoading: false,
+      error: null,
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+    }
+
+    it('refetches the bundle when a standings.updated event arrives', async () => {
+      const mockRefetch = jest.fn()
+      mockUseTournament.mockReturnValue({ ...baseTournament, refetch: mockRefetch })
+
+      renderHook(() => useSSE('tourn_123'), { wrapper: Wrapper })
+
+      mockEventSourceInstance?.emitEvent('standings.updated', {
+        groupId: 'group_1',
+        standings: [],
+      })
+
+      await waitFor(() => {
+        expect(mockRefetch).toHaveBeenCalled()
+      })
+    })
+
+    it('refetches the bundle when a bracket.published event arrives', async () => {
+      const mockRefetch = jest.fn()
+      mockUseTournament.mockReturnValue({ ...baseTournament, refetch: mockRefetch })
+
+      renderHook(() => useSSE('tourn_123'), { wrapper: Wrapper })
+
+      mockEventSourceInstance?.emitEvent('bracket.published', { matchCount: 8, byeCount: 0 })
+
+      await waitFor(() => {
+        expect(mockRefetch).toHaveBeenCalled()
+      })
+    })
+
+    it('refetches the bundle when a bracket.updated event arrives', async () => {
+      const mockRefetch = jest.fn()
+      mockUseTournament.mockReturnValue({ ...baseTournament, refetch: mockRefetch })
+
+      renderHook(() => useSSE('tourn_123'), { wrapper: Wrapper })
+
+      mockEventSourceInstance?.emitEvent('bracket.updated', {
+        matchId: 'ko_1',
+        round: 1,
+        winnerId: 'player_1',
+      })
+
+      await waitFor(() => {
+        expect(mockRefetch).toHaveBeenCalled()
+      })
+    })
+
+    it('does not crash on a malformed bracket.updated event', () => {
+      mockUseTournament.mockReturnValue({ ...baseTournament, refetch: jest.fn() })
+
+      const { result } = renderHook(() => useSSE('tourn_123'), { wrapper: Wrapper })
+
+      const malformed = new MessageEvent('bracket.updated', { data: 'not json {' })
+      mockEventSourceInstance?.listeners['bracket.updated']?.forEach(h => h(malformed))
+
+      expect(result.current).toBeDefined()
+    })
+  })
+
   describe('Configuration', () => {
     it('configures ReconnectingEventSource with maxReconnectionDelay', () => {
       const tournamentId = 'tourn_123'

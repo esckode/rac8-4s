@@ -903,6 +903,21 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 
 ## Feature: Real-Time Updates (SSE)
 
+> **Events & contract.** The API broadcasts on a per-tournament `BroadcastBus`,
+> streamed to clients over `GET /tournaments/:id/events`:
+> - `standings.updated` `{ groupId, standings }` — after the standings-recalc job.
+> - `bracket.published` `{ matchCount, byeCount }` — after the bracket is generated.
+> - `bracket.updated` `{ matchId, round, winnerId }` — **after a knockout score is
+>   submitted** (`POST`/`PATCH /:id/knockout/:matchId/score`). Added for Phase 7
+>   so the bracket advances live; previously knockout scoring emitted nothing.
+>
+> **Frontend behavior.** `useSSE` turns each of these events (and a reconnect)
+> into a `useTournament` bundle **refetch** — the authoritative bundle re-renders
+> the standings table and bracket. This keeps the rendered view consistent with
+> the server rather than patching client state per event.
+>
+> **Browser e2e:** `packages/frontend/e2e/real-time-updates.spec.ts`.
+
 ### Scenario: User receives live standings update
 - **Type:** Happy path
 - **Given** I am viewing /tournament/:id/standings
