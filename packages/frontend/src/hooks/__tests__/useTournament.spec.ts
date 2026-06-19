@@ -49,17 +49,22 @@ describe('useTournament', () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
+    // The bundle returns standings grouped per group (the real API shape).
     standings: [
       {
-        id: 'standing_1',
         groupId: 'group_1',
-        playerId: 'player_1',
-        rank: 1,
-        wins: 2,
-        losses: 0,
-        setsWon: 4,
-        setsLost: 0,
-        tournamentId: 'tourn_123',
+        groupName: 'Group A',
+        standings: [
+          {
+            rank: 1,
+            playerId: 'player_1',
+            name: 'Player 1',
+            wins: 2,
+            losses: 0,
+            setsWon: 4,
+            setsLost: 0,
+          },
+        ],
       },
     ],
     matches: {
@@ -149,7 +154,10 @@ describe('useTournament', () => {
 
       expect(result.current).toEqual({
         tournament: mockTournamentData.tournament,
-        standings: mockTournamentData.standings,
+        // standings are flattened from the grouped bundle shape to Standing[]
+        standings: [
+          { participantId: 'player_1', rank: 1, wins: 2, losses: 0, setsWon: 4, setsLost: 0 },
+        ],
         matches: mockTournamentData.matches,
         bracket: mockTournamentData.bracket,
         isLoading: false,
@@ -243,7 +251,9 @@ describe('useTournament', () => {
 
       expect(stores.standingsStore.update).toHaveBeenCalledWith({
         groupId: 'all',
-        standings: mockTournamentData.standings,
+        standings: [
+          { participantId: 'player_1', rank: 1, wins: 2, losses: 0, setsWon: 4, setsLost: 0 },
+        ],
       })
     })
 

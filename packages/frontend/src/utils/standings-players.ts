@@ -1,4 +1,4 @@
-import type { Player } from '@shared/types'
+import type { Player, Standing } from '@shared/types'
 
 /**
  * Extract {id, name} participant records from a tournament bundle's standings so
@@ -22,4 +22,28 @@ export function playersFromBundleStandings(standings: unknown): Player[] {
     if (id && name) players.push({ id, name } as Player)
   }
   return players
+}
+
+/**
+ * Flatten a tournament bundle's standings into the flat `Standing[]` that
+ * StandingsTable consumes. The bundle returns standings grouped per group
+ * (`[{ standings: [{ playerId, ... }] }]`); mocked/older callers may pass a flat
+ * array using `participantId` or `playerId`. All shapes are normalised to
+ * `{ participantId, rank, wins, losses, setsWon, setsLost }`.
+ */
+export function flattenBundleStandings(standings: unknown): Standing[] {
+  if (!Array.isArray(standings)) return []
+
+  const rows: any[] = standings.flatMap((entry: any) =>
+    Array.isArray(entry?.standings) ? entry.standings : [entry]
+  )
+
+  return rows.map((row: any) => ({
+    participantId: row?.participantId ?? row?.playerId,
+    rank: row?.rank,
+    wins: row?.wins,
+    losses: row?.losses,
+    setsWon: row?.setsWon,
+    setsLost: row?.setsLost,
+  }))
 }

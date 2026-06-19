@@ -10,7 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Tournament, Standing, Match } from '@shared/types'
 import type { BracketData, MatchWithOpponent } from '../types'
 import { tournamentStore, standingsStore, matchStore, playerCache } from '../state'
-import { playersFromBundleStandings } from '../utils/standings-players'
+import { playersFromBundleStandings, flattenBundleStandings } from '../utils/standings-players'
 import { useAuth } from './useAuth'
 import { useAnalytics } from './useAnalytics'
 
@@ -154,11 +154,11 @@ export function useTournament(tournamentId: string): TournamentHookState {
     }
 
     if (bundle.standings && bundle.standings.length > 0) {
-      // Group standings by group if the API returns grouped data
-      // For now, assume it's an array and store as-is
+      // The bundle returns standings grouped per group; flatten to the flat
+      // Standing[] (participantId) that the store and StandingsTable consume.
       standingsStore.update({
         groupId: 'all',
-        standings: bundle.standings,
+        standings: flattenBundleStandings(bundle.standings),
       })
       // Seed the player cache so display names resolve for matches and the
       // bracket, which carry only participant ids.
@@ -205,7 +205,7 @@ export function useTournament(tournamentId: string): TournamentHookState {
 
   return {
     tournament: bundle?.tournament ?? null,
-    standings: bundle?.standings ?? [],
+    standings: flattenBundleStandings(bundle?.standings),
     matches: bundle?.matches ?? { group: [], knockout: [] },
     bracket: bundle?.bracket ?? null,
     isLoading,

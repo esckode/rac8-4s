@@ -148,9 +148,11 @@ describe('useTournament - Request Deduplication (Integration Tests)', () => {
         expect(result2.current.isLoading).toBe(false)
       })
 
-      // Both hooks should return the exact same object reference (cached)
+      // Both hooks should return the exact same object reference (cached).
+      // standings is a derived projection (flattened from the grouped bundle),
+      // so it is compared by value rather than reference identity.
       expect(result1.current.tournament).toBe(result2.current.tournament)
-      expect(result1.current.standings).toBe(result2.current.standings)
+      expect(result1.current.standings).toEqual(result2.current.standings)
       expect(result1.current.matches).toBe(result2.current.matches)
     })
   })
