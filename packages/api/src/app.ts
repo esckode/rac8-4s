@@ -12,6 +12,7 @@ import {
 } from './db/errors'
 import { getLogger, runWithRequestId } from './logger'
 import tournamentsRouter from './routes/tournaments'
+import messagesRouter from './routes/messages'
 import playerRouter from './routes/player'
 import analyticsRouter from './routes/analytics'
 import authRouter from './routes/auth'
@@ -115,6 +116,11 @@ export function createApp(deps: AppDependencies): Express {
   })
 
   app.use('/tournaments', tournamentsRouter(appDeps))
+  // Messaging routes: /:id/announcements, /:id/messages, /:id/messages/:msgId/read.
+  // Mounted after tournamentsRouter; paths are disjoint so no shadowing occurs.
+  // Static literal paths (announcements) are registered before parameterized (:msgId)
+  // inside the router itself (see routes/messages.ts §10).
+  app.use('/tournaments', messagesRouter(appDeps))
   app.use('/player', playerRouter(appDeps))
   app.use('/api/analytics', analyticsRouter(appDeps))
   app.use('/api/auth', authRouter(appDeps))
