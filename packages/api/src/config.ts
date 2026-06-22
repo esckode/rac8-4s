@@ -260,6 +260,48 @@ export interface JobsConfig extends RetryConfig {
 }
 
 /**
+ * Messaging retention and partition management configuration.
+ */
+export interface MessagingConfig {
+  /**
+   * Days to retain messages after a tournament's completed_at timestamp.
+   * Partitions whose tournament(s) all cleared this window are eligible for DROP.
+   * Default: 90 (3 months)
+   *
+   * Usage: Controls how long post-tournament messages are kept queryable.
+   * - Higher = more storage, longer message history
+   * - Lower = less storage, shorter retention window
+   * - Override via APP_MESSAGING_RETENTION_DAYS env var
+   */
+  retentionDays: number
+
+  /**
+   * Extra padding days before a partition is physically dropped.
+   * A partition is only considered for DROP when it is older than
+   * (retentionDays + dropPaddingDays) days. This buffer lets late-arriving
+   * rows settle and avoids racing the retention boundary.
+   * Default: 45
+   *
+   * Usage: Safety margin on top of retentionDays.
+   * - Must be > 0; typical values: 30–60 days
+   * - Override via APP_MESSAGING_DROP_PADDING_DAYS env var
+   */
+  dropPaddingDays: number
+
+  /**
+   * Number of future months (beyond current month) to pre-create partitions for.
+   * ensure_future_partitions creates current + monthsAhead partitions.
+   * Default: 2
+   *
+   * Usage: Ensures writes never fall into a missing partition.
+   * - Run ensure_future_partitions on a schedule (e.g. monthly cron).
+   * - Higher = more pre-created partitions; 2 is safe for monthly scheduling.
+   * - Override via APP_MESSAGING_MONTHS_AHEAD env var
+   */
+  monthsAhead: number
+}
+
+/**
  * Email service configuration.
  */
 export interface EmailConfig {
@@ -307,6 +349,7 @@ export interface AppConfig {
   limits: LimitsConfig
   jobs: JobsConfig
   email: EmailConfig
+  messaging: MessagingConfig
 }
 
 /**
@@ -362,6 +405,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     fromAddress: 'noreply@rac8-4s.local', // Sender address for transactional emails
     frontendUrl: 'http://localhost:3000', // Frontend base URL for reset links
     service: 'mock', // Use mock service by default (development)
+  },
+  messaging: {
+    retentionDays: 90,   // Keep messages 90 days post-tournament completion
+    dropPaddingDays: 45, // Extra 45-day safety buffer before physical drop
+    monthsAhead: 2,      // Pre-create partitions 2 months ahead of current month
   },
 }
 
@@ -508,6 +556,20 @@ export function getAppConfig(): AppConfig {
       fromAddress: process.env.EMAIL_FROM_ADDRESS ?? DEFAULT_APP_CONFIG.email.fromAddress,
       frontendUrl: process.env.FRONTEND_URL ?? DEFAULT_APP_CONFIG.email.frontendUrl,
       service: (process.env.EMAIL_SERVICE ?? DEFAULT_APP_CONFIG.email.service) as 'mock' | 'sendgrid' | 'aws_ses',
+    },
+    messaging: {
+      retentionDays: parseInt(
+        process.env.APP_MESSAGING_RETENTION_DAYS ?? String(DEFAULT_APP_CONFIG.messaging.retentionDays),
+        10
+      ),
+      dropPaddingDays: parseInt(
+        process.env.APP_MESSAGING_DROP_PADDING_DAYS ?? String(DEFAULT_APP_CONFIG.messaging.dropPaddingDays),
+        10
+      ),
+      monthsAhead: parseInt(
+        process.env.APP_MESSAGING_MONTHS_AHEAD ?? String(DEFAULT_APP_CONFIG.messaging.monthsAhead),
+        10
+      ),
     },
   }
 }

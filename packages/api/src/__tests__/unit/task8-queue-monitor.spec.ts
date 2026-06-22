@@ -56,6 +56,11 @@ const testConfig: AppConfig = {
     frontendUrl: 'http://localhost:3000',
     service: 'mock',
   },
+  messaging: {
+    retentionDays: 90,
+    dropPaddingDays: 45,
+    monthsAhead: 2,
+  },
 }
 
 describe('Task #8: Queue Monitoring', () => {

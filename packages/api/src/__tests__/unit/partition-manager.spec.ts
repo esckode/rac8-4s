@@ -1,111 +1,125 @@
-import { Pool } from 'pg'
-
 /**
  * Unit tests for packages/api/src/services/partition-manager.ts
  *
  * Tests the thin TS wrappers around the SQL lifecycle functions.
- * Uses a mock pool — no real DB required.
+ * Uses a stub pool — no real DB required.
  */
 
-// Dynamic import so the module can be mocked before import
-jest.mock('../../services/partition-manager', () => {
-  // We'll use the actual module but with a mocked pool
-  const actual = jest.requireActual('../../services/partition-manager')
-  return actual
-})
+const mockLog = {
+  info: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+  error: jest.fn(),
+}
+
+jest.mock('../../logger', () => ({
+  getLogger: jest.fn(() => mockLog),
+}))
+
+import { Pool } from 'pg'
+import { PartitionManager } from '../../services/partition-manager'
+
+function makePool(queryImpl: (sql: string, params?: unknown[]) => Promise<unknown>): Pool {
+  return {
+    query: jest.fn((sql: string, params?: unknown[]) => queryImpl(sql, params)),
+  } as unknown as Pool
+}
 
 describe('PartitionManager', () => {
-  let mockPool: jest.Mocked<Pick<Pool, 'query'>>
-  let PartitionManager: typeof import('../../services/partition-manager').PartitionManager
-
-  beforeEach(async () => {
-    jest.resetModules()
-    const mod = await import('../../services/partition-manager')
-    PartitionManager = mod.PartitionManager
-
-    mockPool = {
-      query: jest.fn(),
-    }
+  beforeEach(() => {
+    jest.clearAllMocks()
   })
 
   describe('ensureFuturePartitions', () => {
     it('calls messaging.ensure_future_partitions with the given months_ahead', async () => {
-      mockPool.query.mockResolvedValue({ rows: [], rowCount: 0 } as any)
+      let capturedSql = ''
+      let capturedParams: unknown[] = []
+      const pool = makePool(async (sql, params) => {
+        capturedSql = sql
+        capturedParams = params ?? []
+        return { rows: [], rowCount: 0 }
+      })
 
-      const manager = new PartitionManager(mockPool as unknown as Pool)
+      const manager = new PartitionManager(pool)
       await manager.ensureFuturePartitions(3)
 
-      expect(mockPool.query).toHaveBeenCalledWith(
-        expect.stringContaining('ensure_future_partitions'),
-        expect.arrayContaining([3])
-      )
+      expect(capturedSql).toContain('ensure_future_partitions')
+      expect(capturedParams).toContain(3)
     })
 
     it('uses default months_ahead=2 when not specified', async () => {
-      mockPool.query.mockResolvedValue({ rows: [], rowCount: 0 } as any)
+      let capturedParams: unknown[] = []
+      const pool = makePool(async (_sql, params) => {
+        capturedParams = params ?? []
+        return { rows: [], rowCount: 0 }
+      })
 
-      const manager = new PartitionManager(mockPool as unknown as Pool)
+      const manager = new PartitionManager(pool)
       await manager.ensureFuturePartitions()
 
-      expect(mockPool.query).toHaveBeenCalledWith(
-        expect.stringContaining('ensure_future_partitions'),
-        expect.arrayContaining([2])
-      )
+      expect(capturedParams).toContain(2)
     })
   })
 
   describe('purgeOldPartitions', () => {
     const sampleRows = [
-      { partition: 'messaging.messages_2024_01', action: 'DROPPED' },
-      { partition: 'messaging.message_recipients_2024_01', action: 'DROPPED' },
+      { partition: 'messaging.messages_2024_01', action: 'DROPPED' as const },
+      { partition: 'messaging.message_recipients_2024_01', action: 'DROPPED' as const },
     ]
 
     it('calls messaging.purge_old_partitions with retention and padding args', async () => {
-      mockPool.query.mockResolvedValue({ rows: sampleRows, rowCount: 2 } as any)
+      let capturedSql = ''
+      let capturedParams: unknown[] = []
+      const pool = makePool(async (sql, params) => {
+        capturedSql = sql
+        capturedParams = params ?? []
+        return { rows: sampleRows, rowCount: 2 }
+      })
 
-      const manager = new PartitionManager(mockPool as unknown as Pool)
+      const manager = new PartitionManager(pool)
       const result = await manager.purgeOldPartitions({ retentionDays: 90, dropPaddingDays: 45 })
 
-      expect(mockPool.query).toHaveBeenCalledWith(
-        expect.stringContaining('purge_old_partitions'),
-        expect.arrayContaining([90, 45])
-      )
+      expect(capturedSql).toContain('purge_old_partitions')
+      expect(capturedParams).toContain(90)
+      expect(capturedParams).toContain(45)
       expect(result).toEqual(sampleRows)
     })
 
-    it('dry-run returns would-be actions without executing DDL', async () => {
-      // In dry-run mode, the manager should NOT call the SQL purge function
-      // but instead query partition metadata to simulate what would happen
-      mockPool.query.mockResolvedValue({ rows: [], rowCount: 0 } as any)
+    it('dry-run does NOT call the SQL purge function', async () => {
+      const calledSqls: string[] = []
+      const pool = makePool(async (sql) => {
+        calledSqls.push(sql)
+        return { rows: [], rowCount: 0 }
+      })
 
-      const manager = new PartitionManager(mockPool as unknown as Pool)
+      const manager = new PartitionManager(pool)
       const result = await manager.purgeOldPartitions({
         retentionDays: 90,
         dropPaddingDays: 45,
         dryRun: true,
       })
 
-      // dry-run should NOT call the real purge function
-      const callArgs = mockPool.query.mock.calls
-      const calledPurge = callArgs.some(
-        ([sql]: [string]) => typeof sql === 'string' && sql.includes('purge_old_partitions')
-      )
+      // The real purge function must not have been called
+      const calledPurge = calledSqls.some((s) => s.includes('purge_old_partitions'))
       expect(calledPurge).toBe(false)
 
-      // dry-run result is an array (possibly empty)
+      // dry-run result is an array
       expect(Array.isArray(result)).toBe(true)
     })
 
-    it('uses default retention and padding when not specified', async () => {
-      mockPool.query.mockResolvedValue({ rows: [], rowCount: 0 } as any)
+    it('uses default retention=90 and padding=45 when not specified', async () => {
+      let capturedParams: unknown[] = []
+      const pool = makePool(async (_sql, params) => {
+        capturedParams = params ?? []
+        return { rows: [], rowCount: 0 }
+      })
 
-      const manager = new PartitionManager(mockPool as unknown as Pool)
+      const manager = new PartitionManager(pool)
       await manager.purgeOldPartitions()
 
-      const calls = mockPool.query.mock.calls
-      // Either the purge function was called with default args (non-dry-run mode)
-      // or the dry-run query was used — either way, query should have been called
-      expect(calls.length).toBeGreaterThan(0)
+      // Non-dry-run with defaults: purge function called with [90, 45]
+      expect(capturedParams).toContain(90)
+      expect(capturedParams).toContain(45)
     })
   })
 })
