@@ -7,6 +7,8 @@ import { PlayerFactory, TournamentFactory, OrganizerFactory } from '../factories
 import { InMemoryTokenStore } from '../../auth/token-store'
 import { generatePlayerSession } from '../../auth/magic-link'
 import { BroadcastBus } from '../../broadcast-bus'
+import { InMemoryJobQueue } from '@worker/job-queue'
+import { processReadReceiptFlush } from '../../workers/read-receipt-processor'
 
 const MAX_BODY_LENGTH = 4000
 
@@ -16,13 +18,15 @@ describe('Messaging API', () => {
   let tokenStore: InMemoryTokenStore
   let jwtConfig: JwtConfig
   let broadcastBus: BroadcastBus
+  let jobQueue: InMemoryJobQueue
 
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
 
     broadcastBus = new BroadcastBus()
-    const testApp = createTestApp(pool, { broadcastBus })
+    jobQueue = new InMemoryJobQueue()
+    const testApp = createTestApp(pool, { broadcastBus, jobQueue })
     app = testApp.app
     tokenStore = testApp.tokenStore
     jwtConfig = testApp.jwtConfig
@@ -459,7 +463,11 @@ describe('Messaging API', () => {
       expect(readRes.status).toBe(204)
     })
 
-    it('marking read reduces unread count', async () => {
+    it('marking read reduces unread count (after flushing the read-receipt batch)', async () => {
+      // Phase 5 behavior: the mark-read route enqueues a read event rather than
+      // synchronously updating the DB. To verify the unread count drops, we must
+      // manually drain the InMemoryJobQueue by invoking processReadReceiptFlush —
+      // the same processor the worker would call in production.
       const { orgToken, tournament } = await createOrganizerWithTournament()
       const { player, sessionToken } = await createPlayerWithSession(tournament.id)
 
@@ -478,19 +486,31 @@ describe('Messaging API', () => {
       const unreadBefore = await msgRepo.getUnreadCount({ playerId: player.id, tournamentId: tournament.id })
       expect(unreadBefore).toBe(1)
 
-      // Mark read
+      // Mark read — route enqueues; DB is NOT yet updated
       await request(app)
         .post(`/tournaments/${tournament.id}/messages/${msgId}/read`)
         .set('Authorization', `Bearer ${sessionToken}`)
         .expect(204)
 
+      // Unread count is still 1 because the batch has not been flushed yet
+      const unreadEnqueued = await msgRepo.getUnreadCount({ playerId: player.id, tournamentId: tournament.id })
+      expect(unreadEnqueued).toBe(1)
+
+      // Drain the queue: pull the enqueued flush job and execute it
+      const flushJobs = jobQueue.getByName('messaging.read_receipt.flush')
+      expect(flushJobs).toHaveLength(1)
+      await processReadReceiptFlush(flushJobs[0].data as any, { pool: pool as any })
+
+      // Now the unread count must drop to 0
       const unreadAfter = await msgRepo.getUnreadCount({ playerId: player.id, tournamentId: tournament.id })
       expect(unreadAfter).toBe(0)
     })
 
-    it('markRead is idempotent (safe to call twice)', async () => {
+    it('markRead is idempotent (safe to call twice; idempotency holds after flush)', async () => {
+      // Phase 5: both calls enqueue separately; the processor coalesces the duplicate
+      // pair and issues a single idempotent UPDATE (read_at IS NULL guard).
       const { orgToken, tournament } = await createOrganizerWithTournament()
-      const { sessionToken } = await createPlayerWithSession(tournament.id)
+      const { player, sessionToken } = await createPlayerWithSession(tournament.id)
 
       const broadcastRes = await request(app)
         .post(`/tournaments/${tournament.id}/announcements`)
@@ -500,7 +520,10 @@ describe('Messaging API', () => {
 
       const msgId = broadcastRes.body.message.id
 
-      // Call twice — both should succeed with 204
+      // Clear the queue before this test's calls
+      jobQueue.clear()
+
+      // Call twice — both should succeed with 204 (route is fire-and-forget enqueue)
       await request(app)
         .post(`/tournaments/${tournament.id}/messages/${msgId}/read`)
         .set('Authorization', `Bearer ${sessionToken}`)
@@ -510,6 +533,14 @@ describe('Messaging API', () => {
         .post(`/tournaments/${tournament.id}/messages/${msgId}/read`)
         .set('Authorization', `Bearer ${sessionToken}`)
         .expect(204)
+
+      // Both enqueued flush jobs should complete without error
+      const flushJobs = jobQueue.getByName('messaging.read_receipt.flush')
+      for (const job of flushJobs) {
+        await expect(
+          processReadReceiptFlush(job.data as any, { pool: pool as any })
+        ).resolves.not.toThrow()
+      }
     })
   })
 })
