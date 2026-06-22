@@ -13,7 +13,7 @@ export async function runMigrations(pool: Pool, migrationsDir: string): Promise<
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.schema_migrations (
         version TEXT UNIQUE NOT NULL,
-        executed_at TIMESTAMP DEFAULT NOW()
+        executed_at TIMESTAMPTZ DEFAULT NOW()
       )
     `)
 
