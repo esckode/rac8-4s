@@ -40,7 +40,8 @@ export interface TournamentRow {
   knockout_stage_deadline: string
   created_at: string
   updated_at: string
-  deleted_at?: string
+  deleted_at?: string | null
+  completed_at?: string | null
 }
 
 export interface PlayerRow {
@@ -331,10 +332,18 @@ export class TournamentRepository {
       throw new CheckConstraintError('status')
     }
 
-    await this.pool.query(
-      'UPDATE public.tournaments SET status = $1, updated_at = $2 WHERE id = $3',
-      [status, new Date().toISOString(), id]
-    )
+    const now = new Date().toISOString()
+    if (status === 'tournament_complete') {
+      await this.pool.query(
+        'UPDATE public.tournaments SET status = $1, updated_at = $2, completed_at = $2 WHERE id = $3',
+        [status, now, id]
+      )
+    } else {
+      await this.pool.query(
+        'UPDATE public.tournaments SET status = $1, updated_at = $2 WHERE id = $3',
+        [status, now, id]
+      )
+    }
     const tournament = await this.findById(id)
     if (!tournament) throw new NotFoundError('Tournament')
     return tournament
