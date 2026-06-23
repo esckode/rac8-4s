@@ -4,6 +4,8 @@ import { usePermissions } from '../../hooks/usePermissions'
 import { useAuth } from '../../hooks/useAuth'
 import { useSSE } from '../../hooks/useSSE'
 import { useTournament } from '../../hooks/useTournament'
+import { useMessages } from '../../hooks/useMessages'
+import { MessagePanel, UnreadBadge } from '../../components/MessagePanel'
 import { Standings } from './Standings'
 import { SkeletonLoader } from '../../components/shared/SkeletonLoader'
 import '../../styles/globals.css'
@@ -21,6 +23,7 @@ export const TournamentDetail: React.FC = () => {
   const permissions = usePermissions(tournamentId || '')
   const sseState = useSSE(tournamentId || '')
   const { error, refetch, retryIn, cancelAutoRetry } = useTournament(tournamentId || '')
+  const { unreadCount } = useMessages(tournamentId || '')
 
   // Get current tab from URL pathname
   const currentPath = location.pathname
@@ -29,6 +32,7 @@ export const TournamentDetail: React.FC = () => {
     if (currentPath.includes('/matches')) return 'matches'
     if (currentPath.includes('/bracket')) return 'bracket'
     if (currentPath.includes('/details')) return 'details'
+    if (currentPath.includes('/messages')) return 'messages'
     return 'standings' // default
   }, [currentPath])
 
@@ -73,6 +77,7 @@ export const TournamentDetail: React.FC = () => {
     { id: 'matches', label: 'Matches', icon: '🎾' },
     { id: 'bracket', label: 'Bracket', icon: '🏆' },
     { id: 'details', label: 'Details', icon: 'ℹ️' },
+    { id: 'messages', label: 'Messages', icon: '💬' },
   ]
 
   const handleTabClick = (tabId: string) => {
@@ -105,6 +110,8 @@ export const TournamentDetail: React.FC = () => {
             <Details />
           </Suspense>
         )
+      case 'messages':
+        return <MessagePanel tournamentId={tournamentId} active />
       default:
         return <Standings />
     }
@@ -178,6 +185,7 @@ export const TournamentDetail: React.FC = () => {
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            data-testid={`tab-${tab.id}`}
             onClick={() => handleTabClick(tab.id)}
             className={`
               flex
@@ -207,6 +215,7 @@ export const TournamentDetail: React.FC = () => {
           >
             <span className="text-lg" aria-hidden="true">{tab.icon}</span>
             <span className="responsive-hidden-mobile">{tab.label}</span>
+            {tab.id === 'messages' && <UnreadBadge count={unreadCount} />}
           </button>
         ))}
       </div>

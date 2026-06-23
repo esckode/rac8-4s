@@ -12,7 +12,6 @@
 
 import { renderHook, act, waitFor } from '@testing-library/react'
 import React from 'react'
-import { AuthProvider } from '../useAuth'
 import { useMessages } from '../useMessages'
 import { messageStore } from '../../state'
 
@@ -22,20 +21,20 @@ global.fetch = mockFetch
 
 // ── Auth mock ─────────────────────────────────────────────────────────────────
 jest.mock('../useAuth', () => {
-  const actual = jest.requireActual('../useAuth')
   return {
-    ...actual,
     useAuth: () => ({
       user: { id: 'player_1', role: 'player', playerId: 'player_1', email: 'p@e.com' },
       isAuthenticated: true,
       login: jest.fn(),
       logout: jest.fn(),
     }),
+    // AuthProvider becomes a passthrough in tests
+    AuthProvider: ({ children }: { children: React.ReactNode }) => children,
   }
 })
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
-  <AuthProvider>{children}</AuthProvider>
+  <>{children}</>
 )
 
 const makeMessage = (overrides: Partial<{

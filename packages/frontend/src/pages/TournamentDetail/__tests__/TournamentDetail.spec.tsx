@@ -30,10 +30,20 @@ jest.mock('../../../hooks/useAnalytics', () => ({
   useAnalytics: jest.fn(),
 }))
 
+jest.mock('../../../hooks/useMessages', () => ({
+  useMessages: () => ({
+    messages: [],
+    unreadCount: 0,
+    send: jest.fn(),
+    markRead: jest.fn(),
+  }),
+}))
+
 jest.mock('../../../state', () => ({
   tournamentStore: { set: jest.fn() },
   standingsStore: { update: jest.fn() },
   matchStore: { setMatches: jest.fn() },
+  messageStore: { all: jest.fn(() => []), subscribe: jest.fn(() => jest.fn()), setHistory: jest.fn(), append: jest.fn(), markRead: jest.fn(), clear: jest.fn() },
 }))
 
 import { useAuth } from '../../../hooks/useAuth'

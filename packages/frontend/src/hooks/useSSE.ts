@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import ReconnectingEventSource from 'reconnecting-eventsource'
-import { standingsStore, matchStore } from '../state'
+import { standingsStore, matchStore, messageStore } from '../state'
 import { useTournament } from './useTournament'
 import { useAnalytics } from './useAnalytics'
 import type { StandingsUpdatedPayload, BracketPublishedPayload } from '../types'
@@ -132,6 +132,19 @@ export function useSSE(tournamentId: string): SSEState {
           }
         } catch (err) {
           console.error('Failed to parse bracket.updated event', err)
+          // Don't crash on malformed data
+        }
+      })
+
+      // Handle message.created event — append to message store (no re-fetch)
+      eventSource.addEventListener('message.created', (event: Event) => {
+        try {
+          if (event instanceof MessageEvent) {
+            const payload = JSON.parse(event.data)
+            messageStore.append(payload)
+          }
+        } catch (err) {
+          console.error('Failed to parse message.created event', err)
           // Don't crash on malformed data
         }
       })
