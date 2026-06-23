@@ -1,8 +1,8 @@
 # Player Messaging Design
 ## Architecture & Feasibility Analysis
 
-**Date:** 2026-06-22
-**Status:** 📋 DESIGN ONLY — Phase 7 (deferred). No implementation in repo.
+**Date:** 2026-06-22 (updated 2026-06-23)
+**Status:** ✅ IMPLEMENTED & MERGED to `main` (Phases P–7, 2026-06-23) — but as a **single-instance, flat group-feed MVP**. The shipped feature diverges from this design's intent (targeted DMs, dispute channel, sender attribution) and omits several operational/scaling pieces. See **§16 (as-built)** and **§17 (gap analysis & forward design)**.
 
 ---
 
@@ -269,11 +269,98 @@ works **unpartitioned with a batched `DELETE` retention job** if shipping lean f
 
 ---
 
-## Deferred status & next steps
+## 16. As-built status (what actually shipped, Phases P–7)
 
-- **Status:** design only. **Do not create `packages/messaging` until the feature is scheduled.**
-- **When built (TDD per CLAUDE.md §4/§11):** failing tests (unit + e2e) + migration first as
-  their own commit, then implementation. Add a `packages/messaging/README.md` ("how to use the
-  module") that links back to this design doc ("why").
-- **Open product decisions:** tournament group chat vs 1:1 DMs vs both; read-receipt visibility
-  on DMs; whether to link out to Discord for community/voice.
+Implemented and merged to `main` (migrations 031/032/033, `MessageRepository`, routes + SSE,
+read-receipt batching, frontend, ≥85% api coverage). What it **is** today:
+
+- **A single shared per-tournament message feed** reached via a **"Messages" tab (💬)** on the
+  tournament detail page, with a live unread badge. Players post to the shared feed; organizers
+  additionally post "📢 Announcement" broadcasts. Fetch-once + SSE `message.created` deltas.
+- Backend supports more than the UI uses: the schema/repository/routes already accept
+  `recipientPlayerId` and `matchId` (targeted DMs, match-scoped), organizer-only broadcast authz,
+  per-player `read_at`, and the boundary-safe partitioning/retention.
+
+What it is **not** (the gaps this section designs out):
+
+| Gap | As-built | Severity |
+|---|---|---|
+| **Partition auto-creation** | job + CLI exist but **not scheduled** — inserts will fail after the last static partition (2026-08) | 🔴 latent prod break |
+| **Retention purge** | not scheduled | 🟠 storage growth |
+| **Detached-partition reclamation** | none — detached partitions accumulate | 🟠 |
+| **Offline reach** | none — only live SSE + history; offline users get nothing pushed | 🟠 functional |
+| **Horizontal scaling** | `BroadcastBus` is in-process `EventEmitter`; single-instance only | 🟠 scaling |
+| **DM targeting / threads** | UI sends `recipient_player_id = NULL` only → flat group feed, no 1:1 DM, no match thread, no dispute channel | 🟡 product |
+| **Sender attribution** | message cards show body + time, **not who sent it** | 🟡 UX |
+| **Read-receipt visibility** | tracked but never surfaced to sender/organizer | 🟡 product |
+
+---
+
+## 17. Gap analysis & forward design
+
+### 17.1 Operational hardening (do first — §A items)
+- **Partition auto-creation (🔴):** register a **BullMQ repeatable monthly job** at app startup that
+  calls `messaging.ensure_future_partitions(2)`, **plus a boot-time safety call** so a fresh deploy
+  always has current+next month. (External cron invoking `scripts/messaging-partitions.js --ensure`
+  is the fallback.) Without this, inserts fail at the next month with no partition.
+- **Purge (🟠):** monthly repeatable job calling `messaging.purge_old_partitions()` (the boundary-safe
+  gate already exists). Gate behind a config flag; start in `--dry-run` and log the action set before
+  enabling real drops.
+- **Detached-partition reclamation (🟠):** add `messaging.reclaim_detached_partitions()` — periodically
+  re-run the retention gate against *detached* partitions; when a partition no longer has any
+  in-progress / within-retention / `legal_hold` rows, drop it (optionally cold-archive to object
+  storage first). Pairs with the purge job.
+
+### 17.2 Offline reach — notification fallback (🟠)
+A broadcast/DM today only reaches connected SSE clients. Design: after persist, enqueue a
+**`messaging.notify` worker job** (existing BullMQ + `email-adapter`) that, after a short grace
+period, **emails participants who still have the message unread** (`message_recipients.read_at IS
+NULL`). **Coalesce** multiple messages per recipient into one digest, and **debounce** so a burst of
+announcements becomes a single email. Push notifications are a later swap-in behind the same job.
+"Offline" is approximated by "unread after grace," which avoids needing per-player connection
+tracking. Time-sensitive organizer announcements are the primary use case.
+
+### 17.3 Horizontal scaling — Redis-backed bus (🟠)
+Back `BroadcastBus` with **Redis pub/sub** (ioredis already present): on `emit`, `PUBLISH` to a
+channel keyed by `tournamentId`; every API instance `SUBSCRIBE`s and re-emits locally to its own SSE
+subscribers. This fixes cross-node delivery for **all** SSE (messaging *and* standings/bracket), not
+just messaging. Keep the in-process `EventEmitter` as the same-node fast path; Redis is the relay,
+**Postgres stays the system of record** (per §5). Required before running >1 API instance.
+
+### 17.4 Targeted messaging + thread model (🟡 — the main product gap)
+Move from a flat feed to a **channel/thread model** (superset that keeps the current behavior as one
+channel). Backend already stores `recipient_player_id` + `match_id`, so this is mostly UI + `getHistory`
+grouping:
+- **Channels:** (1) **Announcements** — organizer→all, read-only for players (today's broadcast);
+  (2) **Direct / coordination threads** — player↔player, optionally keyed to a `match_id`
+  ("Message your opponent" affordance on a match card opens the match thread); (3) **Dispute thread**
+  — player↔organizer, match-scoped, `legal_hold`-capable (organizer/admin support channel).
+- **UI:** a thread list + a message view; "New message" with a **recipient picker** sourced from
+  tournament participants / the player's opponents. The compose box passes `recipientPlayerId` (and
+  `matchId` where applicable) — the route already accepts both.
+- **`getHistory`:** filter/group by thread (broadcasts + the viewer's own DM threads), instead of one
+  flat list.
+
+### 17.5 Sender attribution (🟡)
+Include the sender's display name in the `message.created` payload and `GET history` (resolve from
+`players`, cached per §10 as reference data). Render **"Name · time"** on each card. Small change,
+large UX gain — essential the moment there's more than one sender in a thread.
+
+### 17.6 Read-receipt visibility (🟡 — product decision)
+Tracked (`read_at`) but unsurfaced. Design: **broadcasts** → show the organizer an **"X of N read"**
+acknowledgement count (high value for "did everyone see the schedule change?"). **DMs** → "seen"
+indicators are a privacy choice — make them **off or opt-in** per the §8 stance, not default-on.
+
+### 17.7 Deferred features (sketches, not now)
+- **`delivered_at` / `acknowledged_at`** — add when a feature needs them; `acknowledged_at` enables an
+  explicit **"Acknowledge"** button on critical announcements (the organizer ack count above).
+- **Attachments/media** — object storage (S3/GCS) + URL reference in the row; never blobs in Postgres.
+- **Discord linkout / voice** — optional community channel; out of scope.
+
+### 17.8 Suggested sequencing
+1. **17.1 partition scheduling** (🔴 — has a real deadline). 2. **17.3 Redis bus** + **17.2 offline
+notification** (functional/scaling). 3. **17.5 sender names** (cheap, high UX value). 4. **17.4 thread
+model** + **17.6 read-receipt visibility** (the larger product build). 5. **17.7** as demand appears.
+
+> A follow-up `MESSAGING_IMPLEMENTATION_V2.md` should phase 17.1–17.6 TDD-first (CLAUDE.md §4/§11),
+> same as the original plan. Items 17.1–17.3 are also reflected in the "what's left" operational notes.
