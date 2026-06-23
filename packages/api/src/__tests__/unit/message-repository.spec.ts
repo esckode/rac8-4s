@@ -470,4 +470,152 @@ describe('MessageRepository', () => {
       expect(count).toBe(0)
     })
   })
+
+  // ── getHistory with viewerPlayerId ─────────────────────────────────────────
+
+  describe('getHistory with viewerPlayerId', () => {
+    it('includes read_at field per message when viewerPlayerId is provided', async () => {
+      const sender = await createParticipant()
+      const viewer = await createParticipant()
+
+      const msg = await repo.sendDirectMessage({
+        tournamentId,
+        senderPlayerId: sender.id,
+        recipientPlayerId: viewer.id,
+        body: 'hello viewer',
+      })
+
+      const history = await repo.getHistory({ tournamentId, limit: 10, viewerPlayerId: viewer.id })
+
+      expect(history).toHaveLength(1)
+      expect('read_at' in history[0]).toBe(true)
+      expect(history[0].read_at).toBeNull() // not yet read
+      expect(history[0].id).toBe(msg.id)
+    })
+
+    it('shows read_at as non-null after markRead when viewerPlayerId is provided', async () => {
+      const sender = await createParticipant()
+      const viewer = await createParticipant()
+
+      const msg = await repo.sendDirectMessage({
+        tournamentId,
+        senderPlayerId: sender.id,
+        recipientPlayerId: viewer.id,
+        body: 'mark me',
+      })
+
+      await repo.markRead({ messageId: msg.id, messageCreatedAt: msg.createdAt, playerId: viewer.id })
+
+      const history = await repo.getHistory({ tournamentId, limit: 10, viewerPlayerId: viewer.id })
+
+      expect(history).toHaveLength(1)
+      expect(history[0].read_at).not.toBeNull()
+    })
+
+    it('returns read_at field when using before cursor with viewerPlayerId', async () => {
+      const sender = await createParticipant()
+      const viewer = await createParticipant()
+
+      // Insert two messages
+      await repo.sendDirectMessage({
+        tournamentId,
+        senderPlayerId: sender.id,
+        recipientPlayerId: viewer.id,
+        body: 'msg first',
+      })
+      await repo.sendDirectMessage({
+        tournamentId,
+        senderPlayerId: sender.id,
+        recipientPlayerId: viewer.id,
+        body: 'msg second',
+      })
+
+      // Fetch all to get stable order and last cursor
+      const all = await repo.getHistory({ tournamentId, limit: 10, viewerPlayerId: viewer.id })
+      expect(all).toHaveLength(2)
+
+      // Use the LAST message in the ordered list as the cursor — should return only the preceding message
+      const lastMsg = all[all.length - 1]
+      const page = await repo.getHistory({
+        tournamentId,
+        limit: 10,
+        before: { createdAt: lastMsg.createdAt, id: lastMsg.id },
+        viewerPlayerId: viewer.id,
+      })
+
+      expect(page).toHaveLength(1)
+      expect('read_at' in page[0]).toBe(true)
+      expect(page[0].id).toBe(all[0].id)
+    })
+  })
+
+  // ── markReadBatch ─────────────────────────────────────────────────────────
+
+  describe('markReadBatch', () => {
+    it('does nothing when called with an empty array', async () => {
+      // Should not throw and should not issue any queries
+      await expect(repo.markReadBatch([])).resolves.toBeUndefined()
+    })
+
+    it('marks multiple recipient rows as read in a single call', async () => {
+      const sender = await createParticipant()
+      const r1 = await createParticipant()
+      const r2 = await createParticipant()
+
+      const msg1 = await repo.sendDirectMessage({
+        tournamentId,
+        senderPlayerId: sender.id,
+        recipientPlayerId: r1.id,
+        body: 'batch msg 1',
+      })
+      const msg2 = await repo.sendDirectMessage({
+        tournamentId,
+        senderPlayerId: sender.id,
+        recipientPlayerId: r2.id,
+        body: 'batch msg 2',
+      })
+
+      await repo.markReadBatch([
+        { messageId: msg1.id, playerId: r1.id },
+        { messageId: msg2.id, playerId: r2.id },
+      ])
+
+      const res1 = await pool.query(
+        'SELECT read_at FROM messaging.message_recipients WHERE message_id = $1 AND player_id = $2',
+        [msg1.id, r1.id]
+      )
+      const res2 = await pool.query(
+        'SELECT read_at FROM messaging.message_recipients WHERE message_id = $1 AND player_id = $2',
+        [msg2.id, r2.id]
+      )
+
+      expect(res1.rows[0].read_at).not.toBeNull()
+      expect(res2.rows[0].read_at).not.toBeNull()
+    })
+
+    it('deduplicates pairs before issuing the update', async () => {
+      const sender = await createParticipant()
+      const recipient = await createParticipant()
+
+      const msg = await repo.sendDirectMessage({
+        tournamentId,
+        senderPlayerId: sender.id,
+        recipientPlayerId: recipient.id,
+        body: 'dedup test',
+      })
+
+      // Same pair repeated — should not error, should only touch the row once
+      await expect(repo.markReadBatch([
+        { messageId: msg.id, playerId: recipient.id },
+        { messageId: msg.id, playerId: recipient.id },
+        { messageId: msg.id, playerId: recipient.id },
+      ])).resolves.toBeUndefined()
+
+      const res = await pool.query(
+        'SELECT read_at FROM messaging.message_recipients WHERE message_id = $1 AND player_id = $2',
+        [msg.id, recipient.id]
+      )
+      expect(res.rows[0].read_at).not.toBeNull()
+    })
+  })
 })

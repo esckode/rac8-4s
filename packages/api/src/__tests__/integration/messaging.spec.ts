@@ -548,4 +548,72 @@ describe('Messaging API', () => {
       }
     })
   })
+
+  // ──────────────────────────────────────────────────────────────────
+  // POST /tournaments/:id/announcements — 404 branch (uncovered)
+  // ──────────────────────────────────────────────────────────────────
+  describe('POST /tournaments/:id/announcements — not-found', () => {
+    it('returns 404 when the tournament does not exist', async () => {
+      const { accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const res = await request(app)
+        .post('/tournaments/00000000-0000-0000-0000-000000000000/announcements')
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ body: 'Hello?' })
+      expect(res.status).toBe(404)
+      expect(res.body.code).toBe('NOT_FOUND')
+    })
+  })
+
+  // ──────────────────────────────────────────────────────────────────
+  // GET /tournaments/:id/messages — invalid before cursor
+  // ──────────────────────────────────────────────────────────────────
+  describe('GET /tournaments/:id/messages — query-string edge cases', () => {
+    it('ignores a before cursor with an invalid date and returns full history', async () => {
+      const { orgToken, tournament } = await createOrganizerWithTournament()
+
+      await request(app)
+        .post(`/tournaments/${tournament.id}/announcements`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ body: 'Edge case message' })
+        .expect(201)
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/messages?before=not-a-date,some-id`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      expect(res.status).toBe(200)
+      // Invalid date in cursor → cursor is ignored → full history returned
+      expect(Array.isArray(res.body.messages)).toBe(true)
+    })
+
+    it('ignores a before cursor missing the id part', async () => {
+      const { orgToken, tournament } = await createOrganizerWithTournament()
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/messages?before=2024-01-01T00:00:00.000Z`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      expect(res.status).toBe(200)
+    })
+
+    it('caps limit at 100 when a larger value is provided', async () => {
+      const { orgToken, tournament } = await createOrganizerWithTournament()
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/messages?limit=999`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      expect(res.status).toBe(200)
+    })
+
+    it('uses default limit 50 when limit is not a valid number', async () => {
+      const { orgToken, tournament } = await createOrganizerWithTournament()
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/messages?limit=abc`)
+        .set('Authorization', `Bearer ${orgToken}`)
+
+      expect(res.status).toBe(200)
+    })
+  })
 })

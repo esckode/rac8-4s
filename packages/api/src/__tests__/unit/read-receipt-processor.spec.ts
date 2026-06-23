@@ -198,4 +198,41 @@ describe('processReadReceiptFlush', () => {
       expect.objectContaining({ count: 1 })
     )
   })
+
+  it('logs error and re-throws when markReadBatch rejects with an Error', async () => {
+    const boom = new Error('DB connection lost')
+    const pool = {
+      query: jest.fn(async () => { throw boom }),
+    } as unknown as Pool
+
+    await expect(
+      processReadReceiptFlush(
+        { reads: [{ messageId: 'msg-1', playerId: 'player-a' }] },
+        { pool }
+      )
+    ).rejects.toThrow('DB connection lost')
+
+    expect(mockLog.error).toHaveBeenCalledWith(
+      'read_receipt.flush.failed',
+      expect.objectContaining({ message: 'DB connection lost' })
+    )
+  })
+
+  it('logs error and re-throws when markReadBatch rejects with a non-Error value', async () => {
+    const pool = {
+      query: jest.fn(async () => { throw 'unexpected string error' }),
+    } as unknown as Pool
+
+    await expect(
+      processReadReceiptFlush(
+        { reads: [{ messageId: 'msg-1', playerId: 'player-a' }] },
+        { pool }
+      )
+    ).rejects.toBe('unexpected string error')
+
+    expect(mockLog.error).toHaveBeenCalledWith(
+      'read_receipt.flush.failed',
+      expect.objectContaining({ message: 'unexpected string error' })
+    )
+  })
 })
