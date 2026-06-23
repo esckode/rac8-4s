@@ -33,6 +33,7 @@ export const ROUTES = {
   TOURNAMENT_LIST: '/tournaments',
   TOURNAMENT_DETAIL: (id: string) => `/tournament/${id}`,
   TOURNAMENT_BROWSE: (id: string) => `/tournament/${id}/browse`,
+  TOURNAMENT_MESSAGES: (id: string) => `/tournament/${id}/messages`,
 
   // Registration pages
   REGISTRATION_CONFIRM: (id: string) => `/registrations/${id}/confirm`,
@@ -93,6 +94,14 @@ export const API_ENDPOINTS = {
   BRACKET: {
     GET: (tournamentId: string) => `/api/tournaments/${tournamentId}/bracket`,
     UPDATE_MATCH: (matchId: string) => `/api/matches/${matchId}`,
+  },
+
+  // Messaging
+  MESSAGES: {
+    HISTORY: (tournamentId: string) => `/tournaments/${tournamentId}/messages`,
+    SEND: (tournamentId: string) => `/tournaments/${tournamentId}/messages`,
+    ANNOUNCE: (tournamentId: string) => `/tournaments/${tournamentId}/announcements`,
+    MARK_READ: (tournamentId: string, msgId: string) => `/tournaments/${tournamentId}/messages/${msgId}/read`,
   },
 
   // Health check
@@ -247,6 +256,16 @@ export const SELECTORS = {
   CONFIRM_PARTNERSHIP_BUTTON: '[data-testid="confirm-partnership-button"]',
   CONFIRM_SUCCESS: '[data-testid="confirm-success"]',
   CONFIRM_ERROR: '[data-testid="confirm-error"]',
+
+  // Messaging
+  MESSAGE_PANEL: '[data-testid="message-panel"]',
+  MESSAGE_ITEM: '[data-testid="message-item"]',
+  MESSAGE_INPUT: '[data-testid="message-input"]',
+  MESSAGE_SEND_BUTTON: '[data-testid="message-send-button"]',
+  ANNOUNCE_BUTTON: '[data-testid="announce-button"]',
+  ANNOUNCE_INPUT: '[data-testid="announce-input"]',
+  UNREAD_BADGE: '[data-testid="messages-unread-badge"]',
+  MESSAGES_TAB: '[data-testid="tab-messages"]',
 }
 
 // ============================================================================

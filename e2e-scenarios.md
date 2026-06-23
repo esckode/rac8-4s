@@ -1175,3 +1175,71 @@ test('User can register for tournament', async ({ page }) => {
 ---
 
 **Next Step:** When implementing Phase 3+ tests, use `createTournamentWithGroups()` to set up proper state
+
+---
+
+## Feature: Player Messaging
+
+Real-time in-tournament messaging between participants and organizers. Messages are persisted and delivered over SSE (`message.created`). Auth-gated — all message routes require a valid player session or organizer JWT.
+
+### Scenario: Organizer broadcasts an announcement to all participants
+
+```gherkin
+Given an organizer with a tournament that has registered players
+When the organizer posts an announcement via POST /tournaments/:id/announcements
+Then every connected participant receives it in real time via SSE
+And a reconnecting participant sees it in message history on reload
+```
+
+**Implementation:** `messaging.spec.ts` — "Organizer broadcasts an announcement to all participants"
+
+---
+
+### Scenario: Player sends a coordination message to their match opponent
+
+```gherkin
+Given two players registered in the same tournament
+When one player sends a message scoped to the match (POST /tournaments/:id/messages)
+Then the message appears in their message panel
+And the opponent can see it in the message history
+```
+
+**Implementation:** `messaging.spec.ts` — "Player sends a coordination message to their match opponent"
+
+---
+
+### Scenario: Player cannot broadcast to the tournament
+
+```gherkin
+Given an authenticated player (not organizer)
+When the player attempts to POST /tournaments/:id/announcements
+Then the request is rejected with 403 Forbidden
+And the MessagePanel does not expose the broadcast action to players
+```
+
+**Implementation:** `messaging.spec.ts` — "Player cannot broadcast to the tournament"
+
+---
+
+### Scenario: Unread badge updates and clears on read
+
+```gherkin
+Given a player with one unread message in the tournament
+Then the message panel shows an unread badge with count 1
+When the player opens the message thread (MessagePanel becomes visible)
+Then the badge clears to 0
+```
+
+**Implementation:** `messaging.spec.ts` — "Unread badge updates and clears on read"
+
+---
+
+### Scenario: Unauthenticated user cannot access messages
+
+```gherkin
+When an unauthenticated user requests GET /tournaments/:id/messages
+Then the request is rejected with 401 Unauthorized
+And navigating to the messages tab redirects to login
+```
+
+**Implementation:** `messaging.spec.ts` — "Unauthenticated user cannot access messages"
