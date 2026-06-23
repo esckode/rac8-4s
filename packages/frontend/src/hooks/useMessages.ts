@@ -37,9 +37,10 @@ export function useMessages(tournamentId: string): UseMessagesResult {
     return unsub
   }, [])
 
-  // Fetch history once on mount
+  // Fetch history once on mount — skip if the store already has history loaded
+  // (another hook instance in the same render tree already fetched it).
   useEffect(() => {
-    if (!tournamentId || fetchedRef.current) return
+    if (!tournamentId || fetchedRef.current || messageStore.isLoaded()) return
     fetchedRef.current = true
 
     const token = localStorage.getItem('auth_token')
@@ -64,9 +65,14 @@ export function useMessages(tournamentId: string): UseMessagesResult {
       })
   }, [tournamentId])
 
-  // Count unread: messages directed at the current player with no read_at
+  // Count unread: messages directed at the current player (DMs) or broadcasts
+  // (recipientPlayerId === null), when the player has not read them yet.
+  // Broadcasts create a message_recipients row for every participant; the history
+  // response includes read_at per-viewer so both types are covered by this check.
   const unreadCount = messages.filter(
-    m => m.recipientPlayerId === user?.playerId && m.read_at === null
+    m =>
+      (m.recipientPlayerId === user?.playerId || m.recipientPlayerId === null) &&
+      m.read_at === null
   ).length
 
   const send = useCallback(

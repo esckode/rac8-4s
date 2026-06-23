@@ -12,6 +12,8 @@ export interface MessageRow {
   body: string
   createdAt: Date
   legalHold: boolean
+  /** Present only when getHistory is called with viewerPlayerId; null means unread. */
+  read_at?: Date | null
 }
 
 export interface SendDirectMessageInput {
@@ -37,6 +39,8 @@ export interface GetHistoryInput {
   tournamentId: string
   limit: number
   before?: HistoryCursor
+  /** When provided, LEFT JOINs message_recipients to include per-player read_at. */
+  viewerPlayerId?: string
 }
 
 export interface MarkReadInput {
@@ -51,7 +55,7 @@ export interface GetUnreadCountInput {
 }
 
 function rowToMessage(row: any): MessageRow {
-  return {
+  const msg: MessageRow = {
     id: row.id,
     tournamentId: row.tournament_id,
     senderPlayerId: row.sender_player_id,
@@ -61,6 +65,14 @@ function rowToMessage(row: any): MessageRow {
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
     legalHold: !!row.legal_hold,
   }
+  if ('viewer_read_at' in row) {
+    msg.read_at = row.viewer_read_at instanceof Date
+      ? row.viewer_read_at
+      : row.viewer_read_at
+        ? new Date(row.viewer_read_at)
+        : null
+  }
+  return msg
 }
 
 export class MessageRepository {
@@ -194,39 +206,57 @@ export class MessageRepository {
    * Get paginated message history for a tournament.
    * Ordered by (created_at ASC, id ASC) for stable pagination.
    * Optional `before` cursor excludes messages at or after the cursor position.
+   *
+   * When `viewerPlayerId` is provided, LEFT JOINs messaging.message_recipients so
+   * each row includes the viewer's per-message read_at (returned as `viewer_read_at`).
+   * This lets the frontend distinguish unread messages without a separate query.
    */
   async getHistory(input: GetHistoryInput): Promise<MessageRow[]> {
-    const { tournamentId, limit, before } = input
+    const { tournamentId, limit, before, viewerPlayerId } = input
+    const readAtSelect = viewerPlayerId ? ', mr.read_at AS viewer_read_at' : ''
 
     if (before) {
-      // Use date_trunc('milliseconds', ...) on both sides of the cursor comparison.
-      // JavaScript Date objects have millisecond precision but Postgres stores
-      // TIMESTAMPTZ with microsecond precision. Without truncation, a stored value
-      // like 22:00:00.001421 would be GREATER than the JS cursor 22:00:00.001000,
-      // causing all same-millisecond messages to be excluded from the page.
-      // Truncating both sides to milliseconds produces correct keyset pagination.
+      // Params: $1=tournamentId, $2=before.createdAt, $3=before.id, $4=limit,
+      //         $5=viewerPlayerId (optional)
+      const joinClause = viewerPlayerId
+        ? `LEFT JOIN messaging.message_recipients mr
+               ON mr.message_id = m.id AND mr.player_id = $5`
+        : ''
+      const params: unknown[] = [tournamentId, before.createdAt, before.id, limit]
+      if (viewerPlayerId) params.push(viewerPlayerId)
+
       const result = await this.pool.query(
-        `SELECT id, tournament_id, sender_player_id, recipient_player_id,
-                match_id, body, created_at, legal_hold
-         FROM messaging.messages
-         WHERE tournament_id = $1
-           AND (date_trunc('milliseconds', created_at), id)
+        `SELECT m.id, m.tournament_id, m.sender_player_id, m.recipient_player_id,
+                m.match_id, m.body, m.created_at, m.legal_hold${readAtSelect}
+         FROM messaging.messages m
+         ${joinClause}
+         WHERE m.tournament_id = $1
+           AND (date_trunc('milliseconds', m.created_at), m.id)
                < (date_trunc('milliseconds', $2::timestamptz), $3)
-         ORDER BY created_at ASC, id ASC
+         ORDER BY m.created_at ASC, m.id ASC
          LIMIT $4`,
-        [tournamentId, before.createdAt, before.id, limit]
+        params
       )
       return result.rows.map(rowToMessage)
     }
 
+    // Params: $1=tournamentId, $2=limit, $3=viewerPlayerId (optional)
+    const joinClause = viewerPlayerId
+      ? `LEFT JOIN messaging.message_recipients mr
+             ON mr.message_id = m.id AND mr.player_id = $3`
+      : ''
+    const params: unknown[] = [tournamentId, limit]
+    if (viewerPlayerId) params.push(viewerPlayerId)
+
     const result = await this.pool.query(
-      `SELECT id, tournament_id, sender_player_id, recipient_player_id,
-              match_id, body, created_at, legal_hold
-       FROM messaging.messages
-       WHERE tournament_id = $1
-       ORDER BY created_at ASC, id ASC
+      `SELECT m.id, m.tournament_id, m.sender_player_id, m.recipient_player_id,
+              m.match_id, m.body, m.created_at, m.legal_hold${readAtSelect}
+       FROM messaging.messages m
+       ${joinClause}
+       WHERE m.tournament_id = $1
+       ORDER BY m.created_at ASC, m.id ASC
        LIMIT $2`,
-      [tournamentId, limit]
+      params
     )
     return result.rows.map(rowToMessage)
   }

@@ -131,7 +131,9 @@ describe('useMessages', () => {
       await waitFor(() => expect(result.current.unreadCount).toBe(2))
     })
 
-    it('does not count broadcast messages (null recipientPlayerId) as unread for a player', async () => {
+    it('counts unread broadcast messages (null recipientPlayerId) for a player', async () => {
+      // Broadcasts have recipientPlayerId: null. The API joins message_recipients so
+      // read_at is null (unread) for a participant who hasn't read the announcement.
       const msgs = [
         makeMessage({ id: 'msg_1', read_at: null, recipientPlayerId: null }),
       ]
@@ -140,7 +142,19 @@ describe('useMessages', () => {
       const { result } = renderHook(() => useMessages('tourn_1'), { wrapper: Wrapper })
 
       await waitFor(() => expect(result.current.messages).toHaveLength(1))
-      // Broadcast messages addressed to no specific player don't count toward the personal badge
+      // Broadcast with read_at: null counts toward the personal unread badge
+      expect(result.current.unreadCount).toBe(1)
+    })
+
+    it('does not count a read broadcast (read_at set) as unread', async () => {
+      const msgs = [
+        makeMessage({ id: 'msg_1', read_at: new Date().toISOString(), recipientPlayerId: null }),
+      ]
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ messages: msgs }) })
+
+      const { result } = renderHook(() => useMessages('tourn_1'), { wrapper: Wrapper })
+
+      await waitFor(() => expect(result.current.messages).toHaveLength(1))
       expect(result.current.unreadCount).toBe(0)
     })
   })

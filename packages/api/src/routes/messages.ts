@@ -73,7 +73,11 @@ export default function messagesRouter(deps: AppDependencies) {
         tournamentId: message.tournamentId,
         senderPlayerId: message.senderPlayerId,
         recipientPlayerId: null,
+        matchId: message.matchId,
+        body: message.body,
+        legalHold: message.legalHold,
         createdAt: message.createdAt,
+        read_at: null,
       })
 
       log.info('announcement.sent', {
@@ -140,7 +144,11 @@ export default function messagesRouter(deps: AppDependencies) {
         tournamentId: message.tournamentId,
         senderPlayerId: message.senderPlayerId,
         recipientPlayerId: message.recipientPlayerId,
+        matchId: message.matchId,
+        body: message.body,
+        legalHold: message.legalHold,
         createdAt: message.createdAt,
+        read_at: null,
       })
 
       log.info('message.sent', {
@@ -160,11 +168,16 @@ export default function messagesRouter(deps: AppDependencies) {
     try {
       const tournamentId = req.params.id as string
 
-      // Accept either a player session or an organizer JWT
+      // Accept either a player session or an organizer JWT.
+      // Capture the player's ID when present so we can join message_recipients
+      // and return per-player read_at in the history response.
       let authed = false
+      let viewerPlayerId: string | undefined
+
       try {
-        await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
         authed = true
+        viewerPlayerId = session.playerId
       } catch {
         // fall through to organizer check
       }
@@ -196,7 +209,7 @@ export default function messagesRouter(deps: AppDependencies) {
         }
       }
 
-      const messages = await messageRepo.getHistory({ tournamentId, limit, before })
+      const messages = await messageRepo.getHistory({ tournamentId, limit, before, viewerPlayerId })
 
       res.status(200).json({ messages })
     } catch (err) {

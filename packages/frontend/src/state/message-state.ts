@@ -15,13 +15,20 @@ type Subscriber = (messages: MessageRecord[]) => void
 export class MessageStore {
   private messages: MessageRecord[] = []
   private subscribers: Set<Subscriber> = new Set()
+  /** True once setHistory has been called at least once (i.e. initial fetch completed). */
+  private loaded = false
 
   all(): MessageRecord[] {
     return [...this.messages]
   }
 
+  isLoaded(): boolean {
+    return this.loaded
+  }
+
   setHistory(messages: MessageRecord[]): void {
     this.messages = [...messages]
+    this.loaded = true
     this.notifySubscribers()
   }
 
@@ -43,6 +50,7 @@ export class MessageStore {
 
   clear(): void {
     this.messages = []
+    this.loaded = false
     this.notifySubscribers()
   }
 
