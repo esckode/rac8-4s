@@ -308,8 +308,31 @@ What it is **not** (the gaps this section designs out):
   enabling real drops.
 - **Detached-partition reclamation (🟠):** add `messaging.reclaim_detached_partitions()` — periodically
   re-run the retention gate against *detached* partitions; when a partition no longer has any
-  in-progress / within-retention / `legal_hold` rows, drop it (optionally cold-archive to object
-  storage first). Pairs with the purge job.
+  in-progress / within-retention / `legal_hold` rows, drop it. Pairs with the purge job.
+
+**Locked requirements (grill, 2026-06-23):**
+- **R-17.1.1 — Env-selected queue backend.** `InMemoryJobQueue` for dev/test (default, no Redis);
+  `BullMQJobQueue` + Redis in prod, chosen via env (`JOB_QUEUE`, `REDIS_URL`). Same `JobQueue`
+  interface, so app code is backend-agnostic. (This also finally gives the Phase-5 read-receipt
+  flush a real consumer — it currently has none in prod.)
+- **R-17.1.2 — Prod topology.** `redis-server` on the EC2 box via systemd, `maxmemory` capped with
+  **`maxmemory-policy noeviction`** (a queue must never have job keys evicted) + the BullMQ worker as
+  a **second systemd service**. IaC adds the Redis install to user-data bootstrap, a worker systemd
+  unit, and an SSM `redis_url` param.
+- **R-17.1.3 — Dev parity.** `redis` service in `docker-compose` + a runnable worker entrypoint +
+  `dev:worker` script; backend env-selected. **Tests/CI and default dev stay on `InMemoryJobQueue`**
+  (no Redis dependency).
+- **R-17.1.4 — Scheduling.** `messaging.partition.ensure` / `.purge` as **monthly BullMQ repeatable
+  jobs** (cron `0 3 1 * *` / `0 4 1 * *`, **UTC**); `ensure` also runs at **process boot**; `ensure`
+  pre-creates **3 months ahead**; `purge` ships **dry-run-behind-a-flag** until verified.
+- **R-17.1.5 — Maintenance observability.** (1) Structured `noun.verb` logs
+  (`partition.ensure.completed` / `partition.purge.completed` with counts; `*.failed` → `error`);
+  (2) a queryable **`messaging.partition_maintenance_runs`** audit table (run_type, ran_at, counts,
+  dry_run, success, error); (3) a **`partition.coverage.low|critical`** health signal (logs + `/health`)
+  when the furthest-future partition is within ~1 month — the early-warning that catches a stuck
+  scheduler **before** inserts break.
+- **R-17.1.6 — Detached reclamation.** Reclaim-and-drop folded into the monthly purge; **no S3
+  cold-archive** for the MVP (add only if a compliance need appears).
 
 ### 17.2 Offline reach — notification fallback (🟠)
 A broadcast/DM today only reaches connected SSE clients. Design: after persist, enqueue a
@@ -320,12 +343,32 @@ announcements becomes a single email. Push notifications are a later swap-in beh
 "Offline" is approximated by "unread after grace," which avoids needing per-player connection
 tracking. Time-sensitive organizer announcements are the primary use case.
 
-### 17.3 Horizontal scaling — Redis-backed bus (🟠)
-Back `BroadcastBus` with **Redis pub/sub** (ioredis already present): on `emit`, `PUBLISH` to a
-channel keyed by `tournamentId`; every API instance `SUBSCRIBE`s and re-emits locally to its own SSE
-subscribers. This fixes cross-node delivery for **all** SSE (messaging *and* standings/bracket), not
-just messaging. Keep the in-process `EventEmitter` as the same-node fast path; Redis is the relay,
-**Postgres stays the system of record** (per §5). Required before running >1 API instance.
+### 17.3 Horizontal scaling — Redis-backed bus (🟠) — ✅ VALIDATED
+Back the SSE bus with **Redis pub/sub** so events relay across API instances (fixes cross-node
+delivery for **all** SSE — messaging *and* standings/bracket). **Decision: build now** (Redis already
+arrives via §17.1) rather than defer behind a seam. **Validated 2026-06-23** with a 2-instance spike
+(`spike/redis-pubsub-bus`): an announcement posted to instance A (:3001) was delivered to an SSE
+client on instance B (:3002) via Redis. **Postgres stays the system of record** (per §5).
+
+**Locked requirements (grill):**
+- **R-17.3.1 — Build now**, reusing §17.1's Redis.
+- **R-17.3.2 — Pure pub/sub** (validated, 3/3 unit + 2-instance e2e). Single uniform Redis path — no
+  in-process fast path, no origin dedup. **Accepted tradeoff:** Redis is a hard dependency for SSE.
+  **Mitigation:** a Redis/bus connectivity health signal (on `/health`, alert on `error`) so an
+  outage is visible.
+- **R-17.3.3 — Ephemeral pub/sub, not Streams.** Fire-and-forget; a down subscriber misses live
+  events — fine because SSE is best-effort and clients **backfill via `GET history` on reconnect**.
+- **R-17.3.4 — Single SSE channel** (`tournamentId` in payload, filtered locally); **separate ioredis
+  pub/sub connections** from the BullMQ/command connection; **config-selected** backend
+  (`SSE_BUS=redis|memory`) so dev/test/default need no Redis.
+- **R-17.3.5 — In-process fallback (config-selected).** Keep both `BroadcastBus` (in-process) and
+  `RedisBroadcastBus`. Prod defaults to `redis`; an operator can **deliberately flip to `memory`** if
+  Redis misbehaves. **Manual flip, not silent auto-degradation** — on multi-instance, auto-falling-back
+  to in-process would silently break cross-node delivery.
+
+> Reference impl validated on branch `spike/redis-pubsub-bus` (`RedisBroadcastBus` + `server.ts`
+> env-selection + `scripts/two-instance-sse-test.mjs`). The V2 build should re-land it TDD-first with
+> a proper `IBroadcastBus` interface + the health signal.
 
 ### 17.4 Targeted messaging + thread model (🟡 — the main product gap)
 Move from a flat feed to a **channel/thread model** (superset that keeps the current behavior as one
@@ -356,6 +399,26 @@ indicators are a privacy choice — make them **off or opt-in** per the §8 stan
   explicit **"Acknowledge"** button on critical announcements (the organizer ack count above).
 - **Attachments/media** — object storage (S3/GCS) + URL reference in the row; never blobs in Postgres.
 - **Discord linkout / voice** — optional community channel; out of scope.
+
+### 17.10 Horizontal scaling readiness (beyond the §17.3 bus)
+The Redis bus only solves SSE *delivery*. An audit (2026-06-23) found other single-instance
+assumptions; the 2-instance spike **confirmed R-17.10.1 is a real blocker** (player-session auth
+failed across instances — we had to use a stateless organizer JWT).
+- **R-17.10.1 🔴 — Magic-link token store → Redis. Build now.** Move opaque magic-link/player-session
+  tokens off `InMemoryTokenStore` to a Redis-backed store (TTL-native). It's the scale-blocker **and**
+  a single-instance durability win (tokens survive restarts). JWT account path is stateless — unchanged.
+- **R-17.10.2 🟠 — Redis-backed rate limiting.** `rate-limit.ts` uses an in-process `Map` → per-instance
+  limits. Move counters to Redis. *Design now, build when 2nd instance lands.*
+- **R-17.10.3 🟠 — Standings-cache consistency.** `InMemoryStandingsCache` is per-instance → stale reads
+  across nodes. Either shared Redis cache **or** per-instance cache + invalidation propagated over the
+  §17.3 bus (publish `standings.invalidate`). *Design now, build when scaling.*
+- **R-17.10.4 🟠 — Multi-instance infra.** ASG behind the **existing ALB**; **raise ALB idle timeout +
+  send SSE keepalive comments** (default 60s timeout kills SSE); budget DB connections (pool size ×
+  instances vs Postgres max; PgBouncer if needed). *Build when scaling.*
+
+> **Open (grill in progress):** §17.2 offline, §17.4 thread model, §17.5 sender attribution, §17.6
+> read-receipt visibility, §17.7 deferred, §17.9 messaging feature analytics — requirements TBD.
+> §17.10 build-now vs design-defer for .2/.3/.4 pending confirmation of whether >1 instance is imminent.
 
 ### 17.8 Suggested sequencing
 1. **17.1 partition scheduling** (🔴 — has a real deadline). 2. **17.3 Redis bus** + **17.2 offline
