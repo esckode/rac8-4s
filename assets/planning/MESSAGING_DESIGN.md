@@ -298,6 +298,59 @@ What it is **not** (the gaps this section designs out):
 
 ## 17. Gap analysis & forward design
 
+### 17.0 Target architecture (multi-instance) — visual
+
+```
+                                 ┌─────────────┐
+                                 │  Browsers   │   HTTP requests + SSE (EventSource)
+                                 └──────┬──────┘
+                                        │
+                          ┌─────────────▼──────────────┐
+                          │   Load Balancer (NON-sticky │   prod: ALB — raised idle timeout,
+                          │   round-robin)              │         SSE keepalive comments
+                          └──────┬───────────────┬──────┘   dev:  nginx/caddy → :3001/:3002
+                                 │               │
+                   ┌─────────────▼──┐     ┌──────▼─────────┐
+                   │  API instance 1│     │ API instance 2 │  … N (stateless)
+                   │  • REST routes │     │ • REST routes  │
+                   │  • SSE /events │     │ • SSE /events  │  ← holds each client's EventSource
+                   │  • RedisBus    │     │ • RedisBus     │  (pure pub/sub, R-17.3.2)
+                   └──┬───┬───┬─────┘     └────┬───┬───┬───┘
+            (1)persist│   │   │ (2)publish+sub │   │   │(3)enqueue jobs
+                      │   │   └───────┬────────┘   │   │
+                      │   └──────┐    │    ┌───────┘   │
+                      ▼          ▼    ▼    ▼           ▼
+   ┌────────────────────────┐  ┌────────────────────────────────────┐
+   │  PostgreSQL  (SoR)     │  │  Redis  — SHARED, HA                │
+   │  • messaging schema:   │  │  prod: ElastiCache (multi-AZ)       │
+   │     messages (part.)   │  │  dev:  docker container             │
+   │     message_recipients │  │  ───────────────────────────────── │
+   │     (part., FK-aligned)│  │  • pub/sub channel  → SSE relay     │  (R-17.3)
+   │  • public (tournaments,│  │  • BullMQ job queue                 │  (R-17.1)
+   │     players, …)        │  │  • token store (magic-link/session) │  (R-17.10.1)
+   │  • partition_          │  │  • rate-limit counters              │  (R-17.10.2)
+   │     maintenance_runs    │  │  • unread counters / cache invalid. │  (R-17.10.3)
+   └───────────▲────────────┘  └─────────────────┬──────────────────┘
+               │ writes                           │ consume (exactly-once)
+               │                       ┌──────────▼───────────┐
+               └───────────────────────┤  Worker tier         │  decoupled, 1–2 procs,
+                                        │  (BullMQ consumer)   │  scale by QUEUE DEPTH (R-17.1.7)
+                                        │  • partition.ensure/ │
+                                        │    .purge (monthly + │
+                                        │    boot; idempotent) │
+                                        │  • read_receipt.flush│  (batched)
+                                        │  • messaging.notify ─┼──► Email / Push  (offline, R-17.2)
+                                        └──────────────────────┘
+```
+
+**Key flows:** (1) **persist-then-broadcast** — API writes the message to Postgres (system of record)
+*before* emitting. (2) **SSE relay** — the API `PUBLISH`es to Redis pub/sub; every instance's
+`RedisBus` re-delivers to its own SSE clients → cross-node delivery (validated). (3) **jobs** — APIs
+enqueue to BullMQ; the decoupled worker tier consumes (exactly-once normally, at-least-once under
+failure → handlers idempotent). **Redis is shared + a SPOF** for bus + queue + auth → HA required in
+prod; an operator can flip `SSE_BUS=memory` per node as a deliberate fallback (R-17.3.5).
+**Dev** runs this whole shape on one box (compose: 2 API + worker + redis + LB; R-17.10.5).
+
 ### 17.1 Operational hardening (do first — §A items)
 - **Partition auto-creation (🔴):** register a **BullMQ repeatable monthly job** at app startup that
   calls `messaging.ensure_future_partitions(2)`, **plus a boot-time safety call** so a fresh deploy
@@ -315,10 +368,12 @@ What it is **not** (the gaps this section designs out):
   `BullMQJobQueue` + Redis in prod, chosen via env (`JOB_QUEUE`, `REDIS_URL`). Same `JobQueue`
   interface, so app code is backend-agnostic. (This also finally gives the Phase-5 read-receipt
   flush a real consumer — it currently has none in prod.)
-- **R-17.1.2 — Prod topology.** `redis-server` on the EC2 box via systemd, `maxmemory` capped with
-  **`maxmemory-policy noeviction`** (a queue must never have job keys evicted) + the BullMQ worker as
-  a **second systemd service**. IaC adds the Redis install to user-data bootstrap, a worker systemd
-  unit, and an SSM `redis_url` param.
+- **R-17.1.2 — Prod topology (revised for multi-instance).** Redis must be **shared + HA** —
+  **ElastiCache (multi-AZ)**, NOT local-per-box (local Redis would un-share the queue/bus/token store
+  and collapse the multi-instance design). `maxmemory-policy noeviction` (a queue must never have job
+  keys evicted). The **worker is a decoupled tier** (its own systemd service / process, independent of
+  the API ASG). IaC adds ElastiCache + an SSM `redis_url` param + the worker unit. **Cost note:**
+  ElastiCache multi-AZ exceeds the free-tier ethos the IaC docs assumed — accepted for multi-instance.
 - **R-17.1.3 — Dev parity.** `redis` service in `docker-compose` + a runnable worker entrypoint +
   `dev:worker` script; backend env-selected. **Tests/CI and default dev stay on `InMemoryJobQueue`**
   (no Redis dependency).
@@ -333,6 +388,13 @@ What it is **not** (the gaps this section designs out):
   scheduler **before** inserts break.
 - **R-17.1.6 — Detached reclamation.** Reclaim-and-drop folded into the monthly purge; **no S3
   cold-archive** for the MVP (add only if a compliance need appears).
+- **R-17.1.7 — Worker scaling.** BullMQ workers are stateless consumers of the shared Redis queue
+  (exactly-once normally; at-least-once under failure → **handlers idempotent**, which ours are).
+  Worker count is **decoupled from API count** — a **small fixed pool (1–2 for HA)** sized by **queue
+  depth**, not request volume (job volume is low). Repeatable jobs are deduped by repeat key (fire
+  once/schedule regardless of worker count); BullMQ v5's scheduler is built into the Worker, so **no
+  leader election**. The **read-receipt flush must be a queued/repeatable job** (one coalesced flush
+  per worker pickup), *not* per-worker in-memory timers, or N workers duplicate the flush.
 
 ### 17.2 Offline reach — notification fallback (🟠)
 A broadcast/DM today only reaches connected SSE clients. Design: after persist, enqueue a
@@ -416,7 +478,8 @@ instances means single-instance-assuming code fails immediately in dev.
   stale reads across nodes. Per-instance cache + **invalidation propagated over the §17.3 bus**
   (publish `standings.invalidate`) is the cheap option; shared Redis cache is the alternative.
 - **R-17.10.4 — Multi-instance infra (prod). Build with the prod rollout.** ASG behind the **existing
-  ALB**; **raise ALB idle timeout + send SSE keepalive comments** (default 60s kills SSE); budget DB
+  ALB**; **raise ALB idle timeout + send SSE keepalive comments** (default 60s kills SSE); **shared HA
+  Redis (ElastiCache multi-AZ — now a critical SPOF for bus + queue + auth)** per R-17.1.2; budget DB
   connections (pool size × instances vs Postgres max; PgBouncer if needed).
 - **R-17.10.5 — Dev distributed topology. Build now.** `docker-compose` gains **`redis` + a
   load-balancer (nginx/caddy, round-robin, non-sticky)** over `api@:3001`/`api@:3002`; the **Vite proxy
