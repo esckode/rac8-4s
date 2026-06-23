@@ -403,27 +403,40 @@ indicators are a privacy choice — make them **off or opt-in** per the §8 stan
 ### 17.10 Horizontal scaling readiness (beyond the §17.3 bus)
 The Redis bus only solves SSE *delivery*. An audit (2026-06-23) found other single-instance
 assumptions; the 2-instance spike **confirmed R-17.10.1 is a real blocker** (player-session auth
-failed across instances — we had to use a stateless organizer JWT).
+failed across instances). **Decision (2026-06-23): prod is going multi-instance, and dev will run the
+full distributed stack always — so ALL of §17.10 is build-now** (no deferral). Developing against 2
+instances means single-instance-assuming code fails immediately in dev.
 - **R-17.10.1 🔴 — Magic-link token store → Redis. Build now.** Move opaque magic-link/player-session
-  tokens off `InMemoryTokenStore` to a Redis-backed store (TTL-native). It's the scale-blocker **and**
-  a single-instance durability win (tokens survive restarts). JWT account path is stateless — unchanged.
-- **R-17.10.2 🟠 — Redis-backed rate limiting.** `rate-limit.ts` uses an in-process `Map` → per-instance
-  limits. Move counters to Redis. *Design now, build when 2nd instance lands.*
-- **R-17.10.3 🟠 — Standings-cache consistency.** `InMemoryStandingsCache` is per-instance → stale reads
-  across nodes. Either shared Redis cache **or** per-instance cache + invalidation propagated over the
-  §17.3 bus (publish `standings.invalidate`). *Design now, build when scaling.*
-- **R-17.10.4 🟠 — Multi-instance infra.** ASG behind the **existing ALB**; **raise ALB idle timeout +
-  send SSE keepalive comments** (default 60s timeout kills SSE); budget DB connections (pool size ×
-  instances vs Postgres max; PgBouncer if needed). *Build when scaling.*
+  tokens off `InMemoryTokenStore` to a Redis-backed store (TTL-native). Scale-blocker **and** a
+  single-instance durability win. JWT account path is stateless — unchanged. *(Without it, a
+  round-robin LB yields random `401`s.)*
+- **R-17.10.2 — Redis-backed rate limiting. Build now.** `rate-limit.ts` uses an in-process `Map` →
+  per-instance limits. Move counters to Redis.
+- **R-17.10.3 — Standings-cache consistency. Build now.** `InMemoryStandingsCache` is per-instance →
+  stale reads across nodes. Per-instance cache + **invalidation propagated over the §17.3 bus**
+  (publish `standings.invalidate`) is the cheap option; shared Redis cache is the alternative.
+- **R-17.10.4 — Multi-instance infra (prod). Build with the prod rollout.** ASG behind the **existing
+  ALB**; **raise ALB idle timeout + send SSE keepalive comments** (default 60s kills SSE); budget DB
+  connections (pool size × instances vs Postgres max; PgBouncer if needed).
+- **R-17.10.5 — Dev distributed topology. Build now.** `docker-compose` gains **`redis` + a
+  load-balancer (nginx/caddy, round-robin, non-sticky)** over `api@:3001`/`api@:3002`; the **Vite proxy
+  targets the LB** (was `:3001`); dev runs **2 API instances + 1 worker + Redis + Postgres**.
+  Non-sticky on purpose (so cross-instance bugs surface). **Tests/CI stay single-process + in-memory**
+  (no LB/Redis dependency).
 
 > **Open (grill in progress):** §17.2 offline, §17.4 thread model, §17.5 sender attribution, §17.6
 > read-receipt visibility, §17.7 deferred, §17.9 messaging feature analytics — requirements TBD.
-> §17.10 build-now vs design-defer for .2/.3/.4 pending confirmation of whether >1 instance is imminent.
 
 ### 17.8 Suggested sequencing
-1. **17.1 partition scheduling** (🔴 — has a real deadline). 2. **17.3 Redis bus** + **17.2 offline
-notification** (functional/scaling). 3. **17.5 sender names** (cheap, high UX value). 4. **17.4 thread
-model** + **17.6 read-receipt visibility** (the larger product build). 5. **17.7** as demand appears.
+Now that prod is multi-instance and dev runs the full distributed stack, the **distributed
+foundation is built first** (everything else rides on it):
+1. **Foundation (build now):** §17.1 (env-selected BullMQ + worker + partition scheduling 🔴) ·
+   §17.3 (Redis pub/sub bus, validated) · §17.10 (token store 🔴, rate-limit, cache invalidation,
+   **dev LB topology R-17.10.5**). Stand up the distributed dev stack here.
+2. **Functional:** §17.2 offline notification (rides on the worker).
+3. **UX (cheap, high value):** §17.5 sender names.
+4. **Product build:** §17.4 thread model + §17.6 read-receipt visibility.
+5. **As demand appears:** §17.7; §17.9 messaging feature analytics.
 
-> A follow-up `MESSAGING_IMPLEMENTATION_V2.md` should phase 17.1–17.6 TDD-first (CLAUDE.md §4/§11),
-> same as the original plan. Items 17.1–17.3 are also reflected in the "what's left" operational notes.
+> A follow-up **`MESSAGING_IMPLEMENTATION_V2.md`** should phase all of the above TDD-first
+> (CLAUDE.md §4/§11), foundation-first. The §17.3 reference impl lives on `spike/redis-pubsub-bus`.
