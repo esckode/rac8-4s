@@ -6,7 +6,10 @@ export default defineConfig({
   testIgnore: '**/TEMPLATE.spec.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // Retry locally too (not just CI): the real-time SSE specs are timing-sensitive and
+  // flake under parallel local workers. Measured equally flaky regardless of DB schema,
+  // so retries — not a code change — are the right mitigation. CI already ran with 2.
+  retries: 2,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
