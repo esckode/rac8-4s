@@ -468,6 +468,11 @@ describe('Messaging API', () => {
       // synchronously updating the DB. To verify the unread count drops, we must
       // manually drain the InMemoryJobQueue by invoking processReadReceiptFlush —
       // the same processor the worker would call in production.
+
+      // Clear any flush jobs from earlier tests in this suite so the length assertion
+      // below is unambiguous (we expect exactly 1 job from this test's mark-read call).
+      jobQueue.clear()
+
       const { orgToken, tournament } = await createOrganizerWithTournament()
       const { player, sessionToken } = await createPlayerWithSession(tournament.id)
 

@@ -256,6 +256,53 @@ export class MessageRepository {
   }
 
   /**
+   * Mark multiple (messageId, playerId) pairs as read in a single bulk UPDATE.
+   * Deduplicates pairs before issuing the statement.
+   * Idempotent: pairs already read (read_at IS NOT NULL) are skipped.
+   *
+   * Uses a CTE-based JOIN rather than an IN (VALUES ...) row-constructor, which
+   * avoids Postgres type-inference issues (text vs uuid) when binding parameters
+   * in a row comparison context.
+   *
+   * Does nothing if the input array is empty.
+   */
+  async markReadBatch(reads: Array<{ messageId: string; playerId: string }>): Promise<void> {
+    if (reads.length === 0) return
+
+    // Deduplicate by "messageId|playerId" key.
+    const seen = new Set<string>()
+    const unique: Array<{ messageId: string; playerId: string }> = []
+    for (const r of reads) {
+      const key = `${r.messageId}|${r.playerId}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        unique.push(r)
+      }
+    }
+
+    // Build a FROM (VALUES ...) subquery to match (message_id, player_id) pairs.
+    // Note: message_id is uuid but player_id is text in message_recipients — casts
+    // must match the column types exactly. Using FROM ... WHERE rather than
+    // IN (VALUES ...) to avoid Postgres's row-constructor type-inference issues.
+    //
+    // Shape: FROM (VALUES ($1::uuid, $2), ($3::uuid, $4)) AS v(mid, pid)
+    const valuePlaceholders = unique
+      .map((_, i) => `($${i * 2 + 1}::uuid, $${i * 2 + 2})`)
+      .join(', ')
+    const params = unique.flatMap((r) => [r.messageId, r.playerId])
+
+    await this.pool.query(
+      `UPDATE messaging.message_recipients mr
+       SET read_at = now()
+       FROM (VALUES ${valuePlaceholders}) AS v(mid, pid)
+       WHERE mr.message_id = v.mid
+         AND mr.player_id = v.pid
+         AND mr.read_at IS NULL`,
+      params
+    )
+  }
+
+  /**
    * Count unread messages for a player.
    * Optionally scoped to a specific tournament.
    */

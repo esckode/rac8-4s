@@ -90,18 +90,18 @@ export default function messagesRouter(deps: AppDependencies) {
 
   // POST /tournaments/:id/messages/:msgId/read — mark read (player session)
   // Registered before POST /:id/messages (same prefix; more specific path first)
+  //
+  // Phase 5: enqueues a messaging.read_receipt.flush job rather than doing a
+  // synchronous UPDATE. Read receipts are low-stakes bookkeeping — a crash
+  // losing the in-flight job is acceptable (design §11). Returns 204 immediately.
   router.post('/:id/messages/:msgId/read', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const msgId = req.params.msgId as string
 
       const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
 
-      // markRead omits message_created_at from WHERE intentionally (see repository comment
-      // on microsecond precision mismatch with partitioned FK). Pass a placeholder.
-      await messageRepo.markRead({
-        messageId: msgId,
-        messageCreatedAt: new Date(),
-        playerId: session.playerId,
+      await deps.jobQueue?.add('messaging.read_receipt.flush', {
+        reads: [{ messageId: msgId, playerId: session.playerId }],
       })
 
       res.status(204).send()

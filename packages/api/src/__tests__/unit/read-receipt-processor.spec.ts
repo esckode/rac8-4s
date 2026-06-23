@@ -130,6 +130,9 @@ describe('processReadReceiptFlush', () => {
   })
 
   it('order of events does not affect the set of pairs flushed', async () => {
+    // The bulk UPDATE passes pairs as a flat params array: [mid1, pid1, mid2, pid2, ...]
+    // Regardless of input order, the SET of (messageId, playerId) pairs passed
+    // to the DB must be equivalent across both calls.
     const capturedParams: unknown[][] = []
     const pool = {
       query: jest.fn(async (_sql: string, params?: unknown[]) => {
@@ -162,15 +165,18 @@ describe('processReadReceiptFlush', () => {
     expect(paramsAB).toHaveLength(1)
     expect(paramsBA).toHaveLength(1)
 
-    // The sets of messageId/playerId pairs passed as params must be equivalent
-    // (order may differ since deduplication uses a Set/Map).
-    const flatAB = new Set(
-      (paramsAB[0] as string[]).map((v) => (typeof v === 'string' ? v : JSON.stringify(v)))
-    )
-    const flatBA = new Set(
-      (paramsBA[0] as string[]).map((v) => (typeof v === 'string' ? v : JSON.stringify(v)))
-    )
-    expect(flatAB).toEqual(flatBA)
+    // Reconstruct the (messageId, playerId) pairs from the flat params array.
+    // Params are interleaved: [mid1, pid1, mid2, pid2, ...]
+    function toPairSet(flatParams: unknown[]): Set<string> {
+      const pairs = new Set<string>()
+      for (let i = 0; i < flatParams.length; i += 2) {
+        pairs.add(`${flatParams[i]}|${flatParams[i + 1]}`)
+      }
+      return pairs
+    }
+
+    // The sets of pairs must be equal regardless of input order.
+    expect(toPairSet(paramsAB[0] as unknown[])).toEqual(toPairSet(paramsBA[0] as unknown[]))
   })
 
   it('logs a structured info event after flushing', async () => {

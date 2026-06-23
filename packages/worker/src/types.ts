@@ -4,6 +4,7 @@ export type JobName =
   | 'email.send'
   | 'messaging.partition.ensure'
   | 'messaging.partition.purge'
+  | 'messaging.read_receipt.flush'
 
 export type JobPayload = {
   'standings.recalculate': { tournamentId: string; groupId: string }
@@ -11,6 +12,7 @@ export type JobPayload = {
   'email.send': { type: string; recipientIds: string[]; data: Record<string, unknown> }
   'messaging.partition.ensure': { monthsAhead?: number }
   'messaging.partition.purge': { retentionDays?: number; dropPaddingDays?: number; dryRun?: boolean }
+  'messaging.read_receipt.flush': { reads: Array<{ messageId: string; playerId: string }> }
 }
 
 export interface JobOptions {
