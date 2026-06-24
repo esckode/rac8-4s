@@ -1,6 +1,8 @@
 # Player Messaging Design
 ## Architecture & Feasibility Analysis
 
+> 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
+
 **Date:** 2026-06-22 (updated 2026-06-23)
 **Status:** ✅ IMPLEMENTED & MERGED to `main` (Phases P–7, 2026-06-23) — but as a **single-instance, flat group-feed MVP**. The shipped feature diverges from this design's intent (targeted DMs, dispute channel, sender attribution) and omits several operational/scaling pieces. See **§16 (as-built)** and **§17 (gap analysis & forward design)**.
 

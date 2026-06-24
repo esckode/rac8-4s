@@ -1,6 +1,8 @@
 # Player Messaging — Implementation Plan
 ## TDD-driven build of the Phase 7 messaging feature
 
+> 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
+
 **Date:** 2026-06-22
 **Status:** 📋 PLAN — not started. Pulls `MESSAGING_DESIGN.md` (Phase 7) forward.
 **Design source of truth:** [`MESSAGING_DESIGN.md`](./MESSAGING_DESIGN.md)

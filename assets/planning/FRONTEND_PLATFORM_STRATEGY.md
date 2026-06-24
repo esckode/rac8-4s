@@ -1,6 +1,8 @@
 # Frontend Platform Strategy
 ## PWA-first now; native via Capacitor deferred
 
+> 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
+
 **Date:** 2026-06-24
 **Status:** ✅ DECISION — **PWA-first**; **Capacitor wrapper deferred** (clear trigger below).
 

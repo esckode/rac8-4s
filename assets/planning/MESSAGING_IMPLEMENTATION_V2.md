@@ -1,6 +1,8 @@
 # Player Messaging — Implementation Plan V2
 ## Foundation-first, TDD-driven build of the §17 multi-instance design
 
+> 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
+
 **Date:** 2026-06-23
 **Status:** 📋 PLAN — not started.
 **Design source of truth:** [`MESSAGING_DESIGN.md`](./MESSAGING_DESIGN.md) §16–§17 (esp. the §17.0 diagram and the R-17.x requirements).

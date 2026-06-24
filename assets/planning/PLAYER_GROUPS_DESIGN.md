@@ -1,6 +1,8 @@
 # Player Groups & Availability — Design
 ## Durable groups, group chat, availability polls, group-launched tournaments
 
+> 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
+
 **Date:** 2026-06-24
 **Status:** 📋 DESIGN (grilled) — not started. A **new product track** (community layer), distinct from
 but sharing infrastructure with the tournament-scoped messaging in
