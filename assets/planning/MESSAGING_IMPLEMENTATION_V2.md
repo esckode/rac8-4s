@@ -101,6 +101,14 @@ without re-plumbing. Behavior-preserving for tournaments — each tournament get
 - **GREEN:** wire `BullMQJobQueue` selection (`JOB_QUEUE=bullmq`); add a runnable worker entrypoint
   (`packages/worker`) + `dev:worker` script that registers existing processors (read-receipt flush,
   partition ensure/purge). Give the read-receipt flush a real consumer.
+- **⚠️ Carry-over from V1.0 (must-fix here):** the job-**enqueue** payloads currently omit
+  `conversationId` (e.g. `standings.recalculate` in `tournaments.ts`); the processors fall back to
+  `conversationId ?? tournamentId`. Harmless today (no consumer; the inline broadcast emits on the
+  resolved `cid`), but once a **real consumer** runs, the worker would emit on `tournamentId` while SSE
+  subscribes on `conversation_id` → **silent SSE miss**. When wiring the consumer: **resolve and include
+  `conversationId` in every enqueue payload** (and remove the now-redundant inline broadcast), with a test
+  asserting a queued job's emit lands on `conversation_id` (the cross-node job→SSE case is covered again in
+  V2.2).
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
 ### V1.4 — Redis-backed token store — R-17.10.1 🔴
