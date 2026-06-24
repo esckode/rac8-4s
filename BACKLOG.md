@@ -30,7 +30,7 @@ here.
 | Plan | Drives | Status |
 |---|---|---|
 | [MESSAGING_IMPLEMENTATION.md](assets/planning/MESSAGING_IMPLEMENTATION.md) | Messaging MVP — Phases P–7 (schema, partitioning, repo, routes+SSE, batching, frontend, coverage) | ✅ **Built & merged** |
-| [MESSAGING_IMPLEMENTATION_V2.md](assets/planning/MESSAGING_IMPLEMENTATION_V2.md) | §17 multi-instance foundation (Redis bus/queue/token store, worker, dev distributed stack) + product gaps (offline notify, sender names, thread model, read-receipts) | 📋 **Plan ready** — not started |
+| [MESSAGING_IMPLEMENTATION_V2.md](assets/planning/MESSAGING_IMPLEMENTATION_V2.md) | `conversations` abstraction (V1.0, Player-Groups prereq) + §17 multi-instance foundation (Redis bus/queue/token store, worker, dev distributed stack; Redis-required failure mode) + product gaps (offline notify, sender names, thread model, read-receipts) | 📋 **Plan ready** — not started |
 | [FRONTEND_IMPLEMENTATION.md](assets/planning/FRONTEND_IMPLEMENTATION.md) | Frontend-quality / rendering tasks driving [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) — FE-RENDER-1 (memoize `AuthProvider` value) | 📋 **Plan ready** — not started |
 
 ## Test scenarios
@@ -60,8 +60,8 @@ here.
   organizer SaaS), then create `MONETIZATION_IMPLEMENTATION.md` (payments integration first).
 
 ### 📋 Plan ready → available to tackle
-- **MESSAGING_IMPLEMENTATION_V2.md** — foundation-first, TDD. (Note: the `conversations` abstraction in
-  its foundation is a shared prerequisite for Player Groups.)
+- **MESSAGING_IMPLEMENTATION_V2.md** — foundation-first, TDD. (`conversations` abstraction is now **V1.0**,
+  the first task — a shared prerequisite for Player Groups.)
 - **FRONTEND_IMPLEMENTATION.md** — frontend-quality tasks (TDD). First task: **FE-RENDER-1** memoize the
   `AuthProvider` context value.
 

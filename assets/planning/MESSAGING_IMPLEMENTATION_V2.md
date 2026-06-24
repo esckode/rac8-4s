@@ -13,9 +13,10 @@
 ## 0. Scope, constraints & global rules
 
 ### What this builds
-The §17 forward design: a **distributed (multi-instance) messaging platform** — Redis-backed SSE bus,
-BullMQ worker tier, shared token store / rate-limit / cache, the dev 2-instance topology — **then** the
-product gaps (offline notify, sender names, thread model, read-receipt visibility). **Foundation first.**
+The §17 forward design: a **distributed (multi-instance) messaging platform** — the **`conversations`
+abstraction** (the generalized container the bus/SSE/history key on), a Redis-backed SSE bus, BullMQ
+worker tier, shared token store / rate-limit / cache, the dev 2-instance topology — **then** the product
+gaps (offline notify, sender names, thread model, read-receipt visibility). **Foundation first.**
 
 ### Hard rules (apply to EVERY task)
 1. **TDD-first (CLAUDE.md §4, §11):** write/extend **unit + integration + e2e tests AND scenario docs
@@ -41,6 +42,17 @@ product gaps (offline notify, sender names, thread model, read-receipt visibilit
 6. **Branch/commit:** branch off `main` (`feat/messaging-v2`); one logical change per commit; trailers
    per CLAUDE.md §11.
 
+### Failure model — Redis is a required dependency
+After Phase V1 the bus, queue, **token store**, rate-limit and cache-invalidation all depend on Redis; the
+token store makes **auth** Redis-dependent, so there is **no meaningful partial degradation**. **Decision:**
+treat Redis as **required** — when it is unavailable in a Redis-selected deployment, **fail fast and present
+a clean "service unavailable" state**, don't limp along. Mechanics in **V1.5**: Redis-down trips
+**readiness** (the instance is pulled from the ALB) but **not liveness** (no restart-loop over a dependency
+outage); Redis-dependent API calls return **503 + `Retry-After`**; the SPA shows a maintenance page; a
+shared-ElastiCache outage means all targets go unready → the ALB serves 503 (optionally a static
+maintenance page). The cost is an availability coupling to ElastiCache → argues for **multi-AZ**. Unit/CI
+default to in-memory and are unaffected.
+
 ### Conventions to mirror
 Migrations `db/migrations/034+`; `getLogger` `noun.verb` logging (IDs only, never message bodies);
 the transactional test harness `getTestPool()`; factories; route ordering §10; `TIMESTAMPTZ` only.
@@ -48,6 +60,24 @@ the transactional test harness `getTestPool()`; factories; route ordering §10; 
 ---
 
 ## PHASE V1 — Redis foundation & env-selected backends
+
+### V1.0 — `conversations` abstraction (tournament_id → conversation_id) — Player-Groups prerequisite
+*Added post-V2-draft: this plan predates the Player Groups discussion. The bus/SSE/history must key on a
+generalized **`conversation_id`**, not `tournament_id`, so Groups (and the V5 thread model) layer on
+without re-plumbing. Behavior-preserving for tournaments — each tournament gets exactly one conversation.*
+- **RED:** migration test — every existing tournament backfills to **exactly one** `conversations` row and
+  every existing message links to it; repo/route resolve a tournament to its conversation; **bus + SSE
+  keyed on `conversation_id`** (emit + subscribe) with tournament behavior unchanged; history fetch by
+  conversation. (Behavior-preserving SSE/route surface → green-before/green-after; new tests cover the
+  mapping + backfill.)
+- **GREEN:** migration `034` — `conversations(id, type{tournament|group}, tournament_id?, group_id?)` +
+  `messages.conversation_id` (backfill from `tournament_id`, then `NOT NULL`); resolve tournament→
+  conversation in repo/routes; rekey the bus + SSE subscription on `conversation_id`; frontend subscribes
+  by the tournament's `conversation_id`.
+- **Scope guard:** only `type=tournament` here. `messages.type{text|poll|system|announcement}`,
+  `group_messages`, and group conversations are **Player-Groups scope** (see PLAYER_GROUPS_DESIGN §3) —
+  **not** V2. V2 builds only the container the bus needs.
+- **Verify gate.** **Commit:** `test:`/`refactor:` → `feat:`.
 
 ### V1.1 — Redis config + connectivity + health
 - **RED:** unit tests for config parsing (`REDIS_URL`, `JOB_QUEUE`, `SSE_BUS` defaults + overrides); a
@@ -81,6 +111,20 @@ the transactional test harness `getTestPool()`; factories; route ordering §10; 
   unchanged.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
+### V1.5 — Redis-required failure mode (readiness gate + 503 maintenance) — §0 Failure model
+*Placed after the token store, since that's what makes auth — and thus the whole app — Redis-dependent.*
+- **RED:** with Redis selected and the connection down: **readiness** `/health` returns non-200
+  (`redis: down`) while **liveness** stays OK (no restart loop); a guard returns **503 + `Retry-After`**
+  for Redis-dependent requests; the SPA renders a **"service temporarily unavailable"** page on 503; on
+  recovery, traffic resumes. Unit (health/guard branches) + a focused e2e (Redis down → maintenance page →
+  recovers). In-memory/CI paths unaffected (Redis not selected).
+- **GREEN:** shared Redis-health state; split liveness vs readiness on `/health`; 503 middleware
+  (`Retry-After`); frontend 503/maintenance view; document the ALB behavior (all targets unready → ALB
+  503; optional static maintenance page).
+- **Scope:** **whole-site-down for simplicity** — no public-browse-only carve-out in V1 (note as a possible
+  later refinement if browse uptime during a Redis outage is wanted).
+- **Verify gate.** **Commit:** `test:` → `feat:`.
+
 ---
 
 ## PHASE V2 — Distributed dev topology & multi-instance validation
@@ -90,8 +134,9 @@ the transactional test harness `getTestPool()`; factories; route ordering §10; 
   (dedup by repeat key); **boot-time ensure** creates current+3-months; `messaging.partition_maintenance_runs`
   audit rows written with counts; `partition.coverage.low|critical` health signal fires when the
   furthest partition is within threshold; purge `--dry-run` flag path.
-- **GREEN:** migration `034` (audit table + `reclaim_detached_partitions()`); schedule repeatable jobs +
-  boot ensure in the worker; wire coverage signal into `/health`; observability logs.
+- **GREEN:** migration `035` (audit table + `reclaim_detached_partitions()`; `034` is now the
+  `conversations` abstraction); schedule repeatable jobs + boot ensure in the worker; wire coverage signal
+  into `/health`; observability logs.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
 ### V2.2 — Dev distributed topology + multi-instance e2e harness — R-17.10.5
@@ -212,6 +257,9 @@ the task.
 
 ## Sequencing & risks
 - **Order is foundation-first** (V1 → V2 → V3 → V4 → V5 → V6 → V7); each phase depends on the prior.
+  **V1.0 (`conversations`) is the first domino** — it's also the shared prerequisite for Player Groups.
+- **Redis is a hard dependency (no fallback) — accepted.** Redis-down = site-down by design (V1.5, §0
+  Failure model); the availability coupling to ElastiCache argues for **multi-AZ**.
 - **Biggest risk:** the multi-instance e2e harness (V2.2) — bringing up LB+2 API+worker+Redis in CI is
   real test infra. Mitigate by making it a *separate* Playwright project that the foundation tasks gate
   on, while the main suite stays single-instance.
