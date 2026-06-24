@@ -63,11 +63,34 @@ Why in-app (not "use WhatsApp"): the WhatsApp Business API **cannot post into us
 
 ## 6. Group → tournament launch — **G-TOURN-1**
 - **Any** availability poll can drive a tournament — it is **not** a pre-declared poll type. At any time
-  the **poll creator can launch** a private tournament seeded from the current **In-voters**; and if
-  **auto-close** is set, the creator may opt for it to **auto-launch on close**. The launch creates a
-  private tournament **linked via `tournaments.group_id`** (nullable) and posts a **`system` message**
-  linking to it. The new tournament has its own *ephemeral* Messages tab (V1); the group keeps its
-  *durable* chat. Members still register individually for external/open tournaments.
+  the **poll creator can launch** an **unlisted, casual** tournament seeded from the current **In-voters**;
+  and if **auto-close** is set, the creator may opt for it to **auto-launch on close**. The launch creates
+  the tournament (**`visibility = unlisted`** + **`mode = casual`** — see §6.0) **linked via
+  `tournaments.group_id`** (nullable) and posts a **`system` message** linking to it. The new tournament
+  has its own *ephemeral* Messages tab (V1); the group keeps its *durable* chat. Members still register
+  individually for external/open tournaments.
+
+### 6.0 Tournament attributes — two orthogonal axes (terminology)
+A tournament has **two independent attributes**; do **not** conflate them into one name (an earlier draft
+called the group-launched tournament a "private tournament," which collided with "casual" — they are
+different axes).
+
+- **`mode: scheduled | casual`** — *how the engine runs* (deadlines vs none; own-match/organizer scoring
+  vs open scoring; manual vs auto-advance). This is the **R-A** reconciliation axis (§6.1).
+- **`visibility: public | unlisted`** — *who can see / join*. `public` = shown in `/browse` with open
+  registration; **`unlisted`** = hidden from browse, joinable only by seed/link (closed roster). We use
+  **`unlisted`** rather than "private" — it reads accurately for the group-launch case and avoids the
+  private/casual confusion.
+
+They combine independently (the group-launch case is just one cell):
+
+| | **public** | **unlisted** |
+|---|---|---|
+| **scheduled** | today's default open tournament | club invite-only league w/ deadlines (future; ties to organizer-SaaS) |
+| **casual** | open drop-in session, discoverable (future) | **group-launched ad-hoc (this design)** |
+
+The group-launch flow (G-TOURN-1) sets **both** `visibility = unlisted` **and** `mode = casual` — as two
+fields, not one renamed concept.
 
 ### 6.1 Casual mode — **G-CASUAL-1** (group-launched / ad-hoc tournaments)
 Ad-hoc tournaments are **live, in-person, play-until-done** — not scheduled. They run in **casual mode**,
@@ -103,6 +126,8 @@ messages.type{text|poll|system|announcement}
 messaging.group_messages(...)   -- durable, non-purged (Option X)
 poll_votes(message_id, player_id, choice{in|out|maybe}, voted_at)
 tournaments.group_id   (nullable; group-launched tournaments)
+tournaments.mode{scheduled|casual}          -- §6.0 / R-A; default scheduled
+tournaments.visibility{public|unlisted}     -- §6.0; default public
 ```
 
 ## 8. Architectural reuse & ripples

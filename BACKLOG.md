@@ -24,6 +24,7 @@ here.
 | [PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) | Durable groups, group chat, availability polls, casual-mode group-launched tournaments | 📐 **Design** — **needs an implementation plan** |
 | [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) | PWA-first now; Capacitor (native wrapper) deferred | 🧭 **Decision** — PWA work pending; Capacitor ⏸️ **Deferred** (trigger documented) |
 | [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (primary) + organizer SaaS (secondary); ads rejected | 📐 **Design (draft)** — **not yet grilled**, needs detail |
+| [DESIGN_SYSTEM.md](assets/planning/DESIGN_SYSTEM.md) | "C U At Court" token-driven design system (tokens + Tailwind v4 + shared component lib) — as-built + gaps (no doc/Storybook/a11y/theming/governance) | 📐 **Design (as-built)** — **not yet grilled**, gaps to scope |
 
 ## Implementation plans
 | Plan | Drives | Status |
@@ -80,6 +81,11 @@ here.
   (REQUIREMENTS:84,140); own-match/organizer scoring → **open scoring**; registration-deadline guard →
   **seeded roster** (REQUIREMENTS:1158). Update HL + REQUIREMENTS; add casual-mode tests **alongside** the
   scheduled-mode ones.
+  - **Terminology (PLAYER_GROUPS_DESIGN §6.0):** `mode` (engine: `scheduled | casual`) and **`visibility`
+    (`public | unlisted`)** are **two orthogonal axes** — not one concept. The group-launch flow sets
+    **both** `visibility = unlisted` **and** `mode = casual` (two fields). We use **`unlisted`**, *not*
+    "private," to avoid private/casual confusion. There is **no separate "private tournaments" item** —
+    it's the `visibility` attribute. (HL:1140 "only public shown" → the `unlisted` browse-filter carve-out.)
 - **R-B — PWA reconciliation** *(triggered by PWA-first; resolve in the PWA build).* HL **already**
   mandates PWA + Service Workers + IndexedDB sync queue + "Offline - will retry" banner (HL
   21/112/137/172/589) — the PWA plan **folds these in, doesn't reinvent**. Promote **push notifications
@@ -92,6 +98,8 @@ here.
   custom-option polls, admin role.
 - Monetization (MONETIZATION_STRATEGY.md §6): wedge choice (transaction fee vs. organizer SaaS), pricing
   shape, payments integration (Stripe Connect), tax/compliance, free-forever community boundary.
+- Design system (DESIGN_SYSTEM.md §4): formality bar (doc-only vs. + Storybook/visual regression),
+  portability, a11y bar, theming/dark-mode scope, token-usage governance, component API contracts.
 
 ---
 
