@@ -66,6 +66,22 @@ Why in-app (not "use WhatsApp"): the WhatsApp Business API **cannot post into us
   private tournament **linked via `tournaments.group_id`** (nullable) and posts a **`system` message**
   linking to it. The new tournament has its own *ephemeral* Messages tab (V1); the group keeps its
   *durable* chat. Members still register individually for external/open tournaments.
+
+### 6.1 Casual mode — **G-CASUAL-1** (group-launched / ad-hoc tournaments)
+Ad-hoc tournaments are **live, in-person, play-until-done** — not scheduled. They run in **casual mode**,
+which differs from the deadline-driven engine (touches both this track and the **core tournament engine**):
+- **No deadlines.** `registration_deadline` / `group_stage_deadline` / `knockout_stage_deadline` become
+  **nullable**; when null, **no `DEADLINE_PASSED` enforcement** and no date-driven advancement.
+- **Fixed roster.** Participants are the poll's In-voters at launch; **registration closed immediately**.
+- **Open scoring.** **Any participant can enter/edit any current match's score** (vs. scheduled mode's
+  own-match/organizer authz). **The submitter is logged** for accountability.
+- **Auto-progression.** When **all current-round matches have scores**, the bracket **auto-advances** and
+  generates the next round — **no organizer click, no deadline**. Completes normally
+  (`tournament_complete` + `completed_at`) when the final is scored.
+- **Edit window.** Scores are editable **until the round advances; locked after**; the launcher/organizer
+  can **override-fix** (downstream recompute = deferred complexity).
+- **Edge (defer):** a launched-but-abandoned casual tournament has no deadline to close it → optional
+  auto-archive after N days idle.
 - Members **still register individually** for external/open tournaments (unchanged).
 
 ## 7. Data model summary (new/changed)
