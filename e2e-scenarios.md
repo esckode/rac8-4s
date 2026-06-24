@@ -1,5 +1,7 @@
 # E2E Test Scenarios
 
+> 🗂️ Tracked in the [project backlog](BACKLOG.md). (Phases 1–7 + Messaging implemented; Phases 8–10 — Offline/Mobile/Accessibility, 13 scenarios — pending.)
+
 **Format:** Gherkin BDD  
 **Coverage:** Happy paths + critical error scenarios  
 **Status:** Design phase - Option B (80-100 scenarios)  

@@ -29,6 +29,11 @@ here.
 | [MESSAGING_IMPLEMENTATION.md](assets/planning/MESSAGING_IMPLEMENTATION.md) | Messaging MVP — Phases P–7 (schema, partitioning, repo, routes+SSE, batching, frontend, coverage) | ✅ **Built & merged** |
 | [MESSAGING_IMPLEMENTATION_V2.md](assets/planning/MESSAGING_IMPLEMENTATION_V2.md) | §17 multi-instance foundation (Redis bus/queue/token store, worker, dev distributed stack) + product gaps (offline notify, sender names, thread model, read-receipts) | 📋 **Plan ready** — not started |
 
+## Test scenarios
+| Spec doc | Covers | Status |
+|---|---|---|
+| [e2e-scenarios.md](e2e-scenarios.md) | Browser e2e scenarios (Gherkin → Playwright) | Phases 1–7 + Messaging ✅ **Built** (17 spec files); **Phases 8–10 — Offline (4) · Mobile (4) · Accessibility (5) = 13 scenarios ⏳ documented, NOT implemented** |
+
 ---
 
 ## Queues
@@ -42,6 +47,9 @@ here.
   V2 `conversations` abstraction).
 - **PWA-first frontend** (FRONTEND_PLATFORM_STRATEGY.md) → small PWA enablement plan (manifest, web push,
   service worker).
+- **E2E Phases 8–10** ([e2e-scenarios.md](e2e-scenarios.md)) — 13 documented-but-unimplemented scenarios
+  (Offline / Mobile / Accessibility) → write the Playwright specs (`offline-error.spec.ts`,
+  `mobile-responsive.spec.ts`, + a11y). Note: Offline/Mobile overlap the **PWA-first** work above.
 
 ### 📋 Plan ready → available to tackle
 - **MESSAGING_IMPLEMENTATION_V2.md** — foundation-first, TDD. (Note: the `conversations` abstraction in
