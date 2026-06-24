@@ -23,12 +23,14 @@ here.
 | [MESSAGING_DESIGN.md](assets/planning/MESSAGING_DESIGN.md) | §16 as-built messaging (single-instance MVP) + §17 multi-instance forward design (diagram + R-requirements) | §16 ✅ **Built**; §17 📐 **Design** → has a plan (V2 below) |
 | [PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) | Durable groups, group chat, availability polls, casual-mode group-launched tournaments | 📐 **Design** — **needs an implementation plan** |
 | [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) | PWA-first now; Capacitor (native wrapper) deferred | 🧭 **Decision** — PWA work pending; Capacitor ⏸️ **Deferred** (trigger documented) |
+| [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (primary) + organizer SaaS (secondary); ads rejected | 📐 **Design (draft)** — **not yet grilled**, needs detail |
 
 ## Implementation plans
 | Plan | Drives | Status |
 |---|---|---|
 | [MESSAGING_IMPLEMENTATION.md](assets/planning/MESSAGING_IMPLEMENTATION.md) | Messaging MVP — Phases P–7 (schema, partitioning, repo, routes+SSE, batching, frontend, coverage) | ✅ **Built & merged** |
 | [MESSAGING_IMPLEMENTATION_V2.md](assets/planning/MESSAGING_IMPLEMENTATION_V2.md) | §17 multi-instance foundation (Redis bus/queue/token store, worker, dev distributed stack) + product gaps (offline notify, sender names, thread model, read-receipts) | 📋 **Plan ready** — not started |
+| [FRONTEND_IMPLEMENTATION.md](assets/planning/FRONTEND_IMPLEMENTATION.md) | Frontend-quality / rendering tasks driving [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) — FE-RENDER-1 (memoize `AuthProvider` value) | 📋 **Plan ready** — not started |
 
 ## Test scenarios
 | Spec doc | Covers | Status |
@@ -53,10 +55,14 @@ here.
 - **Accessibility e2e** ([e2e-scenarios.md](e2e-scenarios.md)) — 5 a11y scenarios (keyboard nav, input
   labels, button roles, color-independence, error-field association). **Separate frontend-quality item,
   NOT PWA-specific** — applies to any web frontend. → its own spec / general frontend hardening.
+- **Monetization** (MONETIZATION_STRATEGY.md) → **grill first** to pick the wedge (transaction fee vs.
+  organizer SaaS), then create `MONETIZATION_IMPLEMENTATION.md` (payments integration first).
 
 ### 📋 Plan ready → available to tackle
 - **MESSAGING_IMPLEMENTATION_V2.md** — foundation-first, TDD. (Note: the `conversations` abstraction in
   its foundation is a shared prerequisite for Player Groups.)
+- **FRONTEND_IMPLEMENTATION.md** — frontend-quality tasks (TDD). First task: **FE-RENDER-1** memoize the
+  `AuthProvider` context value.
 
 ### ⏸️ Deferred (with triggers)
 - **Capacitor native wrapper** — trigger: reliable iOS push / app-store presence / engagement for the
@@ -84,6 +90,8 @@ here.
   visibility) — recommendations only, not yet confirmed.
 - Player Groups: **group-chat moderation policy** (abuse/reporting/leave), group discovery/privacy,
   custom-option polls, admin role.
+- Monetization (MONETIZATION_STRATEGY.md §6): wedge choice (transaction fee vs. organizer SaaS), pricing
+  shape, payments integration (Stripe Connect), tax/compliance, free-forever community boundary.
 
 ---
 

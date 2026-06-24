@@ -54,6 +54,25 @@ rewrite. **No full native (Swift/Kotlin) rewrite** is planned.
 
 Until a trigger fires, native is **speculative** — PWA covers the experience at near-zero cost.
 
+## Architecture: single SPA, not micro-frontends
+The frontend is **one monolithic React/Vite SPA** (`packages/frontend`, single bundle, client-side
+`react-router` routing) — **micro-frontends are deliberately not used.** Micro-frontends are an
+*organizational* scaling tool (multiple autonomous teams shipping independent deployables), not a
+technical one. This is one team, one codebase, one deployable — and they would actively fight the
+**PWA-first** direction (fragmented service-worker / cache scopes) and the deferred **Capacitor** path
+(which wraps a single `dist/`). New surfaces (groups, polls, casual brackets) are **new routes/tabs in
+the same app**, sharing one auth/token store, SSE connection, and React Query cache. Revisit only if
+*separate teams* ever need independent deploy cadences; until then, use feature folders / lazy-loaded
+routes for modularity — not a runtime integration layer.
+
+## Rendering requirements (core)
+Re-rendering must stay **targeted**, not app-wide: React Query scopes data-driven renders to subscribers,
+local UI state stays in leaves, and hot list rows (`MatchCard` / `StandingsTable`) are `React.memo`'d.
+
+- **FE-RENDER-1 — context providers must not fan out re-renders to unrelated consumers.** The known gap is
+  the unmemoized `AuthProvider` value in `hooks/useAuth.tsx`. *Task + TDD detail in*
+  [`FRONTEND_IMPLEMENTATION.md`](./FRONTEND_IMPLEMENTATION.md).
+
 ## Notes
 - Aligns with the HL roadmap, which already listed native apps as "future."
 - When triggered: `npx cap add ios/android` over the Vite `dist/`, add the Push plugin, wire APNs/FCM,
