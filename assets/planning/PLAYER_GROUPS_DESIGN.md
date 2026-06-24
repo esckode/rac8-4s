@@ -84,6 +84,13 @@ which differs from the deadline-driven engine (touches both this track and the *
   can **override-fix** (downstream recompute = deferred complexity).
 - **Edge (defer):** a launched-but-abandoned casual tournament has no deadline to close it → optional
   auto-archive after N days idle.
+
+> **🔧 Reconciliation (backlog R-A):** casual mode **overrides 5 documented scheduled-mode requirements** —
+> deadlines `NOT NULL` (HL 705–707), partner-confirm by registration deadline (REQUIREMENTS:21),
+> organizer-manual advance (REQUIREMENTS:84,140), own-match/organizer scoring, registration-deadline
+> guard (REQUIREMENTS:1158). Introduce a **`tournament mode: scheduled | casual`** distinction and
+> **update `rac8-4s-HL.md` + `REQUIREMENTS.md` + the affected tests within this feature's
+> implementation** (don't leave the source-of-truth docs contradicting casual mode).
 - Members **still register individually** for external/open tournaments (unchanged).
 
 ## 7. Data model summary (new/changed)
