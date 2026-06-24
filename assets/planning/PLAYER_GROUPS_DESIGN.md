@@ -60,10 +60,12 @@ Why in-app (not "use WhatsApp"): the WhatsApp Business API **cannot post into us
   `voted_at`).
 
 ## 6. Group → tournament launch — **G-TOURN-1**
-- A poll can optionally be a **"tournament poll."** On close (**auto-close OR manual launch by the
-  creator**), a **private tournament is created, seeded from the In-voters**, **linked via
-  `tournaments.group_id`** (nullable), and a **`system` message** posts linking to it. The new tournament
-  has its own *ephemeral* Messages tab (V1); the group keeps its *durable* chat.
+- **Any** availability poll can drive a tournament — it is **not** a pre-declared poll type. At any time
+  the **poll creator can launch** a private tournament seeded from the current **In-voters**; and if
+  **auto-close** is set, the creator may opt for it to **auto-launch on close**. The launch creates a
+  private tournament **linked via `tournaments.group_id`** (nullable) and posts a **`system` message**
+  linking to it. The new tournament has its own *ephemeral* Messages tab (V1); the group keeps its
+  *durable* chat. Members still register individually for external/open tournaments.
 - Members **still register individually** for external/open tournaments (unchanged).
 
 ## 7. Data model summary (new/changed)
