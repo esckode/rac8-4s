@@ -9,6 +9,7 @@ import { generatePlayerSession } from '../../auth/magic-link'
 import { BroadcastBus } from '../../broadcast-bus'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { processReadReceiptFlush } from '../../workers/read-receipt-processor'
+import { ConversationRepository } from '../../repositories/conversation-repository'
 
 const MAX_BODY_LENGTH = 4000
 
@@ -142,11 +143,15 @@ describe('Messaging API', () => {
         const { sessionToken } = await createPlayerWithSession(tournament.id)
         const recipient = await PlayerFactory.create(pool)
 
+        // Resolve the conversation_id — the bus now keys on conversation_id, not tournamentId
+        const convRepo = new ConversationRepository(pool)
+        const conversationId = await convRepo.resolveConversation(tournament.id)
+
         const emitOrder: string[] = []
         let dbPersistedId: string | null = null
 
         // Subscribe to the bus BEFORE the request to capture the event
-        const unsubscribe = broadcastBus.subscribe(tournament.id, (eventType: string, data: any) => {
+        const unsubscribe = broadcastBus.subscribe(conversationId, (eventType: string, data: any) => {
           if (eventType === 'message.created') {
             emitOrder.push('emit')
             dbPersistedId = data.id
@@ -166,7 +171,7 @@ describe('Messaging API', () => {
         expect(dbPersistedId).toBe(res.body.id)
       })
 
-      it('emits message.created with tournamentId and messageId', async () => {
+      it('emits message.created with conversationId and messageId', async () => {
         const busEmit = jest.spyOn(broadcastBus, 'emit')
 
         const { tournament } = await createOrganizerWithTournament()
@@ -179,8 +184,12 @@ describe('Messaging API', () => {
           .send({ recipientPlayerId: recipient.id, body: 'Test emit payload' })
 
         expect(res.status).toBe(201)
+
+        // The bus is keyed on conversation_id (not tournamentId) — resolve to verify
+        const convRepo = new ConversationRepository(pool)
+        const conversationId = await convRepo.resolveConversation(tournament.id)
         expect(busEmit).toHaveBeenCalledWith(
-          tournament.id,
+          conversationId,
           'message.created',
           expect.objectContaining({ id: res.body.id })
         )
@@ -293,8 +302,12 @@ describe('Messaging API', () => {
       it('emits message.created on broadcastBus AFTER persist for broadcast', async () => {
         const { orgToken, tournament } = await createOrganizerWithTournament()
 
+        // Resolve the conversation_id — the bus now keys on conversation_id, not tournamentId
+        const convRepo = new ConversationRepository(pool)
+        const conversationId = await convRepo.resolveConversation(tournament.id)
+
         const emittedEvents: Array<{ eventType: string; data: any }> = []
-        const unsubscribe = broadcastBus.subscribe(tournament.id, (eventType: string, data: any) => {
+        const unsubscribe = broadcastBus.subscribe(conversationId, (eventType: string, data: any) => {
           emittedEvents.push({ eventType, data })
         })
 
@@ -312,7 +325,7 @@ describe('Messaging API', () => {
         expect(messagCreatedEvent!.data.id).toBe(res.body.message.id)
       })
 
-      it('emits message.created with correct tournamentId and messageId for broadcast', async () => {
+      it('emits message.created with correct conversationId and messageId for broadcast', async () => {
         const busEmit = jest.spyOn(broadcastBus, 'emit')
 
         const { orgToken, tournament } = await createOrganizerWithTournament()
@@ -323,8 +336,12 @@ describe('Messaging API', () => {
           .send({ body: 'Broadcast test emit' })
 
         expect(res.status).toBe(201)
+
+        // The bus is keyed on conversation_id (not tournamentId) — resolve to verify
+        const convRepo = new ConversationRepository(pool)
+        const conversationId = await convRepo.resolveConversation(tournament.id)
         expect(busEmit).toHaveBeenCalledWith(
-          tournament.id,
+          conversationId,
           'message.created',
           expect.objectContaining({ id: res.body.message.id })
         )

@@ -164,11 +164,17 @@ describe('Messaging partition lifecycle (migration 033)', () => {
         [completedAt, tournament.id]
       )
 
-      // Insert a message into the old partition (legal_hold=false)
+      // Ensure conversation row exists, then insert message into old partition (legal_hold=false)
+      await pool.query(`
+        INSERT INTO messaging.conversations (type, tournament_id)
+        VALUES ('tournament', $1)
+        ON CONFLICT (tournament_id) WHERE tournament_id IS NOT NULL DO NOTHING
+      `, [tournament.id])
       await pool.query(`
         INSERT INTO messaging.messages
-          (tournament_id, sender_player_id, body, created_at, legal_hold)
-        VALUES ($1, $2, 'old message', '2024-01-15 00:00:00+00', false)
+          (tournament_id, conversation_id, sender_player_id, body, created_at, legal_hold)
+        SELECT $1, c.id, $2, 'old message', '2024-01-15 00:00:00+00', false
+        FROM messaging.conversations c WHERE c.tournament_id = $1
       `, [tournament.id, tournament.creator_id])
 
       // Call purge with defaults (retention_days=90, drop_padding_days=45)
@@ -209,11 +215,17 @@ describe('Messaging partition lifecycle (migration 033)', () => {
         [completedAt, tournament.id]
       )
 
-      // Insert a message into the old partition (no legal hold)
+      // Ensure conversation row exists, then insert message into old partition (no legal hold)
+      await pool.query(`
+        INSERT INTO messaging.conversations (type, tournament_id)
+        VALUES ('tournament', $1)
+        ON CONFLICT (tournament_id) WHERE tournament_id IS NOT NULL DO NOTHING
+      `, [tournament.id])
       await pool.query(`
         INSERT INTO messaging.messages
-          (tournament_id, sender_player_id, body, created_at, legal_hold)
-        VALUES ($1, $2, 'within retention msg', '2024-02-10 00:00:00+00', false)
+          (tournament_id, conversation_id, sender_player_id, body, created_at, legal_hold)
+        SELECT $1, c.id, $2, 'within retention msg', '2024-02-10 00:00:00+00', false
+        FROM messaging.conversations c WHERE c.tournament_id = $1
       `, [tournament.id, tournament.creator_id])
 
       // Call purge
@@ -246,11 +258,17 @@ describe('Messaging partition lifecycle (migration 033)', () => {
         [completedAt, tournament.id]
       )
 
-      // Insert a message with legal_hold=true
+      // Ensure conversation row exists, then insert message with legal_hold=true
+      await pool.query(`
+        INSERT INTO messaging.conversations (type, tournament_id)
+        VALUES ('tournament', $1)
+        ON CONFLICT (tournament_id) WHERE tournament_id IS NOT NULL DO NOTHING
+      `, [tournament.id])
       await pool.query(`
         INSERT INTO messaging.messages
-          (tournament_id, sender_player_id, body, created_at, legal_hold)
-        VALUES ($1, $2, 'held message', '2024-03-05 00:00:00+00', true)
+          (tournament_id, conversation_id, sender_player_id, body, created_at, legal_hold)
+        SELECT $1, c.id, $2, 'held message', '2024-03-05 00:00:00+00', true
+        FROM messaging.conversations c WHERE c.tournament_id = $1
       `, [tournament.id, tournament.creator_id])
 
       // Call purge
@@ -284,11 +302,17 @@ describe('Messaging partition lifecycle (migration 033)', () => {
       )
       expect(check.rows[0].completed_at).toBeNull()
 
-      // Insert a message into the old partition
+      // Ensure conversation row exists, then insert message into old partition
+      await pool.query(`
+        INSERT INTO messaging.conversations (type, tournament_id)
+        VALUES ('tournament', $1)
+        ON CONFLICT (tournament_id) WHERE tournament_id IS NOT NULL DO NOTHING
+      `, [tournament.id])
       await pool.query(`
         INSERT INTO messaging.messages
-          (tournament_id, sender_player_id, body, created_at, legal_hold)
-        VALUES ($1, $2, 'in-progress msg', '2024-04-20 00:00:00+00', false)
+          (tournament_id, conversation_id, sender_player_id, body, created_at, legal_hold)
+        SELECT $1, c.id, $2, 'in-progress msg', '2024-04-20 00:00:00+00', false
+        FROM messaging.conversations c WHERE c.tournament_id = $1
       `, [tournament.id, tournament.creator_id])
 
       // Call purge

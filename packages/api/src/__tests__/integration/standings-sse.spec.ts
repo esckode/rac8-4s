@@ -6,6 +6,7 @@ import { createTestApp, JwtConfig } from '../helpers/app'
 import { PlayerFactory, TournamentFactory, OrganizerFactory } from '../factories'
 import { TournamentRepository, GroupRepository, PlayerRepository } from '../../db'
 import { generatePlayerSession } from '../../auth/magic-link'
+import { ConversationRepository } from '../../repositories/conversation-repository'
 
 /**
  * Real-Time (SSE): submitting a group-stage score must broadcast a
@@ -73,8 +74,12 @@ describe('Group score API - SSE standings.updated', () => {
 
     if (res.status !== 200) throw new Error(`score ${res.status}: ${JSON.stringify(res.body)}`)
 
+    // The bus is now keyed on conversation_id (not tournamentId) — resolve it to verify
+    const convRepo = new ConversationRepository(pool)
+    const conversationId = await convRepo.resolveConversation(tournament.id)
+
     expect(broadcastBus.emit).toHaveBeenCalledWith(
-      tournament.id,
+      conversationId,
       'standings.updated',
       expect.objectContaining({ groupId })
     )

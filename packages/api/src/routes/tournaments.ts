@@ -18,6 +18,7 @@ import { calculateStandings, generateBracket } from '@core/index'
 import { parseScore, type SportFormat } from '@core/score-parser'
 import { isSinglesMatch, isDoublesMatch, getMatchParticipantIds, validateMatchFormatConsistency } from '../utils/match-format'
 import { processStandingsRecalculate } from '../workers/standings-processor'
+import { ConversationRepository } from '../repositories/conversation-repository'
 import { getLogger } from '../logger'
 
 const log = getLogger('tournaments')
@@ -83,6 +84,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
   const groupRepo = new GroupRepository(deps.db)
   const knockoutRepo = new KnockoutRepository(deps.db)
   const accountRepo = new AccountRepository(deps.db)
+  const conversationRepo = new ConversationRepository(deps.db as any)
   const sseConnectionCount = new Map<string, number>()
 
   // Resolve the acting player for a tournament from either a magic-link player
@@ -534,8 +536,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
       // (the in-memory job queue has no consumer; standings are otherwise only
       // recomputed at read time in the bundle endpoint).
       if (deps.broadcastBus && match.group_id) {
+        const cid = await conversationRepo.resolveConversation(tournamentId)
         await processStandingsRecalculate(
-          { tournamentId, groupId: match.group_id },
+          { tournamentId, groupId: match.group_id, conversationId: cid },
           { groupRepo, broadcastBus: deps.broadcastBus }
         )
       }
@@ -648,8 +651,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       // Broadcast the recalculated standings so connected clients refresh live.
       if (deps.broadcastBus && match.group_id) {
+        const cid = await conversationRepo.resolveConversation(tournamentId)
         await processStandingsRecalculate(
-          { tournamentId, groupId: match.group_id },
+          { tournamentId, groupId: match.group_id, conversationId: cid },
           { groupRepo, broadcastBus: deps.broadcastBus }
         )
       }
@@ -1051,7 +1055,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       // Broadcast so connected clients advance the bracket live (mirrors the
       // bracket.published broadcast from the generation job).
-      deps.broadcastBus?.emit(tournamentId, 'bracket.updated', { matchId, round: updated.round, winnerId })
+      if (deps.broadcastBus) {
+        const cid = await conversationRepo.resolveConversation(tournamentId)
+        deps.broadcastBus.emit(cid, 'bracket.updated', { matchId, round: updated.round, winnerId })
+      }
 
       log.info('score.submitted', { tournamentId, matchId, round: updated.round, score: req.body.score, winnerId, playerId: payload.playerId })
 
@@ -1110,7 +1117,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
       const updated = await knockoutRepo.updateKnockoutMatch(matchId, winnerId, req.body.score)
 
-      deps.broadcastBus?.emit(tournamentId, 'bracket.updated', { matchId, round: updated.round, winnerId })
+      if (deps.broadcastBus) {
+        const cid = await conversationRepo.resolveConversation(tournamentId)
+        deps.broadcastBus.emit(cid, 'bracket.updated', { matchId, round: updated.round, winnerId })
+      }
 
       log.info('score.overridden', { tournamentId, matchId, round: updated.round, score: req.body.score, winnerId, organizerId: payload.sub })
 
@@ -2057,7 +2067,11 @@ export default function tournamentsRouter(deps: AppDependencies) {
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
 
-    const unsubscribe = deps.broadcastBus.subscribe(tournamentId, (event, data) => {
+    // Resolve the tournament's conversation_id — the bus is keyed on conversation_id
+    // so all subscribers and emitters use a stable, non-tournament-ID key.
+    const conversationId = await conversationRepo.resolveConversation(tournamentId)
+
+    const unsubscribe = deps.broadcastBus.subscribe(conversationId, (event, data) => {
       if (!res.writableEnded) {
         res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
       }

@@ -15,10 +15,10 @@ interface StandsProcessorDeps {
 }
 
 export async function processStandingsRecalculate(
-  payload: { tournamentId: string; groupId: string },
+  payload: { tournamentId: string; groupId: string; conversationId?: string },
   deps: StandsProcessorDeps
 ) {
-  const { tournamentId, groupId } = payload
+  const { tournamentId, groupId, conversationId } = payload
 
   try {
     deps.standingsCache?.clear(groupId)
@@ -38,7 +38,11 @@ export async function processStandingsRecalculate(
 
     deps.standingsCache?.set(groupId, standings)
 
-    deps.broadcastBus?.emit(tournamentId, 'standings.updated', { groupId, standings })
+    // Emit on conversation_id when available (V1.0 forward); fall back to
+    // tournamentId only for callers that have not yet resolved the conversation
+    // (internal direct calls without a DB-resolved conversationId).
+    const busKey = conversationId ?? tournamentId
+    deps.broadcastBus?.emit(busKey, 'standings.updated', { groupId, standings })
 
     log.info('standings.recalculated', { tournamentId, groupId })
 

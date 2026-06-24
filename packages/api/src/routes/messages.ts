@@ -8,6 +8,7 @@ import {
 } from '../auth'
 import { TournamentRepository } from '../db'
 import { MessageRepository } from '../repositories/message-repository'
+import { ConversationRepository } from '../repositories/conversation-repository'
 
 const log = getLogger('messages')
 
@@ -27,6 +28,7 @@ export default function messagesRouter(deps: AppDependencies) {
   const router = Router()
   const tournamentRepo = new TournamentRepository(deps.db)
   const messageRepo = new MessageRepository(deps.db as any)
+  const conversationRepo = new ConversationRepository(deps.db as any)
 
   // POST /tournaments/:id/announcements — organizer-only broadcast
   // Registered before /:id/messages/:msgId to respect §10 (static before parameterized)
@@ -68,17 +70,20 @@ export default function messagesRouter(deps: AppDependencies) {
         body: req.body.body,
       })
 
-      deps.broadcastBus?.emit(tournamentId, 'message.created', {
-        id: message.id,
-        tournamentId: message.tournamentId,
-        senderPlayerId: message.senderPlayerId,
-        recipientPlayerId: null,
-        matchId: message.matchId,
-        body: message.body,
-        legalHold: message.legalHold,
-        createdAt: message.createdAt,
-        read_at: null,
-      })
+      if (deps.broadcastBus) {
+        const conversationId = await conversationRepo.resolveConversation(tournamentId)
+        deps.broadcastBus.emit(conversationId, 'message.created', {
+          id: message.id,
+          tournamentId: message.tournamentId,
+          senderPlayerId: message.senderPlayerId,
+          recipientPlayerId: null,
+          matchId: message.matchId,
+          body: message.body,
+          legalHold: message.legalHold,
+          createdAt: message.createdAt,
+          read_at: null,
+        })
+      }
 
       log.info('announcement.sent', {
         tournamentId,
@@ -139,17 +144,20 @@ export default function messagesRouter(deps: AppDependencies) {
         matchId: matchId ?? undefined,
       })
 
-      deps.broadcastBus?.emit(tournamentId, 'message.created', {
-        id: message.id,
-        tournamentId: message.tournamentId,
-        senderPlayerId: message.senderPlayerId,
-        recipientPlayerId: message.recipientPlayerId,
-        matchId: message.matchId,
-        body: message.body,
-        legalHold: message.legalHold,
-        createdAt: message.createdAt,
-        read_at: null,
-      })
+      if (deps.broadcastBus) {
+        const conversationId = await conversationRepo.resolveConversation(tournamentId)
+        deps.broadcastBus.emit(conversationId, 'message.created', {
+          id: message.id,
+          tournamentId: message.tournamentId,
+          senderPlayerId: message.senderPlayerId,
+          recipientPlayerId: message.recipientPlayerId,
+          matchId: message.matchId,
+          body: message.body,
+          legalHold: message.legalHold,
+          createdAt: message.createdAt,
+          read_at: null,
+        })
+      }
 
       log.info('message.sent', {
         tournamentId,
@@ -209,7 +217,8 @@ export default function messagesRouter(deps: AppDependencies) {
         }
       }
 
-      const messages = await messageRepo.getHistory({ tournamentId, limit, before, viewerPlayerId })
+      const conversationId = await conversationRepo.resolveConversation(tournamentId)
+      const messages = await messageRepo.getHistoryByConversation({ conversationId, limit, before, viewerPlayerId })
 
       res.status(200).json({ messages })
     } catch (err) {

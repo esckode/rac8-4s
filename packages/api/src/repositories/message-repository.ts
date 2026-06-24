@@ -43,6 +43,14 @@ export interface GetHistoryInput {
   viewerPlayerId?: string
 }
 
+export interface GetHistoryByConversationInput {
+  conversationId: string
+  limit: number
+  before?: HistoryCursor
+  /** When provided, LEFT JOINs message_recipients to include per-player read_at. */
+  viewerPlayerId?: string
+}
+
 export interface MarkReadInput {
   messageId: string
   messageCreatedAt: Date
@@ -79,6 +87,26 @@ export class MessageRepository {
   constructor(private pool: Pool) {}
 
   /**
+   * Resolve (or create) the conversation_id for a tournament.
+   * Idempotent: safe to call concurrently — uses INSERT ON CONFLICT.
+   */
+  private async resolveConversationId(client: { query: (text: string, params?: unknown[]) => Promise<any> }, tournamentId: string): Promise<string> {
+    const ins = await client.query(
+      `INSERT INTO messaging.conversations (type, tournament_id)
+       VALUES ('tournament', $1)
+       ON CONFLICT (tournament_id) WHERE tournament_id IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [tournamentId]
+    )
+    if (ins.rows.length > 0) return ins.rows[0].id as string
+    const sel = await client.query(
+      `SELECT id FROM messaging.conversations WHERE tournament_id = $1`,
+      [tournamentId]
+    )
+    return sel.rows[0].id as string
+  }
+
+  /**
    * Send a direct message from one player to another.
    *
    * Uses a single CTE that inserts one row into messaging.messages (with
@@ -92,22 +120,25 @@ export class MessageRepository {
     try {
       await client.query('BEGIN')
 
+      const conversationId = await this.resolveConversationId(client, input.tournamentId)
+
       const result = await client.query(
         `WITH msg AS (
            INSERT INTO messaging.messages
-             (tournament_id, sender_player_id, recipient_player_id, match_id, body)
-           VALUES ($1, $2, $3, $4, $5)
+             (tournament_id, conversation_id, sender_player_id, recipient_player_id, match_id, body)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id, tournament_id, sender_player_id, recipient_player_id,
                      match_id, body, created_at, legal_hold
          ),
          ins_recipients AS (
            INSERT INTO messaging.message_recipients
              (message_id, message_created_at, player_id)
-           SELECT id, created_at, $3 FROM msg
+           SELECT id, created_at, $4 FROM msg
          )
          SELECT * FROM msg`,
         [
           input.tournamentId,
+          conversationId,
           input.senderPlayerId,
           input.recipientPlayerId,
           input.matchId ?? null,
@@ -159,14 +190,16 @@ export class MessageRepository {
       )
       const recipientCount = Number(countResult.rows[0].n)
 
+      const conversationId = await this.resolveConversationId(client, input.tournamentId)
+
       // Single CTE: insert message + fan-out recipient rows in one statement.
       // The SELECT ... CROSS JOIN produces N recipient rows in a single INSERT,
       // satisfying the "single multi-row INSERT" requirement.
       const result = await client.query(
         `WITH msg AS (
            INSERT INTO messaging.messages
-             (tournament_id, sender_player_id, recipient_player_id, body)
-           VALUES ($1, $2, NULL, $3)
+             (tournament_id, conversation_id, sender_player_id, recipient_player_id, body)
+           VALUES ($1, $2, $3, NULL, $4)
            RETURNING id, tournament_id, sender_player_id, recipient_player_id,
                      match_id, body, created_at, legal_hold
          ),
@@ -179,7 +212,7 @@ export class MessageRepository {
            WHERE pr.tournament_id = $1
          )
          SELECT * FROM msg`,
-        [input.tournamentId, input.senderPlayerId, input.body]
+        [input.tournamentId, conversationId, input.senderPlayerId, input.body]
       )
 
       await client.query('COMMIT')
@@ -254,6 +287,59 @@ export class MessageRepository {
        FROM messaging.messages m
        ${joinClause}
        WHERE m.tournament_id = $1
+       ORDER BY m.created_at ASC, m.id ASC
+       LIMIT $2`,
+      params
+    )
+    return result.rows.map(rowToMessage)
+  }
+
+  /**
+   * Get paginated message history for a conversation (keyed by conversation_id).
+   * Mirrors getHistory but keys on conversation_id rather than tournament_id,
+   * making it the forward-compatible variant (works for both tournament and
+   * group conversations once Player Groups is built).
+   */
+  async getHistoryByConversation(input: GetHistoryByConversationInput): Promise<MessageRow[]> {
+    const { conversationId, limit, before, viewerPlayerId } = input
+    const readAtSelect = viewerPlayerId ? ', mr.read_at AS viewer_read_at' : ''
+
+    if (before) {
+      const joinClause = viewerPlayerId
+        ? `LEFT JOIN messaging.message_recipients mr
+               ON mr.message_id = m.id AND mr.player_id = $5`
+        : ''
+      const params: unknown[] = [conversationId, before.createdAt, before.id, limit]
+      if (viewerPlayerId) params.push(viewerPlayerId)
+
+      const result = await this.pool.query(
+        `SELECT m.id, m.tournament_id, m.sender_player_id, m.recipient_player_id,
+                m.match_id, m.body, m.created_at, m.legal_hold${readAtSelect}
+         FROM messaging.messages m
+         ${joinClause}
+         WHERE m.conversation_id = $1
+           AND (date_trunc('milliseconds', m.created_at), m.id)
+               < (date_trunc('milliseconds', $2::timestamptz), $3)
+         ORDER BY m.created_at ASC, m.id ASC
+         LIMIT $4`,
+        params
+      )
+      return result.rows.map(rowToMessage)
+    }
+
+    const joinClause = viewerPlayerId
+      ? `LEFT JOIN messaging.message_recipients mr
+             ON mr.message_id = m.id AND mr.player_id = $3`
+      : ''
+    const params: unknown[] = [conversationId, limit]
+    if (viewerPlayerId) params.push(viewerPlayerId)
+
+    const result = await this.pool.query(
+      `SELECT m.id, m.tournament_id, m.sender_player_id, m.recipient_player_id,
+              m.match_id, m.body, m.created_at, m.legal_hold${readAtSelect}
+       FROM messaging.messages m
+       ${joinClause}
+       WHERE m.conversation_id = $1
        ORDER BY m.created_at ASC, m.id ASC
        LIMIT $2`,
       params

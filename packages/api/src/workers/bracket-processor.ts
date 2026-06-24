@@ -14,10 +14,10 @@ interface BracketProcessorDeps {
 }
 
 export async function processBracketGenerate(
-  payload: { tournamentId: string },
+  payload: { tournamentId: string; conversationId?: string },
   deps: BracketProcessorDeps
 ) {
-  const { tournamentId } = payload
+  const { tournamentId, conversationId } = payload
 
   try {
     const pendingCount = await deps.groupRepo.countPendingMatchesByTournament(tournamentId)
@@ -70,7 +70,8 @@ export async function processBracketGenerate(
     const seedMap = new Map(seeds.map(s => [s.seedPosition, s.playerId]))
     const matches = await deps.knockoutRepo.createKnockoutMatches(tournamentId, bracket, seedMap)
 
-    deps.broadcastBus?.emit(tournamentId, 'bracket.published', { matchCount: matches.length, byeCount: bracket.byeCount })
+    const busKey = conversationId ?? tournamentId
+    deps.broadcastBus?.emit(busKey, 'bracket.published', { matchCount: matches.length, byeCount: bracket.byeCount })
 
     log.info('bracket.generated', { tournamentId, matchCount: matches.length, byeCount: bracket.byeCount })
 

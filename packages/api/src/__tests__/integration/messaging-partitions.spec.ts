@@ -148,11 +148,19 @@ describe('Messaging schema (migration 032)', () => {
     })
     const tournament = await TournamentFactory.create(pool, organizerId)
 
+    // Ensure a conversation row exists for FK / NOT NULL on conversation_id
+    await pool.query(`
+      INSERT INTO messaging.conversations (type, tournament_id)
+      VALUES ('tournament', $1)
+      ON CONFLICT (tournament_id) WHERE tournament_id IS NOT NULL DO NOTHING
+    `, [tournament.id])
+
     // Insert a broadcast message directly (recipient_player_id NULL = broadcast)
     const insertRes = await pool.query(`
       INSERT INTO messaging.messages
-        (tournament_id, sender_player_id, body, created_at)
-      VALUES ($1, $2, 'hello', $3::timestamptz)
+        (tournament_id, conversation_id, sender_player_id, body, created_at)
+      SELECT $1, c.id, $2, 'hello', $3::timestamptz
+      FROM messaging.conversations c WHERE c.tournament_id = $1
       RETURNING id, created_at
     `, [tournament.id, tournament.creator_id, ts])
 
@@ -177,11 +185,19 @@ describe('Messaging schema (migration 032)', () => {
     })
     const tournament = await TournamentFactory.create(pool, organizerId)
 
+    // Ensure a conversation row exists
+    await pool.query(`
+      INSERT INTO messaging.conversations (type, tournament_id)
+      VALUES ('tournament', $1)
+      ON CONFLICT (tournament_id) WHERE tournament_id IS NOT NULL DO NOTHING
+    `, [tournament.id])
+
     // Insert parent message
     const msgRes = await pool.query(`
       INSERT INTO messaging.messages
-        (tournament_id, sender_player_id, body, created_at)
-      VALUES ($1, $2, 'broadcast', $3::timestamptz)
+        (tournament_id, conversation_id, sender_player_id, body, created_at)
+      SELECT $1, c.id, $2, 'broadcast', $3::timestamptz
+      FROM messaging.conversations c WHERE c.tournament_id = $1
       RETURNING id
     `, [tournament.id, tournament.creator_id, ts])
     const messageId = msgRes.rows[0].id
@@ -217,10 +233,18 @@ describe('Messaging schema (migration 032)', () => {
     })
     const tournament = await TournamentFactory.create(pool, organizerId)
 
+    // Ensure conversation row exists
+    await pool.query(`
+      INSERT INTO messaging.conversations (type, tournament_id)
+      VALUES ('tournament', $1)
+      ON CONFLICT (tournament_id) WHERE tournament_id IS NOT NULL DO NOTHING
+    `, [tournament.id])
+
     const msgRes = await pool.query(`
       INSERT INTO messaging.messages
-        (tournament_id, sender_player_id, body, created_at)
-      VALUES ($1, $2, 'dup test', $3::timestamptz)
+        (tournament_id, conversation_id, sender_player_id, body, created_at)
+      SELECT $1, c.id, $2, 'dup test', $3::timestamptz
+      FROM messaging.conversations c WHERE c.tournament_id = $1
       RETURNING id
     `, [tournament.id, tournament.creator_id, ts])
     const messageId = msgRes.rows[0].id
@@ -228,8 +252,9 @@ describe('Messaging schema (migration 032)', () => {
     await expect(
       pool.query(`
         INSERT INTO messaging.messages
-          (id, tournament_id, sender_player_id, body, created_at)
-        VALUES ($1, $2, $3, 'dup', $4::timestamptz)
+          (id, tournament_id, conversation_id, sender_player_id, body, created_at)
+        SELECT $1, $2, c.id, $3, 'dup', $4::timestamptz
+        FROM messaging.conversations c WHERE c.tournament_id = $2
       `, [messageId, tournament.id, tournament.creator_id, ts])
     ).rejects.toThrow()
   })
