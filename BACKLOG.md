@@ -32,7 +32,7 @@ here.
 ## Test scenarios
 | Spec doc | Covers | Status |
 |---|---|---|
-| [e2e-scenarios.md](e2e-scenarios.md) | Browser e2e scenarios (Gherkin → Playwright) | Phases 1–7 + Messaging ✅ **Built** (17 spec files); **Phases 8–10 — Offline (4) · Mobile (4) · Accessibility (5) = 13 scenarios ⏳ documented, NOT implemented** |
+| [e2e-scenarios.md](e2e-scenarios.md) | Browser e2e scenarios (Gherkin → Playwright) | Phases 1–7 + Messaging ✅ **Built** (17 spec files); **Phases 8–10 (Offline · Mobile · Accessibility = 13) ⏳ pending — folded into the PWA-first frontend work** |
 
 ---
 
@@ -45,11 +45,11 @@ here.
 ### 📐 Design → needs an implementation plan
 - **Player Groups** (PLAYER_GROUPS_DESIGN.md) → create `PLAYER_GROUPS_IMPLEMENTATION.md` (depends on the
   V2 `conversations` abstraction).
-- **PWA-first frontend** (FRONTEND_PLATFORM_STRATEGY.md) → small PWA enablement plan (manifest, web push,
-  service worker).
-- **E2E Phases 8–10** ([e2e-scenarios.md](e2e-scenarios.md)) — 13 documented-but-unimplemented scenarios
-  (Offline / Mobile / Accessibility) → write the Playwright specs (`offline-error.spec.ts`,
-  `mobile-responsive.spec.ts`, + a11y). Note: Offline/Mobile overlap the **PWA-first** work above.
+- **PWA-first frontend** (FRONTEND_PLATFORM_STRATEGY.md) → create `PWA_FRONTEND_IMPLEMENTATION.md` =
+  PWA enablement (manifest, web push, service worker) **+ the 13 pending E2E Phases 8–10 specs folded in**
+  ([e2e-scenarios.md](e2e-scenarios.md)): Offline (`offline-error.spec.ts`), Mobile
+  (`mobile-responsive.spec.ts`), Accessibility — since Offline/Mobile *are* the PWA surface and a11y
+  rides the same frontend track. TDD-first.
 
 ### 📋 Plan ready → available to tackle
 - **MESSAGING_IMPLEMENTATION_V2.md** — foundation-first, TDD. (Note: the `conversations` abstraction in

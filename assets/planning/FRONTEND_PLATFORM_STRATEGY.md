@@ -28,6 +28,10 @@ rewrite. **No full native (Swift/Kotlin) rewrite** is planned.
 - **Web push** — good on Android; iOS only when installed (accept the limitation for now).
 - **Service worker** — offline caching + background sync (aligns with the existing Phase-8 "Offline
   Support" scenarios; useful at courts with poor signal).
+- **Includes the 13 pending E2E Phases 8–10 specs** (`e2e-scenarios.md`): **Offline**
+  (`offline-error.spec.ts`), **Mobile/Responsive** (`mobile-responsive.spec.ts`), **Accessibility** —
+  written TDD-first as part of this work (Offline/Mobile *are* the PWA surface; a11y is the same
+  frontend track).
 - Cost: ~free, on the existing codebase.
 
 ## Capacitor — DEFERRED (the native path when triggered)
