@@ -24,6 +24,7 @@ import type { EmailAdapter } from './email-adapter'
 import { QueueMonitor } from './queue-monitor'
 import type { Redis } from 'ioredis'
 import { RedisHealthState, probeRedisHealth, isRedisSelected } from './redis-health'
+import type { PartitionManager } from './services/partition-manager'
 
 const httpLog = getLogger('http')
 
@@ -101,6 +102,12 @@ export interface AppDependencies {
    * Optional: createApp creates one if not provided.
    */
   redisHealthState?: RedisHealthState
+  /**
+   * PartitionManager instance. When provided, /health and /health/ready include a
+   * partition_coverage field ('ok' | 'low' | 'critical' | 'disabled').
+   * Optional: if absent, field is omitted or set to 'disabled'.
+   */
+  partitionManager?: PartitionManager
 }
 
 export function createApp(deps: AppDependencies): Express {
@@ -193,12 +200,26 @@ export function createApp(deps: AppDependencies): Express {
     // Update cached health state for the 503 guard
     healthState.set(redisStatus === 'down' ? 'down' : redisStatus === 'disabled' ? 'disabled' : 'up')
 
+    // Check partition coverage
+    let partitionCoverage: string | undefined
+    if (deps.partitionManager) {
+      try {
+        const coverage = await deps.partitionManager.getCoverageStatus()
+        partitionCoverage = coverage.level
+      } catch {
+        partitionCoverage = 'unknown'
+      }
+    }
+
     const isReady = dbStatus === 'connected' && redisStatus !== 'down'
     const httpStatus = isReady ? 200 : 503
     const body: Record<string, string> = {
       status: isReady ? 'ok' : 'unavailable',
       database: dbStatus,
       redis: redisStatus === 'up' ? 'connected' : redisStatus === 'disabled' ? 'disabled' : 'down',
+    }
+    if (partitionCoverage !== undefined) {
+      body.partition_coverage = partitionCoverage
     }
 
     res.status(httpStatus).json(body)
@@ -243,7 +264,28 @@ export function createApp(deps: AppDependencies): Express {
       busStatus = 'in-process'
     }
 
-    res.status(200).json({ status: 'ok', database: dbStatus, redis: redisStatus, bus: busStatus })
+    // Check partition coverage
+    let partitionCoverage: string | undefined
+    if (deps.partitionManager) {
+      try {
+        const coverage = await deps.partitionManager.getCoverageStatus()
+        partitionCoverage = coverage.level
+      } catch {
+        partitionCoverage = 'unknown'
+      }
+    }
+
+    const body: Record<string, string> = {
+      status: 'ok',
+      database: dbStatus,
+      redis: redisStatus,
+      bus: busStatus,
+    }
+    if (partitionCoverage !== undefined) {
+      body.partition_coverage = partitionCoverage
+    }
+
+    res.status(200).json(body)
   })
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

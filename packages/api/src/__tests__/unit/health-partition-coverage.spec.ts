@@ -15,9 +15,13 @@ import { BroadcastBus } from '../../broadcast-bus'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { InMemoryStandingsCache } from '../../standings-cache'
 
-const mockLog = { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() }
 jest.mock('../../logger', () => ({
-  getLogger: jest.fn(() => mockLog),
+  getLogger: jest.fn(() => ({
+    info: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn(),
+  })),
   runWithRequestId: jest.fn((_id: string, fn: () => void) => fn()),
 }))
 

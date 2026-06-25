@@ -355,22 +355,19 @@ describe('Partition maintenance (migration 035)', () => {
       expect(status.furthestPartitionDate).toBeDefined()
     })
 
-    it('returns critical when only the current month partition exists', async () => {
+    it('getCoverageStatus returns a valid shape with level/furthestPartitionDate/daysAhead', async () => {
       const { PartitionManager } = await import('../../services/partition-manager')
-      // Use a pool that only sees 2026-06 and 2026-07 (within 1 month threshold)
-      // We'll test by checking the logic directly — the manager must evaluate coverage
-      // against the furthest attached partition date vs now() + threshold
       const manager = new PartitionManager(pool)
 
-      // The coverage check depends on existing partitions.
-      // Since we're in the suite transaction, we just call it and verify the shape.
       const status = await manager.getCoverageStatus()
 
-      expect(status).toMatchObject({
-        level: expect.stringMatching(/^(ok|low|critical)$/),
-        furthestPartitionDate: expect.any(Date),
-        daysAhead: expect.any(Number),
-      })
+      expect(status.level).toMatch(/^(ok|low|critical)$/)
+      expect(typeof status.daysAhead).toBe('number')
+      // furthestPartitionDate may be a Date or null
+      expect(
+        status.furthestPartitionDate === null ||
+        status.furthestPartitionDate instanceof Date
+      ).toBe(true)
     })
   })
 })

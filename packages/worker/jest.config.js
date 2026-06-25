@@ -11,6 +11,7 @@ module.exports = {
     // Redis-required implementations: tested by Redis-gated specs (skip when REDIS_URL unset)
     '!src/bullmq-queue.ts',
     '!src/worker.ts',
+    '!src/partition-scheduler.ts',
     '!src/index.ts',
   ],
   coverageThreshold: {

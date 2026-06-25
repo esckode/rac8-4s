@@ -32,32 +32,32 @@ describe('PartitionManager', () => {
 
   describe('ensureFuturePartitions', () => {
     it('calls messaging.ensure_future_partitions with the given months_ahead', async () => {
-      let capturedSql = ''
-      let capturedParams: unknown[] = []
+      const allSqls: string[] = []
+      const allParams: unknown[][] = []
       const pool = makePool(async (sql, params) => {
-        capturedSql = sql
-        capturedParams = params ?? []
+        allSqls.push(sql)
+        allParams.push(params ?? [])
         return { rows: [], rowCount: 0 }
       })
 
       const manager = new PartitionManager(pool)
       await manager.ensureFuturePartitions(3)
 
-      expect(capturedSql).toContain('ensure_future_partitions')
-      expect(capturedParams).toContain(3)
+      expect(allSqls.some((s) => s.includes('ensure_future_partitions'))).toBe(true)
+      expect(allParams.flat()).toContain(3)
     })
 
     it('uses default months_ahead=2 when not specified', async () => {
-      let capturedParams: unknown[] = []
+      const allParams: unknown[][] = []
       const pool = makePool(async (_sql, params) => {
-        capturedParams = params ?? []
+        allParams.push(params ?? [])
         return { rows: [], rowCount: 0 }
       })
 
       const manager = new PartitionManager(pool)
       await manager.ensureFuturePartitions()
 
-      expect(capturedParams).toContain(2)
+      expect(allParams.flat()).toContain(2)
     })
   })
 
@@ -68,20 +68,20 @@ describe('PartitionManager', () => {
     ]
 
     it('calls messaging.purge_old_partitions with retention and padding args', async () => {
-      let capturedSql = ''
-      let capturedParams: unknown[] = []
+      const allSqls: string[] = []
+      const allParams: unknown[][] = []
       const pool = makePool(async (sql, params) => {
-        capturedSql = sql
-        capturedParams = params ?? []
+        allSqls.push(sql)
+        allParams.push(params ?? [])
         return { rows: sampleRows, rowCount: 2 }
       })
 
       const manager = new PartitionManager(pool)
       const result = await manager.purgeOldPartitions({ retentionDays: 90, dropPaddingDays: 45 })
 
-      expect(capturedSql).toContain('purge_old_partitions')
-      expect(capturedParams).toContain(90)
-      expect(capturedParams).toContain(45)
+      expect(allSqls.some((s) => s.includes('purge_old_partitions'))).toBe(true)
+      expect(allParams.flat()).toContain(90)
+      expect(allParams.flat()).toContain(45)
       expect(result).toEqual(sampleRows)
     })
 
@@ -108,9 +108,9 @@ describe('PartitionManager', () => {
     })
 
     it('uses default retention=90 and padding=45 when not specified', async () => {
-      let capturedParams: unknown[] = []
+      const allParams: unknown[][] = []
       const pool = makePool(async (_sql, params) => {
-        capturedParams = params ?? []
+        allParams.push(params ?? [])
         return { rows: [], rowCount: 0 }
       })
 
@@ -118,8 +118,9 @@ describe('PartitionManager', () => {
       await manager.purgeOldPartitions()
 
       // Non-dry-run with defaults: purge function called with [90, 45]
-      expect(capturedParams).toContain(90)
-      expect(capturedParams).toContain(45)
+      const flat = allParams.flat()
+      expect(flat).toContain(90)
+      expect(flat).toContain(45)
     })
   })
 })

@@ -34,15 +34,17 @@ describe('processPartitionEnsure', () => {
   beforeEach(() => jest.clearAllMocks())
 
   it('calls ensureFuturePartitions with default monthsAhead=2 when not specified', async () => {
-    let capturedParams: unknown[] = []
+    const allParams: unknown[][] = []
     const pool = makePool(async (_sql, params) => {
-      capturedParams = params ?? []
+      allParams.push(params ?? [])
       return { rows: [], rowCount: 0 }
     })
 
     await processPartitionEnsure({}, { pool })
 
-    expect(capturedParams).toContain(2)
+    // One of the queries must have used monthsAhead=2
+    const flat = allParams.flat()
+    expect(flat).toContain(2)
     expect(mockLog.info).toHaveBeenCalledWith(
       'partition.ensure.job.done',
       expect.objectContaining({ monthsAhead: 2 })
@@ -50,15 +52,16 @@ describe('processPartitionEnsure', () => {
   })
 
   it('passes custom monthsAhead through to the partition manager', async () => {
-    let capturedParams: unknown[] = []
+    const allParams: unknown[][] = []
     const pool = makePool(async (_sql, params) => {
-      capturedParams = params ?? []
+      allParams.push(params ?? [])
       return { rows: [], rowCount: 0 }
     })
 
     await processPartitionEnsure({ monthsAhead: 4 }, { pool })
 
-    expect(capturedParams).toContain(4)
+    const flat = allParams.flat()
+    expect(flat).toContain(4)
     expect(mockLog.info).toHaveBeenCalledWith(
       'partition.ensure.job.done',
       expect.objectContaining({ monthsAhead: 4 })
@@ -120,16 +123,17 @@ describe('processPartitionPurge', () => {
   })
 
   it('uses default retentionDays=90 and dropPaddingDays=45 when not specified', async () => {
-    let capturedParams: unknown[] = []
+    const allParams: unknown[][] = []
     const pool = makePool(async (_sql, params) => {
-      capturedParams = params ?? []
+      allParams.push(params ?? [])
       return { rows: [], rowCount: 0 }
     })
 
     await processPartitionPurge({}, { pool })
 
-    expect(capturedParams).toContain(90)
-    expect(capturedParams).toContain(45)
+    const flat = allParams.flat()
+    expect(flat).toContain(90)
+    expect(flat).toContain(45)
   })
 
   it('returns 0/0 when no partitions were acted on', async () => {

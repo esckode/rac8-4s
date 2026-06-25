@@ -1,6 +1,8 @@
 export { JobQueue, InMemoryJobQueue, DEFAULT_RETRY_CONFIG } from './job-queue'
 export { BullMQJobQueue } from './bullmq-queue'
 export { createWorker } from './worker'
+export { registerPartitionJobs } from './partition-scheduler'
 export type { WorkerConfig } from './worker'
 export type { JobName, JobPayload, JobOptions, EnqueuedJob } from './types'
 export type { RetryConfig } from './job-queue'
+export type { PartitionSchedulerOptions } from './partition-scheduler'

@@ -16,8 +16,10 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') })
 import { initializeDb, closeDb } from './db-connections'
 import { runMigrations } from './migrations'
 import { createWorker } from '@worker/worker'
+import { registerPartitionJobs } from '@worker/partition-scheduler'
 import { processReadReceiptFlush } from './workers/read-receipt-processor'
 import { processPartitionEnsure, processPartitionPurge } from './workers/partition-processor'
+import { PartitionManager } from './services/partition-manager'
 import { getLogger } from './logger'
 
 const log = getLogger('worker-entrypoint')
@@ -35,6 +37,29 @@ async function main() {
   const pool = await initializeDb()
   const migrationsDir = path.resolve(__dirname, '../../../db/migrations')
   await runMigrations(pool, migrationsDir)
+
+  // ── Boot-time partition ensure (current + 3 months ahead) ─────────────────
+  // Runs before the workers start, so a fresh deploy always has partitions ready.
+  const partitionManager = new PartitionManager(pool)
+  try {
+    await partitionManager.ensureFuturePartitions(3)
+    log.info('partition.boot.ensure.done', {})
+  } catch (err) {
+    log.error('partition.boot.ensure.failed', {
+      message: err instanceof Error ? err.message : String(err),
+    })
+    // Non-fatal: workers can still start; the monthly repeatable job will retry
+  }
+
+  // ── Register monthly repeatable jobs (idempotent — dedup by repeat key) ───
+  try {
+    await registerPartitionJobs({ redisUrl: REDIS_URL! })
+    log.info('partition.scheduler.registered', {})
+  } catch (err) {
+    log.error('partition.scheduler.registration.failed', {
+      message: err instanceof Error ? err.message : String(err),
+    })
+  }
 
   const workers = [
     createWorker({
