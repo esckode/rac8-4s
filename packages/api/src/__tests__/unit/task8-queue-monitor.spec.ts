@@ -66,6 +66,7 @@ const testConfig: AppConfig = {
     jobQueue: 'memory',
     sseBus: 'memory',
     tokenStore: 'memory',
+    rateLimitStore: 'memory',
   },
 }
 

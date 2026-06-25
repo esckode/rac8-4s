@@ -345,12 +345,13 @@ test('Rate limit enforced across round-robined instances (shared Redis counter)'
   /**
    * Proof: the Redis-backed rate-limit counter (RedisCounterStore) is shared across
    * instances.  Without Redis, each instance has its own in-memory counter; a client
-   * could exceed the limit 2× by round-robining across 2 instances.
+   * could double the effective limit by round-robining across 2 instances.
    *
-   * Approach: make failed login attempts alternating between API-A and API-B directly
-   * (bypassing the LB so we control exactly which instance handles each request).
-   * After maxAttempts total failures — spread across the two instances — the next
-   * attempt via the LB should be 429.
+   * Approach: send all failed login attempts through the load balancer (round-robin)
+   * so they are distributed across both instances.  The rate-limit key includes the
+   * client IP — which is the nginx LB container's IP from the perspective of each API
+   * instance.  Since both instances share the same Redis counter, the cumulative
+   * failure count reaches maxAttempts regardless of which instance served each request.
    *
    * We use a non-existent account email so every attempt is a 401 (counts as a failure).
    * maxAttempts for login is 5 (APP_LIMITS_RATE_LIMIT_LOGIN_MAX_ATTEMPTS default).
@@ -359,25 +360,22 @@ test('Rate limit enforced across round-robined instances (shared Redis counter)'
   const email = `rate-limit-mi-${suffix}@test.local`
   const password = 'some-wrong-password'
 
-  // Alternate failed requests across API-A and API-B.
-  // 4 total failures — one short of the limit (maxAttempts=5, but the 5th triggers 429).
-  const instances = [API_A, API_B, API_A, API_B]
-  for (const instance of instances) {
-    const res = await apiCall(instance, '/api/auth/login', 'POST', { email, password })
-    // 401 = credentials rejected (counts as a failure toward rate limit)
-    // 400 = validation error (also counted toward rate limit)
-    // Either way it is NOT 429 yet.
+  // First 4 attempts via the LB (round-robin across both instances).
+  // Each should be 401 (unauthorized) — the counter increments on each failure.
+  for (let i = 1; i <= 4; i++) {
+    const res = await apiCall(LB_URL, '/api/auth/login', 'POST', { email, password })
     expect(
       res.status,
-      `Expected 401/400 on attempt #${instances.indexOf(instance) + 1} to ${instance}, got ${res.status}`
+      `Expected 401/400 on attempt #${i} via LB, got ${res.status}: ${await res.clone().text()}`
     ).toBeLessThan(429)
   }
 
-  // 5th attempt (via the LB — could land on either instance) should be 429.
+  // 5th attempt via the LB — shared Redis counter has reached maxAttempts (5).
+  // Both instances see the same counter, so the 5th request returns 429.
   const final = await apiCall(LB_URL, '/api/auth/login', 'POST', { email, password })
   expect(
     final.status,
-    `Expected 429 on the 5th combined failure across both instances, got ${final.status}: ${await final.clone().text()}`
+    `Expected 429 on the 5th combined failure across LB-distributed instances, got ${final.status}: ${await final.clone().text()}`
   ).toBe(429)
 
   const body = await final.json()

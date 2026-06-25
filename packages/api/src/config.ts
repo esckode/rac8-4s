@@ -373,6 +373,15 @@ export interface RedisConfig {
    * Override via TOKEN_STORE env var.
    */
   tokenStore: 'memory' | 'redis'
+
+  /**
+   * Rate-limit counter store backend.
+   * Default: 'memory' (InMemoryCounterStore — no Redis required; single-instance only)
+   * 'redis' requires REDIS_URL and uses RedisCounterStore (V2.3): atomic, shared across
+   * instances — prevents limit bypass via round-robin LB (R-17.10.2).
+   * Override via RATE_LIMIT_STORE env var.
+   */
+  rateLimitStore: 'memory' | 'redis'
 }
 
 /**
@@ -449,10 +458,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     monthsAhead: 2,      // Pre-create partitions 2 months ahead of current month
   },
   redis: {
-    url: undefined,        // No Redis by default; in-memory backends are used
-    jobQueue: 'memory',    // Use in-process queue by default (no Redis needed)
-    sseBus: 'memory',      // Use in-process bus by default (no Redis needed)
-    tokenStore: 'memory',  // Use in-memory token store by default (no Redis needed)
+    url: undefined,            // No Redis by default; in-memory backends are used
+    jobQueue: 'memory',        // Use in-process queue by default (no Redis needed)
+    sseBus: 'memory',          // Use in-process bus by default (no Redis needed)
+    tokenStore: 'memory',      // Use in-memory token store by default (no Redis needed)
+    rateLimitStore: 'memory',  // Use in-memory counter by default (no Redis needed)
   },
 }
 
@@ -619,6 +629,7 @@ export function getAppConfig(): AppConfig {
       jobQueue: (process.env.JOB_QUEUE ?? DEFAULT_APP_CONFIG.redis.jobQueue) as 'memory' | 'bullmq',
       sseBus: (process.env.SSE_BUS ?? DEFAULT_APP_CONFIG.redis.sseBus) as 'memory' | 'redis',
       tokenStore: (process.env.TOKEN_STORE ?? DEFAULT_APP_CONFIG.redis.tokenStore) as 'memory' | 'redis',
+      rateLimitStore: (process.env.RATE_LIMIT_STORE ?? DEFAULT_APP_CONFIG.redis.rateLimitStore) as 'memory' | 'redis',
     },
   }
 }

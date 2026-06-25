@@ -25,7 +25,7 @@ import { DEFAULT_APP_CONFIG, AppConfig } from '../../config'
 
 const REDIS_SELECTED_CONFIG: AppConfig = {
   ...DEFAULT_APP_CONFIG,
-  redis: { url: 'redis://localhost:6379', jobQueue: 'bullmq', sseBus: 'redis', tokenStore: 'redis' },
+  redis: { url: 'redis://localhost:6379', jobQueue: 'bullmq', sseBus: 'redis', tokenStore: 'redis', rateLimitStore: 'redis' },
 }
 
 function makePool(opts: { connectFails?: boolean } = {}): Pool {

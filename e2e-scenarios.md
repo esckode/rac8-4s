@@ -1314,7 +1314,7 @@ the database, exercising the full async job pipeline under the distributed stack
 ```gherkin
 Given two API instances sharing a Redis-backed rate-limit counter store
 And the login rate limit is set to 5 failed attempts
-When failed login attempts are spread across both instances via the load balancer (round-robin)
+When 5 failed login attempts are made via the load balancer (round-robined across both instances)
 Then the 5th cumulative failure returns 429 (RATE_LIMITED)
 And the limit is enforced regardless of which instance served each request
 ```
