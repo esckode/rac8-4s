@@ -8,7 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') })
 import { createApp } from './app'
 import { initializeDb, closeDb } from './db-connections'
 import { runMigrations } from './migrations'
-import { InMemoryTokenStore } from './auth/token-store'
+import { selectTokenStore } from './auth/token-store'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { selectBroadcastBus } from './broadcast-bus'
 import { getAppConfig } from './config'
@@ -45,7 +45,7 @@ async function main() {
     const redisClient = createRedisClient(config.redis)
 
     // Initialize dependencies
-    const tokenStore = new InMemoryTokenStore()
+    const tokenStore = selectTokenStore()
     const jobQueue = new InMemoryJobQueue()
     const broadcastBus = selectBroadcastBus()
 
@@ -98,6 +98,9 @@ async function main() {
       server.close(async () => {
         await closeDb()
         jobQueue.close()
+        if ('close' in tokenStore && typeof (tokenStore as any).close === 'function') {
+          await (tokenStore as any).close().catch(() => {})
+        }
         if (redisClient) await redisClient.quit().catch(() => {})
         process.exit(0)
       })
