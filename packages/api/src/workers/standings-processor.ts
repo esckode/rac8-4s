@@ -2,6 +2,7 @@ import { calculateStandings } from '@core/index'
 import { GroupRepository } from '../db'
 import type { JobQueue } from '@worker/job-queue'
 import type { StandingsCache } from '../standings-cache'
+import { STANDINGS_INVALIDATION_KEY } from '../standings-cache'
 import type { IBroadcastBus } from '../broadcast-bus'
 import { getLogger } from '../logger'
 
@@ -21,6 +22,11 @@ export async function processStandingsRecalculate(
   const { tournamentId, groupId, conversationId } = payload
 
   try {
+    // Publish standings.invalidate on the bus before clearing locally so that
+    // all instances (including this one, via the bus subscribe callback) drop
+    // the affected group from their InMemoryStandingsCache.  The local clear
+    // is kept for the no-bus code path (tests / single-instance without bus).
+    deps.broadcastBus?.emit(STANDINGS_INVALIDATION_KEY, 'standings.invalidate', { groupId })
     deps.standingsCache?.clear(groupId)
 
     const members = await deps.groupRepo.findMembersByGroup(groupId)

@@ -404,17 +404,20 @@ test('Standings are fresh on instance B after a score write on instance A', asyn
   expect(groupMatch, `No group match found between p1 and p2 in: ${JSON.stringify(matches)}`).toBeDefined()
   const matchId: string = groupMatch.id
 
-  // 4. Player 1 submits a winning score on API-A
+  // 4. Player 1 submits a score on API-A.
+  // The score format "11-5, 11-3" means the match's player1_id wins.
+  // Record who player1_id is so we can assert on the right player below.
+  const matchPlayer1Id: string = groupMatch.player1_id
   const scoreRes = await apiCall(
     API_A,
     `/tournaments/${tournamentId}/matches/${matchId}/score`,
     'POST',
-    { score: '11-5 11-3' },
+    { score: '11-5, 11-3' },
     p1Token
   )
   expect(scoreRes.status, `Score submission failed: ${await scoreRes.clone().text()}`).toBe(200)
 
-  // 5. Read the bundle (standings) from API-B
+  // 5. Read the bundle (standings) from API-B — the key cross-instance read.
   const bundleRes = await apiCall(
     API_B,
     `/tournaments/${tournamentId}/bundle?include=standings`,
@@ -425,14 +428,16 @@ test('Standings are fresh on instance B after a score write on instance A', asyn
   expect(bundleRes.status, `Bundle read on API-B failed: ${await bundleRes.clone().text()}`).toBe(200)
   const bundle = await bundleRes.json()
 
-  // 6. Find the standings for the group and verify player 1 has wins > 0
+  // 6. The match's player1_id is the winner of "11-5, 11-3".
+  //    Verify that on API-B they have ≥ 1 win — proving no stale cache.
   const groupStandings = (bundle.standings as any[])?.find((g: any) => g.groupId === groupId)
   expect(groupStandings, `Group ${groupId} not found in standings: ${JSON.stringify(bundle.standings)}`).toBeDefined()
 
-  const p1Standing = groupStandings.standings.find((s: any) => s.playerId === p1Id)
+  const winnerStanding = groupStandings.standings.find((s: any) => s.playerId === matchPlayer1Id)
   expect(
-    p1Standing?.wins,
-    `Expected player 1 to have ≥ 1 win on API-B after scoring on API-A, but got: ${JSON.stringify(p1Standing)}`
+    winnerStanding?.wins,
+    `Expected match player1 (${matchPlayer1Id}) to have ≥ 1 win on API-B after scoring on API-A, ` +
+    `but got: ${JSON.stringify(winnerStanding)}. Full standings: ${JSON.stringify(groupStandings.standings)}`
   ).toBeGreaterThanOrEqual(1)
 })
 

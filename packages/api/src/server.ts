@@ -17,6 +17,7 @@ import { createEmailService } from './services/email-service'
 import { ServiceEmailAdapter } from './email-service-adapter'
 import { getLogger } from './logger'
 import { seedTestAccounts } from '../scripts/seed-test-accounts'
+import { InMemoryStandingsCache, subscribeToStandingsInvalidations } from './standings-cache'
 
 const log = getLogger('server')
 
@@ -48,6 +49,13 @@ async function main() {
     const tokenStore = selectTokenStore()
     const jobQueue = selectJobQueue()
     const broadcastBus = selectBroadcastBus()
+
+    // Standings cache + bus-driven invalidation (V2.4 / R-17.10.3).
+    // Each instance maintains its own InMemoryStandingsCache.  When a score
+    // write publishes standings.invalidate on the bus, this subscription drops
+    // the named group from the local cache so the next read re-fetches from DB.
+    const standingsCache = new InMemoryStandingsCache()
+    const unsubscribeStandingsInvalidations = subscribeToStandingsInvalidations(broadcastBus, standingsCache)
 
     // Initialize email service based on configuration
     let emailAdapter
@@ -81,6 +89,7 @@ async function main() {
       broadcastBus,
       emailAdapter,
       redis: redisClient,
+      standingsCache,
     })
 
     // Create HTTP server
@@ -95,6 +104,7 @@ async function main() {
     // Graceful shutdown
     const shutdown = async () => {
       console.log('\n⏹️  Shutting down server...')
+      unsubscribeStandingsInvalidations()
       server.close(async () => {
         await closeDb()
         jobQueue.close()

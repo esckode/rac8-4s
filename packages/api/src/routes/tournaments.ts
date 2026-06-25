@@ -529,7 +529,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       // Enqueue standings recalculation job if job queue is available
       if (deps.jobQueue) {
-        const jobId = `standings.recalculate:${match.group_id}`
+        const jobId = `standings.recalculate.${match.group_id}`
         await deps.jobQueue.add('standings.recalculate', { tournamentId, groupId: match.group_id, conversationId: cid }, {
           jobId,
           attempts: deps.config.jobs.maxAttempts,
