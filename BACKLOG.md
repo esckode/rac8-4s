@@ -21,7 +21,7 @@ here.
 | Document | Covers | Status |
 |---|---|---|
 | [MESSAGING_DESIGN.md](assets/planning/MESSAGING_DESIGN.md) | §16 as-built messaging (single-instance MVP) + §17 multi-instance forward design (diagram + R-requirements) | §16 ✅ **Built**; §17 📐 **Design** → has a plan (V2 below) |
-| [PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) | Durable groups, group chat, availability polls, casual-mode group-launched tournaments | 📐 **Design** — **needs an implementation plan** |
+| [PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) | Durable groups, group chat, availability polls, casual-mode group-launched tournaments | 📐 **Design (fully grilled, §11–§12)** → has a plan ([PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md)) |
 | [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) | PWA-first now; Capacitor (native wrapper) deferred | 🧭 **Decision** — PWA work pending; Capacitor ⏸️ **Deferred** (trigger documented) |
 | [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (primary) + organizer SaaS (secondary); ads rejected | 📐 **Design (draft)** — **not yet grilled**, needs detail |
 | [DESIGN_SYSTEM.md](assets/planning/DESIGN_SYSTEM.md) | "C U At Court" token-driven design system (tokens + Tailwind v4 + shared component lib) — as-built + gaps (no doc/Storybook/a11y/theming/governance) | 📐 **Design (as-built)** — **not yet grilled**, gaps to scope |
@@ -32,6 +32,7 @@ here.
 | [MESSAGING_IMPLEMENTATION.md](assets/planning/MESSAGING_IMPLEMENTATION.md) | Messaging MVP — Phases P–7 (schema, partitioning, repo, routes+SSE, batching, frontend, coverage) | ✅ **Built & merged** |
 | [MESSAGING_IMPLEMENTATION_V2.md](assets/planning/MESSAGING_IMPLEMENTATION_V2.md) | `conversations` abstraction (V1.0, Player-Groups prereq) + §17 multi-instance foundation (Redis bus/queue/token store, worker, dev distributed stack; Redis-required failure mode) + product gaps (offline notify, sender names, thread model, read-receipts) | 📋 **Plan ready** — not started |
 | [FRONTEND_IMPLEMENTATION.md](assets/planning/FRONTEND_IMPLEMENTATION.md) | Frontend-quality / rendering tasks driving [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) — FE-RENDER-1 (memoize `AuthProvider` value) | 📋 **Plan ready** — not started |
+| [PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md) | Community layer — Phases G0–G5 (compliance/age-gate prereq, group entity+membership, durable chat+moderation, polls, casual tournament engine+launch, DSR erasure cascade). TDD-first, ≥85% coverage; carries R-A reconciliation (G4.7) | 📋 **Plan ready** — not started |
 
 ## Test scenarios
 | Spec doc | Covers | Status |
@@ -47,10 +48,9 @@ here.
 - TIMESTAMPTZ normalization (migration 031); messaging schema/partitioning (032/033); ≥85% coverage gate.
 
 ### 📐 Design → needs an implementation plan
-- **Player Groups** (PLAYER_GROUPS_DESIGN.md) — **fully grilled** (open items + casual edges + compliance
-  resolved, §11–§12) → create `PLAYER_GROUPS_IMPLEMENTATION.md` (depends on the V2 `conversations`
-  abstraction; carries a **compliance prerequisite**: operator DSR cascade + 18+ age gate at
-  `findOrCreatePlayerByEmail`).
+- *(done)* ~~**Player Groups** → create `PLAYER_GROUPS_IMPLEMENTATION.md`~~ — **plan written** (see Plan
+  ready below). Fully grilled (§11–§12); depends on the V2 `conversations` abstraction; carries the
+  compliance prerequisite (operator DSR cascade + 18+ age gate at `findOrCreatePlayerByEmail`).
 - **PWA-first frontend** (FRONTEND_PLATFORM_STRATEGY.md) → create `PWA_FRONTEND_IMPLEMENTATION.md` =
   PWA enablement (manifest, web push, service worker) **+ the Offline (`offline-error.spec.ts`) and
   Mobile/Responsive (`mobile-responsive.spec.ts`) e2e specs** ([e2e-scenarios.md](e2e-scenarios.md)) —
@@ -66,6 +66,9 @@ here.
   the first task — a shared prerequisite for Player Groups.)
 - **FRONTEND_IMPLEMENTATION.md** — frontend-quality tasks (TDD). First task: **FE-RENDER-1** memoize the
   `AuthProvider` context value.
+- **PLAYER_GROUPS_IMPLEMENTATION.md** — community layer, Phases G0–G5 (TDD-first, ≥85%). First task:
+  **G0.1** 18+ age gate at `findOrCreatePlayerByEmail` (compliance prereq, gates onboarding). Depends on
+  the `conversations` abstraction (migration 034, on `main`). Resolves backlog **R-A** within **G4.7**.
 
 ### ⏸️ Deferred (with triggers)
 - **Capacitor native wrapper** — trigger: reliable iOS push / app-store presence / engagement for the
@@ -77,7 +80,8 @@ here.
 > unreconciled, implementers build to the stale requirement or code contradicts the docs.
 
 - **R-A — Casual-mode tournament reconciliation** *(triggered by Player Groups / G-CASUAL-1; resolve in
-  the Player Groups build).* Introduce a **`tournament mode: scheduled | casual`** concept and carve out
+  the Player Groups build — now mapped to **[PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md) G4.7**,
+  with the schema in G4.1).* Introduce a **`tournament mode: scheduled | casual`** concept and carve out
   5 conflicting requirements: deadlines `NOT NULL` → **nullable** (HL 705–707); partner-confirm by
   registration deadline → **N/A** (REQUIREMENTS:21); organizer-manual advance → **auto-advance**
   (REQUIREMENTS:84,140); own-match/organizer scoring → **open scoring**; registration-deadline guard →

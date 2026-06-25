@@ -71,6 +71,7 @@ packages/api/db/*.db
 
 # Playwright test artifacts
 playwright-report/
+playwright-report-multi-instance/
 test-results/
 /test-results/
 /playwright-report/
