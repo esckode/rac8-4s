@@ -10,7 +10,7 @@ import { initializeDb, closeDb } from './db-connections'
 import { runMigrations } from './migrations'
 import { InMemoryTokenStore } from './auth/token-store'
 import { InMemoryJobQueue } from '@worker/job-queue'
-import { BroadcastBus } from './broadcast-bus'
+import { selectBroadcastBus } from './broadcast-bus'
 import { getAppConfig } from './config'
 import { createRedisClient } from './redis'
 import { createEmailService } from './services/email-service'
@@ -47,7 +47,7 @@ async function main() {
     // Initialize dependencies
     const tokenStore = new InMemoryTokenStore()
     const jobQueue = new InMemoryJobQueue()
-    const broadcastBus = new BroadcastBus()
+    const broadcastBus = selectBroadcastBus()
 
     // Initialize email service based on configuration
     let emailAdapter

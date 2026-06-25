@@ -1,7 +1,7 @@
 import { calculateStandings, generateBracket } from '@core/index'
 import { GroupRepository, KnockoutRepository } from '../db'
 import type { JobQueue } from '@worker/job-queue'
-import type { BroadcastBus } from '../broadcast-bus'
+import type { IBroadcastBus } from '../broadcast-bus'
 import { getLogger } from '../logger'
 
 const log = getLogger('bracket-processor')
@@ -10,7 +10,7 @@ interface BracketProcessorDeps {
   groupRepo: GroupRepository
   knockoutRepo: KnockoutRepository
   jobQueue?: JobQueue
-  broadcastBus?: BroadcastBus
+  broadcastBus?: IBroadcastBus
 }
 
 export async function processBracketGenerate(

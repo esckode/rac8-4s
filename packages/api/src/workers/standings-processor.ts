@@ -2,7 +2,7 @@ import { calculateStandings } from '@core/index'
 import { GroupRepository } from '../db'
 import type { JobQueue } from '@worker/job-queue'
 import type { StandingsCache } from '../standings-cache'
-import type { BroadcastBus } from '../broadcast-bus'
+import type { IBroadcastBus } from '../broadcast-bus'
 import { getLogger } from '../logger'
 
 const log = getLogger('standings-processor')
@@ -11,7 +11,7 @@ interface StandsProcessorDeps {
   groupRepo: GroupRepository
   jobQueue?: JobQueue
   standingsCache?: StandingsCache
-  broadcastBus?: BroadcastBus
+  broadcastBus?: IBroadcastBus
 }
 
 export async function processStandingsRecalculate(

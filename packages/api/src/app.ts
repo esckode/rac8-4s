@@ -18,7 +18,7 @@ import analyticsRouter from './routes/analytics'
 import authRouter from './routes/auth'
 import type { JobQueue } from '@worker/job-queue'
 import type { StandingsCache } from './standings-cache'
-import type { BroadcastBus } from './broadcast-bus'
+import type { IBroadcastBus } from './broadcast-bus'
 import type { AppConfig } from './config'
 import type { EmailAdapter } from './email-adapter'
 import { QueueMonitor } from './queue-monitor'
@@ -89,7 +89,7 @@ export interface AppDependencies {
   emailAdapter?: EmailAdapter
   jobQueue?: JobQueue
   standingsCache?: StandingsCache
-  broadcastBus?: BroadcastBus
+  broadcastBus?: IBroadcastBus
   locationRepository?: any
   courtRepository?: any
   /** Shared ioredis client. null = in-memory mode (no Redis). */
@@ -158,7 +158,16 @@ export function createApp(deps: AppDependencies): Express {
       }
     }
 
-    res.status(200).json({ status: 'ok', database: dbStatus, redis: redisStatus })
+    // Check bus connectivity (RedisBroadcastBus exposes busHealthStatus(); BroadcastBus does not)
+    const bus = deps.broadcastBus as any
+    let busStatus: 'in-process' | 'connected' | 'down'
+    if (bus && typeof bus.busHealthStatus === 'function') {
+      busStatus = await bus.busHealthStatus()
+    } else {
+      busStatus = 'in-process'
+    }
+
+    res.status(200).json({ status: 'ok', database: dbStatus, redis: redisStatus, bus: busStatus })
   })
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
