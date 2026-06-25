@@ -19,9 +19,10 @@ Player-Groups scope by V1.0's scope guard).
 ### What this builds
 The community track, in dependency order: **compliance/identity prerequisites → group entity & membership →
 durable group conversation & chat → availability polls → casual tournament engine & group-launch → DSR
-erasure cascade (pre-GA)**. Two parts touch the **core tournament engine** (casual mode + social-mixer
+orchestration (pre-GA)**. Two parts touch the **core tournament engine** (casual mode + social-mixer
 doubles, §11.10–11.13) and one is **platform-wide** (compliance, §12) — both are carried here because this
-track is what forces them.
+track is what forces them. **Erasure is decomposed** (rule §0.5): each durable store ships its own anonymize
+primitive + contract test when it lands; G5 only orchestrates.
 
 ### Hard rules (apply to EVERY task) — mirror MESSAGING_IMPLEMENTATION_V2 §0
 1. **TDD-first (CLAUDE.md §4, §11):** write/extend **unit + integration + e2e tests AND scenario docs
@@ -35,13 +36,21 @@ track is what forces them.
      relevant e2e are green **by running them**, not by trusting a report.
 3. **Coverage ≥ 85%** (`branches/functions/lines/statements`, enforced in `packages/api/jest.config.js`).
    Every new module/branch carries tests to hold the gate. **New core-engine code (casual mode, mixer) and
-   the DSR cascade must each be ≥ 85% on their own files** — they are correctness- and legal-critical.
+   the erasure primitives + DSR orchestrator must each be ≥ 85% on their own files** — they are
+   correctness- and legal-critical.
 4. **Tests/CI stay single-process + in-memory** — no new Redis/external dependency in the unit suite. Reuse
    the env-selected backends from V2 (bus, queue, token store).
-5. **Anonymization-ready durable tables (§12):** every durable table that attributes data to a player uses a
-   **nullable/replaceable `player_id` + a denormalized, tombstone-able display name**. Enforce from the
-   first migration — it is irreversible if baked wrong. A migration test asserts the column is nullable and
-   a name-snapshot column exists.
+5. **Anonymization-ready durable tables + per-store erasure primitive (§12) — DECOMPOSED.** Every durable
+   table that attributes data to a player uses a **nullable/replaceable `player_id` + a denormalized,
+   tombstone-able display name**, enforced **from the first migration** (irreversible if baked wrong). To
+   avoid validating erasability only at the end (the waterfall trap), **each durable store ships its own
+   anonymize primitive + contract test in the same task that creates it** (G2.1, G3.1, G4.4): a migration
+   test asserts `player_id` is nullable + a name-snapshot column exists, **and** a contract test proves
+   `anonymize<Store>For(playerId)` turns that player's rows into "Former player" while **leaving
+   co-participants' rows untouched**. **G5 then only composes these already-proven primitives** (fan-out +
+   identity verification + export + operator entrypoint) — the hard, schema-coupled work lives next to the
+   schema, not at the end. **Real-PII environments** (beta/dogfood/staging with real emails) are gated on
+   the relevant primitive existing for every store they populate.
 6. **Branch/commit:** branch off `main` (`feat/player-groups`); one logical change per commit; trailers per
    CLAUDE.md §11. **TDD history:** red `test:` commit precedes the `feat:` commit.
 
@@ -62,8 +71,8 @@ autocommit — CLAUDE.md §7); factories under `__tests__/factories`; **route or
 
 ## PHASE G0 — Compliance & identity prerequisites (§12.2)
 *Must precede any group onboarding: groups create players via invite-accept, and the age gate sits at the
-universal player boundary. The DSR **cascade** (§12.1) is built later (Phase G5) once durable stores exist,
-but its **schema convention** (rule §0.5) is enforced from G1 onward.*
+universal player boundary. DSR (§12.1) is **decomposed** (rule §0.5): each store's anonymize primitive +
+contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** is G5.*
 
 ### G0.1 — 18+ age gate at the universal player boundary
 - **RED:** unit — `findOrCreatePlayerByEmail` (`packages/api/src/db.ts:363`) rejects creation without a
@@ -132,8 +141,11 @@ but its **schema convention** (rule §0.5) is enforced from G1 onward.*
   indexed by `(conversation_id, created_at)`; **rule §0.5 assertions** (nullable `player_id` +
   tombstone-able name); **retention test:** group conversations are **exempt from the completion-anchored
   purge** (§14/§15) — a purge run leaves group rows intact.
+  **Per-store erasure primitive (§0.5):** a contract test proves `anonymizeGroupMessagesFor(playerId)`
+  tombstones that player's messages ("Former player", body/attribution cleared) while **co-authors' messages
+  in the same conversation are untouched**, and is idempotent on re-run.
 - **GREEN:** migration `038`; make retention conversation-type-aware (group = durable). Extend the
-  conversation repository to resolve a group→conversation.
+  conversation repository to resolve a group→conversation. Add `anonymizeGroupMessagesFor` to the repo.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
 ### G2.2 — Group chat backend: send / history / sender names / system events
@@ -179,7 +191,11 @@ but its **schema convention** (rule §0.5) is enforced from G1 onward.*
   `poll_votes(message_id, player_id, choice{in|out|maybe}, voted_at)` with **`choice` stored extensibly**
   (enum/string, not three booleans — §11.8 forward-compat); **non-anonymous** (everyone sees who's in);
   **re-votable** (latest vote wins, one row per player); **notify members on create** (per G2.4 levels).
-- **GREEN:** poll create/vote routes; `poll_votes` table (migration `039`); live tally aggregation.
+  **Per-store erasure primitive (§0.5):** a contract test proves `anonymizePollVotesFor(playerId)` removes/
+  tombstones that player's votes while **other voters' rows and the remaining tally stay correct**, and is
+  idempotent.
+- **GREEN:** poll create/vote routes; `poll_votes` table (migration `039`); live tally aggregation; add
+  `anonymizePollVotesFor`.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
 ### G3.2 — Poll auto-close + system follow-up
@@ -237,14 +253,26 @@ but its **schema convention** (rule §0.5) is enforced from G1 onward.*
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
 ### G4.4 — Durable cross-tournament leaderboards (pair + individual, raw W/L) (§11.12)
-- **RED:** migration + integration — `messaging.group_match_log(... group_id, conversation_id?, player
-  slots NULLABLE + name snapshots, result, played_at ...)` (**durable, never auto-purged**,
-  **anonymization-ready** §0.5); every casual match writes a row; derive a **pair leaderboard** (`{A,B}`
-  cumulative) and an **individual leaderboard** (each player across all partners), both ranked by **raw W/L
-  + games-won**, **across multiple casual tournaments**; **partial results count** (an abandoned tournament
-  contributes its played rows). (Elo explicitly out — deferred.)
-- **GREEN:** migration `041`; match-log writer on score finalize; leaderboard aggregation queries +
-  endpoints.
+> **⚠️ Hardest erasure case — decide the schema shape HERE, not in G5.** A doubles result has up to 4
+> participants; anonymizing one player's slot must leave the other three intact. **Decision to make and test
+> in this task:** model participants as **one row per slot** (`group_match_participants(match_id, slot,
+> player_id NULLABLE, name_snapshot, side)`) rather than 4 player-id columns on a single row — per-slot rows
+> make single-slot anonymization a plain `UPDATE … WHERE player_id = $1` and keep aggregation simple. If the
+> single-row/4-column shape is chosen instead, the contract test below **must** still prove per-slot
+> anonymization works; surface the shape as an explicit, tested choice now (late discovery here is the main
+> risk called out in *Sequencing & risks*).
+- **RED:** migration + integration — durable `group_match_log` + per-slot participants (**durable, never
+  auto-purged**, **anonymization-ready** §0.5); every casual match writes rows; derive a **pair leaderboard**
+  (`{A,B}` cumulative) and an **individual leaderboard** (each player across all partners), both ranked by
+  **raw W/L + games-won**, **across multiple casual tournaments**; **partial results count** (an abandoned
+  tournament contributes its played rows). (Elo explicitly out — deferred.)
+  **Per-store erasure primitive (§0.5) — the load-bearing one:** a contract test proves
+  `anonymizeMatchLogSlotsFor(playerId)` tombstones **only that player's slots** across multi-party rows
+  (co-participants untouched), and that **`recomputeLeaderboards()` re-derives correct pair + individual
+  standings from the mutated log** (drops the anonymized player from the individual board). Aggregation is
+  built **re-runnable/idempotent** so G5 can call it after erasure.
+- **GREEN:** migration `041`; per-slot participant model; match-log writer on score finalize; **idempotent**
+  leaderboard aggregation queries + endpoints; add `anonymizeMatchLogSlotsFor` + `recomputeLeaderboards`.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
 ### G4.5 — Group → tournament launch (G-TOURN-1, §6)
@@ -288,26 +316,24 @@ but its **schema convention** (rule §0.5) is enforced from G1 onward.*
 
 ---
 
-## PHASE G5 — DSR erasure cascade (§12.1) — **before GA**
-*All durable stores now exist (group_messages, poll_votes, group_match_log, group_members, invite tokens),
-so the cascade can be built and tested end-to-end.*
+## PHASE G5 — DSR orchestration (§12.1) — **before GA**
+*The hard, schema-coupled work already shipped with each store: `anonymizeGroupMessagesFor` (G2.1),
+`anonymizePollVotesFor` (G3.1), `anonymizeMatchLogSlotsFor` + `recomputeLeaderboards` (G4.4), and the
+solely-theirs hard-deletes (membership/notify in G1, invite tokens in G1.3). G5 is now **thin plumbing** that
+composes proven primitives — not a from-scratch cascade discovered at the end.*
 
-### G5.1 — Operator data-subject-request: delete / anonymize / export
-- **RED:** integration — given an **email** (durable-player key), an **operator-triggered** request fans out
-  across **all** durable stores:
-  - **anonymize-in-place (tombstone)** for shared/multi-party data — chat messages, poll votes, and the
-    requester's **slot** in `group_match_log` rows (a doubles row has up to 4 players; co-participants'
-    records survive); identity → "Former player"; they **drop off the individual leaderboard**.
-  - **hard-delete** solely-theirs data — `group_members` rows, `notify_level`, live invite tokens.
-  - **recompute** leaderboard aggregates after erasure (self-heal from the anonymized log).
-  - **export** uses the **same** email-keyed cascade (one traversal, two outputs).
-  - **identity verified** via the magic-link/email model before acting; **no self-serve UI** (operator
-    tooling/runbook only).
-  Assert co-participant data is **untouched**, and that a re-run is idempotent.
-- **GREEN:** a `DataSubjectRequestService` performing the cascade (anonymize vs hard-delete per store) +
-  aggregate recompute + export serializer; operator entrypoint (script/admin route, auth-gated); runbook
-  note in the doc.
-- **Verify gate** (full unit suite; the cascade file ≥ 85%). **Commit:** `test:` → `feat:`.
+### G5.1 — Operator data-subject-request: orchestrate / verify / export / entrypoint
+- **RED:** integration — given an **email** (durable-player key), an **operator-triggered** request:
+  - **resolves email → player** and **verifies identity** via the magic-link/email model before acting.
+  - **composes the per-store primitives** in order: anonymize chat + votes + match-log slots, hard-delete
+    membership/notify + live invite tokens, then `recomputeLeaderboards()`. (Each primitive is already
+    unit-proven; G5 tests the **orchestration** — full fan-out leaves **no PII** for the player and **all
+    co-participant data untouched**, and the whole request is **idempotent** on re-run.)
+  - **export** reuses the **same** email-keyed traversal (one walk, two outputs — erase vs serialize).
+  - **no self-serve UI** — operator script/admin route, auth-gated.
+- **GREEN:** a `DataSubjectRequestService` that fans out to the existing primitives + export serializer +
+  identity verification; operator entrypoint; **runbook** added to PLAYER_GROUPS_DESIGN §12.
+- **Verify gate** (full unit suite; orchestrator + any new code ≥ 85%). **Commit:** `test:` → `feat:`.
 
 ---
 
@@ -315,10 +341,12 @@ so the cascade can be built and tested end-to-end.*
 - **Unit (jest):** every new module/branch — membership invariants, mixer scheduler (seeded RNG),
   notify-level selection, casual auto-progression, DSR anonymize-vs-delete decisions.
 - **Integration (jest, transactional harness `getTestPool()`):** routes, repositories, migrations, the
-  launch service, the DSR cascade — against Postgres, rolled back per suite (no autocommit).
+  launch service, the per-store anonymize primitives + DSR orchestrator — against Postgres, rolled back per
+  suite (no autocommit).
 - **E2E (Playwright):** group chat, polls, casual tournament + leaderboards, age-gate onboarding — single
   instance; run with `--retries=2`. Seed own data via fixtures; select by `data-testid`/`e2e/config.ts`.
-- **Coverage:** api global ≥ 85; **casual-mode engine, mixer scheduler, and the DSR cascade each ≥ 85 on
+- **Coverage:** api global ≥ 85; **casual-mode engine, mixer scheduler, the erasure primitives + DSR
+  orchestrator each ≥ 85 on
   their own files** (correctness/legal-critical).
 
 ## Per-task Definition of Done
@@ -328,16 +356,22 @@ so the cascade can be built and tested end-to-end.*
 
 ## Sequencing & risks
 - **Order:** G0 (compliance prereq) → G1 (groups) → G2 (chat) → G3 (polls) → G4 (casual engine + launch) →
-  G5 (DSR before GA). G0.1's age gate **must land first** (it gates onboarding); the DSR **cascade** lands
-  last (needs all durable stores) but its **schema convention** is enforced from G1.
+  G5 (DSR orchestration before GA). G0.1's age gate **must land first** (it gates onboarding). DSR is
+  **decomposed**: the schema convention **and** each store's anonymize primitive + contract test land **with
+  that store** (G2.1/G3.1/G4.4); only the thin orchestrator/export/operator-entrypoint is in G5. This
+  pulls erasability **validation** forward so a bad schema constraint is caught when the (still-empty) table
+  is created, not after it's populated.
 - **Depends on** the `conversations` abstraction (migration 034, on `main`). If `MESSAGING_IMPLEMENTATION_V2`
   is still mid-flight, coordinate the bus/SSE conversation-key plumbing.
 - **Biggest risk — core-engine ripple (G4.2/G4.3):** casual mode and social-mixer doubles are **new engine
   code**, not reuse; the chief hazard is **regressing scheduled mode**. Mitigate by branching on `mode` and
   asserting the existing scheduled-mode unit + e2e suites stay green in every G4 task.
-- **Second risk — compliance correctness (G0.1/G5.1):** legally load-bearing. The age gate must cover **all
-  three** player-creation paths (gate at `findOrCreatePlayerByEmail`, not signup); the DSR cascade must
-  **never** touch co-participants' data. Both carry their own ≥85% bar.
+- **Second risk — compliance correctness (G0.1 + the per-store primitives):** legally load-bearing. The age
+  gate must cover **all three** player-creation paths (gate at `findOrCreatePlayerByEmail`, not signup);
+  erasure must **never** touch co-participants' data — proven per-store at G2.1/G3.1/G4.4, then composed at
+  G5. The **match-log shape (G4.4)** is the case to get right early (per-slot rows vs 4 columns); late
+  discovery there was the chief reason not to defer all of erasure to G5. Each primitive carries its own
+  ≥85% bar.
 - **Scheduler dependency (G3.2/G4.6):** poll auto-close and idle auto-archive ride the **shared scheduler**
   that also runs partition purge/retention (backlog 🔴 — one scheduler, three consumers). Manual paths
   ("end session now", manual poll close) ship regardless so the track isn't blocked on the cron.
