@@ -75,6 +75,22 @@ describe('createRedisClient()', () => {
     expect(client).toBeNull()
   })
 
+  it('creates a client (with warning) when redis backend is selected but no URL is provided', async () => {
+    // Even with no URL, if SSE_BUS=redis is selected we attempt to create a client
+    // and log a warning. The client defaults to localhost:6379 and will likely fail,
+    // but the factory should not return null.
+    const { createRedisClient } = await import('../../redis')
+    const client = createRedisClient({
+      url: undefined,
+      jobQueue: 'memory',
+      sseBus: 'redis', // redis backend requested
+      connectTimeoutMs: 100,
+      maxRetriesPerRequest: 0,
+    })
+    expect(client).not.toBeNull()
+    await client!.quit().catch(() => {})
+  })
+
   it('attempts connection and rejects quickly when given an unreachable host', async () => {
     const { createRedisClient } = await import('../../redis')
     // Point at a port that is not listening (use a non-routable IP with short timeout)

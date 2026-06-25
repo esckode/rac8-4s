@@ -22,6 +22,7 @@ import type { BroadcastBus } from './broadcast-bus'
 import type { AppConfig } from './config'
 import type { EmailAdapter } from './email-adapter'
 import { QueueMonitor } from './queue-monitor'
+import type { Redis } from 'ioredis'
 
 const httpLog = getLogger('http')
 
@@ -91,6 +92,8 @@ export interface AppDependencies {
   broadcastBus?: BroadcastBus
   locationRepository?: any
   courtRepository?: any
+  /** Shared ioredis client. null = in-memory mode (no Redis). */
+  redis?: Redis | null
 }
 
 export function createApp(deps: AppDependencies): Express {
@@ -124,6 +127,39 @@ export function createApp(deps: AppDependencies): Express {
   app.use('/player', playerRouter(appDeps))
   app.use('/api/analytics', analyticsRouter(appDeps))
   app.use('/api/auth', authRouter(appDeps))
+
+  // Health check — must be registered after routers so request-id middleware applies
+  const redisClient = deps.redis ?? null
+  app.get('/health', async (_req: Request, res: Response) => {
+    // Check database
+    let dbStatus: 'connected' | 'disconnected' = 'disconnected'
+    try {
+      const client = await (deps.db as Pool).connect()
+      try {
+        await client.query('SELECT 1')
+        dbStatus = 'connected'
+      } finally {
+        client.release()
+      }
+    } catch {
+      // dbStatus stays 'disconnected'
+    }
+
+    // Check Redis
+    let redisStatus: 'connected' | 'down' | 'disabled'
+    if (redisClient === null) {
+      redisStatus = 'disabled'
+    } else {
+      try {
+        await redisClient.ping()
+        redisStatus = 'connected'
+      } catch {
+        redisStatus = 'down'
+      }
+    }
+
+    res.status(200).json({ status: 'ok', database: dbStatus, redis: redisStatus })
+  })
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     // Parse PostgreSQL errors first

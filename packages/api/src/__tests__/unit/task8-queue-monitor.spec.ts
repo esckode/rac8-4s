@@ -61,6 +61,11 @@ const testConfig: AppConfig = {
     dropPaddingDays: 45,
     monthsAhead: 2,
   },
+  redis: {
+    url: undefined,
+    jobQueue: 'memory',
+    sseBus: 'memory',
+  },
 }
 
 describe('Task #8: Queue Monitoring', () => {

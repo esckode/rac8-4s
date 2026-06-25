@@ -60,6 +60,11 @@ const testConfig: AppConfig = {
     dropPaddingDays: 45,
     monthsAhead: 2,
   },
+  redis: {
+    url: undefined,
+    jobQueue: 'memory',
+    sseBus: 'memory',
+  },
 }
 
 const MAX_EMAIL_RECIPIENTS_PER_JOB = testConfig.limits.emailRecipientsPerJob

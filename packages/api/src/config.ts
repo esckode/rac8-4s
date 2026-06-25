@@ -340,6 +340,34 @@ export interface EmailConfig {
 }
 
 /**
+ * Redis and distributed-backend configuration.
+ */
+export interface RedisConfig {
+  /**
+   * Redis connection URL.
+   * Default: undefined (no Redis; in-memory backends are used)
+   * Override via REDIS_URL env var.
+   */
+  url: string | undefined
+
+  /**
+   * Job queue backend.
+   * Default: 'memory' (in-process InMemoryJobQueue — no Redis required)
+   * 'bullmq' requires REDIS_URL and uses BullMQ (V1.3).
+   * Override via JOB_QUEUE env var.
+   */
+  jobQueue: 'memory' | 'bullmq'
+
+  /**
+   * SSE broadcast bus backend.
+   * Default: 'memory' (in-process BroadcastBus — no Redis required)
+   * 'redis' requires REDIS_URL and uses RedisBroadcastBus (V1.2).
+   * Override via SSE_BUS env var.
+   */
+  sseBus: 'memory' | 'redis'
+}
+
+/**
  * Complete application configuration.
  * All magic numbers and environment-dependent settings are centralized here.
  */
@@ -350,6 +378,7 @@ export interface AppConfig {
   jobs: JobsConfig
   email: EmailConfig
   messaging: MessagingConfig
+  redis: RedisConfig
 }
 
 /**
@@ -410,6 +439,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     retentionDays: 90,   // Keep messages 90 days post-tournament completion
     dropPaddingDays: 45, // Extra 45-day safety buffer before physical drop
     monthsAhead: 2,      // Pre-create partitions 2 months ahead of current month
+  },
+  redis: {
+    url: undefined,       // No Redis by default; in-memory backends are used
+    jobQueue: 'memory',   // Use in-process queue by default (no Redis needed)
+    sseBus: 'memory',     // Use in-process bus by default (no Redis needed)
   },
 }
 
@@ -570,6 +604,11 @@ export function getAppConfig(): AppConfig {
         process.env.APP_MESSAGING_MONTHS_AHEAD ?? String(DEFAULT_APP_CONFIG.messaging.monthsAhead),
         10
       ),
+    },
+    redis: {
+      url: process.env.REDIS_URL || undefined,
+      jobQueue: (process.env.JOB_QUEUE ?? DEFAULT_APP_CONFIG.redis.jobQueue) as 'memory' | 'bullmq',
+      sseBus: (process.env.SSE_BUS ?? DEFAULT_APP_CONFIG.redis.sseBus) as 'memory' | 'redis',
     },
   }
 }

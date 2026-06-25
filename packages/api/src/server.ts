@@ -12,6 +12,7 @@ import { InMemoryTokenStore } from './auth/token-store'
 import { InMemoryJobQueue } from '@worker/job-queue'
 import { BroadcastBus } from './broadcast-bus'
 import { getAppConfig } from './config'
+import { createRedisClient } from './redis'
 import { createEmailService } from './services/email-service'
 import { ServiceEmailAdapter } from './email-service-adapter'
 import { getLogger } from './logger'
@@ -40,6 +41,9 @@ async function main() {
     // Load configuration with environment overrides
     const config = getAppConfig()
 
+    // Initialize Redis client (null = in-memory mode)
+    const redisClient = createRedisClient(config.redis)
+
     // Initialize dependencies
     const tokenStore = new InMemoryTokenStore()
     const jobQueue = new InMemoryJobQueue()
@@ -67,7 +71,7 @@ async function main() {
       // In production, consider fallback or different initialization strategy
     }
 
-    // Create Express app
+    // Create Express app (health route is inside createApp)
     const app = createApp({
       config,
       db: pool,
@@ -76,21 +80,7 @@ async function main() {
       jobQueue,
       broadcastBus,
       emailAdapter,
-    })
-
-    // Add health check endpoint
-    app.get('/health', async (req, res) => {
-      try {
-        const client = await pool.connect()
-        try {
-          await client.query('SELECT 1')
-          res.status(200).json({ status: 'ok', database: 'connected' })
-        } finally {
-          client.release()
-        }
-      } catch (err) {
-        res.status(503).json({ status: 'error', database: 'disconnected' })
-      }
+      redis: redisClient,
     })
 
     // Create HTTP server
@@ -108,6 +98,7 @@ async function main() {
       server.close(async () => {
         await closeDb()
         jobQueue.close()
+        if (redisClient) await redisClient.quit().catch(() => {})
         process.exit(0)
       })
     }
