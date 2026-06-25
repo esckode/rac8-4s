@@ -3,7 +3,8 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './packages/frontend/e2e',
   // TEMPLATE.spec.ts is a copy-this scaffold for new specs, not a real test.
-  testIgnore: '**/TEMPLATE.spec.ts',
+  // multi-instance/ specs require the distributed stack and live in their own config.
+  testIgnore: ['**/TEMPLATE.spec.ts', '**/multi-instance/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   // Retry locally too (not just CI): the real-time SSE specs are timing-sensitive and

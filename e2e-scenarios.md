@@ -1245,3 +1245,64 @@ And navigating to the messages tab redirects to login
 ```
 
 **Implementation:** `messaging.spec.ts` — "Unauthenticated user cannot access messages"
+
+---
+
+## Feature: Messaging — multi-instance
+
+> These scenarios validate distributed behaviour when two API instances sit behind a
+> non-sticky round-robin load balancer (LB) and share a Redis bus, BullMQ queue, and
+> Redis token store.  They live in the separate `messaging-multi-instance` Playwright
+> project and are NOT part of the default single-instance suite.  The distributed
+> stack must be running (`npm run dev:distributed`) before these can go green.
+
+### Scenario 1: Cross-node SSE delivery
+
+```gherkin
+Given two API instances (A :3001 and B :3002) sharing the same Redis bus
+And a client SSE connection is established via the load balancer (may land on either instance)
+And a second SSE connection is established via the load balancer (expected to land on the other)
+When an organizer posts an announcement via the load balancer
+Then BOTH SSE connections receive a "message.created" event containing the announcement body
+```
+
+**Why:** Proves R-17.3 — the Redis pub/sub bus relays events across instances so a client
+on node B receives events emitted on node A.
+
+**Implementation:** `packages/frontend/e2e/multi-instance/messaging-multi-instance.spec.ts`
+— "Cross-node SSE delivery via load balancer"
+
+---
+
+### Scenario 2: Auth across instances (no random 401s)
+
+```gherkin
+Given a player registers for a tournament and exchanges their magic-link token for a player-session token
+And requests are round-robined across both API instances by the load balancer
+When the player makes 10 authenticated requests in sequence
+Then all 10 requests succeed (0 × 401)
+```
+
+**Why:** Proves R-17.10.1 — the Redis-backed token store (RedisTokenStore) shares opaque
+player-session tokens across instances, preventing 401s under a round-robin LB.
+
+**Implementation:** `packages/frontend/e2e/multi-instance/messaging-multi-instance.spec.ts`
+— "Player-session auth works across round-robined instances"
+
+---
+
+### Scenario 3: Job processing — read-receipt flush by worker
+
+```gherkin
+Given a player session and a tournament with an unread broadcast message
+When the player calls POST /tournaments/:id/messages/:msgId/read via the load balancer
+Then a messaging.read_receipt.flush job is enqueued in BullMQ
+And the BullMQ worker processes the job
+And GET /tournaments/:id/messages returns the message with read_at set (not null)
+```
+
+**Why:** Proves the BullMQ worker correctly consumes read-receipt flush jobs and updates
+the database, exercising the full async job pipeline under the distributed stack.
+
+**Implementation:** `packages/frontend/e2e/multi-instance/messaging-multi-instance.spec.ts`
+— "Read-receipt flush processed by BullMQ worker"

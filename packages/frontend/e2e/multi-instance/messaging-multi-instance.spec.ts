@@ -1,0 +1,338 @@
+/**
+ * Multi-instance messaging e2e — V2.2
+ *
+ * Validates distributed behaviour when two API instances sit behind a non-sticky
+ * round-robin nginx load balancer at :4000.
+ *
+ * Prerequisites: distributed stack must be running (`npm run dev:distributed`).
+ * This file is part of the `messaging-multi-instance` Playwright project and is
+ * NOT included in the default single-instance suite (playwright.config.ts).
+ *
+ * Scenarios:
+ *   1. Cross-node SSE delivery — proves the Redis pub/sub bus relays events
+ *      across API instances (R-17.3).
+ *   2. Auth across instances — proves the Redis token store prevents 401s under
+ *      round-robin LB (R-17.10.1).
+ *   3. Read-receipt flush by BullMQ worker — proves the async job pipeline works
+ *      end-to-end (R-17.1.3).
+ */
+
+import { test, expect } from '@playwright/test'
+import http from 'node:http'
+
+// ─── Config ──────────────────────────────────────────────────────────────────
+
+const LB_URL = process.env.LB_URL ?? 'http://localhost:4000'
+const API_A = process.env.API_A_URL ?? 'http://localhost:3001'
+const API_B = process.env.API_B_URL ?? 'http://localhost:3002'
+const DB_URL =
+  process.env.DATABASE_URL ??
+  'postgresql://tournament_user:tournament_pass@localhost:5432/tournament_app'
+const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-key-change-in-production'
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function apiCall(
+  base: string,
+  path: string,
+  method: string,
+  body?: unknown,
+  token?: string
+): Promise<Response> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  return fetch(`${base}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+}
+
+function future(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString()
+}
+
+/** Sign a minimal organizer JWT — stateless, so no token store needed. */
+function signOrganizerJwt(sub: string): string {
+  // Node's crypto can sign HS256 without the `jsonwebtoken` package.
+  const { createHmac } = require('node:crypto')
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
+  const payload = Buffer.from(
+    JSON.stringify({ sub, email: `${sub}@test.local`, role: 'organizer', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 })
+  ).toString('base64url')
+  const sig = createHmac('sha256', JWT_SECRET)
+    .update(`${header}.${payload}`)
+    .digest('base64url')
+  return `${header}.${payload}.${sig}`
+}
+
+/** Open a Server-Sent Events connection to a URL and collect events for `durationMs`. */
+function collectSSEEvents(
+  url: string,
+  durationMs: number
+): Promise<{ event: string; data: string }[]> {
+  return new Promise((resolve, reject) => {
+    const events: { event: string; data: string }[] = []
+    const parsed = new URL(url)
+    const opts: http.RequestOptions = {
+      hostname: parsed.hostname,
+      port: parseInt(parsed.port || '80', 10),
+      path: parsed.pathname + parsed.search,
+      method: 'GET',
+      headers: { Accept: 'text/event-stream', 'Cache-Control': 'no-cache' },
+    }
+
+    const req = http.get(opts, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume()
+        return reject(new Error(`SSE connect failed: ${res.statusCode} to ${url}`))
+      }
+      let buf = ''
+      let currentEvent = 'message'
+
+      res.setEncoding('utf8')
+      res.on('data', (chunk: string) => {
+        buf += chunk
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            currentEvent = line.slice(6).trim()
+          } else if (line.startsWith('data:')) {
+            events.push({ event: currentEvent, data: line.slice(5).trim() })
+            currentEvent = 'message'
+          }
+        }
+      })
+      res.on('error', reject)
+    })
+    req.on('error', reject)
+
+    setTimeout(() => {
+      req.destroy()
+      resolve(events)
+    }, durationMs)
+  })
+}
+
+/** Seed a tournament + conversation directly via the API (no DB client needed). */
+async function seedTournament(organizerToken: string, base: string = LB_URL) {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  const orgId = `mi-org-${suffix}`
+
+  // Create via API (uses the organizer JWT)
+  const create = await apiCall(base, '/tournaments', 'POST', {
+    name: `MI Test ${suffix}`,
+    sport: 'pickleball',
+    matchFormat: 'singles',
+    maxPlayers: 16,
+    registrationDeadline: future(1),
+    groupStageDeadline: future(2),
+    knockoutStageDeadline: future(3),
+  }, organizerToken)
+
+  if (!create.ok) {
+    throw new Error(`Failed to create tournament: ${create.status} ${await create.text()}`)
+  }
+  const { id: tournamentId } = await create.json()
+
+  // Open registration
+  const open = await apiCall(base, `/tournaments/${tournamentId}/advance`, 'POST', { action: 'OPEN_REGISTRATION' }, organizerToken)
+  if (!open.ok) throw new Error(`Failed to open registration: ${open.status} ${await open.text()}`)
+
+  return { tournamentId }
+}
+
+/** Register a player and exchange magic-link token for a player-session token. */
+async function registerPlayer(
+  tournamentId: string,
+  base: string = LB_URL
+): Promise<{ playerToken: string; playerId: string }> {
+  const suffix = Date.now() + Math.random().toString(36).slice(2, 6)
+  const email = `player-mi-${suffix}@test.local`
+  const name = `Player MI ${suffix}`
+
+  const reg = await apiCall(base, `/tournaments/${tournamentId}/register`, 'POST', { email, name })
+  if (!reg.ok) throw new Error(`Failed to register: ${reg.status} ${await reg.text()}`)
+  const { magicLinkToken } = await reg.json()
+
+  const verify = await apiCall(
+    base,
+    `/tournaments/${tournamentId}/auth/verify?token=${encodeURIComponent(magicLinkToken)}`,
+    'GET'
+  )
+  if (!verify.ok) throw new Error(`Failed to verify: ${verify.status} ${await verify.text()}`)
+  const { playerToken, playerId } = await verify.json()
+  return { playerToken, playerId }
+}
+
+// ─── Stack check ─────────────────────────────────────────────────────────────
+
+test.beforeAll(async () => {
+  // Fail fast with a clear message if the distributed stack is not running.
+  for (const [label, url] of [
+    ['LB:4000', `${LB_URL}/health`],
+    ['API-A:3001', `${API_A}/health`],
+    ['API-B:3002', `${API_B}/health`],
+  ]) {
+    const res = await fetch(url).catch(() => null)
+    if (!res || !res.ok) {
+      throw new Error(
+        `${label} not reachable at ${url}. ` +
+        'Run `npm run dev:distributed` before executing this test project.'
+      )
+    }
+  }
+})
+
+// ─── Scenario 1: Cross-node SSE ──────────────────────────────────────────────
+
+test('Cross-node SSE delivery via load balancer', async () => {
+  /**
+   * Proof: an SSE client receives a "message.created" event even when the
+   * announcement is posted to a *different* API instance than the one serving
+   * the SSE connection.  Both instances share the Redis pub/sub bus.
+   *
+   * Approach: open one SSE stream, wait for it to attach, post an announcement,
+   * wait for relay, assert the event arrived.  Because the LB is round-robin,
+   * over repeated requests the announcement is statistically likely to land on
+   * the other instance.  To make this deterministic we post directly to API-A
+   * and open the SSE stream directly to API-B.
+   */
+  const orgSub = `mi-org-crossnode-${Date.now()}`
+  const token = signOrganizerJwt(orgSub)
+
+  // Seed the tournament via API-A so the conversation exists.
+  const { tournamentId } = await seedTournament(token, API_A)
+
+  // Open SSE on API-B (different instance from where we will POST).
+  const sseUrl = `${API_B}/tournaments/${tournamentId}/events?token=${encodeURIComponent(token)}`
+
+  // Start collecting events (5 s window).
+  const eventsPromise = collectSSEEvents(sseUrl, 5000)
+
+  // Give SSE time to attach and subscribe to the Redis channel.
+  await new Promise((r) => setTimeout(r, 1500))
+
+  // Post the announcement directly to API-A.
+  const body = `cross-node-test-${Date.now()}`
+  const announce = await apiCall(
+    API_A,
+    `/tournaments/${tournamentId}/announcements`,
+    'POST',
+    { body },
+    token
+  )
+  expect(announce.status, `Announcement POST to API-A failed: ${await announce.clone().text()}`).toBe(201)
+
+  // Wait for collection window to close.
+  const events = await eventsPromise
+
+  const matched = events.find(
+    (e) => e.event === 'message.created' && e.data.includes(body)
+  )
+  expect(
+    matched,
+    `Expected a message.created event containing "${body}" on API-B but got: ${JSON.stringify(events)}`
+  ).toBeTruthy()
+})
+
+// ─── Scenario 2: Auth across instances ───────────────────────────────────────
+
+test('Player-session auth works across round-robined instances', async () => {
+  /**
+   * Proof: player-session tokens are stored in Redis (RedisTokenStore) and are
+   * therefore shared across instances.  A token obtained via one instance is
+   * valid on another — no random 401s under round-robin LB.
+   *
+   * We make 10 authenticated requests through the LB (round-robin) and assert
+   * that all 10 return 2xx.  The history endpoint is a cheap read that exercises
+   * the token-store lookup on every request.
+   */
+  const orgSub = `mi-org-auth-${Date.now()}`
+  const orgToken = signOrganizerJwt(orgSub)
+
+  // Seed via API-A.
+  const { tournamentId } = await seedTournament(orgToken, API_A)
+
+  // Register a player and get their session token — also via API-A.
+  const { playerToken } = await registerPlayer(tournamentId, API_A)
+
+  // Now make 10 requests through the LB (round-robin hits both instances).
+  const results: number[] = []
+  for (let i = 0; i < 10; i++) {
+    const res = await apiCall(LB_URL, `/tournaments/${tournamentId}/messages`, 'GET', undefined, playerToken)
+    results.push(res.status)
+  }
+
+  const failures = results.filter((s) => s === 401)
+  expect(
+    failures.length,
+    `Got ${failures.length} × 401 in 10 requests via LB.  Status codes: ${results.join(', ')}`
+  ).toBe(0)
+
+  const successes = results.filter((s) => s === 200)
+  expect(successes.length, `Expected 10 × 200 but got: ${results.join(', ')}`).toBe(10)
+})
+
+// ─── Scenario 3: Job processing — read-receipt flush ─────────────────────────
+
+test('Read-receipt flush processed by BullMQ worker', async () => {
+  /**
+   * Proof: POST /:id/messages/:msgId/read enqueues a messaging.read_receipt.flush
+   * job in BullMQ, which the worker processes.  After a short delay, GET history
+   * returns the message with read_at set.
+   *
+   * Flow:
+   *   1. Organizer sends an announcement (creates a message + recipient row).
+   *   2. Player marks it read via the LB.
+   *   3. Wait for the BullMQ worker to process the job (up to 8 s).
+   *   4. Assert GET /messages returns the message with read_at != null.
+   */
+  const orgSub = `mi-org-rr-${Date.now()}`
+  const orgToken = signOrganizerJwt(orgSub)
+
+  // Seed via LB (round-robin).
+  const { tournamentId } = await seedTournament(orgToken, LB_URL)
+
+  // Register a player via LB.
+  const { playerToken } = await registerPlayer(tournamentId, LB_URL)
+
+  // Organizer sends a broadcast.
+  const msgBody = `rr-test-msg-${Date.now()}`
+  const announce = await apiCall(LB_URL, `/tournaments/${tournamentId}/announcements`, 'POST', { body: msgBody }, orgToken)
+  expect(announce.status, `Announcement failed: ${await announce.clone().text()}`).toBe(201)
+  const { message } = await announce.json()
+  const messageId: string = message.id
+
+  // Player marks it read via LB.
+  const markRead = await apiCall(
+    LB_URL,
+    `/tournaments/${tournamentId}/messages/${messageId}/read`,
+    'POST',
+    undefined,
+    playerToken
+  )
+  expect(markRead.status, `Mark-read failed: ${markRead.status}`).toBe(204)
+
+  // Poll GET /messages until read_at is set (worker must flush in ≤ 8 s).
+  const deadline = Date.now() + 8000
+  let readAt: string | null = null
+  while (Date.now() < deadline) {
+    const hist = await apiCall(LB_URL, `/tournaments/${tournamentId}/messages`, 'GET', undefined, playerToken)
+    if (hist.ok) {
+      const msgs: any[] = await hist.json()
+      const found = msgs.find((m: any) => m.id === messageId)
+      if (found?.read_at) {
+        readAt = found.read_at
+        break
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500))
+  }
+
+  expect(
+    readAt,
+    `Expected message ${messageId} to have read_at set within 8 s after mark-read (BullMQ worker must be running)`
+  ).not.toBeNull()
+})
