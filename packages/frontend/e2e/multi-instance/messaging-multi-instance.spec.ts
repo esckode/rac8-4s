@@ -321,7 +321,9 @@ test('Read-receipt flush processed by BullMQ worker', async () => {
   while (Date.now() < deadline) {
     const hist = await apiCall(LB_URL, `/tournaments/${tournamentId}/messages`, 'GET', undefined, playerToken)
     if (hist.ok) {
-      const msgs: any[] = await hist.json()
+      const body = await hist.json()
+      // History endpoint returns { messages: [...] }
+      const msgs: any[] = Array.isArray(body) ? body : (body.messages ?? [])
       const found = msgs.find((m: any) => m.id === messageId)
       if (found?.read_at) {
         readAt = found.read_at

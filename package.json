@@ -27,6 +27,9 @@
     "test:e2e:chromium": "playwright test --project=chromium",
     "test:e2e:firefox": "playwright test --project=firefox",
     "dev:worker": "npm run dev:worker --workspace=packages/api",
+    "dev:distributed": "bash scripts/dev-distributed.sh",
+    "dev:distributed:down": "bash scripts/dev-distributed-down.sh",
+    "test:e2e:multi-instance": "playwright test --config playwright.config.multi-instance.ts --retries=2",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "type-check": "tsc --noEmit"

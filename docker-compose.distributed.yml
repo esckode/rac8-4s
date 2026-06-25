@@ -1,0 +1,32 @@
+# docker-compose.distributed.yml — distributed dev stack for V2.2
+#
+# Starts a non-sticky nginx load balancer on :4000 in front of the two API
+# instances that you start manually with `npm run dev:distributed`.
+#
+# The two API instances (:3001 and :3002) are Node processes started on the
+# host — NOT Docker containers — because they need hot-reload (tsx watch),
+# DB migration access, and the existing .env file without complication.
+# nginx reaches them via `host.docker.internal`.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.distributed.yml up -d lb
+#   npm run dev:distributed     ← boots API-A, API-B, worker in separate shells
+#
+# Teardown:
+#   npm run dev:distributed:down
+
+services:
+  lb:
+    image: nginx:alpine
+    container_name: tournament_app_lb
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./infra/nginx/nginx-lb.conf:/etc/nginx/conf.d/default.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis
+    networks:
+      - tournament_network
+    restart: unless-stopped
