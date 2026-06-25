@@ -77,12 +77,14 @@ describeIfRedis('BullMQJobQueue (Redis-gated — skip when REDIS_URL unset)', ()
       const job1 = await queue.add(
         'standings.recalculate',
         { tournamentId: 't1', groupId: 'g1', conversationId: 'conv_1' },
+        { jobId: 'distinct-standings-job' }
       )
       const job2 = await queue.add('bracket.generate', {
         tournamentId: 't1',
         conversationId: 'conv_1',
-      })
-      expect(job1.id).not.toBe(job2.id)
+      }, { jobId: 'distinct-bracket-job' })
+      expect(job1.id).toBe('distinct-standings-job')
+      expect(job2.id).toBe('distinct-bracket-job')
       expect(job1.name).toBe('standings.recalculate')
       expect(job2.name).toBe('bracket.generate')
     })

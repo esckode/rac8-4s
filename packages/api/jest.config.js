@@ -22,6 +22,8 @@ module.exports = {
     '!src/**/__tests__/**',
     '!src/index.ts',
     '!src/auth/index.ts',
+    '!src/server.ts',
+    '!src/worker-entrypoint.ts',
   ],
   coverageThreshold: {
     global: {

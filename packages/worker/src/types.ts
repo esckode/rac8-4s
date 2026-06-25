@@ -7,8 +7,8 @@ export type JobName =
   | 'messaging.read_receipt.flush'
 
 export type JobPayload = {
-  'standings.recalculate': { tournamentId: string; groupId: string }
-  'bracket.generate': { tournamentId: string }
+  'standings.recalculate': { tournamentId: string; groupId: string; conversationId?: string }
+  'bracket.generate': { tournamentId: string; conversationId?: string }
   'email.send': { type: string; recipientIds: string[]; data: Record<string, unknown> }
   'messaging.partition.ensure': { monthsAhead?: number }
   'messaging.partition.purge': { retentionDays?: number; dropPaddingDays?: number; dryRun?: boolean }

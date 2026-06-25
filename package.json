@@ -26,6 +26,7 @@
     "test:e2e:tournament:debug": "playwright test tournament-discovery-registration.spec.ts --debug",
     "test:e2e:chromium": "playwright test --project=chromium",
     "test:e2e:firefox": "playwright test --project=firefox",
+    "dev:worker": "npm run dev:worker --workspace=packages/api",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "type-check": "tsc --noEmit"

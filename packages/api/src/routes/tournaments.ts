@@ -522,10 +522,15 @@ export default function tournamentsRouter(deps: AppDependencies) {
         : (parsed.winner === 'player1' ? match.player1_id! : match.player2_id!)
       const updated = await groupRepo.updateMatch(matchId, winnerId as string, req.body.score)
 
+      // Resolve conversation_id once — used in both the enqueue payload
+      // (so a BullMQ worker consumer emits on conversation_id, not tournamentId)
+      // and the inline broadcast (in-memory mode, where no consumer exists).
+      const cid = await conversationRepo.resolveConversation(tournamentId)
+
       // Enqueue standings recalculation job if job queue is available
       if (deps.jobQueue) {
         const jobId = `standings.recalculate:${match.group_id}`
-        await deps.jobQueue.add('standings.recalculate', { tournamentId, groupId: match.group_id }, {
+        await deps.jobQueue.add('standings.recalculate', { tournamentId, groupId: match.group_id, conversationId: cid }, {
           jobId,
           attempts: deps.config.jobs.maxAttempts,
           backoff: { type: 'exponential', delay: deps.config.jobs.backoffBase },
@@ -536,7 +541,6 @@ export default function tournamentsRouter(deps: AppDependencies) {
       // (the in-memory job queue has no consumer; standings are otherwise only
       // recomputed at read time in the bundle endpoint).
       if (deps.broadcastBus && match.group_id) {
-        const cid = await conversationRepo.resolveConversation(tournamentId)
         await processStandingsRecalculate(
           { tournamentId, groupId: match.group_id, conversationId: cid },
           { groupRepo, broadcastBus: deps.broadcastBus }

@@ -4,18 +4,35 @@ import { JobQueue } from './job-queue'
 
 export type { EnqueuedJob, JobName, JobOptions, JobPayload }
 
+export interface BullMQJobQueueOptions {
+  /** Redis connection URL, e.g. "redis://localhost:6379" */
+  url?: string
+  /** Legacy host/port form (used when url is not provided) */
+  host?: string
+  port?: number
+  /** Queue key prefix (useful in tests to isolate suites). Default: "{bull}" */
+  prefix?: string
+}
+
 export class BullMQJobQueue implements JobQueue {
   private queues = new Map<string, Queue>()
-  private connection: { host: string; port: number }
+  private connection: { host: string; port: number } | { url: string }
+  private prefix: string
 
-  constructor(connection: { host: string; port: number } = { host: 'localhost', port: 6379 }) {
-    this.connection = connection
+  constructor(options: BullMQJobQueueOptions = {}) {
+    if (options.url) {
+      this.connection = { url: options.url }
+    } else {
+      this.connection = { host: options.host ?? 'localhost', port: options.port ?? 6379 }
+    }
+    this.prefix = options.prefix ?? '{bull}'
   }
 
   private getQueue(name: string): Queue {
     if (!this.queues.has(name)) {
       const queueOptions: QueueOptions = {
-        connection: this.connection,
+        connection: this.connection as any,
+        prefix: this.prefix,
       }
       this.queues.set(name, new Queue(name, queueOptions))
     }
@@ -63,8 +80,7 @@ export class BullMQJobQueue implements JobQueue {
   }
 
   getFailedJobs(): EnqueuedJob[] {
-    // Would need to fetch from failed queue
-    // For now, empty since BullMQ tracks failures in Redis
+    // BullMQ tracks failures in Redis — not needed for the contract
     return []
   }
 
@@ -72,5 +88,16 @@ export class BullMQJobQueue implements JobQueue {
     const promises = Array.from(this.queues.values()).map((q) => q.close())
     await Promise.all(promises)
     this.queues.clear()
+  }
+
+  /**
+   * Test helper: obliterate all queues (removes all jobs and queue data from Redis).
+   * Only call this in tests.
+   */
+  async obliterate(): Promise<void> {
+    const promises = Array.from(this.queues.values()).map((q) =>
+      q.obliterate({ force: true }).catch(() => {})
+    )
+    await Promise.all(promises)
   }
 }

@@ -8,6 +8,10 @@ module.exports = {
     'src/**/*.ts',
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
+    // Redis-required implementations: tested by Redis-gated specs (skip when REDIS_URL unset)
+    '!src/bullmq-queue.ts',
+    '!src/worker.ts',
+    '!src/index.ts',
   ],
   coverageThreshold: {
     global: {
