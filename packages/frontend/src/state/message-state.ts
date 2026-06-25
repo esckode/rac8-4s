@@ -2,6 +2,8 @@ export interface MessageRecord {
   id: string
   tournamentId: string
   senderPlayerId: string
+  /** Display name of the sender, resolved from public.players.name. Null for organizer senders. */
+  senderName?: string | null
   recipientPlayerId: string | null
   matchId: string | null
   body: string

@@ -7,6 +7,8 @@ export interface MessageRow {
   id: string
   tournamentId: string
   senderPlayerId: string
+  /** Resolved from public.players.name; null when the sender has no players row (e.g. organizer). */
+  senderName: string | null
   recipientPlayerId: string | null
   matchId: string | null
   body: string
@@ -67,6 +69,7 @@ function rowToMessage(row: any): MessageRow {
     id: row.id,
     tournamentId: row.tournament_id,
     senderPlayerId: row.sender_player_id,
+    senderName: row.sender_name ?? null,
     recipientPlayerId: row.recipient_player_id ?? null,
     matchId: row.match_id ?? null,
     body: row.body,
@@ -250,7 +253,7 @@ export class MessageRepository {
     if (before) {
       // Params: $1=tournamentId, $2=before.createdAt, $3=before.id, $4=limit,
       //         $5=viewerPlayerId (optional)
-      const joinClause = viewerPlayerId
+      const recipientsJoin = viewerPlayerId
         ? `LEFT JOIN messaging.message_recipients mr
                ON mr.message_id = m.id AND mr.player_id = $5`
         : ''
@@ -259,9 +262,11 @@ export class MessageRepository {
 
       const result = await this.pool.query(
         `SELECT m.id, m.tournament_id, m.sender_player_id, m.recipient_player_id,
-                m.match_id, m.body, m.created_at, m.legal_hold${readAtSelect}
+                m.match_id, m.body, m.created_at, m.legal_hold,
+                p.name AS sender_name${readAtSelect}
          FROM messaging.messages m
-         ${joinClause}
+         LEFT JOIN public.players p ON p.id = m.sender_player_id
+         ${recipientsJoin}
          WHERE m.tournament_id = $1
            AND (date_trunc('milliseconds', m.created_at), m.id)
                < (date_trunc('milliseconds', $2::timestamptz), $3)
@@ -273,7 +278,7 @@ export class MessageRepository {
     }
 
     // Params: $1=tournamentId, $2=limit, $3=viewerPlayerId (optional)
-    const joinClause = viewerPlayerId
+    const recipientsJoin = viewerPlayerId
       ? `LEFT JOIN messaging.message_recipients mr
              ON mr.message_id = m.id AND mr.player_id = $3`
       : ''
@@ -282,9 +287,11 @@ export class MessageRepository {
 
     const result = await this.pool.query(
       `SELECT m.id, m.tournament_id, m.sender_player_id, m.recipient_player_id,
-              m.match_id, m.body, m.created_at, m.legal_hold${readAtSelect}
+              m.match_id, m.body, m.created_at, m.legal_hold,
+              p.name AS sender_name${readAtSelect}
        FROM messaging.messages m
-       ${joinClause}
+       LEFT JOIN public.players p ON p.id = m.sender_player_id
+       ${recipientsJoin}
        WHERE m.tournament_id = $1
        ORDER BY m.created_at ASC, m.id ASC
        LIMIT $2`,
@@ -304,7 +311,7 @@ export class MessageRepository {
     const readAtSelect = viewerPlayerId ? ', mr.read_at AS viewer_read_at' : ''
 
     if (before) {
-      const joinClause = viewerPlayerId
+      const recipientsJoin = viewerPlayerId
         ? `LEFT JOIN messaging.message_recipients mr
                ON mr.message_id = m.id AND mr.player_id = $5`
         : ''
@@ -313,9 +320,11 @@ export class MessageRepository {
 
       const result = await this.pool.query(
         `SELECT m.id, m.tournament_id, m.sender_player_id, m.recipient_player_id,
-                m.match_id, m.body, m.created_at, m.legal_hold${readAtSelect}
+                m.match_id, m.body, m.created_at, m.legal_hold,
+                p.name AS sender_name${readAtSelect}
          FROM messaging.messages m
-         ${joinClause}
+         LEFT JOIN public.players p ON p.id = m.sender_player_id
+         ${recipientsJoin}
          WHERE m.conversation_id = $1
            AND (date_trunc('milliseconds', m.created_at), m.id)
                < (date_trunc('milliseconds', $2::timestamptz), $3)
@@ -326,7 +335,7 @@ export class MessageRepository {
       return result.rows.map(rowToMessage)
     }
 
-    const joinClause = viewerPlayerId
+    const recipientsJoin = viewerPlayerId
       ? `LEFT JOIN messaging.message_recipients mr
              ON mr.message_id = m.id AND mr.player_id = $3`
       : ''
@@ -335,15 +344,30 @@ export class MessageRepository {
 
     const result = await this.pool.query(
       `SELECT m.id, m.tournament_id, m.sender_player_id, m.recipient_player_id,
-              m.match_id, m.body, m.created_at, m.legal_hold${readAtSelect}
+              m.match_id, m.body, m.created_at, m.legal_hold,
+              p.name AS sender_name${readAtSelect}
        FROM messaging.messages m
-       ${joinClause}
+       LEFT JOIN public.players p ON p.id = m.sender_player_id
+       ${recipientsJoin}
        WHERE m.conversation_id = $1
        ORDER BY m.created_at ASC, m.id ASC
        LIMIT $2`,
       params
     )
     return result.rows.map(rowToMessage)
+  }
+
+  /**
+   * Look up a player's display name by their ID.
+   * Returns null when the player has no row in public.players (e.g. organizer-only accounts).
+   * Used by send paths to include senderName in the SSE message.created payload.
+   */
+  async getPlayerName(playerId: string): Promise<string | null> {
+    const result = await this.pool.query(
+      'SELECT name FROM public.players WHERE id = $1',
+      [playerId]
+    )
+    return result.rows[0]?.name ?? null
   }
 
   /**

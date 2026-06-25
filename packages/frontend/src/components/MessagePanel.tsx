@@ -111,7 +111,11 @@ export const MessagePanel: React.FC<Props> = ({ tournamentId, active = false }) 
           >
             <p className="text-[--ink-900]">{m.body}</p>
             <p className="text-xs text-[--ink-500] mt-1">
-              {new Date(m.createdAt).toLocaleTimeString()}
+              {m.senderName != null ? (
+                <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
+              ) : (
+                new Date(m.createdAt).toLocaleTimeString()
+              )}
               {m.recipientPlayerId === null && (
                 <span className="ml-2 font-medium text-[--court-600]">📢 Announcement</span>
               )}

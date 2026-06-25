@@ -73,10 +73,12 @@ export default function messagesRouter(deps: AppDependencies) {
       const conversationId = await conversationRepo.resolveConversation(tournamentId)
 
       if (deps.broadcastBus) {
+        const senderName = await messageRepo.getPlayerName(message.senderPlayerId)
         deps.broadcastBus.emit(conversationId, 'message.created', {
           id: message.id,
           tournamentId: message.tournamentId,
           senderPlayerId: message.senderPlayerId,
+          senderName,
           recipientPlayerId: null,
           matchId: message.matchId,
           body: message.body,
@@ -160,10 +162,12 @@ export default function messagesRouter(deps: AppDependencies) {
       const conversationId = await conversationRepo.resolveConversation(tournamentId)
 
       if (deps.broadcastBus) {
+        const senderName = await messageRepo.getPlayerName(message.senderPlayerId)
         deps.broadcastBus.emit(conversationId, 'message.created', {
           id: message.id,
           tournamentId: message.tournamentId,
           senderPlayerId: message.senderPlayerId,
+          senderName,
           recipientPlayerId: message.recipientPlayerId,
           matchId: message.matchId,
           body: message.body,
