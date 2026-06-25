@@ -64,14 +64,15 @@ export default function messagesRouter(deps: AppDependencies) {
         return res.status(400).json({ code: 'VALIDATION_ERROR', message: bodyErr })
       }
 
-      const { message, recipientCount } = await messageRepo.sendBroadcast({
+      const { message, recipientCount, recipientIds } = await messageRepo.sendBroadcast({
         tournamentId,
         senderPlayerId: payload.sub,
         body: req.body.body,
       })
 
+      const conversationId = await conversationRepo.resolveConversation(tournamentId)
+
       if (deps.broadcastBus) {
-        const conversationId = await conversationRepo.resolveConversation(tournamentId)
         deps.broadcastBus.emit(conversationId, 'message.created', {
           id: message.id,
           tournamentId: message.tournamentId,
@@ -83,6 +84,18 @@ export default function messagesRouter(deps: AppDependencies) {
           createdAt: message.createdAt,
           read_at: null,
         })
+      }
+
+      // Enqueue one messaging.notify job per recipient (deduped by jobId so a
+      // burst of broadcasts collapses to one job per recipient — debounce).
+      if (deps.jobQueue) {
+        for (const recipientId of recipientIds) {
+          await deps.jobQueue.add(
+            'messaging.notify',
+            { conversationId, tournamentId },
+            { jobId: `notify:${conversationId}:${recipientId}` }
+          )
+        }
       }
 
       log.info('announcement.sent', {
@@ -144,8 +157,9 @@ export default function messagesRouter(deps: AppDependencies) {
         matchId: matchId ?? undefined,
       })
 
+      const conversationId = await conversationRepo.resolveConversation(tournamentId)
+
       if (deps.broadcastBus) {
-        const conversationId = await conversationRepo.resolveConversation(tournamentId)
         deps.broadcastBus.emit(conversationId, 'message.created', {
           id: message.id,
           tournamentId: message.tournamentId,
@@ -157,6 +171,15 @@ export default function messagesRouter(deps: AppDependencies) {
           createdAt: message.createdAt,
           read_at: null,
         })
+      }
+
+      // Enqueue messaging.notify for the recipient (deduped by jobId — debounce).
+      if (deps.jobQueue) {
+        await deps.jobQueue.add(
+          'messaging.notify',
+          { conversationId, tournamentId },
+          { jobId: `notify:${conversationId}:${effectiveRecipient}` }
+        )
       }
 
       log.info('message.sent', {

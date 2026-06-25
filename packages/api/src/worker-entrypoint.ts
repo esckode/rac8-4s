@@ -19,7 +19,11 @@ import { createWorker } from '@worker/worker'
 import { registerPartitionJobs } from '@worker/partition-scheduler'
 import { processReadReceiptFlush } from './workers/read-receipt-processor'
 import { processPartitionEnsure, processPartitionPurge } from './workers/partition-processor'
+import { processMessagingNotify } from './workers/notify-processor'
 import { PartitionManager } from './services/partition-manager'
+import { ServiceEmailAdapter } from './email-service-adapter'
+import { createEmailService } from './services/email-service'
+import { DEFAULT_APP_CONFIG } from './config'
 import { getLogger } from './logger'
 
 const log = getLogger('worker-entrypoint')
@@ -61,6 +65,24 @@ async function main() {
     })
   }
 
+  // ── Email adapter for the notify worker ────────────────────────────────────
+  let emailAdapter: ServiceEmailAdapter | undefined
+  try {
+    const emailService = createEmailService(DEFAULT_APP_CONFIG.email.service, {
+      fromAddress: DEFAULT_APP_CONFIG.email.fromAddress,
+      sendgridApiKey: process.env.SENDGRID_API_KEY || undefined,
+      awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || undefined,
+      awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || undefined,
+      awsRegion: process.env.AWS_REGION || undefined,
+    })
+    emailAdapter = new ServiceEmailAdapter(emailService, DEFAULT_APP_CONFIG.email.fromAddress)
+    log.info('email.service.initialized', { service: DEFAULT_APP_CONFIG.email.service })
+  } catch (err) {
+    log.warn('email.service.initialization_failed', {
+      message: err instanceof Error ? err.message : String(err),
+    })
+  }
+
   const workers = [
     createWorker({
       queueName: 'messaging.read_receipt.flush',
@@ -85,6 +107,18 @@ async function main() {
         await processPartitionPurge(job.data, { pool })
       },
     }),
+
+    ...(emailAdapter
+      ? [
+          createWorker({
+            queueName: 'messaging.notify',
+            redisUrl: REDIS_URL!,
+            processor: async (job) => {
+              await processMessagingNotify(job.data, { pool, emailAdapter: emailAdapter! })
+            },
+          }),
+        ]
+      : []),
   ]
 
   log.info('worker.started', { queues: workers.map((_, i) => i) })

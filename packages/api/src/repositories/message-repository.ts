@@ -178,23 +178,15 @@ export class MessageRepository {
    */
   async sendBroadcast(
     input: SendBroadcastInput
-  ): Promise<{ message: MessageRow; recipientCount: number }> {
+  ): Promise<{ message: MessageRow; recipientCount: number; recipientIds: string[] }> {
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
 
-      // First count participants so we can return the count.
-      const countResult = await client.query(
-        `SELECT COUNT(*) AS n FROM public.player_registrations WHERE tournament_id = $1`,
-        [input.tournamentId]
-      )
-      const recipientCount = Number(countResult.rows[0].n)
-
       const conversationId = await this.resolveConversationId(client, input.tournamentId)
 
-      // Single CTE: insert message + fan-out recipient rows in one statement.
-      // The SELECT ... CROSS JOIN produces N recipient rows in a single INSERT,
-      // satisfying the "single multi-row INSERT" requirement.
+      // Single CTE: insert message + fan-out recipient rows in one statement,
+      // returning recipient player_ids for job enqueue.
       const result = await client.query(
         `WITH msg AS (
            INSERT INTO messaging.messages
@@ -210,14 +202,21 @@ export class MessageRepository {
            FROM msg
            CROSS JOIN public.player_registrations pr
            WHERE pr.tournament_id = $1
+           RETURNING player_id
          )
-         SELECT * FROM msg`,
+         SELECT
+           (SELECT row_to_json(msg.*) FROM msg) AS message_row,
+           array_agg(ins_recipients.player_id) AS recipient_ids
+         FROM ins_recipients`,
         [input.tournamentId, conversationId, input.senderPlayerId, input.body]
       )
 
       await client.query('COMMIT')
 
-      const message = rowToMessage(result.rows[0])
+      const row = result.rows[0]
+      const message = rowToMessage(row.message_row)
+      const recipientIds: string[] = row.recipient_ids ?? []
+      const recipientCount = recipientIds.length
 
       log.info('announcement.sent', {
         tournamentId: input.tournamentId,
@@ -226,7 +225,7 @@ export class MessageRepository {
         recipientCount,
       })
 
-      return { message, recipientCount }
+      return { message, recipientCount, recipientIds }
     } catch (err) {
       await client.query('ROLLBACK')
       throw err
