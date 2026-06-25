@@ -56,6 +56,25 @@ describe('Messaging API', () => {
     return { organizerId, orgToken, tournament }
   }
 
+  /**
+   * Create a group match pairing two players as opponents in a tournament.
+   * V5.1: required before a player can DM another via POST /messages.
+   */
+  async function makeOpponents(tournamentId: string, player1Id: string, player2Id: string) {
+    const groupId = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+    await pool.query(
+      `INSERT INTO public.groups (id, tournament_id, name, created_at)
+       VALUES ($1, $2, 'Test Group', now())`,
+      [groupId, tournamentId]
+    )
+    await pool.query(
+      `INSERT INTO public.group_matches
+         (id, group_id, tournament_id, format, player1_id, player2_id, status, created_at, updated_at)
+       VALUES ($1, $2, $3, 'singles', $4, $5, 'pending', now(), now())`,
+      [`gm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, groupId, tournamentId, player1Id, player2Id]
+    )
+  }
+
   // ──────────────────────────────────────────────────────────────────
   // POST /tournaments/:id/messages — player DM
   // ──────────────────────────────────────────────────────────────────
@@ -124,7 +143,9 @@ describe('Messaging API', () => {
       it('persists the DM and returns 201 with the created message', async () => {
         const { tournament } = await createOrganizerWithTournament()
         const { player: sender, sessionToken } = await createPlayerWithSession(tournament.id)
-        const recipient = await PlayerFactory.create(pool)
+        const { player: recipient } = await createPlayerWithSession(tournament.id)
+        // V5.1: must be matched opponents to send a DM
+        await makeOpponents(tournament.id, sender.id, recipient.id)
 
         const res = await request(app)
           .post(`/tournaments/${tournament.id}/messages`)
@@ -140,8 +161,10 @@ describe('Messaging API', () => {
 
       it('emits message.created on broadcastBus AFTER persist (not before)', async () => {
         const { tournament } = await createOrganizerWithTournament()
-        const { sessionToken } = await createPlayerWithSession(tournament.id)
-        const recipient = await PlayerFactory.create(pool)
+        const { player: sender, sessionToken } = await createPlayerWithSession(tournament.id)
+        const { player: recipient } = await createPlayerWithSession(tournament.id)
+        // V5.1: must be matched opponents to send a DM
+        await makeOpponents(tournament.id, sender.id, recipient.id)
 
         // Resolve the conversation_id — the bus now keys on conversation_id, not tournamentId
         const convRepo = new ConversationRepository(pool)
@@ -175,8 +198,10 @@ describe('Messaging API', () => {
         const busEmit = jest.spyOn(broadcastBus, 'emit')
 
         const { tournament } = await createOrganizerWithTournament()
-        const { sessionToken } = await createPlayerWithSession(tournament.id)
-        const recipient = await PlayerFactory.create(pool)
+        const { player: sender, sessionToken } = await createPlayerWithSession(tournament.id)
+        const { player: recipient } = await createPlayerWithSession(tournament.id)
+        // V5.1: must be matched opponents to send a DM
+        await makeOpponents(tournament.id, sender.id, recipient.id)
 
         const res = await request(app)
           .post(`/tournaments/${tournament.id}/messages`)
@@ -573,7 +598,9 @@ describe('Messaging API', () => {
     it('message.created SSE payload includes senderName for player DM', async () => {
       const { tournament } = await createOrganizerWithTournament()
       const { player: sender, sessionToken } = await createPlayerWithSession(tournament.id)
-      const recipient = await PlayerFactory.create(pool)
+      const { player: recipient } = await createPlayerWithSession(tournament.id)
+      // V5.1: must be matched opponents to send a DM
+      await makeOpponents(tournament.id, sender.id, recipient.id)
 
       const convRepo = new ConversationRepository(pool)
       const conversationId = await convRepo.resolveConversation(tournament.id)
@@ -625,10 +652,11 @@ describe('Messaging API', () => {
     })
 
     it('GET /messages history includes senderName for each message', async () => {
-      const { orgToken, tournament } = await createOrganizerWithTournament()
+      const { organizerId, orgToken, tournament } = await createOrganizerWithTournament()
       const { player: sender, sessionToken } = await createPlayerWithSession(tournament.id)
 
-      // Seed a broadcast from the organizer; then a DM from the player
+      // Seed a broadcast from the organizer; then a DM from the player to the organizer
+      // (organizer is exempt from opponent check — dispute DM).
       await request(app)
         .post(`/tournaments/${tournament.id}/announcements`)
         .set('Authorization', `Bearer ${orgToken}`)
@@ -638,7 +666,7 @@ describe('Messaging API', () => {
       await request(app)
         .post(`/tournaments/${tournament.id}/messages`)
         .set('Authorization', `Bearer ${sessionToken}`)
-        .send({ body: 'Player message', recipientPlayerId: sender.id })
+        .send({ body: 'Player message', recipientPlayerId: organizerId })
         .expect(201)
 
       const res = await request(app)
@@ -664,6 +692,8 @@ describe('Messaging API', () => {
       const { orgToken, tournament } = await createOrganizerWithTournament()
       const { player: sender1, sessionToken: token1 } = await createPlayerWithSession(tournament.id)
       const { player: sender2, sessionToken: token2 } = await createPlayerWithSession(tournament.id)
+      // V5.1: must be matched opponents to send DMs to each other
+      await makeOpponents(tournament.id, sender1.id, sender2.id)
 
       await request(app)
         .post(`/tournaments/${tournament.id}/messages`)

@@ -120,8 +120,24 @@ describe('messaging.notify — integration', () => {
     it('enqueues a messaging.notify job after a DM', async () => {
       jobQueue.clear()
       const { tournament } = await createOrganizerWithTournament()
-      const { sessionToken } = await createPlayerWithSession(tournament.id)
-      const recipient = await PlayerFactory.create(pool)
+      const { player: sender, sessionToken } = await createPlayerWithSession(tournament.id)
+      const { player: recipient } = await createPlayerWithSession(tournament.id)
+
+      // V5.1: sender and recipient must be matched opponents to send a DM.
+      // Insert a group match to establish the opponent relationship.
+      const groupId = `grp_notify_${Date.now()}`
+      await pool.query(
+        `INSERT INTO public.groups (id, tournament_id, name, created_at)
+         VALUES ($1, $2, 'Notify Test Group', now())`,
+        [groupId, tournament.id]
+      )
+      const matchId = `gm_notify_${Date.now()}`
+      await pool.query(
+        `INSERT INTO public.group_matches
+           (id, group_id, tournament_id, format, player1_id, player2_id, status, created_at, updated_at)
+         VALUES ($1, $2, $3, 'singles', $4, $5, 'pending', now(), now())`,
+        [matchId, groupId, tournament.id, sender.id, recipient.id]
+      )
 
       const res = await request(app)
         .post(`/tournaments/${tournament.id}/messages`)

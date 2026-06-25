@@ -244,6 +244,20 @@ describe('V1.0 conversations abstraction', () => {
       const sender = await PlayerFactory.createAndRegister(pool, t.id)
       const recipient = await PlayerFactory.createAndRegister(pool, t.id)
 
+      // V5.1: sender and recipient must be matched opponents to send a DM via HTTP.
+      const groupId = `grp_convtest_${Date.now()}`
+      await pool.query(
+        `INSERT INTO public.groups (id, tournament_id, name, created_at)
+         VALUES ($1, $2, 'Conv Test Group', now())`,
+        [groupId, t.id]
+      )
+      await pool.query(
+        `INSERT INTO public.group_matches
+           (id, group_id, tournament_id, format, player1_id, player2_id, status, created_at, updated_at)
+         VALUES ($1, $2, $3, 'singles', $4, $5, 'pending', now(), now())`,
+        [`gm_convtest_${Date.now()}`, groupId, t.id, sender.id, recipient.id]
+      )
+
       const tokenStore = new InMemoryTokenStore()
       const bus = new BroadcastBus()
       const jobQueue = new InMemoryJobQueue()

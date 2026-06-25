@@ -181,12 +181,10 @@ describe('V5.1 — Messaging threads & targeting', () => {
       // Players registered in both tournaments, but match is in t2
       const { player: sender, sessionToken } = await createPlayerWithSession(t1.id)
       const { player: opponent } = await createPlayerWithSession(t1.id)
-      await pool.query(
-        `INSERT INTO public.player_registrations (player_id, tournament_id, created_at)
-         VALUES ($1, $2, now()), ($3, $2, now())
-         ON CONFLICT DO NOTHING`,
-        [sender.id, t2.id, opponent.id]
-      )
+      // Register both players in t2 as well
+      const playerRepo2 = new (await import('../../db')).PlayerRepository(pool)
+      await playerRepo2.createRegistration(sender.id, t2.id).catch(() => { /* ignore duplicate */ })
+      await playerRepo2.createRegistration(opponent.id, t2.id).catch(() => { /* ignore duplicate */ })
       await createGroupMatch(t2.id, sender.id, opponent.id)
 
       // Sending DM in t1 — match is in t2, so NOT an opponent in t1

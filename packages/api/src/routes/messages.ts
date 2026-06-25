@@ -112,6 +112,51 @@ export default function messagesRouter(deps: AppDependencies) {
     }
   })
 
+  // PATCH /tournaments/:id/messages/:msgId/legal-hold — organizer sets legal_hold
+  // Registered before POST /:id/messages/:msgId/read and POST /:id/messages to
+  // respect §10 route ordering (more-specific literal paths before parameterized).
+  router.patch('/:id/messages/:msgId/legal-hold', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.id as string
+      const msgId = req.params.msgId as string
+
+      // A player session is not authorized for this action (organizer-only).
+      let isPlayerSession = false
+      try {
+        await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        isPlayerSession = true
+      } catch {
+        // not a player session — try organizer below
+      }
+      if (isPlayerSession) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the tournament organizer may set legal_hold' })
+      }
+
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+
+      const tournament = await tournamentRepo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      const { legalHold } = req.body
+      if (typeof legalHold !== 'boolean') {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'legalHold must be a boolean' })
+      }
+
+      const updated = await messageRepo.setLegalHold(tournamentId, msgId, legalHold)
+      if (!updated) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Message not found' })
+      }
+
+      res.status(200).json(updated)
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // POST /tournaments/:id/messages/:msgId/read — mark read (player session)
   // Registered before POST /:id/messages (same prefix; more specific path first)
   //
@@ -147,6 +192,29 @@ export default function messagesRouter(deps: AppDependencies) {
       }
 
       const { recipientPlayerId, matchId } = req.body
+
+      // Opponent-only DM authorization (V5.1):
+      // When a recipientPlayerId is provided, the sender must be a matched opponent of
+      // the recipient in this tournament, OR the recipient must be the tournament organizer
+      // (for dispute threads). Players may not DM arbitrary participants.
+      if (recipientPlayerId) {
+        const tournament = await tournamentRepo.findById(tournamentId)
+        if (!tournament) {
+          return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+        }
+        const allowed = await messageRepo.areOpponents(
+          tournamentId,
+          session.playerId,
+          recipientPlayerId,
+          tournament.creator_id
+        )
+        if (!allowed) {
+          return res.status(403).json({
+            code: 'FORBIDDEN',
+            message: 'You may only send direct messages to your matched opponents or the organizer',
+          })
+        }
+      }
 
       // If no recipientPlayerId, fall back to sender (self-addressed coordination note)
       const effectiveRecipient = recipientPlayerId ?? session.playerId
@@ -244,8 +312,16 @@ export default function messagesRouter(deps: AppDependencies) {
         }
       }
 
+      // Optional thread filter: 'announcements' | 'dm:{playerId}' | 'match:{matchId}'
+      // For 'dm:{playerId}' the viewerPlayerId scopes results to only their conversation.
+      const thread = req.query.thread as string | undefined
+
+      // Security: 'dm:{playerId}' without a viewer (organizer auth) leaks nothing
+      // because the query returns messages where the named player is a party.
+      // Organizers see the full history regardless (they have no viewerPlayerId).
+
       const conversationId = await conversationRepo.resolveConversation(tournamentId)
-      const messages = await messageRepo.getHistoryByConversation({ conversationId, limit, before, viewerPlayerId })
+      const messages = await messageRepo.getHistoryByConversation({ conversationId, limit, before, viewerPlayerId, thread })
 
       res.status(200).json({ messages })
     } catch (err) {

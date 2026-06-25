@@ -51,6 +51,13 @@ export interface GetHistoryByConversationInput {
   before?: HistoryCursor
   /** When provided, LEFT JOINs message_recipients to include per-player read_at. */
   viewerPlayerId?: string
+  /**
+   * Optional thread filter. Shapes:
+   * - `'announcements'` — broadcasts only (recipient_player_id IS NULL)
+   * - `'dm:{playerId}'` — DM thread between viewerPlayerId and the named player
+   * - `'match:{matchId}'` — all messages scoped to a specific match_id
+   */
+  thread?: string
 }
 
 export interface MarkReadInput {
@@ -305,18 +312,80 @@ export class MessageRepository {
    * Mirrors getHistory but keys on conversation_id rather than tournament_id,
    * making it the forward-compatible variant (works for both tournament and
    * group conversations once Player Groups is built).
+   *
+   * Supports optional thread filtering via `input.thread`:
+   * - `'announcements'` — broadcasts only (recipient_player_id IS NULL)
+   * - `'dm:{playerId}'` — DM thread between viewerPlayerId and the named player
+   *    (only messages where viewer is sender or recipient, other party is playerId)
+   * - `'match:{matchId}'` — all messages with the given match_id
+   *
+   * When `thread = 'dm:{playerId}'` the viewer is automatically scoped: only
+   * messages where viewerPlayerId is a party are returned, preventing leakage.
    */
   async getHistoryByConversation(input: GetHistoryByConversationInput): Promise<MessageRow[]> {
-    const { conversationId, limit, before, viewerPlayerId } = input
+    const { conversationId, limit, before, viewerPlayerId, thread } = input
+
+    // Build dynamic WHERE fragments for thread filtering.
+    // We use a growing params array; $1 = conversationId, then extras as needed.
+    const params: unknown[] = [conversationId]
+    const whereExtras: string[] = []
+
+    if (thread) {
+      if (thread === 'announcements') {
+        whereExtras.push('m.recipient_player_id IS NULL')
+      } else if (thread.startsWith('dm:')) {
+        const otherPlayerId = thread.slice(3)
+        params.push(otherPlayerId)         // next param index
+        const pi = params.length            // e.g. $2
+        if (viewerPlayerId) {
+          params.push(viewerPlayerId)
+          const vi = params.length          // e.g. $3
+          // Messages in this DM thread: (viewer→other) OR (other→viewer)
+          whereExtras.push(
+            `((m.sender_player_id = $${vi} AND m.recipient_player_id = $${pi})` +
+            ` OR (m.sender_player_id = $${pi} AND m.recipient_player_id = $${vi}))`
+          )
+        } else {
+          // No viewer — still filter by the named player being either party
+          whereExtras.push(
+            `(m.sender_player_id = $${pi} OR m.recipient_player_id = $${pi})`
+          )
+        }
+      } else if (thread.startsWith('match:')) {
+        const matchId = thread.slice(6)
+        params.push(matchId)
+        const mi = params.length
+        whereExtras.push(`m.match_id = $${mi}`)
+      }
+      // Unknown thread values are silently ignored (no extra filter = full history)
+    }
+
+    // For 'dm:' without thread: when there's a viewerPlayerId and NO thread filter,
+    // the default returns ALL messages visible in the conversation (announcements +
+    // the viewer's own DMs + all other messages they can see). This is backward-compat.
+
+    const whereExtrasSql = whereExtras.length > 0
+      ? ' AND ' + whereExtras.join(' AND ')
+      : ''
+
+    // Add read_at join after WHERE extras params so param indices are stable
     const readAtSelect = viewerPlayerId ? ', mr.read_at AS viewer_read_at' : ''
 
     if (before) {
-      const recipientsJoin = viewerPlayerId
-        ? `LEFT JOIN messaging.message_recipients mr
-               ON mr.message_id = m.id AND mr.player_id = $5`
-        : ''
-      const params: unknown[] = [conversationId, before.createdAt, before.id, limit]
-      if (viewerPlayerId) params.push(viewerPlayerId)
+      params.push(before.createdAt)
+      const beforeAtIdx = params.length
+      params.push(before.id)
+      const beforeIdIdx = params.length
+      params.push(limit)
+      const limitIdx = params.length
+
+      let recipientsJoin = ''
+      if (viewerPlayerId) {
+        params.push(viewerPlayerId)
+        const vrIdx = params.length
+        recipientsJoin = `LEFT JOIN messaging.message_recipients mr
+               ON mr.message_id = m.id AND mr.player_id = $${vrIdx}`
+      }
 
       const result = await this.pool.query(
         `SELECT m.id, m.tournament_id, m.sender_player_id, m.recipient_player_id,
@@ -325,22 +394,26 @@ export class MessageRepository {
          FROM messaging.messages m
          LEFT JOIN public.players p ON p.id = m.sender_player_id
          ${recipientsJoin}
-         WHERE m.conversation_id = $1
+         WHERE m.conversation_id = $1${whereExtrasSql}
            AND (date_trunc('milliseconds', m.created_at), m.id)
-               < (date_trunc('milliseconds', $2::timestamptz), $3)
+               < (date_trunc('milliseconds', $${beforeAtIdx}::timestamptz), $${beforeIdIdx})
          ORDER BY m.created_at ASC, m.id ASC
-         LIMIT $4`,
+         LIMIT $${limitIdx}`,
         params
       )
       return result.rows.map(rowToMessage)
     }
 
-    const recipientsJoin = viewerPlayerId
-      ? `LEFT JOIN messaging.message_recipients mr
-             ON mr.message_id = m.id AND mr.player_id = $3`
-      : ''
-    const params: unknown[] = [conversationId, limit]
-    if (viewerPlayerId) params.push(viewerPlayerId)
+    params.push(limit)
+    const limitIdx = params.length
+
+    let recipientsJoin = ''
+    if (viewerPlayerId) {
+      params.push(viewerPlayerId)
+      const vrIdx = params.length
+      recipientsJoin = `LEFT JOIN messaging.message_recipients mr
+             ON mr.message_id = m.id AND mr.player_id = $${vrIdx}`
+    }
 
     const result = await this.pool.query(
       `SELECT m.id, m.tournament_id, m.sender_player_id, m.recipient_player_id,
@@ -349,9 +422,9 @@ export class MessageRepository {
        FROM messaging.messages m
        LEFT JOIN public.players p ON p.id = m.sender_player_id
        ${recipientsJoin}
-       WHERE m.conversation_id = $1
+       WHERE m.conversation_id = $1${whereExtrasSql}
        ORDER BY m.created_at ASC, m.id ASC
-       LIMIT $2`,
+       LIMIT $${limitIdx}`,
       params
     )
     return result.rows.map(rowToMessage)
@@ -467,5 +540,137 @@ export class MessageRepository {
       [input.playerId]
     )
     return Number(result.rows[0].n)
+  }
+
+  /**
+   * Check whether two players are opponents in a given tournament.
+   *
+   * A pair (A, B) are opponents if they appear on opposing sides of any
+   * match — either a group match (singles: player1_id/player2_id; doubles:
+   * via team1_id/team2_id joined to teams.player1_id/player2_id) or a
+   * knockout match (same two sides).
+   *
+   * Also returns true if one of the players is the tournament organizer
+   * (organizerId provided), enabling dispute-thread DMs to the organizer
+   * without requiring a shared match.
+   */
+  async areOpponents(
+    tournamentId: string,
+    playerAId: string,
+    playerBId: string,
+    organizerId?: string
+  ): Promise<boolean> {
+    // Exempt: if either party is the organizer of this tournament
+    if (organizerId && (playerAId === organizerId || playerBId === organizerId)) {
+      return true
+    }
+
+    // Singles group match
+    const gmSingles = await this.pool.query(
+      `SELECT 1 FROM public.group_matches
+       WHERE tournament_id = $1
+         AND format = 'singles'
+         AND (
+           (player1_id = $2 AND player2_id = $3)
+           OR
+           (player1_id = $3 AND player2_id = $2)
+         )
+       LIMIT 1`,
+      [tournamentId, playerAId, playerBId]
+    )
+    if (gmSingles.rows.length > 0) return true
+
+    // Singles knockout match
+    const kmSingles = await this.pool.query(
+      `SELECT 1 FROM public.knockout_matches
+       WHERE tournament_id = $1
+         AND format = 'singles'
+         AND (
+           (player1_id = $2 AND player2_id = $3)
+           OR
+           (player1_id = $3 AND player2_id = $2)
+         )
+       LIMIT 1`,
+      [tournamentId, playerAId, playerBId]
+    )
+    if (kmSingles.rows.length > 0) return true
+
+    // Doubles group match: playerA is in team1 AND playerB is in team2 (or vice versa)
+    const gmDoubles = await this.pool.query(
+      `SELECT 1
+       FROM public.group_matches gm
+       JOIN public.teams t1 ON gm.team1_id = t1.id
+       JOIN public.teams t2 ON gm.team2_id = t2.id
+       WHERE gm.tournament_id = $1
+         AND gm.format = 'doubles'
+         AND (
+           (
+             (t1.player1_id = $2 OR t1.player2_id = $2)
+             AND
+             (t2.player1_id = $3 OR t2.player2_id = $3)
+           )
+           OR
+           (
+             (t2.player1_id = $2 OR t2.player2_id = $2)
+             AND
+             (t1.player1_id = $3 OR t1.player2_id = $3)
+           )
+         )
+       LIMIT 1`,
+      [tournamentId, playerAId, playerBId]
+    )
+    if (gmDoubles.rows.length > 0) return true
+
+    // Doubles knockout match: same logic
+    const kmDoubles = await this.pool.query(
+      `SELECT 1
+       FROM public.knockout_matches km
+       JOIN public.teams t1 ON km.team1_id = t1.id
+       JOIN public.teams t2 ON km.team2_id = t2.id
+       WHERE km.tournament_id = $1
+         AND km.format = 'doubles'
+         AND (
+           (
+             (t1.player1_id = $2 OR t1.player2_id = $2)
+             AND
+             (t2.player1_id = $3 OR t2.player2_id = $3)
+           )
+           OR
+           (
+             (t2.player1_id = $2 OR t2.player2_id = $2)
+             AND
+             (t1.player1_id = $3 OR t1.player2_id = $3)
+           )
+         )
+       LIMIT 1`,
+      [tournamentId, playerAId, playerBId]
+    )
+    if (kmDoubles.rows.length > 0) return true
+
+    return false
+  }
+
+  /**
+   * Set legal_hold on a single message row.
+   * Returns the updated message, or null when the message is not found in this tournament.
+   */
+  async setLegalHold(
+    tournamentId: string,
+    messageId: string,
+    legalHold: boolean
+  ): Promise<MessageRow | null> {
+    const result = await this.pool.query(
+      `UPDATE messaging.messages
+       SET legal_hold = $3
+       WHERE id = $1 AND tournament_id = $2
+       RETURNING id, tournament_id, sender_player_id, recipient_player_id,
+                 match_id, body, created_at, legal_hold`,
+      [messageId, tournamentId, legalHold]
+    )
+    if (result.rows.length === 0) return null
+
+    log.info('message.legal_hold.set', { tournamentId, messageId, legalHold })
+
+    return rowToMessage(result.rows[0])
   }
 }
