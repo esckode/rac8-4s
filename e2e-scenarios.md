@@ -1248,6 +1248,77 @@ And navigating to the messages tab redirects to login
 
 ---
 
+## Feature: Messaging — threads (V5.2)
+
+Thread-model UI: channel switcher, Announcements read-only for players, "Message opponent" DM scoping, dispute threads, no arbitrary-DM affordance.
+
+### Scenario: Announcements channel is read-only for players
+
+```gherkin
+Given an authenticated player on the messages page
+When the Announcements channel is active (default)
+Then the compose input is NOT shown for the player
+And a read-only notice is displayed
+And the message list shows only broadcast messages (recipientPlayerId === null)
+```
+
+**Implementation:** `messaging-threads.spec.ts` — "Announcements channel is read-only for players"
+
+---
+
+### Scenario: Organizer can post announcements from the Announcements channel
+
+```gherkin
+Given an authenticated organizer on the messages page
+When the Announcements channel is active
+Then the announce compose form IS shown
+And posting sends to /tournaments/:id/announcements
+```
+
+**Implementation:** `messaging-threads.spec.ts` — "Organizer can post announcements from Announcements channel"
+
+---
+
+### Scenario: "Message opponent" DM reaches only the opponent
+
+```gherkin
+Given a player with a pending match against an opponent
+When the player clicks "Message opponent" on the match card
+Then a compose panel opens scoped to that match
+And sending a message calls POST /tournaments/:id/messages with recipientPlayerId=<opponentId> and matchId=<matchId>
+And only the opponent sees the DM (not other participants)
+```
+
+**Implementation:** `messaging-threads.spec.ts` — "Message opponent DM reaches only the opponent"
+
+---
+
+### Scenario: Arbitrary DM is not offered
+
+```gherkin
+Given an authenticated player on the messages page
+Then there is no "New DM" or "Start a direct message" button
+And the only way to start a DM thread is via "Message opponent" on a match card
+```
+
+**Implementation:** `messaging-threads.spec.ts` — "Arbitrary DM not offered to players"
+
+---
+
+### Scenario: Channel switcher switches threads and fetches filtered history
+
+```gherkin
+Given a player with an existing DM thread with their opponent
+And they are on the Announcements channel
+When they click on the DM thread in the channel switcher
+Then the history re-fetches with ?thread=dm:<opponentId>
+And the compose box becomes available (DM channel is writable)
+```
+
+**Implementation:** `messaging-threads.spec.ts` — "Channel switcher switches threads"
+
+---
+
 ## Feature: Messaging — multi-instance
 
 > These scenarios validate distributed behaviour when two API instances sit behind a

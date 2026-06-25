@@ -5,19 +5,23 @@ import { useTournament } from '../../hooks/useTournament'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useAuth } from '../../hooks/useAuth'
 import { MatchCard } from '../../components/shared/MatchCard'
+import type { MessageOpponentArgs } from '../../components/shared/MatchCard'
 import { ScoreSubmitForm } from '../../components/ScoreSubmitForm'
+import { MatchMessageCompose } from '../../components/MatchMessageCompose'
 import '../../styles/globals.css'
 
 type FilterStatus = 'all' | 'pending' | 'completed'
 
 export const Matches: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const { matches, isLoading, error, refetch } = useTournament(tournamentId || '')
   const { organizerRole } = usePermissions(tournamentId || '')
   const [selectedStatus, setSelectedStatus] = useState<FilterStatus>('all')
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null)
   const [scoringMatchId, setScoringMatchId] = useState<string | null>(null)
+  // V5.2: tracks the match whose opponent compose panel is open
+  const [messageOpponentTarget, setMessageOpponentTarget] = useState<MessageOpponentArgs | null>(null)
 
   if (!isAuthenticated) {
     return (
@@ -63,6 +67,10 @@ export const Matches: React.FC = () => {
 
   const handleOverride = (matchId: string) => {
     // TODO: Open score override form (Task 4.6e)
+  }
+
+  const handleMessageOpponent = (args: MessageOpponentArgs) => {
+    setMessageOpponentTarget(args)
   }
 
   if (isLoading && allMatches.length === 0) {
@@ -154,9 +162,21 @@ export const Matches: React.FC = () => {
               onClick={() => handleMatchClick(match.id)}
               onSubmitScore={handleSubmitScore}
               onOverride={handleOverride}
+              onMessageOpponent={userRole === 'player' ? handleMessageOpponent : undefined}
+              viewerPlayerId={user?.playerId ?? undefined}
             />
           ))}
         </div>
+      )}
+
+      {/* V5.2: Match-scoped DM compose panel */}
+      {messageOpponentTarget && (
+        <MatchMessageCompose
+          tournamentId={tournamentId || ''}
+          matchId={messageOpponentTarget.matchId}
+          opponentPlayerId={messageOpponentTarget.opponentPlayerId}
+          onClose={() => setMessageOpponentTarget(null)}
+        />
       )}
 
       {/* Score submission / edit form */}

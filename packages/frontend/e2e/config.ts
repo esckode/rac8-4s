@@ -266,6 +266,20 @@ export const SELECTORS = {
   ANNOUNCE_INPUT: '[data-testid="announce-input"]',
   UNREAD_BADGE: '[data-testid="messages-unread-badge"]',
   MESSAGES_TAB: '[data-testid="tab-messages"]',
+
+  // Messaging — V5.2 thread model
+  MESSAGE_THREAD_PANEL: '[data-testid="message-thread-panel"]',
+  CHANNEL_SWITCHER: '[data-testid="channel-switcher"]',
+  CHANNEL_ANNOUNCEMENTS: '[data-testid="channel-announcements"]',
+  CHANNEL_DM: (playerId: string) => `[data-testid="channel-dm-${playerId}"]`,
+  CHANNEL_MATCH: (matchId: string) => `[data-testid="channel-match-${matchId}"]`,
+  ANNOUNCEMENTS_READONLY_NOTICE: '[data-testid="announcements-readonly-notice"]',
+  MESSAGE_OPPONENT_BUTTON: '[data-testid="message-opponent-button"]',
+  MATCH_MESSAGE_COMPOSE: '[data-testid="match-message-compose"]',
+  MATCH_COMPOSE_CONTEXT: '[data-testid="match-compose-context"]',
+  MATCH_COMPOSE_CLOSE: '[data-testid="match-compose-close"]',
+  MATCH_COMPOSE_INPUT: '[data-testid="match-compose-input"]',
+  MATCH_COMPOSE_SEND: '[data-testid="match-compose-send"]',
 }
 
 // ============================================================================

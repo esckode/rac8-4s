@@ -6,6 +6,11 @@ import { LoadingSpinner } from './LoadingSpinner'
 import { Button } from './Button'
 import '../../styles/globals.css'
 
+export interface MessageOpponentArgs {
+  matchId: string
+  opponentPlayerId: string
+}
+
 export interface MatchCardProps {
   match: Match
   userRole?: 'player' | 'organizer'
@@ -13,6 +18,10 @@ export interface MatchCardProps {
   onClick?: () => void
   onSubmitScore?: (matchId: string) => void
   onOverride?: (matchId: string) => void
+  /** V5.2: called when the player taps "Message opponent" */
+  onMessageOpponent?: (args: MessageOpponentArgs) => void
+  /** V5.2: the viewer's playerId, used to identify which player is the opponent */
+  viewerPlayerId?: string
   className?: string
 }
 
@@ -23,6 +32,8 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
   onClick,
   onSubmitScore,
   onOverride,
+  onMessageOpponent,
+  viewerPlayerId,
   className,
 }) => {
   const player1 = playerCache.get(match.player1Id)
@@ -57,6 +68,22 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
   const canSubmitScore = userRole === 'player' && match.status === 'pending'
   const canEditScore = userRole === 'player' && match.status === 'completed'
   const canOverride = userRole === 'organizer'
+
+  // V5.2: "Message opponent" is available to players when both sides are known
+  // and the onMessageOpponent callback is provided.
+  const opponentPlayerId = match.player2Id
+    ? viewerPlayerId === match.player1Id
+      ? match.player2Id
+      : viewerPlayerId === match.player2Id
+        ? match.player1Id
+        : match.player2Id // default: treat player2 as opponent when viewerPlayerId unset
+    : null
+
+  const canMessageOpponent =
+    userRole === 'player' &&
+    !!onMessageOpponent &&
+    !!match.player2Id &&
+    !!opponentPlayerId
 
   return (
     <div
@@ -156,7 +183,21 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
           </Button>
         )}
 
-        {!canSubmitScore && !canEditScore && !canOverride && (
+        {canMessageOpponent && (
+          <Button
+            variant="soft"
+            size="sm"
+            data-testid="message-opponent-button"
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation()
+              onMessageOpponent!({ matchId: match.id, opponentPlayerId: opponentPlayerId! })
+            }}
+          >
+            Message opponent
+          </Button>
+        )}
+
+        {!canSubmitScore && !canEditScore && !canOverride && !canMessageOpponent && (
           <div className="flex-1" />
         )}
       </div>
