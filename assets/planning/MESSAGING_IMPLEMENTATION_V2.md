@@ -273,3 +273,16 @@ the task.
   on, while the main suite stays single-instance.
 - **Cost:** prod ElastiCache (multi-AZ) + ASG (R-17.1.2/.10.4) — infra/cost owners must sign off.
 - **Idempotency** of every worker handler is load-bearing (at-least-once under failure) — assert it.
+
+## Production-readiness gaps (must resolve before prod cutover — not blocking the build)
+- **🔴 `trust proxy` behind the LB (found in V2.3).** The app does **not** set Express `trust proxy`, so
+  `req.ip` is the **LB's IP** for all proxied traffic (nginx already forwards `X-Forwarded-For`/`X-Real-IP`).
+  Rate-limit keys (and any IP-based logging) therefore collapse to one value behind the LB. Fix: `app.set('trust proxy', …)`
+  (scoped to proxied/Redis-selected deploys) so `req.ip` is the real client. Small but important — rate
+  limiting is otherwise meaningless per-client in prod. *(The shared Redis counter itself, V2.3, is correct.)*
+- **🟠 SSE catch-up on reconnect (gap #3, still open).** Redis pub/sub is at-most-once; a client that
+  reconnects to a different instance can miss messages emitted during the gap. Add `Last-Event-ID` / backfill
+  before relying on SSE for guaranteed delivery (relevant once real multi-instance traffic flows).
+- **🟠 Prod cutover (gap #4, still open).** No task yet for ElastiCache/ASG/ALB provisioning, rolling-deploy
+  mixed-mode (instances on in-process vs Redis bus during a deploy), or live-session migration at cutover.
+  Add a closing phase before going multi-instance in prod.
