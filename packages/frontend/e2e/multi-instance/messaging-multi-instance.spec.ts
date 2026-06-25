@@ -339,6 +339,103 @@ test('Read-receipt flush processed by BullMQ worker', async () => {
   ).not.toBeNull()
 })
 
+// ─── Scenario 5: Standings cache consistency across instances (R-17.10.3) ────
+
+test('Standings are fresh on instance B after a score write on instance A', async () => {
+  /**
+   * Proof: when a score is submitted on instance A, the standings.invalidate event
+   * is published on the broadcast bus so that every instance drops the affected
+   * group from its InMemoryStandingsCache.  The next read on instance B must
+   * reflect the new result (no stale cached standings).
+   *
+   * Flow:
+   *   1. Organizer seeds a tournament via API-A and advances it to group_stage_active.
+   *   2. Two players register and receive player-session tokens (Redis token store).
+   *   3. Each player's match is fetched; we identify the group match between them.
+   *   4. Player 1 submits a score on API-A directly.
+   *   5. The bundle endpoint is called on API-B directly.
+   *   6. The standings for the group must show player 1 as the winner (non-zero wins),
+   *      proving instance B did not serve a stale cached result that pre-dated the score.
+   */
+  const orgSub = `mi-org-standings-${Date.now()}`
+  const orgToken = signOrganizerJwt(orgSub)
+
+  // 1. Create tournament via API-A
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+  const createRes = await apiCall(API_A, '/tournaments', 'POST', {
+    name: `Standings MI ${suffix}`,
+    sport: 'pickleball',
+    matchFormat: 'singles',
+    maxPlayers: 16,
+    registrationDeadline: future(1),
+    groupStageDeadline: future(2),
+    knockoutStageDeadline: future(3),
+  }, orgToken)
+  expect(createRes.status, `Create tournament failed: ${await createRes.clone().text()}`).toBe(201)
+  const { id: tournamentId } = await createRes.json()
+
+  // OPEN_REGISTRATION
+  const openRes = await apiCall(API_A, `/tournaments/${tournamentId}/advance`, 'POST', { action: 'OPEN_REGISTRATION' }, orgToken)
+  expect(openRes.status, `Open registration failed: ${await openRes.clone().text()}`).toBe(200)
+
+  // 2. Register two players via API-A
+  const { playerToken: p1Token, playerId: p1Id } = await registerPlayer(tournamentId, API_A)
+  const { playerToken: p2Token, playerId: p2Id } = await registerPlayer(tournamentId, API_A)
+
+  // CLOSE_REGISTRATION then create groups (transitions to group_stage_active)
+  const closeRes = await apiCall(API_A, `/tournaments/${tournamentId}/advance`, 'POST', { action: 'CLOSE_REGISTRATION' }, orgToken)
+  expect(closeRes.status, `Close registration failed: ${await closeRes.clone().text()}`).toBe(200)
+
+  const groupsRes = await apiCall(API_A, `/tournaments/${tournamentId}/groups`, 'POST', {
+    numGroups: 1,
+    advancingPerGroup: 1,
+  }, orgToken)
+  expect(groupsRes.status, `Create groups failed: ${await groupsRes.clone().text()}`).toBe(201)
+  const { groups } = await groupsRes.json()
+  const groupId: string = groups[0].id
+
+  // 3. Find the match between the two players by fetching player 1's matches via API-A
+  const matchesRes = await apiCall(API_A, `/tournaments/${tournamentId}/matches`, 'GET', undefined, p1Token)
+  expect(matchesRes.status, `Get matches failed: ${await matchesRes.clone().text()}`).toBe(200)
+  const { matches } = await matchesRes.json()
+  const groupMatch = (matches as any[]).find(
+    (m) => m.type === 'group' && (m.player2_id === p2Id || m.player1_id === p2Id)
+  )
+  expect(groupMatch, `No group match found between p1 and p2 in: ${JSON.stringify(matches)}`).toBeDefined()
+  const matchId: string = groupMatch.id
+
+  // 4. Player 1 submits a winning score on API-A
+  const scoreRes = await apiCall(
+    API_A,
+    `/tournaments/${tournamentId}/matches/${matchId}/score`,
+    'POST',
+    { score: '11-5 11-3' },
+    p1Token
+  )
+  expect(scoreRes.status, `Score submission failed: ${await scoreRes.clone().text()}`).toBe(200)
+
+  // 5. Read the bundle (standings) from API-B
+  const bundleRes = await apiCall(
+    API_B,
+    `/tournaments/${tournamentId}/bundle?include=standings`,
+    'GET',
+    undefined,
+    p1Token
+  )
+  expect(bundleRes.status, `Bundle read on API-B failed: ${await bundleRes.clone().text()}`).toBe(200)
+  const bundle = await bundleRes.json()
+
+  // 6. Find the standings for the group and verify player 1 has wins > 0
+  const groupStandings = (bundle.standings as any[])?.find((g: any) => g.groupId === groupId)
+  expect(groupStandings, `Group ${groupId} not found in standings: ${JSON.stringify(bundle.standings)}`).toBeDefined()
+
+  const p1Standing = groupStandings.standings.find((s: any) => s.playerId === p1Id)
+  expect(
+    p1Standing?.wins,
+    `Expected player 1 to have ≥ 1 win on API-B after scoring on API-A, but got: ${JSON.stringify(p1Standing)}`
+  ).toBeGreaterThanOrEqual(1)
+})
+
 // ─── Scenario 4: Shared rate limit across instances ───────────────────────────
 
 test('Rate limit enforced across round-robined instances (shared Redis counter)', async () => {

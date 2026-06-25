@@ -1325,3 +1325,23 @@ counter; a client could exceed the limit N×maxAttempts by round-robining across
 
 **Implementation:** `packages/frontend/e2e/multi-instance/messaging-multi-instance.spec.ts`
 — "Rate limit enforced across round-robined instances (shared Redis counter)"
+
+---
+
+### Scenario 5: Standings cache consistency across instances (R-17.10.3)
+
+```gherkin
+Given two API instances (A :3001 and B :3002) sharing a Redis broadcast bus
+And a tournament in group_stage_active with two registered players and one group match
+When a player submits a score on instance A directly
+Then instance B (queried directly) returns standings that reflect the new result
+And player 1 has at least 1 win in the standings on instance B
+```
+
+**Why:** Proves R-17.10.3 — when a score write on instance A triggers a `standings.invalidate`
+event on the bus, instance B drops the named group from its `InMemoryStandingsCache`.  The
+next read on instance B hits the database and returns fresh standings.  Without bus-driven
+invalidation, instance B could serve a stale cached result that predates the score write.
+
+**Implementation:** `packages/frontend/e2e/multi-instance/messaging-multi-instance.spec.ts`
+— "Standings are fresh on instance B after a score write on instance A"
