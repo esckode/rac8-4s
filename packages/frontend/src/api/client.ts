@@ -6,6 +6,7 @@ import type {
   PlayerMatchesResponse,
   BracketData,
 } from '../types'
+import { notify503 } from '../context/ServiceUnavailableContext'
 
 const API_BASE = ''  // Use relative paths with Vite proxy (/api)
 
@@ -49,6 +50,9 @@ async function apiFetch<T>(
     const response = await fetch(url, fetchOptions)
 
     if (!response.ok) {
+      if (response.status === 503) {
+        notify503()
+      }
       const errorBody = await response.json().catch(() => ({ code: undefined }))
       throw createApiError(
         `API error: ${response.statusText}`,

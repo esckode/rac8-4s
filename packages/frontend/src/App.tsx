@@ -17,12 +17,20 @@ import { MyTournamentsHub } from './pages/MyTournamentsHub'
 import { PartnerRequestConfirm } from './pages/PartnerRequestConfirm'
 import { OrganizerManage } from './pages/OrganizerManage'
 import { OrganizerDashboard } from './pages/OrganizerDashboard'
+import { ServiceUnavailable } from './pages/ServiceUnavailable'
+import { useServiceUnavailable } from './context/ServiceUnavailableContext'
 import { ROUTES } from './constants/routes'
 import './styles/globals.css'
 
 
 
 export const App: React.FC = () => {
+  const { serviceUnavailable } = useServiceUnavailable()
+
+  if (serviceUnavailable) {
+    return <ServiceUnavailable />
+  }
+
   return (
     <BrowserRouter>
       <AuthProvider>

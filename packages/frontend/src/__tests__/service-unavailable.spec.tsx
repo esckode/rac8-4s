@@ -77,8 +77,10 @@ describe('ServiceUnavailableContext', () => {
 })
 
 describe('App-level 503 interception', () => {
+  const originalFetch = global.fetch
+
   afterEach(() => {
-    jest.restoreAllMocks()
+    global.fetch = originalFetch
   })
 
   /**
@@ -147,12 +149,13 @@ describe('App-level 503 interception', () => {
 
   it('apiFetch calls notify503() when the API responds with HTTP 503', async () => {
     // Mock fetch to return a 503
-    const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+    const mockFetch = jest.fn().mockResolvedValueOnce({
       ok: false,
       status: 503,
       statusText: 'Service Unavailable',
       json: async () => ({ code: 'SERVICE_UNAVAILABLE' }),
     } as Response)
+    global.fetch = mockFetch
 
     const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       const { serviceUnavailable } = useServiceUnavailable()
@@ -195,7 +198,7 @@ describe('App-level 503 interception', () => {
 
   it('apiFetch does NOT call notify503() for non-503 HTTP errors', async () => {
     // Mock fetch to return a 404
-    jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+    global.fetch = jest.fn().mockResolvedValueOnce({
       ok: false,
       status: 404,
       statusText: 'Not Found',
