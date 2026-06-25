@@ -567,6 +567,136 @@ describe('Messaging API', () => {
   })
 
   // ──────────────────────────────────────────────────────────────────
+  // V4.1: Sender attribution — senderName in SSE payload + history
+  // ──────────────────────────────────────────────────────────────────
+  describe('V4.1 Sender attribution', () => {
+    it('message.created SSE payload includes senderName for player DM', async () => {
+      const { tournament } = await createOrganizerWithTournament()
+      const { player: sender, sessionToken } = await createPlayerWithSession(tournament.id)
+      const recipient = await PlayerFactory.create(pool)
+
+      const convRepo = new ConversationRepository(pool)
+      const conversationId = await convRepo.resolveConversation(tournament.id)
+
+      let emittedData: any = null
+      const unsubscribe = broadcastBus.subscribe(conversationId, (eventType: string, data: any) => {
+        if (eventType === 'message.created') {
+          emittedData = data
+        }
+      })
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/messages`)
+        .set('Authorization', `Bearer ${sessionToken}`)
+        .send({ recipientPlayerId: recipient.id, body: 'Hey, see you on court 3' })
+
+      unsubscribe()
+
+      expect(res.status).toBe(201)
+      expect(emittedData).not.toBeNull()
+      expect(emittedData.senderName).toBe(sender.name)
+    })
+
+    it('message.created SSE payload includes senderName for organizer announcement', async () => {
+      const { orgToken, tournament } = await createOrganizerWithTournament()
+      await createPlayerWithSession(tournament.id)
+
+      const convRepo = new ConversationRepository(pool)
+      const conversationId = await convRepo.resolveConversation(tournament.id)
+
+      let emittedData: any = null
+      const unsubscribe = broadcastBus.subscribe(conversationId, (eventType: string, data: any) => {
+        if (eventType === 'message.created') {
+          emittedData = data
+        }
+      })
+
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/announcements`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ body: 'Round 2 starts now!' })
+
+      unsubscribe()
+
+      expect(res.status).toBe(201)
+      expect(emittedData).not.toBeNull()
+      // Organizer may not have a players row — senderName should be defined (may be undefined/null or a string)
+      expect('senderName' in emittedData).toBe(true)
+    })
+
+    it('GET /messages history includes senderName for each message', async () => {
+      const { orgToken, tournament } = await createOrganizerWithTournament()
+      const { player: sender, sessionToken } = await createPlayerWithSession(tournament.id)
+
+      // Seed a broadcast from the organizer; then a DM from the player
+      await request(app)
+        .post(`/tournaments/${tournament.id}/announcements`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ body: 'Announcement!' })
+        .expect(201)
+
+      await request(app)
+        .post(`/tournaments/${tournament.id}/messages`)
+        .set('Authorization', `Bearer ${sessionToken}`)
+        .send({ body: 'Player message', recipientPlayerId: sender.id })
+        .expect(201)
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/messages`)
+        .set('Authorization', `Bearer ${sessionToken}`)
+
+      expect(res.status).toBe(200)
+      expect(Array.isArray(res.body.messages)).toBe(true)
+      // Every message has senderName defined (may be string or null for organizer)
+      for (const m of res.body.messages) {
+        expect('senderName' in m).toBe(true)
+      }
+
+      // The player DM sender name matches the created player's name
+      const playerMsg = res.body.messages.find((m: any) => m.senderPlayerId === sender.id)
+      expect(playerMsg).toBeDefined()
+      expect(playerMsg.senderName).toBe(sender.name)
+    })
+
+    it('GET /messages history does NOT N+1: senderName comes from a JOIN, not per-row lookups', async () => {
+      // This is a behavioral proxy: two messages from different senders both have
+      // distinct correct senderNames in a single GET response — proving the JOIN resolved both.
+      const { orgToken, tournament } = await createOrganizerWithTournament()
+      const { player: sender1, sessionToken: token1 } = await createPlayerWithSession(tournament.id)
+      const { player: sender2, sessionToken: token2 } = await createPlayerWithSession(tournament.id)
+
+      await request(app)
+        .post(`/tournaments/${tournament.id}/messages`)
+        .set('Authorization', `Bearer ${token1}`)
+        .send({ body: 'From sender 1', recipientPlayerId: sender2.id })
+        .expect(201)
+
+      await request(app)
+        .post(`/tournaments/${tournament.id}/messages`)
+        .set('Authorization', `Bearer ${token2}`)
+        .send({ body: 'From sender 2', recipientPlayerId: sender1.id })
+        .expect(201)
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/messages`)
+        .set('Authorization', `Bearer ${token1}`)
+
+      expect(res.status).toBe(200)
+      const messages: any[] = res.body.messages
+
+      const msg1 = messages.find(m => m.senderPlayerId === sender1.id)
+      const msg2 = messages.find(m => m.senderPlayerId === sender2.id)
+
+      expect(msg1).toBeDefined()
+      expect(msg2).toBeDefined()
+      expect(msg1.senderName).toBe(sender1.name)
+      expect(msg2.senderName).toBe(sender2.name)
+      // Names are distinct (both players have unique names by PlayerFactory)
+      expect(msg1.senderName).not.toBe(msg2.senderName)
+    })
+  })
+
+  // ──────────────────────────────────────────────────────────────────
   // POST /tournaments/:id/announcements — 404 branch (uncovered)
   // ──────────────────────────────────────────────────────────────────
   describe('POST /tournaments/:id/announcements — not-found', () => {

@@ -359,6 +359,45 @@ describe('MessagePanel', () => {
   })
 })
 
+// ── V4.1 Sender attribution — "Name · time" rendering ────────────────────────
+
+describe('V4.1 Sender attribution', () => {
+  it('renders sender name followed by time for a message with senderName', async () => {
+    const msg = makeMessage({ senderName: 'Alice Smith' } as any)
+    messageStore.setHistory([msg as any])
+
+    render(<MessagePanel tournamentId="tourn_1" />)
+
+    // Both name and some time should appear in the item
+    expect(screen.getByText(/Alice Smith/)).toBeInTheDocument()
+    expect(screen.getByText(/Alice Smith\s*·/)).toBeInTheDocument()
+  })
+
+  it('renders two messages from different senders with distinguishable names', async () => {
+    const msgs = [
+      makeMessage({ id: 'msg_a', body: 'Hello', senderName: 'Alice Smith' } as any),
+      makeMessage({ id: 'msg_b', body: 'Hi back', senderName: 'Bob Jones' } as any),
+    ]
+    messageStore.setHistory(msgs as any)
+
+    render(<MessagePanel tournamentId="tourn_1" />)
+
+    expect(screen.getByText(/Alice Smith/)).toBeInTheDocument()
+    expect(screen.getByText(/Bob Jones/)).toBeInTheDocument()
+  })
+
+  it('falls back gracefully when senderName is absent (no crash)', async () => {
+    // Backward compat: messages without senderName should still render
+    const msg = makeMessage()
+    messageStore.setHistory([msg as any])
+
+    render(<MessagePanel tournamentId="tourn_1" />)
+
+    expect(screen.getByTestId('message-item')).toBeInTheDocument()
+    expect(screen.getByText('Hello')).toBeInTheDocument()
+  })
+})
+
 // ── UnreadBadge ───────────────────────────────────────────────────────────────
 
 describe('UnreadBadge', () => {
