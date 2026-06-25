@@ -338,3 +338,48 @@ test('Read-receipt flush processed by BullMQ worker', async () => {
     `Expected message ${messageId} to have read_at set within 8 s after mark-read (BullMQ worker must be running)`
   ).not.toBeNull()
 })
+
+// ─── Scenario 4: Shared rate limit across instances ───────────────────────────
+
+test('Rate limit enforced across round-robined instances (shared Redis counter)', async () => {
+  /**
+   * Proof: the Redis-backed rate-limit counter (RedisCounterStore) is shared across
+   * instances.  Without Redis, each instance has its own in-memory counter; a client
+   * could exceed the limit 2× by round-robining across 2 instances.
+   *
+   * Approach: make failed login attempts alternating between API-A and API-B directly
+   * (bypassing the LB so we control exactly which instance handles each request).
+   * After maxAttempts total failures — spread across the two instances — the next
+   * attempt via the LB should be 429.
+   *
+   * We use a non-existent account email so every attempt is a 401 (counts as a failure).
+   * maxAttempts for login is 5 (APP_LIMITS_RATE_LIMIT_LOGIN_MAX_ATTEMPTS default).
+   */
+  const suffix = `rl-mi-${Date.now()}`
+  const email = `rate-limit-mi-${suffix}@test.local`
+  const password = 'some-wrong-password'
+
+  // Alternate failed requests across API-A and API-B.
+  // 4 total failures — one short of the limit (maxAttempts=5, but the 5th triggers 429).
+  const instances = [API_A, API_B, API_A, API_B]
+  for (const instance of instances) {
+    const res = await apiCall(instance, '/api/auth/login', 'POST', { email, password })
+    // 401 = credentials rejected (counts as a failure toward rate limit)
+    // 400 = validation error (also counted toward rate limit)
+    // Either way it is NOT 429 yet.
+    expect(
+      res.status,
+      `Expected 401/400 on attempt #${instances.indexOf(instance) + 1} to ${instance}, got ${res.status}`
+    ).toBeLessThan(429)
+  }
+
+  // 5th attempt (via the LB — could land on either instance) should be 429.
+  const final = await apiCall(LB_URL, '/api/auth/login', 'POST', { email, password })
+  expect(
+    final.status,
+    `Expected 429 on the 5th combined failure across both instances, got ${final.status}: ${await final.clone().text()}`
+  ).toBe(429)
+
+  const body = await final.json()
+  expect(body.code).toBe('RATE_LIMITED')
+})

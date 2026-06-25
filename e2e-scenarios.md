@@ -1306,3 +1306,22 @@ the database, exercising the full async job pipeline under the distributed stack
 
 **Implementation:** `packages/frontend/e2e/multi-instance/messaging-multi-instance.spec.ts`
 — "Read-receipt flush processed by BullMQ worker"
+
+---
+
+### Scenario 4: Shared rate limit across instances (R-17.10.2)
+
+```gherkin
+Given two API instances sharing a Redis-backed rate-limit counter store
+And the login rate limit is set to 5 failed attempts
+When failed login attempts are spread across both instances via the load balancer (round-robin)
+Then the 5th cumulative failure returns 429 (RATE_LIMITED)
+And the limit is enforced regardless of which instance served each request
+```
+
+**Why:** Proves R-17.10.2 — the Redis-backed counter store (RedisCounterStore) shares
+rate-limit state across instances.  Without Redis, each instance has its own in-memory
+counter; a client could exceed the limit N×maxAttempts by round-robining across N instances.
+
+**Implementation:** `packages/frontend/e2e/multi-instance/messaging-multi-instance.spec.ts`
+— "Rate limit enforced across round-robined instances (shared Redis counter)"
