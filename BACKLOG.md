@@ -47,8 +47,10 @@ here.
 - TIMESTAMPTZ normalization (migration 031); messaging schema/partitioning (032/033); ≥85% coverage gate.
 
 ### 📐 Design → needs an implementation plan
-- **Player Groups** (PLAYER_GROUPS_DESIGN.md) → create `PLAYER_GROUPS_IMPLEMENTATION.md` (depends on the
-  V2 `conversations` abstraction).
+- **Player Groups** (PLAYER_GROUPS_DESIGN.md) — **fully grilled** (open items + casual edges + compliance
+  resolved, §11–§12) → create `PLAYER_GROUPS_IMPLEMENTATION.md` (depends on the V2 `conversations`
+  abstraction; carries a **compliance prerequisite**: operator DSR cascade + 18+ age gate at
+  `findOrCreatePlayerByEmail`).
 - **PWA-first frontend** (FRONTEND_PLATFORM_STRATEGY.md) → create `PWA_FRONTEND_IMPLEMENTATION.md` =
   PWA enablement (manifest, web push, service worker) **+ the Offline (`offline-error.spec.ts`) and
   Mobile/Responsive (`mobile-responsive.spec.ts`) e2e specs** ([e2e-scenarios.md](e2e-scenarios.md)) —
@@ -94,8 +96,10 @@ here.
 ### 🗒️ Open design threads (not yet grilled/decided)
 - MESSAGING_DESIGN §17.2 (offline), §17.4 (thread model), §17.5 (sender names), §17.6 (read-receipt
   visibility) — recommendations only, not yet confirmed.
-- Player Groups: **group-chat moderation policy** (abuse/reporting/leave), group discovery/privacy,
-  custom-option polls, admin role.
+- ~~Player Groups: moderation policy, group discovery/privacy, custom-option polls, admin role~~ —
+  **RESOLVED 2026-06-24** (PLAYER_GROUPS_DESIGN §11–§12). Remaining deferrals (with triggers): custom-option
+  polls, Elo leaderboard, knockout casual, 7-day idle auto-archive (gated on shared scheduler),
+  self-serve DSR UI.
 - Monetization (MONETIZATION_STRATEGY.md §6): wedge choice (transaction fee vs. organizer SaaS), pricing
   shape, payments integration (Stripe Connect), tax/compliance, free-forever community boundary.
 - Design system (DESIGN_SYSTEM.md §4): formality bar (doc-only vs. + Storybook/visual regression),
