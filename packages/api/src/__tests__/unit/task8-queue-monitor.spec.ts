@@ -65,6 +65,7 @@ const testConfig: AppConfig = {
     url: undefined,
     jobQueue: 'memory',
     sseBus: 'memory',
+    tokenStore: 'memory',
   },
 }
 

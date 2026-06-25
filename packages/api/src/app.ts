@@ -23,6 +23,7 @@ import type { AppConfig } from './config'
 import type { EmailAdapter } from './email-adapter'
 import { QueueMonitor } from './queue-monitor'
 import type { Redis } from 'ioredis'
+import { RedisHealthState, probeRedisHealth, isRedisSelected } from './redis-health'
 
 const httpLog = getLogger('http')
 
@@ -94,6 +95,12 @@ export interface AppDependencies {
   courtRepository?: any
   /** Shared ioredis client. null = in-memory mode (no Redis). */
   redis?: Redis | null
+  /**
+   * Shared Redis health state. Created externally (or auto-created by createApp) so
+   * the 503 middleware and /health/ready share the same cached status.
+   * Optional: createApp creates one if not provided.
+   */
+  redisHealthState?: RedisHealthState
 }
 
 export function createApp(deps: AppDependencies): Express {
@@ -102,6 +109,12 @@ export function createApp(deps: AppDependencies): Express {
   // Wrap queue with monitor for anomaly detection
   const monitoredQueue = deps.jobQueue ? new QueueMonitor(deps.jobQueue, deps.config) : undefined
   const appDeps = { ...deps, jobQueue: monitoredQueue }
+
+  // Shared Redis health state — shared between /health/ready and the 503 middleware
+  const healthState = deps.redisHealthState ?? new RedisHealthState()
+
+  const redisClient = deps.redis ?? null
+  const redisIsRequired = isRedisSelected(deps.config.redis)
 
   app.use(express.json())
 
@@ -118,6 +131,26 @@ export function createApp(deps: AppDependencies): Express {
     runWithRequestId(requestId, next)
   })
 
+  // ─── 503 guard — Redis-down maintenance mode ───────────────────────────────
+  // Only engages when a Redis backend is selected AND the cached health state
+  // says Redis is down. Health endpoints are exempt (ALB needs them to probe).
+  // The guard reads cached state (updated by /health/ready) so it never blocks
+  // on a synchronous Redis ping per request.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // Health endpoints must always pass through (ALB probes + admin visibility)
+    if (req.path.startsWith('/health')) return next()
+
+    if (redisIsRequired && healthState.isDown()) {
+      httpLog.warn('service.unavailable', { path: req.path, reason: 'redis-down' })
+      res.setHeader('Retry-After', '30')
+      return res.status(503).json({
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Service temporarily unavailable. Please try again shortly.',
+      })
+    }
+    next()
+  })
+
   app.use('/tournaments', tournamentsRouter(appDeps))
   // Messaging routes: /:id/announcements, /:id/messages, /:id/messages/:msgId/read.
   // Mounted after tournamentsRouter; paths are disjoint so no shadowing occurs.
@@ -128,8 +161,51 @@ export function createApp(deps: AppDependencies): Express {
   app.use('/api/analytics', analyticsRouter(appDeps))
   app.use('/api/auth', authRouter(appDeps))
 
-  // Health check — must be registered after routers so request-id middleware applies
-  const redisClient = deps.redis ?? null
+  // ─── Health endpoints ──────────────────────────────────────────────────────
+  // Must be registered AFTER routers so request-id middleware applies.
+  // Route order: static paths (/health/live, /health/ready) before parameterized.
+
+  // Liveness: process is up. Never fails on dependency outage (no restart loop).
+  app.get('/health/live', (_req: Request, res: Response) => {
+    res.status(200).json({ status: 'ok' })
+  })
+
+  // Readiness: dependencies (DB + Redis when selected) are reachable.
+  // Redis-down → 503 (ALB pulls the instance). Liveness stays 200 (no restart).
+  app.get('/health/ready', async (_req: Request, res: Response) => {
+    // Check database
+    let dbStatus: 'connected' | 'disconnected' = 'disconnected'
+    try {
+      const client = await (deps.db as Pool).connect()
+      try {
+        await client.query('SELECT 1')
+        dbStatus = 'connected'
+      } finally {
+        client.release()
+      }
+    } catch {
+      // dbStatus stays 'disconnected'
+    }
+
+    // Check Redis
+    const redisStatus = await probeRedisHealth(redisClient, redisIsRequired)
+
+    // Update cached health state for the 503 guard
+    healthState.set(redisStatus === 'down' ? 'down' : redisStatus === 'disabled' ? 'disabled' : 'up')
+
+    const isReady = dbStatus === 'connected' && redisStatus !== 'down'
+    const httpStatus = isReady ? 200 : 503
+    const body: Record<string, string> = {
+      status: isReady ? 'ok' : 'unavailable',
+      database: dbStatus,
+      redis: redisStatus === 'up' ? 'connected' : redisStatus === 'disabled' ? 'disabled' : 'down',
+    }
+
+    res.status(httpStatus).json(body)
+  })
+
+  // Legacy /health — preserved for backwards compatibility (same shape as V1.1/V1.2).
+  // Reports status but always returns 200 (liveness semantics).
   app.get('/health', async (_req: Request, res: Response) => {
     // Check database
     let dbStatus: 'connected' | 'disconnected' = 'disconnected'

@@ -365,6 +365,14 @@ export interface RedisConfig {
    * Override via SSE_BUS env var.
    */
   sseBus: 'memory' | 'redis'
+
+  /**
+   * Token store backend.
+   * Default: 'memory' (InMemoryTokenStore — no Redis required)
+   * 'redis' requires REDIS_URL and uses RedisTokenStore (V1.4).
+   * Override via TOKEN_STORE env var.
+   */
+  tokenStore: 'memory' | 'redis'
 }
 
 /**
@@ -441,9 +449,10 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     monthsAhead: 2,      // Pre-create partitions 2 months ahead of current month
   },
   redis: {
-    url: undefined,       // No Redis by default; in-memory backends are used
-    jobQueue: 'memory',   // Use in-process queue by default (no Redis needed)
-    sseBus: 'memory',     // Use in-process bus by default (no Redis needed)
+    url: undefined,        // No Redis by default; in-memory backends are used
+    jobQueue: 'memory',    // Use in-process queue by default (no Redis needed)
+    sseBus: 'memory',      // Use in-process bus by default (no Redis needed)
+    tokenStore: 'memory',  // Use in-memory token store by default (no Redis needed)
   },
 }
 
@@ -609,6 +618,7 @@ export function getAppConfig(): AppConfig {
       url: process.env.REDIS_URL || undefined,
       jobQueue: (process.env.JOB_QUEUE ?? DEFAULT_APP_CONFIG.redis.jobQueue) as 'memory' | 'bullmq',
       sseBus: (process.env.SSE_BUS ?? DEFAULT_APP_CONFIG.redis.sseBus) as 'memory' | 'redis',
+      tokenStore: (process.env.TOKEN_STORE ?? DEFAULT_APP_CONFIG.redis.tokenStore) as 'memory' | 'redis',
     },
   }
 }
