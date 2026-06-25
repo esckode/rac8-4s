@@ -51,6 +51,7 @@ export interface PlayerRow {
   phone?: string
   preferred_contact?: string
   share_contact: boolean
+  share_read_receipts: boolean
   created_at: string
   updated_at: string
 }
@@ -595,7 +596,7 @@ export class PlayerRepository {
     const result = await this.pool.query('SELECT * FROM public.players WHERE id = $1', [playerId])
     const row = result.rows[0] as any
     if (!row) return undefined
-    return { ...row, share_contact: !!row.share_contact }
+    return { ...row, share_contact: !!row.share_contact, share_read_receipts: !!row.share_read_receipts }
   }
 
   async updateShareContact(playerId: string, shareContact: boolean): Promise<PlayerRow> {
@@ -603,6 +604,17 @@ export class PlayerRepository {
     await this.pool.query(
       `UPDATE public.players SET share_contact = $1, updated_at = $2 WHERE id = $3`,
       [shareContact, now, playerId]
+    )
+    const player = await this.findById(playerId)
+    if (!player) throw new NotFoundError('Player')
+    return player
+  }
+
+  async updateShareReadReceipts(playerId: string, shareReadReceipts: boolean): Promise<PlayerRow> {
+    const now = new Date().toISOString()
+    await this.pool.query(
+      `UPDATE public.players SET share_read_receipts = $1, updated_at = $2 WHERE id = $3`,
+      [shareReadReceipts, now, playerId]
     )
     const player = await this.findById(playerId)
     if (!player) throw new NotFoundError('Player')

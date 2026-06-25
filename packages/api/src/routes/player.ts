@@ -114,5 +114,41 @@ export default function playerRouter(deps: AppDependencies) {
     }
   })
 
+  // GET /player/read-receipt-preferences - get player's read-receipt sharing preference (V6.1)
+  // Registered before PATCH to respect §10 route ordering.
+  router.get('/read-receipt-preferences', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+
+      const player = await playerRepo.findById(payload.playerId)
+      if (!player) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Player not found' })
+      }
+
+      res.json({ shareReadReceipts: player.share_read_receipts })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // PATCH /player/read-receipt-preferences - update read-receipt sharing preference (V6.1)
+  router.patch('/read-receipt-preferences', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+
+      if (typeof req.body.shareReadReceipts !== 'boolean') {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'shareReadReceipts must be a boolean' })
+      }
+
+      const updated = await playerRepo.updateShareReadReceipts(payload.playerId, req.body.shareReadReceipts)
+
+      log.info('read_receipt.preferences.updated', { playerId: payload.playerId, shareReadReceipts: req.body.shareReadReceipts })
+
+      res.json({ shareReadReceipts: updated.share_read_receipts })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   return router
 }

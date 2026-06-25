@@ -10,6 +10,17 @@ export interface MessageRecord {
   createdAt: string
   legalHold: boolean
   read_at: string | null
+  /**
+   * V6.1: For DM messages only. Present on the SENDER's view when the recipient has
+   * opted in (share_read_receipts = true) and has read the message. Absent (undefined)
+   * by default — opt-out privacy.
+   */
+  recipientReadAt?: string | null
+  /**
+   * V6.1: For BROADCAST messages only. Present in the organizer's view.
+   * Shows how many of N recipients have read the message.
+   */
+  ackCount?: { read: number; total: number }
 }
 
 type Subscriber = (messages: MessageRecord[]) => void

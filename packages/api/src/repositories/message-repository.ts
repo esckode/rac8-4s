@@ -651,6 +651,48 @@ export class MessageRepository {
   }
 
   /**
+   * Get the ack count for a broadcast message: how many of the N recipients have read it.
+   * Returns { read, total }.
+   * Used by the organizer ack-count endpoint (GET /:id/messages/:msgId/ack-count).
+   */
+  async getBroadcastAckCount(messageId: string): Promise<{ read: number; total: number }> {
+    const result = await this.pool.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE read_at IS NOT NULL) AS "read",
+         COUNT(*) AS total
+       FROM messaging.message_recipients
+       WHERE message_id = $1`,
+      [messageId]
+    )
+    const row = result.rows[0]
+    return { read: Number(row.read), total: Number(row.total) }
+  }
+
+  /**
+   * For a DM sent by senderPlayerId to recipientPlayerId: return the recipient's read_at
+   * if and only if the recipient has opted in (share_read_receipts = true).
+   * Returns null if not opted in, or if the recipient hasn't read it yet.
+   *
+   * Used to populate `recipientReadAt` in the history payload — only surfaced to the sender.
+   */
+  async getDmRecipientReadAt(
+    messageId: string,
+    recipientPlayerId: string
+  ): Promise<Date | null> {
+    const result = await this.pool.query(
+      `SELECT mr.read_at
+       FROM messaging.message_recipients mr
+       JOIN public.players p ON p.id = mr.player_id
+       WHERE mr.message_id = $1
+         AND mr.player_id = $2
+         AND p.share_read_receipts = TRUE`,
+      [messageId, recipientPlayerId]
+    )
+    if (result.rows.length === 0) return null
+    return result.rows[0].read_at ? new Date(result.rows[0].read_at) : null
+  }
+
+  /**
    * Set legal_hold on a single message row.
    * Returns the updated message, or null when the message is not found in this tournament.
    */

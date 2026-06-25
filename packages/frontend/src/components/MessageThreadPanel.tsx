@@ -185,6 +185,24 @@ export const MessageThreadPanel: React.FC<Props> = ({
                   <span className="ml-2 font-medium text-[--court-600]">📢 Announcement</span>
                 )}
               </p>
+              {/* V6.1: Organizer ack count on broadcasts */}
+              {m.recipientPlayerId === null && permissions.organizerRole && m.ackCount != null && (
+                <p
+                  data-testid="broadcast-ack-count"
+                  className="text-xs text-[--ink-400] mt-1"
+                >
+                  {m.ackCount.read} of {m.ackCount.total} read
+                </p>
+              )}
+              {/* V6.1: DM "seen" indicator — only for sender, only when recipient opted in */}
+              {m.recipientReadAt && (
+                <p
+                  data-testid="dm-seen-indicator"
+                  className="text-xs text-[--court-600] mt-1"
+                >
+                  Seen
+                </p>
+              )}
             </div>
           ))}
           <div ref={bottomRef} />

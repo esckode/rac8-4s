@@ -112,6 +112,52 @@ export default function messagesRouter(deps: AppDependencies) {
     }
   })
 
+  // GET /tournaments/:id/messages/:msgId/ack-count — organizer-only broadcast ack count
+  // Registered before /:id/messages/:msgId/legal-hold and /:id/messages/:msgId/read
+  // (more-specific literal path; §10 route ordering: static before parameterized).
+  router.get('/:id/messages/:msgId/ack-count', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.id as string
+      const msgId = req.params.msgId as string
+
+      // Players are denied this endpoint (403). Organizers only.
+      let isPlayerSession = false
+      try {
+        await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        isPlayerSession = true
+      } catch {
+        // not a player session
+      }
+      if (isPlayerSession) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the tournament organizer may view ack counts' })
+      }
+
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+
+      const tournament = await tournamentRepo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      // Verify the message belongs to this tournament
+      const msgCheck = await deps.db.query(
+        `SELECT id FROM messaging.messages WHERE id = $1 AND tournament_id = $2`,
+        [msgId, tournamentId]
+      )
+      if (msgCheck.rows.length === 0) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Message not found' })
+      }
+
+      const count = await messageRepo.getBroadcastAckCount(msgId)
+
+      res.status(200).json(count)
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // PATCH /tournaments/:id/messages/:msgId/legal-hold — organizer sets legal_hold
   // Registered before POST /:id/messages/:msgId/read and POST /:id/messages to
   // respect §10 route ordering (more-specific literal paths before parameterized).
@@ -323,7 +369,28 @@ export default function messagesRouter(deps: AppDependencies) {
       const conversationId = await conversationRepo.resolveConversation(tournamentId)
       const messages = await messageRepo.getHistoryByConversation({ conversationId, limit, before, viewerPlayerId, thread })
 
-      res.status(200).json({ messages })
+      // V6.1: For DM messages where the viewer is the sender, attach recipientReadAt
+      // if and only if the recipient has opted in (share_read_receipts = true).
+      // Only the sender sees this field — organizers (no viewerPlayerId) never get it.
+      let outMessages: Array<typeof messages[0] & { recipientReadAt?: Date | null }>
+      if (viewerPlayerId) {
+        outMessages = await Promise.all(
+          messages.map(async m => {
+            // Only for DMs where the viewer is the sender
+            if (m.recipientPlayerId && m.senderPlayerId === viewerPlayerId) {
+              const recipientReadAt = await messageRepo.getDmRecipientReadAt(m.id, m.recipientPlayerId)
+              if (recipientReadAt !== null) {
+                return { ...m, recipientReadAt }
+              }
+            }
+            return m
+          })
+        )
+      } else {
+        outMessages = messages
+      }
+
+      res.status(200).json({ messages: outMessages })
     } catch (err) {
       next(err)
     }
