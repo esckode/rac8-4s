@@ -30,7 +30,7 @@ here.
 | Plan | Drives | Status |
 |---|---|---|
 | [MESSAGING_IMPLEMENTATION.md](assets/planning/MESSAGING_IMPLEMENTATION.md) | Messaging MVP — Phases P–7 (schema, partitioning, repo, routes+SSE, batching, frontend, coverage) | ✅ **Built & merged** |
-| [MESSAGING_IMPLEMENTATION_V2.md](assets/planning/MESSAGING_IMPLEMENTATION_V2.md) | `conversations` abstraction (V1.0, Player-Groups prereq) + §17 multi-instance foundation (Redis bus/queue/token store, worker, dev distributed stack; Redis-required failure mode) + product gaps (offline notify, sender names, thread model, read-receipts) | 📋 **Plan ready** — not started |
+| [MESSAGING_IMPLEMENTATION_V2.md](assets/planning/MESSAGING_IMPLEMENTATION_V2.md) | `conversations` abstraction (V1.0, Player-Groups prereq) + §17 multi-instance foundation (Redis bus/queue/token store, worker, dev distributed stack; Redis-required failure mode) + product gaps (offline notify, sender names, thread model, read-receipts) | ✅ **Built & merged** (V1–V6, migrations 034–037); V7 deferred |
 | [FRONTEND_IMPLEMENTATION.md](assets/planning/FRONTEND_IMPLEMENTATION.md) | Frontend-quality / rendering tasks driving [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) — FE-RENDER-1 (memoize `AuthProvider` value) | 📋 **Plan ready** — not started |
 | [PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md) | Community layer — Phases G0–G5 (compliance/age-gate prereq, group entity+membership, durable chat+moderation, polls, casual tournament engine+launch, DSR erasure cascade). TDD-first, ≥85% coverage; carries R-A reconciliation (G4.7) | 📋 **Plan ready** — not started |
 
@@ -46,6 +46,10 @@ here.
 ### ✅ Built (requirements delivered)
 - Messaging MVP (single-instance, flat group-feed) — §16 of MESSAGING_DESIGN + MESSAGING_IMPLEMENTATION.
 - TIMESTAMPTZ normalization (migration 031); messaging schema/partitioning (032/033); ≥85% coverage gate.
+- **Messaging V2 (multi-instance) — §17 / MESSAGING_IMPLEMENTATION_V2 V1–V6** ✅: conversations abstraction,
+  Redis bus/queue/token store, worker tier, dev distributed stack + multi-instance e2e, rate limiting, cache
+  consistency, offline notify, sender names, thread model, read receipts. Migrations 034–037. (V7 deferred;
+  prod-readiness gaps in [PRODUCTION_READINESS.md](assets/planning/PRODUCTION_READINESS.md).)
 
 ### 📐 Design → needs an implementation plan
 - *(done)* ~~**Player Groups** → create `PLAYER_GROUPS_IMPLEMENTATION.md`~~ — **plan written** (see Plan
@@ -62,8 +66,6 @@ here.
   organizer SaaS), then create `MONETIZATION_IMPLEMENTATION.md` (payments integration first).
 
 ### 📋 Plan ready → available to tackle
-- **MESSAGING_IMPLEMENTATION_V2.md** — foundation-first, TDD. (`conversations` abstraction is now **V1.0**,
-  the first task — a shared prerequisite for Player Groups.)
 - **FRONTEND_IMPLEMENTATION.md** — frontend-quality tasks (TDD). First task: **FE-RENDER-1** memoize the
   `AuthProvider` context value.
 - **PLAYER_GROUPS_IMPLEMENTATION.md** — community layer, Phases G0–G5 (TDD-first, ≥85%). First task:
