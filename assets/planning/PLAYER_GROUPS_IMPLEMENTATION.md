@@ -55,7 +55,7 @@ primitive + contract test when it lands; G5 only orchestrates.
    CLAUDE.md §11. **TDD history:** red `test:` commit precedes the `feat:` commit.
 
 ### Conventions to mirror
-Migrations `db/migrations/036+` (034/035 are taken); `getLogger` `noun.verb` logging (**IDs only, never
+Migrations `db/migrations/038+` (034–037 are taken — 036/037 went to messaging V2); `getLogger` `noun.verb` logging (**IDs only, never
 message bodies, never PII beyond IDs** — CLAUDE.md §6); the transactional test harness `getTestPool()` (no
 autocommit — CLAUDE.md §7); factories under `__tests__/factories`; **route ordering §10** (static before
 `/:id`); **`TIMESTAMPTZ` only** (CLAUDE.md §7); e2e conventions — seed own data via fixtures, select by
@@ -82,7 +82,7 @@ contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** i
   registration (`routes/tournaments.ts:1252`), account signup (`routes/auth.ts:143`), and (stub for now)
   the group-invite accept path. e2e — onboarding shows a **neutral DOB screen** (not an "I am 18 ✓" box);
   under-18 is blocked with a clear message; 18+ proceeds.
-- **GREEN:** migration `036` — `players.is_adult BOOLEAN`, `age_attested_at TIMESTAMPTZ`,
+- **GREEN:** migration `038` — `players.is_adult BOOLEAN`, `age_attested_at TIMESTAMPTZ`,
   `policy_version TEXT` (no DOB column). Add attestation params to `findOrCreatePlayerByEmail`; compute
   18+ from a transiently-submitted DOB, persist only the derived flag; reject under-18. Neutral DOB screen
   in onboarding UI; add 18+ requirement to ToS/privacy copy. **Backfill:** pre-gate players get a one-time
@@ -100,7 +100,7 @@ contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** i
   constraints; **many-to-many** (a player in multiple groups); **multiple `role=owner` rows allowed** for one
   group (assert no unique-owner constraint); `default_match_format` defaults `singles`; `notify_level`
   defaults `mentions_polls`.
-- **GREEN:** migration `037` (group tables). Repository skeleton (`GroupRepository`) with `getLogger`.
+- **GREEN:** migration `039` (group tables). Repository skeleton (`GroupRepository`) with `getLogger`.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
 ### G1.2 — Membership lifecycle: create / promote / demote / kick / leave / auto-transfer (§11.1–11.3)
@@ -144,7 +144,7 @@ contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** i
   **Per-store erasure primitive (§0.5):** a contract test proves `anonymizeGroupMessagesFor(playerId)`
   tombstones that player's messages ("Former player", body/attribution cleared) while **co-authors' messages
   in the same conversation are untouched**, and is idempotent on re-run.
-- **GREEN:** migration `038`; make retention conversation-type-aware (group = durable). Extend the
+- **GREEN:** migration `040`; make retention conversation-type-aware (group = durable). Extend the
   conversation repository to resolve a group→conversation. Add `anonymizeGroupMessagesFor` to the repo.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
@@ -194,7 +194,7 @@ contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** i
   **Per-store erasure primitive (§0.5):** a contract test proves `anonymizePollVotesFor(playerId)` removes/
   tombstones that player's votes while **other voters' rows and the remaining tally stay correct**, and is
   idempotent.
-- **GREEN:** poll create/vote routes; `poll_votes` table (migration `039`); live tally aggregation; add
+- **GREEN:** poll create/vote routes; `poll_votes` table (migration `041`); live tally aggregation; add
   `anonymizePollVotesFor`.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
@@ -224,7 +224,7 @@ contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** i
   become **nullable**; **existing tournaments unchanged** (all default `scheduled`/`public`, deadlines
   intact). Browse filter: `/browse` returns only `visibility=public` (HL:1140 carve-out) — `unlisted`
   hidden.
-- **GREEN:** migration `040`; relax deadline NOT NULLs; add columns with safe defaults; apply the browse
+- **GREEN:** migration `042`; relax deadline NOT NULLs; add columns with safe defaults; apply the browse
   `visibility=public` filter.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
@@ -271,7 +271,7 @@ contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** i
   (co-participants untouched), and that **`recomputeLeaderboards()` re-derives correct pair + individual
   standings from the mutated log** (drops the anonymized player from the individual board). Aggregation is
   built **re-runnable/idempotent** so G5 can call it after erasure.
-- **GREEN:** migration `041`; per-slot participant model; match-log writer on score finalize; **idempotent**
+- **GREEN:** migration `043`; per-slot participant model; match-log writer on score finalize; **idempotent**
   leaderboard aggregation queries + endpoints; add `anonymizeMatchLogSlotsFor` + `recomputeLeaderboards`.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
