@@ -275,6 +275,8 @@ the task.
 - **Idempotency** of every worker handler is load-bearing (at-least-once under failure) — assert it.
 
 ## Production-readiness gaps (must resolve before prod cutover — not blocking the build)
+> 📄 Now tracked in [`PRODUCTION_READINESS.md`](./PRODUCTION_READINESS.md) (PR-1/PR-2/PR-3) + the backlog.
+> Kept here too because this is where they were found.
 - **🔴 `trust proxy` behind the LB (found in V2.3).** The app does **not** set Express `trust proxy`, so
   `req.ip` is the **LB's IP** for all proxied traffic (nginx already forwards `X-Forwarded-For`/`X-Real-IP`).
   Rate-limit keys (and any IP-based logging) therefore collapse to one value behind the LB. Fix: `app.set('trust proxy', …)`

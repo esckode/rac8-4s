@@ -97,6 +97,17 @@ here.
   21/112/137/172/589) — the PWA plan **folds these in, doesn't reinvent**. Promote **push notifications
   "future" → in-scope** (web push). Update the HL roadmap status; reference existing offline reqs.
 
+### 🚀 Production readiness (before multi-instance prod cutover)
+> Cross-cutting gaps surfaced during the messaging V2 build — **not** blocking the build (V1–V6 done), but
+> they block a real multi-instance prod rollout. Full detail in
+> [PRODUCTION_READINESS.md](assets/planning/PRODUCTION_READINESS.md).
+- **PR-1 🔴 `trust proxy` behind the LB** *(platform-wide; do first).* `req.ip` = LB IP for proxied traffic
+  → rate-limit keys + IP logging collapse to one value. Fix: `app.set('trust proxy', …)`. Small, TDD-able.
+- **PR-2 🟠 SSE catch-up on reconnect** *(messaging).* At-most-once pub/sub → reconnect to another instance
+  can miss gap messages. Add `Last-Event-ID` / backfill.
+- **PR-3 🟠 Prod cutover** *(platform/infra; touches `IaC-*.md`).* ElastiCache(multi-AZ)/ASG/ALB
+  provisioning, rolling-deploy mixed-mode, live-session migration. Add a closing phase.
+
 ### 🗒️ Open design threads (not yet grilled/decided)
 - MESSAGING_DESIGN §17.2 (offline), §17.4 (thread model), §17.5 (sender names), §17.6 (read-receipt
   visibility) — recommendations only, not yet confirmed.
