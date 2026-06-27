@@ -11,34 +11,329 @@ export interface GroupRow {
   createdAt: Date
 }
 
+export interface MemberRow {
+  groupId: string
+  playerId: string
+  role: 'owner' | 'member'
+  notifyLevel: string
+  joinedAt: Date
+}
+
 export interface CreateGroupInput {
   name: string
   createdBy: string
   defaultMatchFormat?: 'singles' | 'doubles'
 }
 
+// Thrown when an action would leave the group with zero owners and no auto-transfer is possible.
+export class LastOwnerError extends Error {
+  constructor() {
+    super('Cannot remove or demote the last owner of a group')
+    this.name = 'LastOwnerError'
+  }
+}
+
 export class GroupRepository {
   constructor(private pool: Pool) {}
 
   /**
-   * Create a new player group.
-   * The caller is responsible for inserting the creator as a role='owner' member.
-   * Full membership lifecycle is implemented in G1.2.
+   * Create a new player group and add the creator as role='owner' atomically.
    */
   async createGroup(input: CreateGroupInput): Promise<GroupRow> {
     const { name, createdBy, defaultMatchFormat } = input
-    const result = await this.pool.query(
-      `INSERT INTO public.player_groups (name, created_by${defaultMatchFormat ? ', default_match_format' : ''})
-       VALUES ($1, $2${defaultMatchFormat ? ', $3' : ''})
-       RETURNING id, name, created_by, default_match_format, created_at`,
-      defaultMatchFormat ? [name, createdBy, defaultMatchFormat] : [name, createdBy]
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      const groupResult = await client.query(
+        `INSERT INTO public.player_groups (name, created_by${defaultMatchFormat ? ', default_match_format' : ''})
+         VALUES ($1, $2${defaultMatchFormat ? ', $3' : ''})
+         RETURNING id, name, created_by, default_match_format, created_at`,
+        defaultMatchFormat ? [name, createdBy, defaultMatchFormat] : [name, createdBy]
+      )
+      const row = groupResult.rows[0]
+
+      await client.query(
+        `INSERT INTO public.player_group_members (group_id, player_id, role)
+         VALUES ($1, $2, 'owner')`,
+        [row.id, createdBy]
+      )
+
+      await client.query('COMMIT')
+
+      const group = rowToGroup(row)
+      log.info('group.created', { groupId: group.id, createdBy: group.createdBy })
+
+      return group
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Promote a member to owner.
+   * Requires the actor to be an owner of the group.
+   * Throws if the target is not a member of the group.
+   */
+  async promoteMember(
+    groupId: string,
+    actorPlayerId: string,
+    targetPlayerId: string
+  ): Promise<void> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      await this.assertOwner(client, groupId, actorPlayerId)
+
+      const result = await client.query(
+        `UPDATE public.player_group_members
+         SET role = 'owner'
+         WHERE group_id = $1 AND player_id = $2
+         RETURNING player_id`,
+        [groupId, targetPlayerId]
+      )
+      if (result.rowCount === 0) {
+        throw Object.assign(new Error('Member not found'), { code: 'NOT_FOUND' })
+      }
+
+      await client.query('COMMIT')
+
+      log.info('group.member.promoted', { groupId, actorPlayerId, targetPlayerId })
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Demote an owner to member.
+   * Requires the actor to be an owner. Blocked if target is the last owner.
+   */
+  async demoteMember(
+    groupId: string,
+    actorPlayerId: string,
+    targetPlayerId: string
+  ): Promise<void> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      await this.assertOwner(client, groupId, actorPlayerId)
+      await this.assertNotLastOwner(client, groupId, targetPlayerId)
+
+      const result = await client.query(
+        `UPDATE public.player_group_members
+         SET role = 'member'
+         WHERE group_id = $1 AND player_id = $2
+         RETURNING player_id`,
+        [groupId, targetPlayerId]
+      )
+      if (result.rowCount === 0) {
+        throw Object.assign(new Error('Member not found'), { code: 'NOT_FOUND' })
+      }
+
+      await client.query('COMMIT')
+
+      log.info('group.member.demoted', { groupId, actorPlayerId, targetPlayerId })
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Kick (remove) a member from the group.
+   * Requires the actor to be an owner. Cannot kick the last owner.
+   */
+  async kickMember(
+    groupId: string,
+    actorPlayerId: string,
+    targetPlayerId: string
+  ): Promise<void> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      await this.assertOwner(client, groupId, actorPlayerId)
+
+      // Check if target is last owner
+      const targetRole = await this.getMemberRole(client, groupId, targetPlayerId)
+      if (targetRole === null) {
+        throw Object.assign(new Error('Member not found'), { code: 'NOT_FOUND' })
+      }
+      if (targetRole === 'owner') {
+        await this.assertNotLastOwner(client, groupId, targetPlayerId)
+      }
+
+      await client.query(
+        `DELETE FROM public.player_group_members
+         WHERE group_id = $1 AND player_id = $2`,
+        [groupId, targetPlayerId]
+      )
+
+      await client.query('COMMIT')
+
+      log.info('group.member.removed', { groupId, actorPlayerId, targetPlayerId })
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Self-leave: a member removes themselves from the group.
+   * - If they are a non-last owner or a member: remove row directly.
+   * - If they are the last owner and other members exist: auto-transfer to
+   *   the longest-tenured remaining member (earliest joined_at), then remove.
+   * - If they are the last owner with no other members: blocked (LastOwnerError).
+   *
+   * The check+mutate is in one transaction to prevent races.
+   */
+  async leaveGroup(groupId: string, playerId: string): Promise<void> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      const role = await this.getMemberRole(client, groupId, playerId)
+      if (role === null) {
+        throw Object.assign(new Error('Not a member of this group'), { code: 'NOT_FOUND' })
+      }
+
+      if (role === 'owner') {
+        // Count remaining owners excluding this player
+        const ownerCountResult = await client.query(
+          `SELECT COUNT(*) FROM public.player_group_members
+           WHERE group_id = $1 AND role = 'owner' AND player_id != $2`,
+          [groupId, playerId]
+        )
+        const remainingOwnerCount = parseInt(ownerCountResult.rows[0].count)
+
+        if (remainingOwnerCount === 0) {
+          // Last owner: auto-transfer or block
+          const longestTenuredResult = await client.query(
+            `SELECT player_id FROM public.player_group_members
+             WHERE group_id = $1 AND player_id != $2
+             ORDER BY joined_at ASC
+             LIMIT 1`,
+            [groupId, playerId]
+          )
+
+          if (longestTenuredResult.rowCount === 0) {
+            // No other members — cannot leave
+            throw new LastOwnerError()
+          }
+
+          const newOwnerPlayerId = longestTenuredResult.rows[0].player_id as string
+
+          // Transfer ownership
+          await client.query(
+            `UPDATE public.player_group_members
+             SET role = 'owner'
+             WHERE group_id = $1 AND player_id = $2`,
+            [groupId, newOwnerPlayerId]
+          )
+
+          log.info('group.ownership.transferred', {
+            groupId,
+            fromPlayerId: playerId,
+            toPlayerId: newOwnerPlayerId,
+          })
+        }
+      }
+
+      // Remove the leaving member's row
+      await client.query(
+        `DELETE FROM public.player_group_members
+         WHERE group_id = $1 AND player_id = $2`,
+        [groupId, playerId]
+      )
+
+      await client.query('COMMIT')
+
+      log.info('group.member.removed', { groupId, playerId, reason: 'self-leave' })
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Get a member's role, or null if not a member.
+   */
+  async getMemberRole(
+    clientOrPool: { query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }> },
+    groupId: string,
+    playerId: string
+  ): Promise<'owner' | 'member' | null> {
+    const result = await clientOrPool.query(
+      `SELECT role FROM public.player_group_members
+       WHERE group_id = $1 AND player_id = $2`,
+      [groupId, playerId]
     )
-    const row = result.rows[0]
-    const group = rowToGroup(row)
+    if (result.rows.length === 0) return null
+    return result.rows[0].role as 'owner' | 'member'
+  }
 
-    log.info('group.created', { groupId: group.id, createdBy: group.createdBy })
+  /**
+   * Check group existence and that the actor is an owner.
+   * Throws NOT_FOUND if group doesn't exist, FORBIDDEN if actor is not an owner.
+   */
+  private async assertOwner(
+    client: { query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }> },
+    groupId: string,
+    actorPlayerId: string
+  ): Promise<void> {
+    // Check group exists
+    const groupResult = await client.query(
+      `SELECT id FROM public.player_groups WHERE id = $1`,
+      [groupId]
+    )
+    if (groupResult.rows.length === 0) {
+      throw Object.assign(new Error('Group not found'), { code: 'NOT_FOUND' })
+    }
 
-    return group
+    // Check actor is an owner
+    const memberResult = await client.query(
+      `SELECT role FROM public.player_group_members
+       WHERE group_id = $1 AND player_id = $2`,
+      [groupId, actorPlayerId]
+    )
+    if (
+      memberResult.rows.length === 0 ||
+      memberResult.rows[0].role !== 'owner'
+    ) {
+      throw Object.assign(new Error('Not an owner of this group'), { code: 'FORBIDDEN' })
+    }
+  }
+
+  /**
+   * Assert that the target is NOT the last owner. Throws LastOwnerError if they are.
+   */
+  private async assertNotLastOwner(
+    client: { query: (text: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount: number }> },
+    groupId: string,
+    targetPlayerId: string
+  ): Promise<void> {
+    const result = await client.query(
+      `SELECT player_id FROM public.player_group_members
+       WHERE group_id = $1 AND role = 'owner' AND player_id != $2`,
+      [groupId, targetPlayerId]
+    )
+    if (result.rows.length === 0) {
+      throw new LastOwnerError()
+    }
   }
 }
 

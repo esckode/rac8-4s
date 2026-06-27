@@ -14,6 +14,7 @@ import { getLogger, runWithRequestId } from './logger'
 import tournamentsRouter from './routes/tournaments'
 import messagesRouter from './routes/messages'
 import playerRouter from './routes/player'
+import playerGroupsRouter from './routes/player-groups'
 import analyticsRouter from './routes/analytics'
 import authRouter from './routes/auth'
 import type { JobQueue } from '@worker/job-queue'
@@ -165,6 +166,7 @@ export function createApp(deps: AppDependencies): Express {
   // inside the router itself (see routes/messages.ts §10).
   app.use('/tournaments', messagesRouter(appDeps))
   app.use('/player', playerRouter(appDeps))
+  app.use('/player/groups', playerGroupsRouter(appDeps))
   app.use('/api/analytics', analyticsRouter(appDeps))
   app.use('/api/auth', authRouter(appDeps))
 
@@ -313,6 +315,15 @@ export function createApp(deps: AppDependencies): Express {
       const logLevel = err.statusCode >= 500 ? 'error' : 'warn'
       httpLog[logLevel as 'error' | 'warn']('database', { code: err.code, statusCode: err.statusCode })
       return res.status(err.statusCode).json({ code: err.code, message: err.message })
+    }
+
+    // Errors with explicit statusCode (e.g. NOT_FOUND, LAST_OWNER from group routes)
+    if (err instanceof Error && 'statusCode' in err) {
+      const code = (err as any).code || 'ERROR'
+      const statusCode = (err as any).statusCode as number
+      const logLevel = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'debug'
+      httpLog[logLevel as 'error' | 'warn' | 'debug']('error', { code, statusCode })
+      return res.status(statusCode).json({ code, message: err.message })
     }
 
     // Validation errors

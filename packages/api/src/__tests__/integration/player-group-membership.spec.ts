@@ -157,6 +157,19 @@ describe('G1.2 — Player group membership lifecycle', () => {
       expect(res.status).toBe(401)
     })
 
+    it('accepts optional defaultMatchFormat = doubles', async () => {
+      const creator = await createPlayer(pool)
+      const token = await playerToken(creator, tokenStore)
+
+      const res = await request(app)
+        .post('/player/groups')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: `Doubles Group ${uid()}`, defaultMatchFormat: 'doubles' })
+
+      expect(res.status).toBe(201)
+      expect(res.body.defaultMatchFormat).toBe('doubles')
+    })
+
     it('requires a name', async () => {
       const creator = await createPlayer(pool)
       const token = await playerToken(creator, tokenStore)
@@ -452,6 +465,33 @@ describe('G1.2 — Player group membership lifecycle', () => {
   // ─── Behavior 6: kick is owner-only ───────────────────────────────────────
 
   describe('Behavior 6 — kick is owner-only (NEGATIVE: member cannot kick)', () => {
+    it('owner can kick another owner when multiple owners exist', async () => {
+      const owner1 = await createPlayer(pool)
+      const owner2 = await createPlayer(pool)
+      const owner1Token = await playerToken(owner1, tokenStore)
+
+      const group = await createGroup(owner1Token)
+
+      // Make owner2 an owner
+      await pool.query(
+        `INSERT INTO public.player_group_members (group_id, player_id, role)
+         VALUES ($1, $2, 'owner')`,
+        [group.id, owner2.id]
+      )
+
+      // owner1 kicks owner2 (≥1 owner remains: owner1)
+      const res = await request(app)
+        .delete(`/player/groups/${group.id}/members/${owner2.id}`)
+        .set('Authorization', `Bearer ${owner1Token}`)
+
+      expect(res.status).toBe(200)
+
+      const members = await getMembers(group.id)
+      const ids = members.map(m => m.player_id)
+      expect(ids).not.toContain(owner2.id)
+      expect(ids).toContain(owner1.id)
+    })
+
     it('owner can kick a member', async () => {
       const owner = await createPlayer(pool)
       const member = await createPlayer(pool)
@@ -593,6 +633,81 @@ describe('G1.2 — Player group membership lifecycle', () => {
     })
   })
 
+  // ─── Repository-level error coverage ─────────────────────────────────────
+  // These tests exercise the catch/ROLLBACK branches in the repository by
+  // triggering constraint violations or invalid inputs at the DB level.
+
+  describe('Repository error paths (catch/ROLLBACK coverage)', () => {
+    it('createGroup rolls back and re-throws on invalid createdBy (FK violation)', async () => {
+      const { GroupRepository } = await import('../../repositories/group-repository')
+      const repo = new GroupRepository(pool)
+
+      await expect(
+        repo.createGroup({ name: 'Test Group', createdBy: crypto.randomUUID() })
+      ).rejects.toThrow()
+    })
+
+    it('promoteMember rolls back and re-throws when target not found', async () => {
+      const { GroupRepository } = await import('../../repositories/group-repository')
+      const repo = new GroupRepository(pool)
+
+      const owner = await createPlayer(pool)
+      const ownerToken = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerToken)
+
+      // Target is not a member — UPDATE returns 0 rows → throws NOT_FOUND from catch
+      // The assertOwner passes (owner is valid), then UPDATE returns 0 rows
+      const nonMember = await createPlayer(pool)
+      await expect(
+        repo.promoteMember(group.id, owner.id, nonMember.id)
+      ).rejects.toThrow()
+    })
+
+    it('leaveGroup rolls back and re-throws when player is not a member', async () => {
+      const { GroupRepository } = await import('../../repositories/group-repository')
+      const repo = new GroupRepository(pool)
+
+      const owner = await createPlayer(pool)
+      const nonMember = await createPlayer(pool)
+      const ownerToken = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerToken)
+
+      // nonMember was never added to the group
+      await expect(
+        repo.leaveGroup(group.id, nonMember.id)
+      ).rejects.toThrow()
+    })
+
+    it('demoteMember rolls back and re-throws when target not found after guard', async () => {
+      const { GroupRepository } = await import('../../repositories/group-repository')
+      const repo = new GroupRepository(pool)
+
+      const owner1 = await createPlayer(pool)
+      const owner2 = await createPlayer(pool)
+      const ownerToken = await playerToken(owner1, tokenStore)
+      const group = await createGroup(ownerToken)
+
+      // Add owner2 so assertNotLastOwner passes (owner1 remains)
+      await pool.query(
+        `INSERT INTO public.player_group_members (group_id, player_id, role)
+         VALUES ($1, $2, 'owner')`,
+        [group.id, owner2.id]
+      )
+
+      // Remove owner2 directly to cause the UPDATE to return 0 rows after assertOwner/assertNotLastOwner pass
+      await pool.query(
+        `DELETE FROM public.player_group_members WHERE group_id = $1 AND player_id = $2`,
+        [group.id, owner2.id]
+      )
+
+      // Now assertOwner passes (owner1), assertNotLastOwner passes (owner1 is still owner)
+      // But owner2 is no longer a member → UPDATE returns 0 → NOT_FOUND thrown from catch
+      await expect(
+        repo.demoteMember(group.id, owner1.id, owner2.id)
+      ).rejects.toThrow()
+    })
+  })
+
   // ─── 404 and not-member edge cases ────────────────────────────────────────
 
   describe('Edge cases — 404 for unknown group or member', () => {
@@ -602,6 +717,18 @@ describe('G1.2 — Player group membership lifecycle', () => {
 
       const res = await request(app)
         .delete(`/player/groups/${crypto.randomUUID()}/members/${player.id}`)
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(res.status).toBe(404)
+    })
+
+    it('returns 404 for promote in non-existent group (covers assertOwner group-not-found)', async () => {
+      const player = await createPlayer(pool)
+      const target = await createPlayer(pool)
+      const token = await playerToken(player, tokenStore)
+
+      const res = await request(app)
+        .post(`/player/groups/${crypto.randomUUID()}/members/${target.id}/promote`)
         .set('Authorization', `Bearer ${token}`)
 
       expect(res.status).toBe(404)
