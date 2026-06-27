@@ -10,6 +10,9 @@ import { AccountRepository, PasswordResetCodeRepository } from '../../../db'
 import { generateMagicLinkToken } from '../../../auth/magic-link'
 import { InMemoryTokenStore } from '../../../auth/token-store'
 import { clearRateLimitStore } from '../../../middleware/rate-limit'
+import { defaultAdultAttestation } from '../../factories/player.factory'
+
+const ADULT_ATTESTATION = defaultAdultAttestation()
 
 
 function uid(): string {
@@ -67,7 +70,7 @@ describe('Complete Authentication Flows', () => {
       // Step 1: Signup
       const signupRes = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name, password })
+        .send({ email, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(signupRes.status).toBe(201)
       expect(signupRes.body.user).toHaveProperty('id')
@@ -125,7 +128,7 @@ describe('Complete Authentication Flows', () => {
 
       const signupRes = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name, password })
+        .send({ email, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(signupRes.status).toBe(201)
       const token = signupRes.body.token
@@ -152,7 +155,7 @@ describe('Complete Authentication Flows', () => {
 
       const signupRes = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: 'Role User', password })
+        .send({ email, name: 'Role User', password, dob_attestation: ADULT_ATTESTATION })
 
       expect(signupRes.status).toBe(201)
       expect(signupRes.body.user.role).toBe('player')
@@ -319,7 +322,7 @@ describe('Complete Authentication Flows', () => {
       // Step 2: Signup with magic link token
       const signupRes = await request(app)
         .post('/api/auth/signup')
-        .send({ token: magicLink.token, name, password })
+        .send({ token: magicLink.token, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(signupRes.status).toBe(201)
       expect(signupRes.body.user.email).toBe(email.toLowerCase())
@@ -367,7 +370,7 @@ describe('Complete Authentication Flows', () => {
       // Signup with different email
       const signupRes = await request(app)
         .post('/api/auth/signup')
-        .send({ token: magicLink.token, email: userEmail, name: 'Override User', password })
+        .send({ token: magicLink.token, email: userEmail, name: 'Override User', password, dob_attestation: ADULT_ATTESTATION })
 
       expect(signupRes.status).toBe(201)
       expect(signupRes.body.user.email).toBe(userEmail.toLowerCase())
@@ -607,6 +610,7 @@ describe('Complete Authentication Flows', () => {
           email,
           name: 'State Test User',
           password,
+          dob_attestation: ADULT_ATTESTATION,
         })
 
       expect(signupRes.status).toBe(201)
@@ -693,7 +697,7 @@ describe('Complete Authentication Flows', () => {
       // User 1: Signup
       const signup1 = await request(app)
         .post('/api/auth/signup')
-        .send({ email: email1, name: 'User 1', password: password1 })
+        .send({ email: email1, name: 'User 1', password: password1, dob_attestation: ADULT_ATTESTATION })
 
       expect(signup1.status).toBe(201)
       const token1 = signup1.body.token
@@ -702,7 +706,7 @@ describe('Complete Authentication Flows', () => {
       // User 2: Signup
       const signup2 = await request(app)
         .post('/api/auth/signup')
-        .send({ email: email2, name: 'User 2', password: password2 })
+        .send({ email: email2, name: 'User 2', password: password2, dob_attestation: ADULT_ATTESTATION })
 
       expect(signup2.status).toBe(201)
       const token2 = signup2.body.token
@@ -765,7 +769,7 @@ describe('Complete Authentication Flows', () => {
       // Signup
       const signupRes = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name, password })
+        .send({ email, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(signupRes.status).toBe(201)
       const signupUserData = signupRes.body.user
@@ -823,7 +827,7 @@ describe('Complete Authentication Flows', () => {
       // Signup
       const signupRes = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: 'Status User', password })
+        .send({ email, name: 'Status User', password, dob_attestation: ADULT_ATTESTATION })
 
       const accountId = signupRes.body.user.id
 

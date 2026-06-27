@@ -3,7 +3,7 @@ import bcryptjs from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { randomUUID } from 'crypto'
 import { AppDependencies } from '../app'
-import { AccountRepository, PasswordResetCodeRepository, PlayerRepository } from '../db'
+import { AccountRepository, PasswordResetCodeRepository, PlayerRepository, AgeAttestation, AgeAttestationRequiredError, UnderAgeError } from '../db'
 import { hashPassword } from '../auth/password'
 import { issueOrganizerToken } from '../auth/tokens'
 import { validateMagicLinkToken } from '../auth/magic-link'
@@ -53,7 +53,8 @@ export default function authRouter(deps: AppDependencies) {
   // POST /api/auth/signup - Create a new account
   router.post('/signup', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      let { email, name, password, token } = req.body
+      let { email, name, password, token, dob_attestation } = req.body
+      const ageAttestation: AgeAttestation | null = dob_attestation || null
       let magicPayload: any = null
 
       // Step 1: Validate all inputs
@@ -140,7 +141,19 @@ export default function authRouter(deps: AppDependencies) {
       // Step 5c: Claim/create the durable player identity by email and link it.
       // This makes a registered user act as one player across tournaments and
       // claims any prior guest play under the same (normalized) email.
-      const player = await playerRepo.findOrCreatePlayerByEmail(email, name)
+      // On the creation path the 18+ gate is enforced here.
+      let player
+      try {
+        player = await playerRepo.findOrCreatePlayerByEmail(email, name, undefined, undefined, ageAttestation)
+      } catch (err) {
+        if (err instanceof AgeAttestationRequiredError) {
+          return res.status(400).json({ code: 'AGE_ATTESTATION_REQUIRED', message: err.message })
+        }
+        if (err instanceof UnderAgeError) {
+          return res.status(422).json({ code: 'UNDER_AGE', message: err.message })
+        }
+        throw err
+      }
       await accountRepo.linkPlayer(account.id, player.id)
 
       // Step 6: Generate JWT session token (carries playerId so the account can

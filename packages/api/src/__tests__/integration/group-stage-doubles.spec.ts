@@ -8,6 +8,9 @@ import { TournamentRepository, PlayerRepository, GroupRepository } from '../../d
 import { TeamRepository } from '../../repositories/team-repository'
 import { InMemoryTokenStore } from '../../auth/token-store'
 import { generatePlayerSession } from '../../auth/magic-link'
+import { defaultAdultAttestation } from '../factories/player.factory'
+
+const ADULT_ATTESTATION = defaultAdultAttestation()
 
 describe('Phase 4: Group Stage - Doubles', () => {
   let pool: Pool
@@ -353,6 +356,7 @@ describe('Phase 4: Group Stage - Doubles', () => {
           .send({
             email: emails[i],
             name: `API Player ${i + 1}`,
+            dob_attestation: ADULT_ATTESTATION,
           })
 
         if (regRes.status !== 202) {
@@ -398,6 +402,7 @@ describe('Phase 4: Group Stage - Doubles', () => {
           .send({
             email,
             name: `Player ${i + 1}`,
+            dob_attestation: ADULT_ATTESTATION,
           })
 
         if (regRes.status !== 202) {
@@ -442,6 +447,7 @@ describe('Phase 4: Group Stage - Doubles', () => {
           .send({
             email: `api-12p-${i}-${Date.now()}@test.local`,
             name: `Player ${i + 1}`,
+            dob_attestation: ADULT_ATTESTATION,
           })
 
         if (regRes.status !== 202) {
@@ -488,6 +494,7 @@ describe('Phase 4: Group Stage - Doubles', () => {
           .send({
             email: `verify-${i}-${Date.now()}@test.local`,
             name: `Verify Player ${i}`,
+            dob_attestation: ADULT_ATTESTATION,
           })
       }
 

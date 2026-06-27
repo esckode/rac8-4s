@@ -10,6 +10,7 @@ import {
 } from '../../db'
 import { NotFoundError, CheckConstraintError } from '../../db/errors'
 import { TournamentFactory, PlayerFactory, OrganizerFactory, LocationFactory, CourtFactory } from '../factories'
+import { defaultAdultAttestation } from '../factories/player.factory'
 
 describe('Database Layer - Error Cases and Constraint Violations', () => {
   let pool: Pool
@@ -244,8 +245,8 @@ describe('Database Layer - Error Cases and Constraint Violations', () => {
       const repo = new PlayerRepository(pool)
       const email = `player_${Date.now()}@test.local`
 
-      const player1 = await repo.findOrCreatePlayerByEmail(email, 'Player Name')
-      const player2 = await repo.findOrCreatePlayerByEmail(email, 'Different Name')
+      const player1 = await repo.findOrCreatePlayerByEmail(email, 'Player Name', undefined, undefined, defaultAdultAttestation())
+      const player2 = await repo.findOrCreatePlayerByEmail(email, 'Different Name', undefined, undefined, defaultAdultAttestation())
 
       expect(player1.id).toBe(player2.id)
       expect(player1.email).toBe(email)

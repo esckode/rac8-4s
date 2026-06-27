@@ -52,8 +52,52 @@ export interface PlayerRow {
   preferred_contact?: string
   share_contact: boolean
   share_read_receipts: boolean
+  is_adult: boolean | null
+  age_attested_at: string | null
+  policy_version: string | null
   created_at: string
   updated_at: string
+}
+
+/**
+ * Transient-only attestation passed to findOrCreatePlayerByEmail on the
+ * creation path. The raw dateOfBirth is NEVER written to the database;
+ * only the derived result (is_adult, age_attested_at, policy_version) is stored.
+ */
+export interface AgeAttestation {
+  /** ISO 8601 date string (YYYY-MM-DD). Transient — never persisted. */
+  dateOfBirth: string
+  /** Version of the ToS / privacy policy the user accepted. */
+  policyVersion: string
+}
+
+/** Thrown when a minor attempts to create a player record. */
+export class UnderAgeError extends Error {
+  constructor() {
+    super('Age requirement not met: you must be 18 or older to create an account')
+    this.name = 'UnderAgeError'
+  }
+}
+
+/** Thrown when a creation is attempted with no attestation. */
+export class AgeAttestationRequiredError extends Error {
+  constructor() {
+    super('Age attestation required: a date of birth must be provided when creating a new player')
+    this.name = 'AgeAttestationRequiredError'
+  }
+}
+
+/**
+ * Compute whether a date-of-birth string (YYYY-MM-DD) represents someone who
+ * is at least 18 years old as of today. Returns true if 18+, false if younger.
+ */
+function isAtLeast18(dateOfBirth: string): boolean {
+  const dob = new Date(dateOfBirth)
+  const today = new Date()
+  // Compute the 18th birthday
+  const eighteenth = new Date(dob)
+  eighteenth.setFullYear(eighteenth.getFullYear() + 18)
+  return eighteenth <= today
 }
 
 export interface RegistrationRow {
@@ -365,23 +409,49 @@ export class PlayerRepository {
     email: string,
     name: string,
     phone?: string,
-    preferredContact?: string
+    preferredContact?: string,
+    ageAttestation?: AgeAttestation | null
   ): Promise<PlayerRow> {
     // Normalize email so casing differences resolve to one durable player
     const normalizedEmail = email.toLowerCase()
 
     const existing = await this.findByEmail(normalizedEmail)
     if (existing) {
+      // Find path — existing player is NOT gated. Return as-is.
       return existing
     }
+
+    // ── Creation path — 18+ gate (legally load-bearing) ────────────────────
+    // No attestation provided at all
+    if (ageAttestation === null || ageAttestation === undefined) {
+      throw new AgeAttestationRequiredError()
+    }
+    // Attestation provided but under-18 — hard reject, no row written
+    if (!isAtLeast18(ageAttestation.dateOfBirth)) {
+      throw new UnderAgeError()
+    }
+    // ── End gate ─────────────────────────────────────────────────────────────
 
     const id = `player_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const now = new Date().toISOString()
 
+    // Persist only the DERIVED attestation result — raw DOB is never stored
     await this.pool.query(
-      `INSERT INTO public.players (id, email, name, phone, preferred_contact, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, normalizedEmail, name, phone || null, preferredContact || null, now, now]
+      `INSERT INTO public.players
+         (id, email, name, phone, preferred_contact, is_adult, age_attested_at, policy_version, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        id,
+        normalizedEmail,
+        name,
+        phone || null,
+        preferredContact || null,
+        true,                          // is_adult (only true gets here — under-18 rejected above)
+        now,                           // age_attested_at (TIMESTAMPTZ)
+        ageAttestation.policyVersion,  // policy_version
+        now,
+        now,
+      ]
     )
 
     const player = await this.findById(id)

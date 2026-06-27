@@ -1416,3 +1416,65 @@ invalidation, instance B could serve a stale cached result that predates the sco
 
 **Implementation:** `packages/frontend/e2e/multi-instance/messaging-multi-instance.spec.ts`
 — "Standings are fresh on instance B after a score write on instance A"
+
+---
+
+## Feature: 18+ Age Gate (G0.1)
+
+> Legal-critical: COPPA / GDPR / UK Children's Code compliance. Gate at the universal player boundary.
+
+### Scenario: Guest registration blocked for under-18
+
+```gherkin
+Given a tournament with open registration
+When an anonymous user submits registration with email "minor@example.com"
+  And provides a date of birth that is less than 18 years ago
+Then registration is rejected with HTTP 422 UNDER_AGE
+And no player row is created in the database
+```
+
+### Scenario: Guest registration allowed for 18+
+
+```gherkin
+Given a tournament with open registration
+When an anonymous user submits registration with email "adult@example.com"
+  And provides a date of birth that is 25 years ago
+Then registration succeeds (HTTP 202, magic link sent)
+And the player row has is_adult = true, age_attested_at set, policy_version = "v1"
+And no date_of_birth column exists on the players table
+```
+
+### Scenario: Signup blocked when no attestation provided
+
+```gherkin
+Given the signup page
+When a user submits signup with email and password but no dob_attestation
+Then signup is rejected with HTTP 400 AGE_ATTESTATION_REQUIRED
+```
+
+### Scenario: Existing player skips gate on second registration
+
+```gherkin
+Given a player who previously attested as adult (is_adult = true)
+When they register for a second tournament without providing dob_attestation
+Then registration succeeds (HTTP 202) — find path, gate not applied
+```
+
+### Scenario: DOB screen — neutral date input, under-18 blocked (RTL)
+
+```gherkin
+Given the DobScreen component is rendered
+Then it shows a date input (not a checkbox)
+When a user enters a date that is 15 years ago
+  And clicks Continue
+Then an error message appears and onConfirm is NOT called
+When the user changes the date to 25 years ago
+  And clicks Continue
+Then onConfirm is called with { dateOfBirth, policyVersion: "v1" }
+```
+
+**Implementation:**
+- API unit: `packages/api/src/__tests__/unit/age-gate.spec.ts`
+- API integration (all 3 entry paths): `packages/api/src/__tests__/integration/age-gate-entry-paths.spec.ts`
+- Frontend RTL: `packages/frontend/src/__tests__/components/DobScreen.spec.tsx`
+- Playwright e2e: best-effort — RTL covers the UI contract; e2e deferred until servers are available.

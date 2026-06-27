@@ -9,7 +9,10 @@ import { AccountRepository, PlayerRepository } from '../../../db'
 import { InMemoryTokenStore } from '../../../auth/token-store'
 import { generateMagicLinkToken, validateMagicLinkToken } from '../../../auth/magic-link'
 import jwt from 'jsonwebtoken'
+import { defaultAdultAttestation } from '../../factories/player.factory'
 
+/** Default adult attestation used by tests that just need a valid signup. */
+const ADULT_ATTESTATION = defaultAdultAttestation()
 
 function uniqueEmail(prefix: string = ''): string {
   const id = crypto.randomUUID().slice(0, 8)
@@ -45,7 +48,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name, password })
+        .send({ email, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       expect(res.body).toHaveProperty('user')
@@ -70,7 +73,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name, password })
+        .send({ email, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       const accountId = res.body.user.id
@@ -97,7 +100,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name, password })
+        .send({ email, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       expect(res.body.token).toBeDefined()
@@ -117,7 +120,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name, password })
+        .send({ email, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       expect(res.body.user.email).toBe(email.toLowerCase())
@@ -137,13 +140,13 @@ describe('POST /api/auth/signup', () => {
       // Create first account
       const res1 = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: name1, password: password1 })
+        .send({ email, name: name1, password: password1, dob_attestation: ADULT_ATTESTATION })
       expect(res1.status).toBe(201)
 
       // Try to create with same email
       const res2 = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: 'Second User', password: 'secondpass456' })
+        .send({ email, name: 'Second User', password: 'secondpass456', dob_attestation: ADULT_ATTESTATION })
 
       expect(res2.status).toBe(409)
       expect(res2.body).toHaveProperty('code')
@@ -159,13 +162,13 @@ describe('POST /api/auth/signup', () => {
       // Create with lowercase
       const res1 = await request(app)
         .post('/api/auth/signup')
-        .send({ email: emailLower, name: 'User 1', password: 'pass123' })
+        .send({ email: emailLower, name: 'User 1', password: 'pass123', dob_attestation: ADULT_ATTESTATION })
       expect(res1.status).toBe(201)
 
       // Try with uppercase
       const res2 = await request(app)
         .post('/api/auth/signup')
-        .send({ email: emailUpper, name: 'User 2', password: 'pass456' })
+        .send({ email: emailUpper, name: 'User 2', password: 'pass456', dob_attestation: ADULT_ATTESTATION })
 
       expect(res2.status).toBe(409)
       expect(res2.body.code).toBeDefined()
@@ -248,6 +251,7 @@ describe('POST /api/auth/signup', () => {
           email: uniqueEmail('exact6'),
           name: 'Test',
           password: '123456',
+          dob_attestation: ADULT_ATTESTATION,
         })
 
       expect(res.status).toBe(201)
@@ -260,6 +264,7 @@ describe('POST /api/auth/signup', () => {
           email: uniqueEmail('long-pwd'),
           name: 'Test',
           password: 'verylongpasswordhere',
+          dob_attestation: ADULT_ATTESTATION,
         })
 
       expect(res.status).toBe(201)
@@ -302,6 +307,7 @@ describe('POST /api/auth/signup', () => {
           email: uniqueEmail('name2'),
           name: 'AB',
           password: 'password123',
+          dob_attestation: ADULT_ATTESTATION,
         })
 
       expect(res.status).toBe(201)
@@ -314,6 +320,7 @@ describe('POST /api/auth/signup', () => {
           email: uniqueEmail('long-name'),
           name: 'Very Long User Name Here',
           password: 'password123',
+          dob_attestation: ADULT_ATTESTATION,
         })
 
       expect(res.status).toBe(201)
@@ -377,7 +384,7 @@ describe('POST /api/auth/signup', () => {
       // Signup with magic link token
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ token: magicLink.token, name, password })
+        .send({ token: magicLink.token, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       expect(res.body.user.email).toBe(email.toLowerCase())
@@ -400,7 +407,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ token: magicLink.token, name, password })
+        .send({ token: magicLink.token, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       const accountId = res.body.user.id
@@ -476,7 +483,7 @@ describe('POST /api/auth/signup', () => {
       // Signup with different email than token
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ token: magicLink.token, email: userEmail, name, password })
+        .send({ token: magicLink.token, email: userEmail, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       // Should use the user-provided email, not the token email
@@ -500,7 +507,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ token: magicLink.token, email: userEmail, name, password })
+        .send({ token: magicLink.token, email: userEmail, name, password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       const accountId = res.body.user.id
@@ -517,7 +524,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: 'Hash Test', password })
+        .send({ email, name: 'Hash Test', password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       const accountId = res.body.user.id
@@ -538,7 +545,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: 'Verify Test', password })
+        .send({ email, name: 'Verify Test', password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       const accountId = res.body.user.id
@@ -555,7 +562,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: 'Wrong Pwd Test', password })
+        .send({ email, name: 'Wrong Pwd Test', password, dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       const accountId = res.body.user.id
@@ -571,7 +578,7 @@ describe('POST /api/auth/signup', () => {
       const email = uniqueEmail('schema-201')
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: 'Schema Test', password: 'schemapass123' })
+        .send({ email, name: 'Schema Test', password: 'schemapass123', dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
       expect(res.body).toEqual(
@@ -607,7 +614,7 @@ describe('POST /api/auth/signup', () => {
       // Create first
       await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: 'First', password: 'password123' })
+        .send({ email, name: 'First', password: 'password123', dob_attestation: ADULT_ATTESTATION })
 
       // Try duplicate
       const res = await request(app)
@@ -645,11 +652,11 @@ describe('POST /api/auth/signup', () => {
 
       const res1 = await request(app)
         .post('/api/auth/signup')
-        .send({ email: email1, name: 'User 1', password: 'pass123456' })
+        .send({ email: email1, name: 'User 1', password: 'pass123456', dob_attestation: ADULT_ATTESTATION })
 
       const res2 = await request(app)
         .post('/api/auth/signup')
-        .send({ email: email2, name: 'User 2', password: 'pass789012' })
+        .send({ email: email2, name: 'User 2', password: 'pass789012', dob_attestation: ADULT_ATTESTATION })
 
       expect(res1.status).toBe(201)
       expect(res2.status).toBe(201)
@@ -673,14 +680,14 @@ describe('POST /api/auth/signup', () => {
       // Create with magic link
       const res1 = await request(app)
         .post('/api/auth/signup')
-        .send({ token: magicLink.token, name: 'Magic User', password: 'pass123456' })
+        .send({ token: magicLink.token, name: 'Magic User', password: 'pass123456', dob_attestation: ADULT_ATTESTATION })
 
       expect(res1.status).toBe(201)
 
       // Try to create again with same email (standalone)
       const res2 = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: 'Another User', password: 'pass789012' })
+        .send({ email, name: 'Another User', password: 'pass789012', dob_attestation: ADULT_ATTESTATION })
 
       expect(res2.status).toBe(409)
     })
@@ -690,7 +697,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ email: emailWithSpace, name: 'Space Test', password: 'pass123456' })
+        .send({ email: emailWithSpace, name: 'Space Test', password: 'pass123456', dob_attestation: ADULT_ATTESTATION })
 
       // Should either trim or reject - most systems trim
       // Adjust expectation based on implementation
@@ -708,9 +715,10 @@ describe('POST /api/auth/signup', () => {
       const email = uniqueEmail('claim')
 
       // An existing guest player (e.g. previously registered for a tournament)
-      const guest = await playerRepo.findOrCreatePlayerByEmail(email, 'Guest Name')
+      const guest = await playerRepo.findOrCreatePlayerByEmail(email, 'Guest Name', undefined, undefined, ADULT_ATTESTATION)
 
       // Signing up with the same email (different casing) must claim that player
+      // No attestation needed: guest already exists, so find path runs (ungated)
       const res = await request(app)
         .post('/api/auth/signup')
         .send({ email: email.toUpperCase(), name: 'Account Name', password: 'password123' })
@@ -730,7 +738,7 @@ describe('POST /api/auth/signup', () => {
 
       const res = await request(app)
         .post('/api/auth/signup')
-        .send({ email, name: 'Fresh User', password: 'password123' })
+        .send({ email, name: 'Fresh User', password: 'password123', dob_attestation: ADULT_ATTESTATION })
 
       expect(res.status).toBe(201)
 

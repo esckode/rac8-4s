@@ -8,6 +8,9 @@ import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutReposi
 import { generatePlayerSession } from '../../auth/magic-link'
 import { InMemoryTokenStore } from '../../auth/token-store'
 import { generateBracket } from '@core/index'
+import { defaultAdultAttestation } from '../factories/player.factory'
+
+const ADULT_ATTESTATION = defaultAdultAttestation()
 
 // Helper to get the right database connection (transaction or pool)
 
@@ -1480,6 +1483,7 @@ describe('Tournaments API', () => {
         .send({
           email: 'newplayer@test.local',
           name: 'New Player',
+          dob_attestation: ADULT_ATTESTATION,
         })
 
       expect(res.status).toBe(202)
@@ -1603,7 +1607,7 @@ describe('Tournaments API', () => {
       const email = 'player@test.local'
       const res1 = await request(app)
         .post(`/tournaments/${tournament.id}/register`)
-        .send({ email, name: 'Player' })
+        .send({ email, name: 'Player', dob_attestation: ADULT_ATTESTATION })
 
       const res2 = await request(app)
         .post(`/tournaments/${tournament.id}/register`)
@@ -1626,6 +1630,7 @@ describe('Tournaments API', () => {
           name: 'Player',
           phone: '+1234567890',
           preferredContact: 'email',
+          dob_attestation: ADULT_ATTESTATION,
         })
 
       expect(res.status).toBe(202)

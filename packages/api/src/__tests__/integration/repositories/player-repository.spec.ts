@@ -2,6 +2,7 @@ import { Pool, PoolClient } from 'pg'
 import crypto from 'crypto'
 import { getTestPool, beginTransaction, rollbackTransaction } from '../../helpers/db'
 import { PlayerRepository } from '../../../db'
+import { defaultAdultAttestation } from '../../factories/player.factory'
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -27,8 +28,8 @@ describe('PlayerRepository email normalization', () => {
     const mixed = `${local}@Example.COM`
     const lower = `${local}@example.com`.toLowerCase()
 
-    const first = await repo.findOrCreatePlayerByEmail(mixed, 'First')
-    const second = await repo.findOrCreatePlayerByEmail(lower.toUpperCase(), 'Second')
+    const first = await repo.findOrCreatePlayerByEmail(mixed, 'First', undefined, undefined, defaultAdultAttestation())
+    const second = await repo.findOrCreatePlayerByEmail(lower.toUpperCase(), 'Second', undefined, undefined, defaultAdultAttestation())
 
     // Same person regardless of casing — must resolve to the same row
     expect(second.id).toBe(first.id)
@@ -38,7 +39,7 @@ describe('PlayerRepository email normalization', () => {
 
   it('findByEmail matches case-insensitively', async () => {
     const local = `Find.Me.${uid()}`
-    const created = await repo.findOrCreatePlayerByEmail(`${local}@Example.com`, 'Finder')
+    const created = await repo.findOrCreatePlayerByEmail(`${local}@Example.com`, 'Finder', undefined, undefined, defaultAdultAttestation())
 
     const byUpper = await repo.findByEmail(`${local}@EXAMPLE.COM`.toUpperCase())
     const byLower = await repo.findByEmail(`${local}@example.com`.toLowerCase())

@@ -16,7 +16,7 @@ import crypto from 'crypto'
 import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
 import { createTestApp } from '../helpers/app'
 import { PlayerRepository, TournamentRepository, AgeAttestation } from '../../db'
-import { TournamentFactory } from '../factories'
+import { TournamentFactory, OrganizerFactory } from '../factories'
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -49,9 +49,9 @@ describe('age gate: entry path 1 — public tournament registration', () => {
     const deps = createTestApp(pool)
     app = deps.app
 
-    const organizer = await (await import('../factories')).OrganizerFactory.create(pool)
-    const tournament = await TournamentFactory.create(pool, organizer.id)
-    tournamentId = tournament.id
+    const organizerId = OrganizerFactory.id()
+    const tournament = await TournamentFactory.open(pool, organizerId)
+    tournamentId = tournament!.id
   })
 
   afterAll(async () => {
@@ -80,7 +80,7 @@ describe('age gate: entry path 1 — public tournament registration', () => {
     expect(res.body.code).toBe('UNDER_AGE')
   })
 
-  it('allows registration with a valid 18+ attestation (status 200)', async () => {
+  it('allows registration with a valid 18+ attestation (status 202)', async () => {
     const res = await request(app)
       .post(`/tournaments/${tournamentId}/register`)
       .send({
@@ -89,7 +89,7 @@ describe('age gate: entry path 1 — public tournament registration', () => {
         dob_attestation: adultDob(),
       })
 
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(202)
   })
 
   it('allows re-registration of an existing player without attestation', async () => {
@@ -102,16 +102,16 @@ describe('age gate: entry path 1 — public tournament registration', () => {
         name: 'Existing Adult',
         dob_attestation: adultDob(),
       })
-    expect(first.status).toBe(200)
+    expect(first.status).toBe(202)
 
     // Second tournament (existing player can register without re-attesting)
-    const organizer2 = await (await import('../factories')).OrganizerFactory.create(pool)
-    const tournament2 = await TournamentFactory.create(pool, organizer2.id)
+    const organizerId2 = OrganizerFactory.id()
+    const tournament2 = await TournamentFactory.open(pool, organizerId2)
     const second = await request(app)
-      .post(`/tournaments/${tournament2.id}/register`)
+      .post(`/tournaments/${tournament2!.id}/register`)
       .send({ email: playerEmail, name: 'Existing Adult' })
 
-    expect(second.status).toBe(200)
+    expect(second.status).toBe(202)
   })
 })
 

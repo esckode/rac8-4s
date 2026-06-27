@@ -6,6 +6,9 @@ import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/d
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { OrganizerFactory, TournamentFactory } from '../factories'
 import { InMemoryTokenStore } from '../../auth/token-store'
+import { defaultAdultAttestation } from '../factories/player.factory'
+
+const ADULT_ATTESTATION = defaultAdultAttestation()
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -41,7 +44,7 @@ describe('Registered player (account JWT) access to player endpoints (P1)', () =
     const email = `acct-${uid()}@test.local`
     const res = await request(app)
       .post('/api/auth/signup')
-      .send({ email, name: 'Acct Player', password: 'password123' })
+      .send({ email, name: 'Acct Player', password: 'password123', dob_attestation: ADULT_ATTESTATION })
     expect(res.status).toBe(201)
     return { token: res.body.token, email }
   }
@@ -52,7 +55,7 @@ describe('Registered player (account JWT) access to player endpoints (P1)', () =
     for (const email of emails) {
       const r = await request(app)
         .post(`/tournaments/${tournament!.id}/register`)
-        .send({ email, name: 'Player' })
+        .send({ email, name: 'Player', dob_attestation: ADULT_ATTESTATION })
       expect(r.status).toBe(202)
     }
     await request(app)

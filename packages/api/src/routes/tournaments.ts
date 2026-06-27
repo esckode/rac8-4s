@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
-import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository, AccountRepository, RegistrationRow, PlayerRow, GroupMatchRow } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository, AccountRepository, RegistrationRow, PlayerRow, GroupMatchRow, AgeAttestation, AgeAttestationRequiredError, UnderAgeError } from '../db'
 import {
   requireOrganizerAuth,
   assertOrganizerOwnsTournament,
@@ -1249,12 +1249,25 @@ export default function tournamentsRouter(deps: AppDependencies) {
         }
       }
 
-      const player = await playerRepo.findOrCreatePlayerByEmail(
-        req.body.email.trim(),
-        req.body.name.trim(),
-        req.body.phone,
-        req.body.preferredContact
-      )
+      const ageAttestation: AgeAttestation | null = req.body.dob_attestation || null
+      let player: PlayerRow
+      try {
+        player = await playerRepo.findOrCreatePlayerByEmail(
+          req.body.email.trim(),
+          req.body.name.trim(),
+          req.body.phone,
+          req.body.preferredContact,
+          ageAttestation
+        )
+      } catch (err) {
+        if (err instanceof AgeAttestationRequiredError) {
+          return res.status(400).json({ code: 'AGE_ATTESTATION_REQUIRED', message: (err as Error).message })
+        }
+        if (err instanceof UnderAgeError) {
+          return res.status(422).json({ code: 'UNDER_AGE', message: (err as Error).message })
+        }
+        throw err
+      }
 
       // Dual-role: if the request is authenticated as the account whose own email
       // is being registered, link that account to this player so it can act as a

@@ -1,8 +1,21 @@
 import crypto from 'crypto'
-import { PlayerRepository } from '../../db'
+import { PlayerRepository, AgeAttestation } from '../../db'
 import { Pool } from 'pg'
 import { generatePlayerSession } from '../../auth/magic-link'
 import { TokenStore } from '../../auth/token-store'
+
+/**
+ * Default adult attestation for test factories.
+ * Supplies a 30-year-old DOB so existing tests don't need to specify one.
+ */
+export function defaultAdultAttestation(): AgeAttestation {
+  const d = new Date()
+  d.setFullYear(d.getFullYear() - 30)
+  return {
+    dateOfBirth: d.toISOString().slice(0, 10),
+    policyVersion: 'v1',
+  }
+}
 
 export interface PlayerData {
   email: string
@@ -37,7 +50,7 @@ export const PlayerFactory = {
   async create(pool: Pool, overrides: Partial<PlayerData> = {}) {
     const repo = new PlayerRepository(pool)
     const data = this.data(overrides)
-    return repo.findOrCreatePlayerByEmail(data.email, data.name)
+    return repo.findOrCreatePlayerByEmail(data.email, data.name, undefined, undefined, defaultAdultAttestation())
   },
 
   /**

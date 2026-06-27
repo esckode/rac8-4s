@@ -8,6 +8,9 @@ import { TournamentFactory } from '../factories'
 import { AccountRepository } from '../../db'
 import { issueOrganizerToken } from '../../auth/tokens'
 import { InMemoryTokenStore } from '../../auth/token-store'
+import { defaultAdultAttestation } from '../factories/player.factory'
+
+const ADULT_ATTESTATION = defaultAdultAttestation()
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -48,7 +51,7 @@ describe('Dual-role: organizer-as-participant', () => {
     const email = `dual-${uid()}@test.local`
     const signup = await request(app)
       .post('/api/auth/signup')
-      .send({ email, name: 'Dual', password: 'password123' })
+      .send({ email, name: 'Dual', password: 'password123', dob_attestation: ADULT_ATTESTATION })
     expect(signup.status).toBe(201)
     const linkedPlayerId = decodeJwtPayload(signup.body.token).playerId
     expect(linkedPlayerId).toBeTruthy()
@@ -77,7 +80,7 @@ describe('Dual-role: organizer-as-participant', () => {
     const reg = await request(app)
       .post(`/tournaments/${tournament!.id}/register`)
       .set('Authorization', `Bearer ${orgToken}`)
-      .send({ email, name: 'Org Player' })
+      .send({ email, name: 'Org Player', dob_attestation: ADULT_ATTESTATION })
     expect(reg.status).toBe(202)
 
     const refreshed = await accountRepo.findById(account.id)
@@ -92,7 +95,7 @@ describe('Dual-role: organizer-as-participant', () => {
     await request(app)
       .post(`/tournaments/${tournament!.id}/register`)
       .set('Authorization', `Bearer ${orgToken}`)
-      .send({ email, name: 'Org Player' })
+      .send({ email, name: 'Org Player', dob_attestation: ADULT_ATTESTATION })
 
     const linked = await accountRepo.findById(account.id)
     // A fresh token now carries the linked playerId (as login would issue).
