@@ -1478,3 +1478,88 @@ Then onConfirm is called with { dateOfBirth, policyVersion: "v1" }
 - API integration (all 3 entry paths): `packages/api/src/__tests__/integration/age-gate-entry-paths.spec.ts`
 - Frontend RTL: `packages/frontend/src/__tests__/components/DobScreen.spec.tsx`
 - Playwright e2e: best-effort — RTL covers the UI contract; e2e deferred until servers are available.
+
+---
+
+## Feature: Player Groups — G1.3 Invite Flow
+
+### Scenario: Owner invites a new player by email
+
+```gherkin
+Given a player group exists with an owner
+When the owner POSTs /player/groups/:groupId/invites with { email: "invitee@example.com" }
+Then a 201 response is returned
+  And an invite email is sent to invitee@example.com
+  And the email contains a single-use accept URL with a 64-char hex token
+
+When the invitee follows the accept URL (POST /player/groups/:groupId/invites/accept)
+  And supplies { token, email, name, ageAttestation: { dateOfBirth, policyVersion } }
+Then the invitee player record is created (age gate passes — 18+)
+  And a member row is inserted in player_group_members
+  And the response is 200 { ok: true }
+```
+
+### Scenario: Owner invites an existing player (age gate bypass)
+
+```gherkin
+Given a player already exists in the system (is_adult = true)
+When an owner invites them by email and they follow the link
+  And they accept WITHOUT providing ageAttestation
+Then the existing player is looked up and joined to the group as a member
+  And the response is 200 { ok: true }
+```
+
+### Scenario: Under-18 invitee is hard-rejected
+
+```gherkin
+Given an invite token is sent to "young@example.com"
+When "young@example.com" accepts with ageAttestation.dateOfBirth = 16 years ago
+Then the response is 400 UNDERAGE
+  And no player row is created in the database
+  And the group membership table has no row for that email
+```
+
+### Scenario: Token reuse is rejected (single-use)
+
+```gherkin
+Given an invite token was already consumed on a successful accept
+When the invitee (or any attacker) submits the same token again
+Then the response is 400 TOKEN_INVALID
+```
+
+### Scenario: Wrong-email rejection (email-bound)
+
+```gherkin
+Given an invite token was minted for "target@example.com"
+When an attacker submits the token with email = "attacker@example.com"
+Then the response is 400 (email mismatch)
+  And the token is NOT consumed (the rightful invitee can still use it)
+```
+
+### Scenario: Non-owner cannot create an invite
+
+```gherkin
+Given a player is a member (role=member) of a group
+When they POST /player/groups/:groupId/invites
+Then the response is 403 FORBIDDEN
+```
+
+### Scenario: No shareable group-wide link path
+
+```gherkin
+Given a group exists
+When a GET request is made to /player/groups/:groupId/invites
+Then the response is 404 (no shareable-link route exists)
+  And there is no endpoint to generate an invite without specifying a target email
+```
+
+**Implementation (G1.3):**
+- API unit: `packages/api/src/__tests__/unit/group-invite-token.spec.ts`
+  - GroupInvitePayload variant (type='group-invite', groupId, email)
+  - Single-use (second validate throws)
+  - Email-bound (wrong email throws, does NOT consume token)
+  - Case-insensitive email comparison
+  - No anonymous/shareable token (email required in payload)
+- API integration: `packages/api/src/__tests__/integration/group-invite.spec.ts`
+  - All scenarios above tested
+- Playwright e2e: best-effort — integration covers the full flow; Playwright deferred until frontend invite UI is implemented (G2.5+).
