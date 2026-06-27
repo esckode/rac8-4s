@@ -1,10 +1,12 @@
 /**
- * G1.2 — Player group membership lifecycle routes.
+ * G1.2 + G1.3 — Player group membership lifecycle + invite flow routes.
  *
  * Mounted at /player/groups. Route ordering §10: static paths before :id.
  *
  * Routes:
- *   POST   /player/groups                              — create group (creator becomes owner)
+ *   POST   /player/groups                               — create group (creator becomes owner)
+ *   POST   /player/groups/:groupId/invites              — owner creates email-bound invite
+ *   POST   /player/groups/:groupId/invites/accept       — invitee accepts invite (age-gated)
  *   POST   /player/groups/:groupId/members/:pid/promote — owner promotes member → owner
  *   POST   /player/groups/:groupId/members/:pid/demote  — owner demotes owner → member
  *   DELETE /player/groups/:groupId/members/:pid         — owner kicks member
@@ -14,15 +16,23 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
 import { requirePlayerSessionAuth } from '../auth'
-import { ForbiddenError } from '../auth/errors'
+import { ForbiddenError, TokenInvalidError } from '../auth/errors'
 import { GroupRepository, LastOwnerError } from '../repositories/group-repository'
+import { PlayerRepository, AgeAttestationRequiredError, UnderAgeError } from '../db'
+import {
+  generateGroupInviteToken,
+  validateGroupInviteToken,
+} from '../auth/magic-link'
 import { getLogger } from '../logger'
+
+const INVITE_TTL_SECONDS = 7 * 24 * 3600 // 7 days
 
 const log = getLogger('player-groups')
 
 export default function playerGroupsRouter(deps: AppDependencies): Router {
   const router = Router({ mergeParams: true })
   const groupRepo = new GroupRepository(deps.db as any)
+  const playerRepo = new PlayerRepository(deps.db as any)
 
   // POST /player/groups — create a player group
   // §10: registered before /:groupId param routes
@@ -63,6 +73,144 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
       next(err)
     }
   })
+
+  // ─── G1.3 Invite routes ────────────────────────────────────────────────────
+  // §10: /:groupId/invites/accept (static suffix) registered before /:groupId/invites
+  // Both are registered before /:groupId/members to keep member param routes after.
+
+  // POST /player/groups/:groupId/invites/accept — invitee accepts an email-bound invite
+  // Public (no session auth): the invitee may be a brand-new player.
+  router.post(
+    '/:groupId/invites/accept',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const groupId = req.params.groupId as string
+        const { token, email, name, ageAttestation } = req.body
+
+        if (!token || !email) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'token and email are required' })
+        }
+        if (typeof email !== 'string' || !email.trim()) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'email must be a non-empty string' })
+        }
+
+        // Verify token is valid, email-bound, and single-use
+        let invitePayload
+        try {
+          invitePayload = await validateGroupInviteToken(token, email.trim(), deps.tokenStore)
+        } catch (err) {
+          if (err instanceof TokenInvalidError) {
+            return res.status(400).json({ code: 'TOKEN_INVALID', message: err.message })
+          }
+          throw err
+        }
+
+        // Token groupId must match path groupId
+        if (invitePayload.groupId !== groupId) {
+          return res.status(400).json({ code: 'TOKEN_INVALID', message: 'Token does not match this group' })
+        }
+
+        // Confirm the group exists
+        const groupRow = await (deps.db as any).query(
+          `SELECT id FROM public.player_groups WHERE id = $1`,
+          [groupId]
+        )
+        if (groupRow.rows.length === 0) {
+          return res.status(404).json({ code: 'NOT_FOUND', message: 'Group not found' })
+        }
+
+        // findOrCreatePlayerByEmail: existing players bypass the age gate;
+        // new players must provide a valid 18+ attestation (G0.1 gate).
+        let player
+        try {
+          player = await playerRepo.findOrCreatePlayerByEmail(
+            email.trim(),
+            name || email.trim(),
+            undefined,
+            undefined,
+            ageAttestation ?? null
+          )
+        } catch (err) {
+          if (err instanceof AgeAttestationRequiredError || err instanceof UnderAgeError) {
+            return res.status(400).json({
+              code: err instanceof UnderAgeError ? 'UNDERAGE' : 'AGE_ATTESTATION_REQUIRED',
+              message: err.message,
+            })
+          }
+          throw err
+        }
+
+        // Add to group as member (idempotent: ON CONFLICT DO NOTHING)
+        await (deps.db as any).query(
+          `INSERT INTO public.player_group_members (group_id, player_id, role)
+           VALUES ($1, $2, 'member')
+           ON CONFLICT (group_id, player_id) DO NOTHING`,
+          [groupId, player.id]
+        )
+
+        log.info('group.invite.accepted', { groupId, playerId: player.id })
+
+        return res.status(200).json({ ok: true, groupId, playerId: player.id })
+      } catch (err) {
+        next(err)
+      }
+    }
+  )
+
+  // POST /player/groups/:groupId/invites — owner sends an email-bound invite
+  // §10: after /accept (static suffix), before /:groupId/members (param routes)
+  router.post(
+    '/:groupId/invites',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+        const { email } = req.body
+
+        if (!email || typeof email !== 'string' || !email.trim()) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'email is required' })
+        }
+
+        // Verify actor is an owner of this group
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole !== 'owner') {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group owners can send invites' })
+        }
+
+        // Mint a single-use, email-bound group-invite token
+        const { token } = await generateGroupInviteToken(
+          {
+            type: 'group-invite',
+            groupId,
+            email: email.trim().toLowerCase(),
+            createdAt: Date.now(),
+          },
+          INVITE_TTL_SECONDS,
+          deps.tokenStore
+        )
+
+        // Send the invite email
+        if (deps.emailAdapter) {
+          const frontendUrl = deps.config.email?.frontendUrl ?? 'http://localhost:5173'
+          const acceptUrl = `${frontendUrl}/player/groups/${groupId}/invites/accept?token=${token}`
+          await deps.emailAdapter.send(
+            email.trim(),
+            `You've been invited to join a group`,
+            `<p>You have been invited to join a group.</p>
+<p><a href="${acceptUrl}">Accept your invite</a></p>
+<p>This link is single-use and valid for 7 days. It can only be used by this email address.</p>
+<p>Or copy this URL: ${acceptUrl}</p>`
+          )
+        }
+
+        log.info('group.invite.sent', { groupId, actorPlayerId: session.playerId })
+
+        return res.status(201).json({ ok: true })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
 
   // POST /player/groups/:groupId/members/:playerId/promote
   router.post(
