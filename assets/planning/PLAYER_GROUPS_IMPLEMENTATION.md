@@ -94,6 +94,12 @@ contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** i
 
 ## PHASE G1 — Group entity & membership (§11.1–11.5, design §2)
 
+> **⚠️ Table naming (collision fix):** `public.groups` / `group_matches` already exist as the **tournament
+> group-stage** tables (migration 003). The community-layer tables in this plan are therefore named
+> **`public.player_groups`** and **`public.player_group_members`** (the plan/design text says "groups"/
+> "group_members" generically — read those as the `player_*` tables throughout G1–G5). Group **messages**
+> still live in `messaging.group_messages` (G2.1) via the `conversations` bridge.
+
 ### G1.1 — Schema: groups + group_members (multi-owner)
 - **RED:** migration test — `groups(id, name, created_by, default_match_format{singles|doubles}, created_at)`
   and `group_members(group_id, player_id, role{owner|member}, notify_level, joined_at)` exist with correct
