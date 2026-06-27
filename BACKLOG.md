@@ -121,6 +121,11 @@ here.
   shape, payments integration (Stripe Connect), tax/compliance, free-forever community boundary.
 - Design system (DESIGN_SYSTEM.md §4): formality bar (doc-only vs. + Storybook/visual regression),
   portability, a11y bar, theming/dark-mode scope, token-usage governance, component API contracts.
+- **Frontend (community layer + cross-cutting)** ([FrontEndPlan.md](assets/planning/FrontEndPlan.md)) —
+  **gap inventory captured, not yet grilled.** §A Player-Groups FE gaps (member mgmt, notify UI, mentions,
+  invite-accept, mixer scoring, launch flow, nav/IA, states, age-gate screen) + §B cross-cutting (design
+  system, PWA/web-push, a11y, 4th nav tab, SSE reconnect). → grill, then produce a real FE plan / seed the
+  pending `PWA_FRONTEND_IMPLEMENTATION.md` + a11y spec.
 
 ---
 
