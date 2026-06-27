@@ -25,9 +25,10 @@ function uid(): string {
 }
 
 async function insertPlayer(pool: Pool, email: string, name: string): Promise<string> {
+  const id = crypto.randomUUID()
   const result = await pool.query(
-    `INSERT INTO public.players (email, name) VALUES ($1, $2) RETURNING id`,
-    [email, name]
+    `INSERT INTO public.players (id, email, name) VALUES ($1, $2, $3) RETURNING id`,
+    [id, email, name]
   )
   return result.rows[0].id as string
 }
