@@ -22,6 +22,9 @@ A tournament management webapp for racket sports (tennis, pickleball, badminton,
   - If partner doesn't confirm by registration deadline, the team is disqualified
   - Players can withdraw team and request a different partner before registration deadline
   - Only paired teams before deadline qualify for the tournament
+
+> **Casual mode exception:** Partner confirmation is N/A for casual tournaments; players are seeded directly from poll In-voters.
+
 - **Player tokens**: Each player gets a new magic link token per tournament registration (not reused across tournaments)
 - **Concurrent tournaments**: Players can register for and participate in unlimited tournaments simultaneously
 
@@ -83,6 +86,8 @@ A tournament management webapp for racket sports (tennis, pickleball, badminton,
 - **Hybrid model**: Organizer sets target dates for each phase, but can manually override/advance at any time
 - **Example**: Group stage deadline is set to May 15, but organizer can declare group stage complete earlier if all scores submitted
 
+> **Casual mode exception:** Casual tournaments auto-advance to the next round when all current-round matches are scored; no organizer action required.
+
 ## Group Stage Details
 
 ### Group Distribution
@@ -140,10 +145,15 @@ A tournament management webapp for racket sports (tennis, pickleball, badminton,
 - **Organizer control**: Organizer can manually advance before the deadline if all scores are submitted
 - **Organizer override window**: Same as group stage — window exists between player deadline and round advance
 
+> **Casual mode exception:** Casual tournaments have no score deadlines. Scores remain editable until the organizer ends the session or the tournament reaches a terminal state.
+
 ## Score Tracking — Detailed
 
 ### Score Submission
 - **Who submits**: One player involved in the match self-reports the final score
+
+> **Casual mode exception:** In casual tournaments, any registered participant may submit the score for any match (open scoring).
+
 - **Format**: Text-based (e.g., "6-4, 6-3" for tennis, "11-9, 11-7" for pickleball)
 - **Validation & parsing**: 
   - System validates score format strictly (e.g., "X-Y, X-Y" pattern)

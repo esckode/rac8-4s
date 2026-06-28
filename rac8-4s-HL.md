@@ -701,16 +701,19 @@ Columns:
   - maxPlayers (INT, NOT NULL)
   - status (ENUM: 'draft'|'registration_open'|'registration_closed'|
             'group_stage_active'|'group_stage_complete'|'knockout_active'|
-            'tournament_complete', DEFAULT: 'draft')
-  - registrationDeadline (TIMESTAMP, NOT NULL)
-  - groupStageDeadline (TIMESTAMP, NOT NULL)
-  - knockoutStageDeadline (TIMESTAMP, NOT NULL)
+            'tournament_complete'|'abandoned', DEFAULT: 'draft')
+  - registrationDeadline (TIMESTAMP, NULLABLE)  -- Nullable for casual mode
+  - groupStageDeadline (TIMESTAMP, NULLABLE)    -- Nullable for casual mode
+  - knockoutStageDeadline (TIMESTAMP, NULLABLE) -- Nullable for casual mode
+  - mode (TEXT, NOT NULL, DEFAULT 'scheduled', CHECK IN ('scheduled','casual'))
+  - visibility (TEXT, NOT NULL, DEFAULT 'public', CHECK IN ('public','unlisted'))
+  - group_id (UUID, NULLABLE, REFERENCES player_groups.id)
   - organizerId (UUID, REFERENCES accounts.id)
   - createdAt (TIMESTAMP, DEFAULT: now())
   - updatedAt (TIMESTAMP, DEFAULT: now())
 
 Constraints:
-  - registrationDeadline < groupStageDeadline < knockoutStageDeadline
+  - When mode = 'scheduled': registrationDeadline < groupStageDeadline < knockoutStageDeadline (all NOT NULL)
   - maxPlayers >= 4
 ```
 
@@ -1138,6 +1141,7 @@ GET /tournaments?page=1&limit=20&sport=pickleball&sort=createdAt
 - Filterable by: sport, status, date range
 - Sortable by: createdAt, registrationDeadline, registrationCount
 - Only public tournaments shown (future: private/invite-only)
+- Tournaments with `visibility='unlisted'` are hidden from all browse endpoints. Unlisted tournaments are reachable only via direct URL or invite link. Casual group-launched tournaments default to `visibility='unlisted'`.
 
 ---
 
@@ -1429,6 +1433,22 @@ GET /tournaments/:tournamentId/bracket
   "completed": false
 }
 ```
+
+---
+
+### 5.5 Casual Mode (mode = 'casual')
+
+Casual tournaments are group-organized, short-session play. Key differences from `mode = 'scheduled'`:
+
+| Behavior              | Scheduled                          | Casual                                         |
+|-----------------------|------------------------------------|------------------------------------------------|
+| Deadlines             | Required (NOT NULL)                | All nullable; deadline checks skipped          |
+| Registration          | Open → closes at deadline          | Seeded from poll In-voters; closed immediately |
+| Score submission      | Only match participants            | Any registered participant                     |
+| Round advancement     | Organizer-triggered                | Auto-advances when all round matches scored    |
+| Visibility default    | 'public'                           | 'unlisted'                                     |
+| Session end           | tournament_complete after final    | 'end session' route or 7-day idle sweep        |
+| group_id              | NULL (standalone)                  | UUID of the originating player group           |
 
 ---
 
