@@ -39,12 +39,12 @@ describe('A. Basic output shape', () => {
     expect(allPlayers.sort()).toEqual(players.slice().sort())
   })
 
-  it('each match has exactly 2 players per team', () => {
+  it('each match has exactly 1 player per team', () => {
     const players = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6']
     const result = generateRoundPairings(players, 1, [], 42)
     for (const match of result.matches) {
-      expect(match.team1).toHaveLength(2)
-      expect(match.team2).toHaveLength(2)
+      expect(match.team1).toHaveLength(1)
+      expect(match.team2).toHaveLength(1)
     }
   })
 })
@@ -76,8 +76,7 @@ describe('B. Sit-out rotation (odd N)', () => {
       sitOuts.push(result.sitOut!)
       // accumulate pairings
       for (const m of result.matches) {
-        priorPairings.push({ playerA: m.team1[0], playerB: m.team1[1] })
-        priorPairings.push({ playerA: m.team2[0], playerB: m.team2[1] })
+        priorPairings.push({ playerA: m.team1[0], playerB: m.team2[0] })
       }
     }
 
@@ -141,8 +140,7 @@ describe('D. Partner rotation (best-effort greedy)', () => {
     for (let round = 1; round <= 3; round++) {
       const result = generateRoundPairings(players, round, priorPairings, seed)
       for (const m of result.matches) {
-        priorPairings.push({ playerA: m.team1[0], playerB: m.team1[1] })
-        priorPairings.push({ playerA: m.team2[0], playerB: m.team2[1] })
+        priorPairings.push({ playerA: m.team1[0], playerB: m.team2[0] })
       }
     }
 
@@ -169,10 +167,7 @@ describe('D. Partner rotation (best-effort greedy)', () => {
       { playerA: 'p5', playerB: 'p6' },
     ]
     const result = generateRoundPairings(players, 2, round1, 42)
-    const partnerships: string[][] = result.matches.flatMap((m) => [
-      [m.team1[0], m.team1[1]],
-      [m.team2[0], m.team2[1]],
-    ])
+    const partnerships: string[][] = result.matches.map((m) => [m.team1[0], m.team2[0]])
     // None of the round 1 pairs should reappear in round 2
     for (const pair of round1) {
       const key = [pair.playerA, pair.playerB].sort().join('|')

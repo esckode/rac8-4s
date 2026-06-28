@@ -20,6 +20,7 @@ import { isSinglesMatch, isDoublesMatch, getMatchParticipantIds, validateMatchFo
 import { processStandingsRecalculate } from '../workers/standings-processor'
 import { ConversationRepository } from '../repositories/conversation-repository'
 import { getLogger } from '../logger'
+import { generateRoundPairings } from '../mixer-scheduler'
 
 const log = getLogger('tournaments')
 
@@ -1603,6 +1604,37 @@ export default function tournamentsRouter(deps: AppDependencies) {
       page: Math.floor(offset / limit) + 1,
       limit,
     })
+  })
+
+  // POST /:id/generate-round - generate mixer round pairings (casual tournaments, participants only)
+  router.post('/:id/generate-round', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.id as string
+
+      const { playerId } = await resolveTournamentPlayer(req.headers.authorization, tournamentId)
+
+      const tournament = await repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      if (tournament.mode !== 'casual') {
+        return res.status(409).json({ code: 'INVALID_MODE', message: 'Round generation is only available for casual tournaments' })
+      }
+
+      const seed = typeof req.body.seed === 'number' ? req.body.seed : Date.now()
+
+      const registrations = await playerRepo.findRegistrationsByTournament(tournamentId, { offset: 0, limit: 1000 })
+      const players = registrations.rows.map((r) => r.player_id)
+
+      const result = generateRoundPairings(players, 1, [], seed)
+
+      log.info('round.generated', { tournamentId, playerId, playerCount: players.length, seed })
+
+      res.json({ matches: result.matches, sitOut: result.sitOut })
+    } catch (err) {
+      next(err)
+    }
   })
 
   // GET /:id - public tournament details (for discovery / guest registration page).
