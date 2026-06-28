@@ -32,6 +32,7 @@ import { getLogger } from '../logger'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
 import { ConversationRepository } from '../repositories/conversation-repository'
 import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-notify-selector'
+import { PollRepository, type PollChoice } from '../repositories/poll-repository'
 
 const INVITE_TTL_SECONDS = 7 * 24 * 3600 // 7 days
 
@@ -55,6 +56,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   const playerRepo = new PlayerRepository(deps.db as any)
   const groupMsgRepo = new GroupMessageRepository(deps.db as any)
   const conversationRepo = new ConversationRepository(deps.db as any)
+  const pollRepo = new PollRepository(deps.db as any)
 
   // GET /player/groups — list the caller's groups (G2.5)
   // §10: static GET registered before POST and /:groupId param routes
@@ -487,6 +489,174 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         }
 
         return res.status(200).json({ ok: true })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // ─── G3.1 Poll routes ─────────────────────────────────────────────────────
+  // §10: /:groupId/polls registered before /:groupId/members
+
+  // POST /player/groups/:groupId/polls — member creates a poll (G3.1)
+  router.post(
+    '/:groupId/polls',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+
+        // Authz: caller must be a member (owner or member)
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can create polls' })
+        }
+
+        const { question, targetTime } = req.body
+        if (!question || typeof question !== 'string' || !question.trim()) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'question is required' })
+        }
+
+        const parsedTargetTime = targetTime ? new Date(targetTime) : null
+
+        const poll = await pollRepo.createPoll({
+          groupId,
+          creatorPlayerId: session.playerId,
+          question: question.trim(),
+          targetTime: parsedTargetTime,
+        })
+
+        // Resolve conversation_id for bus emit and notify
+        const conversationId = await conversationRepo.resolveGroupConversation(groupId)
+
+        // Bus emit (SSE) — reuse existing broadcast path
+        if (deps.broadcastBus) {
+          deps.broadcastBus.emit(conversationId, 'message.created', {
+            id: poll.messageId,
+            conversationId,
+            groupId,
+            playerId: session.playerId,
+            type: 'poll',
+            pollId: poll.pollId,
+            question: poll.question,
+          })
+        }
+
+        // G2.4 notify-on-create: poll type → notify 'all' + 'mentions_polls'
+        if (deps.jobQueue) {
+          const rawMembers = await groupRepo.getGroupMembersForNotify(groupId)
+          const membersForNotify: GroupMemberForNotify[] = rawMembers.map(m => ({
+            playerId: m.playerId,
+            notifyLevel: m.notifyLevel as 'all' | 'mentions_polls' | 'muted',
+            name: m.name,
+          }))
+          const recipientIds = selectNotifyRecipients({
+            members: membersForNotify,
+            messageType: 'poll',
+            body: question.trim(),
+            senderPlayerId: session.playerId,
+          })
+          for (const recipientId of recipientIds) {
+            await deps.jobQueue.add(
+              'messaging.notify',
+              { conversationId, groupId },
+              { jobId: `notify:${conversationId}:${recipientId}` }
+            )
+          }
+        }
+
+        log.info('poll.created', {
+          groupId,
+          pollId: poll.pollId,
+          messageId: poll.messageId,
+          playerId: session.playerId,
+        })
+
+        return res.status(201).json({
+          pollId: poll.pollId,
+          messageId: poll.messageId,
+          question: poll.question,
+        })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // GET /player/groups/:groupId/polls/:pollId/votes — live tally (members only)
+  // §10: /:groupId/polls/:pollId/votes (static suffix) before /:groupId/polls/:pollId
+  router.get(
+    '/:groupId/polls/:pollId/votes',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+        const pollId = req.params.pollId as string
+
+        // Authz: caller must be a member
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can view poll results' })
+        }
+
+        const result = await pollRepo.getVotes(pollId)
+
+        return res.status(200).json({
+          votes: result.votes.map(v => ({
+            playerId: v.playerId,
+            choice: v.choice,
+            votedAt: v.votedAt,
+          })),
+          tally: result.tally,
+        })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // POST /player/groups/:groupId/polls/:pollId/votes — cast/re-cast a vote (G3.1)
+  router.post(
+    '/:groupId/polls/:pollId/votes',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+        const pollId = req.params.pollId as string
+
+        // Authz: caller must be a member
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can vote on polls' })
+        }
+
+        const { choice } = req.body
+        const validChoices: PollChoice[] = ['in', 'out', 'maybe']
+        if (!choice || !validChoices.includes(choice as PollChoice)) {
+          return res.status(400).json({
+            code: 'VALIDATION_ERROR',
+            message: `choice must be one of: ${validChoices.join(', ')}`,
+          })
+        }
+
+        const result = await pollRepo.castVote({
+          pollId,
+          playerId: session.playerId,
+          choice: choice as PollChoice,
+        })
+
+        log.info('poll.vote.cast', {
+          groupId,
+          pollId,
+          playerId: session.playerId,
+          choice,
+        })
+
+        return res.status(201).json({
+          pollId,
+          choice: result.choice,
+          votedAt: result.votedAt,
+        })
       } catch (err) {
         next(handleGroupError(err))
       }
