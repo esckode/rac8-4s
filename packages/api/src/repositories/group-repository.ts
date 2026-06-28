@@ -270,6 +270,18 @@ export class GroupRepository {
   }
 
   /**
+   * Remove a player from all groups unconditionally (DSR hard-delete of membership).
+   * Idempotent: safe to re-run if player is already not a member of any group.
+   */
+  async removeFromAllGroups(playerId: string): Promise<void> {
+    await this.pool.query(
+      `DELETE FROM public.player_group_members WHERE player_id = $1`,
+      [playerId]
+    )
+    log.info('group.member.removed_all', { playerId })
+  }
+
+  /**
    * List all groups a player is a member of (G2.5 — My Groups tab).
    * Returns group id, name, the player's role, and total member count.
    */

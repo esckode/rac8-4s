@@ -65,8 +65,8 @@ async function insertGroupMessage(pool: Pool, groupId: string, playerId: string,
   }
 
   const msgRes = await pool.query(
-    `INSERT INTO messaging.group_messages (conversation_id, player_id, body)
-     VALUES ($1, $2, $3)
+    `INSERT INTO messaging.group_messages (conversation_id, player_id, sender_name_snapshot, body)
+     VALUES ($1, $2, 'Test Player', $3)
      RETURNING id`,
     [convId, playerId, body]
   )
@@ -93,31 +93,29 @@ async function insertPollAndVote(pool: Pool, groupId: string, creatorId: string,
 
   // Insert poll message
   const msgRes = await pool.query(
-    `INSERT INTO messaging.group_messages (conversation_id, player_id, body, type)
-     VALUES ($1, $2, $3, 'poll')
+    `INSERT INTO messaging.group_messages (conversation_id, player_id, sender_name_snapshot, body, type)
+     VALUES ($1, $2, 'Test Creator', $3, 'poll')
      RETURNING id`,
     [convId, creatorId, 'Will you attend?']
   )
   const messageId = msgRes.rows[0].id as string
 
   // Insert poll row
-  const pollRes = await pool.query(
+  await pool.query(
     `INSERT INTO messaging.polls (message_id, question)
-     VALUES ($1, $2)
-     RETURNING id`,
+     VALUES ($1, $2)`,
     [messageId, 'Will you attend?']
   )
-  const pollId = pollRes.rows[0].id as string
 
-  // Insert vote
+  // Insert vote (poll_votes uses message_id as the join key)
   await pool.query(
-    `INSERT INTO messaging.poll_votes (poll_id, player_id, choice)
+    `INSERT INTO messaging.poll_votes (message_id, player_id, choice)
      VALUES ($1, $2, 'in')
-     ON CONFLICT (poll_id, player_id) DO UPDATE SET choice = 'in'`,
-    [pollId, voterId]
+     ON CONFLICT (message_id, player_id) DO UPDATE SET choice = 'in'`,
+    [messageId, voterId]
   )
 
-  return pollId
+  return messageId
 }
 
 /** Insert match log + participant slots. Returns match log id. */

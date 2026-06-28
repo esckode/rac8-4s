@@ -17,6 +17,7 @@ import playerRouter from './routes/player'
 import playerGroupsRouter from './routes/player-groups'
 import analyticsRouter from './routes/analytics'
 import authRouter from './routes/auth'
+import { adminRouter } from './routes/admin'
 import type { JobQueue } from '@worker/job-queue'
 import type { StandingsCache } from './standings-cache'
 import type { IBroadcastBus } from './broadcast-bus'
@@ -169,6 +170,7 @@ export function createApp(deps: AppDependencies): Express {
   app.use('/player/groups', playerGroupsRouter(appDeps))
   app.use('/api/analytics', analyticsRouter(appDeps))
   app.use('/api/auth', authRouter(appDeps))
+  app.use('/api/admin', adminRouter(appDeps))
 
   // ─── Health endpoints ──────────────────────────────────────────────────────
   // Must be registered AFTER routers so request-id middleware applies.
