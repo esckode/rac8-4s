@@ -1,16 +1,18 @@
 /**
- * G1.2 + G1.3 — Player group membership lifecycle + invite flow routes.
+ * G1.2 + G1.3 + G2.2 — Player group membership lifecycle, invite flow, and chat routes.
  *
  * Mounted at /player/groups. Route ordering §10: static paths before :id.
  *
  * Routes:
  *   POST   /player/groups                               — create group (creator becomes owner)
- *   POST   /player/groups/:groupId/invites              — owner creates email-bound invite
  *   POST   /player/groups/:groupId/invites/accept       — invitee accepts invite (age-gated)
+ *   POST   /player/groups/:groupId/invites              — owner creates email-bound invite
+ *   POST   /player/groups/:groupId/messages             — member sends a text message (G2.2)
+ *   GET    /player/groups/:groupId/messages             — member gets history (G2.2)
  *   POST   /player/groups/:groupId/members/:pid/promote — owner promotes member → owner
  *   POST   /player/groups/:groupId/members/:pid/demote  — owner demotes owner → member
- *   DELETE /player/groups/:groupId/members/:pid         — owner kicks member
  *   DELETE /player/groups/:groupId/members/:pid/leave   — self-leave (any member)
+ *   DELETE /player/groups/:groupId/members/:pid         — owner kicks member
  */
 
 import { Router, Request, Response, NextFunction } from 'express'
@@ -24,15 +26,31 @@ import {
   validateGroupInviteToken,
 } from '../auth/magic-link'
 import { getLogger } from '../logger'
+import { GroupMessageRepository } from '../repositories/group-message-repository'
+import { ConversationRepository } from '../repositories/conversation-repository'
 
 const INVITE_TTL_SECONDS = 7 * 24 * 3600 // 7 days
 
 const log = getLogger('player-groups')
 
+const MAX_BODY_LENGTH = 4000
+
+function validateGroupMessageBody(body: unknown): string | null {
+  if (typeof body !== 'string' || !body.trim()) {
+    return 'body must be a non-empty string'
+  }
+  if (body.length > MAX_BODY_LENGTH) {
+    return `body must not exceed ${MAX_BODY_LENGTH} characters`
+  }
+  return null
+}
+
 export default function playerGroupsRouter(deps: AppDependencies): Router {
   const router = Router({ mergeParams: true })
   const groupRepo = new GroupRepository(deps.db as any)
   const playerRepo = new PlayerRepository(deps.db as any)
+  const groupMsgRepo = new GroupMessageRepository(deps.db as any)
+  const conversationRepo = new ConversationRepository(deps.db as any)
 
   // POST /player/groups — create a player group
   // §10: registered before /:groupId param routes
@@ -150,6 +168,13 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
 
         log.info('group.invite.accepted', { groupId, playerId: player.id })
 
+        // G2.2: post system event "Name joined" into the group conversation.
+        // Fire-and-forget: if this fails it is non-fatal to the invite-accept.
+        const joinMsg = `${player.name ?? 'A member'} joined`
+        groupMsgRepo.postSystemEvent(groupId, joinMsg).catch((e: Error) => {
+          log.warn('group.system.event.failed', { groupId, playerId: player.id, error: e.message })
+        })
+
         return res.status(200).json({ ok: true, groupId, playerId: player.id })
       } catch (err) {
         next(err)
@@ -206,6 +231,110 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         log.info('group.invite.sent', { groupId, actorPlayerId: session.playerId })
 
         return res.status(201).json({ ok: true })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // ─── G2.2 Group chat routes ───────────────────────────────────────────────
+  // §10: /:groupId/messages registered before /:groupId/members to keep the literal
+  // suffix 'messages' from being shadowed by a parameterized member route.
+
+  // POST /player/groups/:groupId/messages — send a text message (members only)
+  router.post(
+    '/:groupId/messages',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+
+        // Authz: caller must be a member (owner or member)
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can send messages' })
+        }
+
+        const bodyErr = validateGroupMessageBody(req.body.body)
+        if (bodyErr) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: bodyErr })
+        }
+
+        const { message, conversationId } = await groupMsgRepo.sendGroupMessage({
+          groupId,
+          playerId: session.playerId,
+          body: req.body.body,
+          type: 'text',
+        })
+
+        // Bus emit on conversation_id — reuse the V2 IBroadcastBus
+        if (deps.broadcastBus) {
+          deps.broadcastBus.emit(conversationId, 'message.created', {
+            id: message.id,
+            conversationId,
+            groupId,
+            playerId: message.playerId,
+            senderName: message.senderName,
+            body: message.body,
+            type: message.type,
+            createdAt: message.createdAt,
+          })
+        }
+
+        log.info('group.message.sent', {
+          groupId,
+          conversationId,
+          messageId: message.id,
+          playerId: session.playerId,
+        })
+
+        return res.status(201).json({
+          id: message.id,
+          conversationId,
+          playerId: message.playerId,
+          senderNameSnapshot: message.senderName,
+          body: message.body,
+          type: message.type,
+          createdAt: message.createdAt,
+        })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // GET /player/groups/:groupId/messages — history (members only)
+  router.get(
+    '/:groupId/messages',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+
+        // Authz: caller must be a member
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can view messages' })
+        }
+
+        const conversationId = await conversationRepo.resolveGroupConversation(groupId)
+
+        const rawLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 50
+
+        const messages = await groupMsgRepo.getGroupHistory({ conversationId, limit })
+
+        return res.status(200).json({
+          messages: messages.map(m => ({
+            id: m.id,
+            conversationId: m.conversationId,
+            playerId: m.playerId,
+            senderName: m.senderName,
+            body: m.body,
+            type: m.type,
+            createdAt: m.createdAt,
+          })),
+        })
       } catch (err) {
         next(handleGroupError(err))
       }
@@ -272,7 +401,17 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           return res.status(404).json({ code: 'NOT_FOUND', message: 'Group not found' })
         }
 
+        // Fetch player's name BEFORE leaving (player row stays in public.players)
+        const playerName = await groupMsgRepo.getPlayerName(playerId)
+
         await groupRepo.leaveGroup(groupId, playerId)
+
+        // G2.2: post system event "Name left" into the group conversation
+        // Fire-and-forget: if this fails it is non-fatal to the leave operation.
+        const leaveMsg = `${playerName ?? 'A member'} left`
+        groupMsgRepo.postSystemEvent(groupId, leaveMsg).catch((e: Error) => {
+          log.warn('group.system.event.failed', { groupId, playerId, error: e.message })
+        })
 
         return res.status(200).json({ ok: true })
       } catch (err) {

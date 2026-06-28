@@ -205,21 +205,27 @@ describe('G2.2 — Group chat: history returns messages in order with sender nam
     await rollbackTransaction()
   })
 
-  it('GET history returns messages ordered by created_at ASC', async () => {
+  it('GET history returns messages in (created_at ASC, id ASC) order', async () => {
     const owner = await createPlayer(pool)
     const ownerToken = await playerToken(owner, tokenStore)
     const group = await createGroup(app, ownerToken)
 
-    // Post two messages
-    await request(app)
-      .post(`/player/groups/${group.id}/messages`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ body: 'First message' })
+    // Insert two messages with explicit timestamps to guarantee order
+    const convRepo = new ConversationRepository(pool)
+    const convId = await convRepo.resolveGroupConversation(group.id)
 
-    await request(app)
-      .post(`/player/groups/${group.id}/messages`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ body: 'Second message' })
+    await pool.query(
+      `INSERT INTO messaging.group_messages
+         (conversation_id, player_id, sender_name_snapshot, body, type, created_at)
+       VALUES ($1, $2, $3, 'First message', 'text', NOW() - INTERVAL '2 seconds')`,
+      [convId, owner.id, owner.name]
+    )
+    await pool.query(
+      `INSERT INTO messaging.group_messages
+         (conversation_id, player_id, sender_name_snapshot, body, type, created_at)
+       VALUES ($1, $2, $3, 'Second message', 'text', NOW() - INTERVAL '1 second')`,
+      [convId, owner.id, owner.name]
+    )
 
     const res = await request(app)
       .get(`/player/groups/${group.id}/messages`)
@@ -229,7 +235,7 @@ describe('G2.2 — Group chat: history returns messages in order with sender nam
     expect(res.body.messages).toBeDefined()
     expect(res.body.messages.length).toBeGreaterThanOrEqual(2)
 
-    // Find the two we posted
+    // Find the two we inserted
     const bodies = res.body.messages.map((m: any) => m.body)
     const firstIdx = bodies.indexOf('First message')
     const secondIdx = bodies.indexOf('Second message')
