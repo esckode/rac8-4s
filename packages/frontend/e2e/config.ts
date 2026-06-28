@@ -300,6 +300,12 @@ export const SELECTORS = {
   POLL_VOTE_MAYBE: '[data-testid="poll-vote-maybe"]',
   POLL_TALLY: '[data-testid="poll-tally"]',
   POLL_CLOSE_BUTTON: '[data-testid="poll-close-button"]',
+  POLL_LAUNCH_BUTTON: '[data-testid="poll-launch-button"]',
+  LEADERBOARD_PANEL: '[data-testid="leaderboard-panel"]',
+  LEADERBOARD_INDIVIDUAL: '[data-testid="leaderboard-individual"]',
+  LEADERBOARD_PAIRS: '[data-testid="leaderboard-pairs"]',
+  LEADERBOARD_INDIVIDUAL_ROW: '[data-testid="leaderboard-individual-row"]',
+  LEADERBOARD_PAIR_ROW: '[data-testid="leaderboard-pair-row"]',
 
   // Messaging — V5.2 thread model
   MESSAGE_THREAD_PANEL: '[data-testid="message-thread-panel"]',

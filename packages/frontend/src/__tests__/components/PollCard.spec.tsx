@@ -27,8 +27,10 @@ function makePoll(overrides: Partial<PollCardProps> = {}): PollCardProps {
     tally: { in: 0, out: 0, maybe: 0 },
     currentUserVote: null,
     isOwner: false,
+    isCreator: false,
     onVote: jest.fn(),
     onClose: jest.fn(),
+    onLaunch: undefined,
     ...overrides,
   }
 }
@@ -134,5 +136,23 @@ describe('PollCard', () => {
     render(<PollCard {...makePoll({ isOwner: true, onClose })} />)
     await userEvent.click(screen.getByTestId('poll-close-button'))
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('shows launch button to creator on closed polls', () => {
+    const onLaunch = jest.fn()
+    render(<PollCard {...makePoll({ isCreator: true, closedAt: '2026-07-01T10:00:00Z', onLaunch })} />)
+    expect(screen.getByTestId('poll-launch-button')).toBeInTheDocument()
+  })
+
+  it('hides launch button for non-creators', () => {
+    const onLaunch = jest.fn()
+    render(<PollCard {...makePoll({ isCreator: false, closedAt: '2026-07-01T10:00:00Z', onLaunch })} />)
+    expect(screen.queryByTestId('poll-launch-button')).not.toBeInTheDocument()
+  })
+
+  it('hides launch button on open polls even for creator', () => {
+    const onLaunch = jest.fn()
+    render(<PollCard {...makePoll({ isCreator: true, closedAt: null, onLaunch })} />)
+    expect(screen.queryByTestId('poll-launch-button')).not.toBeInTheDocument()
   })
 })

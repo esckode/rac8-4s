@@ -1682,3 +1682,49 @@ Then a poll.closed SSE event is emitted
 **Implementation (G3.3):**
 - RTL unit tests: `packages/frontend/src/__tests__/components/PollCard.spec.tsx`
 - Playwright e2e: `packages/frontend/e2e/poll-cards.spec.ts` (best-effort; requires running API+frontend)
+
+## Feature: Player Groups — casual tournament (G4.8)
+
+**Scenario: Poll creator launches casual tournament from In-voters**
+```
+Given I am the creator of a closed poll with 3 "In" voters
+When I click the "Launch tournament" button on the poll card
+Then POST /player/groups/:groupId/polls/:messageId/launch is called
+  And a new casual, unlisted tournament is created with those 3 players registered
+  And a system message appears in the chat linking to the tournament
+  And the tournament status is 'registration_closed'
+```
+
+**Scenario: Any participant submits a score in casual mode**
+```
+Given I am a registered participant in a casual tournament
+  And there is a match in 'group_stage_active' state
+When I submit a score for any match (not just mine)
+Then the score is accepted
+  And the match status updates to 'completed'
+  And standings update
+```
+
+**Scenario: Pair + individual leaderboards render**
+```
+Given a group has at least one completed casual tournament
+  And matches have been scored
+When I view the group's leaderboard tab
+Then pair leaderboard shows team partnerships and W/L counts
+  And individual leaderboard shows per-player W/L counts
+  And rows are sorted by wins descending
+```
+
+**Scenario: Owner ends session**
+```
+Given I am the organizer of a casual tournament in 'group_stage_active'
+When I click "End session" and confirm
+Then POST /tournaments/:id/end-session is called
+  And the tournament transitions to 'completed' (all matches done) or 'abandoned' (partial)
+  And a system message is posted in the group
+```
+
+**Implementation (G4.8):**
+- RTL unit: `packages/frontend/src/__tests__/components/LeaderboardPanel.spec.tsx`
+- RTL unit: updated `packages/frontend/src/__tests__/components/PollCard.spec.tsx` (launch button)
+- Playwright e2e: `packages/frontend/e2e/casual-tournament.spec.ts` (best-effort)
