@@ -1707,6 +1707,67 @@ export default function tournamentsRouter(deps: AppDependencies) {
     }
   })
 
+  // POST /:id/end-session — manually terminate a casual tournament (organizer only)
+  // Registered before GET /:id so the literal suffix does not get consumed by the param.
+  router.post('/:id/end-session', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const tournamentId = req.params.id as string
+
+      const tournament = await repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      if (tournament.mode !== 'casual') {
+        return res.status(400).json({ code: 'NOT_CASUAL', message: 'end-session is only available for casual tournaments' })
+      }
+
+      const terminalStatuses = ['completed', 'tournament_complete', 'abandoned']
+      if (terminalStatuses.includes(tournament.status)) {
+        return res.status(409).json({ code: 'ALREADY_TERMINAL', message: 'Tournament is already in a terminal state' })
+      }
+
+      // Count total and scored matches
+      const matchCountResult = await deps.db.query(
+        `SELECT COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE status = 'completed') AS scored
+         FROM public.group_matches WHERE tournament_id = $1`,
+        [tournamentId]
+      )
+      const total: number = parseInt(matchCountResult.rows[0].total, 10)
+      const scored: number = parseInt(matchCountResult.rows[0].scored, 10)
+
+      const finalStatus = total > 0 && scored === total ? 'completed' : 'abandoned'
+      await repo.updateStatus(tournamentId, finalStatus)
+
+      // Post system message in group conversation if tournament is group-linked
+      if (tournament.group_id) {
+        const convResult = await deps.db.query(
+          `SELECT id FROM messaging.conversations WHERE group_id = $1 LIMIT 1`,
+          [tournament.group_id]
+        )
+        if (convResult.rows.length > 0) {
+          const conversationId: string = convResult.rows[0].id
+          const body = `Session ended: ${scored} of ${total} matches played`
+          await deps.db.query(
+            `INSERT INTO messaging.group_messages (conversation_id, player_id, sender_name_snapshot, body, type)
+             VALUES ($1, NULL, 'system', $2, 'system')`,
+            [conversationId, body]
+          )
+        }
+      }
+
+      log.info('session.ended', { tournamentId, finalStatus, scored, total, organizerId: payload.sub })
+
+      res.status(200).json({ status: finalStatus, endedAt: new Date().toISOString() })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // GET /:id - public tournament details (for discovery / guest registration page).
   // Registered after all literal GET routes (/public, /organizer, /available) so the
   // ':id' param does not shadow them.

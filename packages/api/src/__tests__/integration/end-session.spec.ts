@@ -98,7 +98,7 @@ async function ensureGroupConversation(pool: Pool, groupId: string): Promise<str
   )
   if (res.rows.length > 0) return res.rows[0].id as string
   const sel = await pool.query(
-    `SELECT id FROM messaging.conversations WHERE entity_type = 'group' AND entity_id = $1 LIMIT 1`,
+    `SELECT id FROM messaging.conversations WHERE group_id = $1 LIMIT 1`,
     [groupId]
   )
   return sel.rows[0].id as string

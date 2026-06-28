@@ -57,6 +57,7 @@ export async function registerPartitionJobs(options: PartitionSchedulerOptions):
 
   const ensureQueue = new Queue('messaging.partition.ensure', { connection, prefix })
   const purgeQueue = new Queue('messaging.partition.purge', { connection, prefix })
+  const sweepQueue = new Queue('casual.idle.sweep', { connection, prefix })
 
   try {
     // Monthly ensure: 03:00 UTC on the 1st of each month
@@ -78,8 +79,19 @@ export async function registerPartitionJobs(options: PartitionSchedulerOptions):
         jobId: 'partition.purge.monthly',
       }
     )
+
+    // Daily idle-sweep: 02:00 UTC every day
+    await sweepQueue.add(
+      'casual.idle.sweep',
+      { idleDays: 7 },
+      {
+        repeat: { pattern: '0 2 * * *', utc: true },
+        jobId: 'casual.idle.sweep.daily',
+      }
+    )
   } finally {
     await ensureQueue.close()
     await purgeQueue.close()
+    await sweepQueue.close()
   }
 }
