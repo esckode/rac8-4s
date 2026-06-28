@@ -34,6 +34,7 @@ import { ConversationRepository } from '../repositories/conversation-repository'
 import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-notify-selector'
 import { PollRepository, type PollChoice } from '../repositories/poll-repository'
 import { LeaderboardRepository } from '../repositories/leaderboard-repository'
+import { TournamentRepository } from '../db'
 
 const INVITE_TTL_SECONDS = 7 * 24 * 3600 // 7 days
 
@@ -59,6 +60,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   const conversationRepo = new ConversationRepository(deps.db as any)
   const pollRepo = new PollRepository(deps.db as any)
   const leaderboardRepo = new LeaderboardRepository(deps.db as any)
+  const tournamentRepo = new TournamentRepository(deps.db as any)
 
   // GET /player/groups — list the caller's groups (G2.5)
   // §10: static GET registered before POST and /:groupId param routes
@@ -634,6 +636,102 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           pollId: poll.pollId,
           messageId: poll.messageId,
           question: poll.question,
+        })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // POST /player/groups/:groupId/polls/:messageId/launch — poll creator launches a casual tournament (G4.5)
+  // §10: static suffix 'launch' registered before 'close' and before parameterized /:pollId routes
+  router.post(
+    '/:groupId/polls/:messageId/launch',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+        const messageId = req.params.messageId as string
+
+        // Load group (404 if not found), read default_match_format
+        const groupResult = await (deps.db as any).query(
+          `SELECT id, name, default_match_format FROM public.player_groups WHERE id = $1`,
+          [groupId]
+        )
+        if (groupResult.rows.length === 0) {
+          return res.status(404).json({ code: 'NOT_FOUND', message: 'Group not found' })
+        }
+        const group = groupResult.rows[0]
+
+        // Load poll (404 if not found)
+        const poll = await pollRepo.getPollByMessageId(messageId)
+        if (!poll) {
+          return res.status(404).json({ code: 'NOT_FOUND', message: 'Poll not found' })
+        }
+
+        // Authz: only the poll creator may launch
+        if (poll.creatorPlayerId !== session.playerId) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the poll creator can launch a tournament from this poll' })
+        }
+
+        // Get In-voters
+        const votersResult = await (deps.db as any).query(
+          `SELECT player_id FROM messaging.poll_votes
+           WHERE message_id = $1 AND choice = 'in' AND player_id IS NOT NULL`,
+          [messageId]
+        )
+        const inVoters: string[] = votersResult.rows.map((r: any) => r.player_id as string)
+
+        // Determine match format: body override or group default
+        const rawFormat = req.body.matchFormat ?? group.default_match_format ?? 'singles'
+        if (rawFormat !== 'singles' && rawFormat !== 'doubles') {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: "matchFormat must be 'singles' or 'doubles'" })
+        }
+        const matchFormat: 'singles' | 'doubles' = rawFormat
+
+        const sport = req.body.sport || 'tennis'
+        const dateLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        const tournamentName = `${group.name} — ${dateLabel}`
+
+        // Create tournament (casual, unlisted, seeded from group)
+        const tournament = await tournamentRepo.create({
+          name: tournamentName,
+          sport,
+          matchFormat,
+          maxPlayers: inVoters.length || 1,
+          creatorId: session.playerId,
+          mode: 'casual',
+          visibility: 'unlisted',
+          groupId,
+        })
+
+        // Register all In-voters
+        for (const voterId of inVoters) {
+          await playerRepo.createRegistration(voterId, tournament.id)
+        }
+
+        // Lock registration
+        await tournamentRepo.updateStatus(tournament.id, 'registration_closed')
+
+        // Post system message into group conversation
+        const conversationId = await conversationRepo.resolveGroupConversation(groupId)
+        await (deps.db as any).query(
+          `INSERT INTO messaging.group_messages (conversation_id, player_id, sender_name_snapshot, body, type)
+           VALUES ($1, NULL, 'system', $2, 'system')`,
+          [conversationId, `Tournament started: ${tournament.name} (ID: ${tournament.id})`]
+        )
+
+        log.info('tournament.launched', {
+          tournamentId: tournament.id,
+          groupId,
+          pollMessageId: messageId,
+          playerCount: inVoters.length,
+        })
+
+        return res.status(201).json({
+          tournamentId: tournament.id,
+          tournamentName: tournament.name,
+          registeredPlayerIds: inVoters,
         })
       } catch (err) {
         next(handleGroupError(err))

@@ -171,10 +171,13 @@ export interface CreateTournamentInput {
   matchFormat: 'singles' | 'doubles'
   maxPlayers: number
   description?: string
-  registrationDeadline: string
-  groupStageDeadline: string
-  knockoutStageDeadline: string
+  registrationDeadline?: string | null
+  groupStageDeadline?: string | null
+  knockoutStageDeadline?: string | null
   creatorId: string
+  mode?: 'scheduled' | 'casual'
+  visibility?: 'public' | 'unlisted'
+  groupId?: string | null
 }
 
 export interface UpdateTournamentInput {
@@ -205,8 +208,9 @@ export class TournamentRepository {
         id, name, sport, match_format, creator_id, status,
         max_players, description, registration_deadline,
         group_stage_deadline, knockout_stage_deadline,
+        mode, visibility, group_id,
         created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
       [
         id,
         input.name,
@@ -216,9 +220,12 @@ export class TournamentRepository {
         'draft',
         input.maxPlayers,
         input.description || null,
-        input.registrationDeadline,
-        input.groupStageDeadline,
-        input.knockoutStageDeadline,
+        input.registrationDeadline ?? null,
+        input.groupStageDeadline ?? null,
+        input.knockoutStageDeadline ?? null,
+        input.mode ?? 'scheduled',
+        input.visibility ?? 'public',
+        input.groupId ?? null,
         now,
         now,
       ]
