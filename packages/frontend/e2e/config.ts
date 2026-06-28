@@ -51,6 +51,10 @@ export const ROUTES = {
 
   // Home
   HOME: '/',
+
+  // Groups (G2.5)
+  GROUPS: '/groups',
+  GROUP_DETAIL: (groupId: string) => `/groups/${groupId}`,
 }
 
 // ============================================================================
@@ -266,6 +270,26 @@ export const SELECTORS = {
   ANNOUNCE_INPUT: '[data-testid="announce-input"]',
   UNREAD_BADGE: '[data-testid="messages-unread-badge"]',
   MESSAGES_TAB: '[data-testid="tab-messages"]',
+
+  // Groups — G2.5
+  NAV_GROUPS: '[data-testid="nav-groups"]',
+  GROUPS_UNREAD_BADGE: '[data-testid="groups-unread-badge"]',
+  GROUP_LIST_ITEM: '[data-testid="group-list-item"]',
+  GROUP_LIST_EMPTY: '[data-testid="group-list-empty"]',
+  GROUP_LIST_ERROR: '[data-testid="group-list-error"]',
+  GROUP_CHAT_PANEL: '[data-testid="group-chat-panel"]',
+  GROUP_MESSAGE_ITEM: '[data-testid="group-message-item"]',
+  GROUP_SYSTEM_EVENT: '[data-testid="group-system-event"]',
+  GROUP_MESSAGE_INPUT: '[data-testid="group-message-input"]',
+  GROUP_MESSAGE_SEND_BUTTON: '[data-testid="group-message-send-button"]',
+  GROUP_TAB_CHAT: '[data-testid="group-tab-chat"]',
+  GROUP_TAB_MEMBERS: '[data-testid="group-tab-members"]',
+  MEMBERS_PANEL: '[data-testid="members-panel"]',
+  MEMBER_ITEM: '[data-testid="member-item"]',
+  INVITE_EMAIL_INPUT: '[data-testid="invite-email-input"]',
+  INVITE_SEND_BUTTON: '[data-testid="invite-send-button"]',
+  INVITE_SUCCESS: '[data-testid="invite-success"]',
+  INVITE_ERROR: '[data-testid="invite-error"]',
 
   // Messaging — V5.2 thread model
   MESSAGE_THREAD_PANEL: '[data-testid="message-thread-panel"]',

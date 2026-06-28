@@ -1563,3 +1563,80 @@ Then the response is 404 (no shareable-link route exists)
 - API integration: `packages/api/src/__tests__/integration/group-invite.spec.ts`
   - All scenarios above tested
 - Playwright e2e: best-effort — integration covers the full flow; Playwright deferred until frontend invite UI is implemented (G2.5+).
+
+---
+
+## Feature: Player Groups — chat (G2.5)
+
+> **Design refs:** PLAYER_GROUPS_DESIGN.md §4 (G-UI-1…3)
+> **Playwright spec:** `packages/frontend/e2e/player-groups.spec.ts`
+
+### Scenario: My Groups tab lists the player's groups
+
+```gherkin
+Given a player is authenticated and a member of two groups "Pickleball Crew" and "Tennis Regulars"
+When the player navigates to "/groups"
+Then the 👥 My Groups bottom-nav tab is active (data-testid="nav-groups")
+  And "Pickleball Crew" is listed (data-testid="group-list-item")
+  And "Tennis Regulars" is listed
+```
+
+### Scenario: Tapping a group opens the Group page
+
+```gherkin
+Given the player is on the My Groups list
+When the player taps "Pickleball Crew"
+Then they navigate to "/groups/<groupId>"
+  And the Group page renders with Chat tab visible (data-testid="group-chat-panel")
+  And the Members tab is accessible (data-testid="members-panel")
+```
+
+### Scenario: Group chat stream renders messages with sender name and time
+
+```gherkin
+Given the group has two messages — one from "Alice Smith" and one from "Bob Jones"
+When the player views the Chat tab
+Then each message card renders "SenderName · HH:MM:SS" (data-testid="group-message-item")
+  And "Alice Smith" and "Bob Jones" are distinguishable names on their respective cards
+```
+
+### Scenario: Sent message appears live (SSE)
+
+```gherkin
+Given the player has the Group chat page open
+When another member sends a message
+Then the message appears in the chat stream without a page refresh (via SSE message.created)
+```
+
+### Scenario: System events ("Sam joined") appear inline
+
+```gherkin
+Given a member joins the group
+When the player views the Chat tab
+Then a system event row "Sam joined" appears (data-testid="group-system-event")
+  And it is visually distinct from regular message cards
+```
+
+### Scenario: Unread badge on My Groups nav tab
+
+```gherkin
+Given there are unread group messages the player has not seen
+When the player is on a different tab (e.g. /matches)
+Then the 👥 My Groups nav tab shows an unread badge (data-testid="groups-unread-badge")
+  And the badge disappears after visiting the group and reading the messages
+```
+
+### Scenario: Invite-by-email from Members panel
+
+```gherkin
+Given the player is an owner and on the Group page Members tab
+When the owner enters "newplayer@example.com" in the invite field (data-testid="invite-email-input")
+  And clicks Send (data-testid="invite-send-button")
+Then POST /player/groups/:groupId/invites is called with { email: "newplayer@example.com" }
+  And a success confirmation is shown
+```
+
+**Implementation (G2.5):**
+- Frontend unit (RTL): `packages/frontend/src/components/__tests__/MyGroups.spec.tsx`
+  - GroupList renders; GroupChatPanel message cards "Name · time"; MembersPanel; MyGroupsUnreadBadge
+- Playwright e2e: `packages/frontend/e2e/player-groups.spec.ts` (best-effort; relies on running API+frontend)
