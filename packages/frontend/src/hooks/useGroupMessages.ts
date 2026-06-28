@@ -12,10 +12,10 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import ReconnectingEventSource from 'reconnecting-eventsource'
-import { GroupMessageStore, GroupMessageRecord } from '../state/group-message-state'
+import { GroupMessageStore, GroupMessageRecord, PollTally } from '../state/group-message-state'
 import { groupUnreadStore } from '../state/group-unread-state'
 
-export { GroupMessageRecord }
+export { GroupMessageRecord, PollTally }
 
 // Per-groupId singleton stores: avoids re-fetching when the component remounts
 // during navigation but the same group is still in scope.
@@ -97,6 +97,33 @@ export function useGroupMessages(groupId: string, active = false): UseGroupMessa
             if (payload.type !== 'system') {
               groupUnreadStore.setGroupUnread(groupId, store.all().filter(m => m.type !== 'system').length)
             }
+          } catch {
+            // malformed — ignore
+          }
+        }
+      })
+
+      es.addEventListener('poll.tally.updated', (event: Event) => {
+        if (event instanceof MessageEvent) {
+          try {
+            const { pollId, tally } = JSON.parse(event.data) as { pollId: string; tally: PollTally }
+            store.updatePollTally(pollId, tally)
+          } catch {
+            // malformed — ignore
+          }
+        }
+      })
+
+      es.addEventListener('poll.closed', (event: Event) => {
+        if (event instanceof MessageEvent) {
+          try {
+            const { messageId, tally, closedAt } = JSON.parse(event.data) as {
+              messageId: string
+              pollId: string
+              tally: PollTally
+              closedAt: string
+            }
+            store.updatePollClosed(messageId, tally, typeof closedAt === 'string' ? closedAt : new Date(closedAt).toISOString())
           } catch {
             // malformed — ignore
           }

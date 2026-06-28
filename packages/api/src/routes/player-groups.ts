@@ -458,6 +458,11 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             type: m.type,
             createdAt: m.createdAt,
             removedAt: m.removedAt ?? null,
+            ...(m.type === 'poll' && {
+              pollId: m.pollId ?? null,
+              targetTime: m.targetTime ?? null,
+              closedAt: m.closedAt ?? null,
+            }),
           })),
         })
       } catch (err) {
@@ -539,6 +544,9 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             type: 'poll',
             pollId: poll.pollId,
             question: poll.question,
+            targetTime: parsedTargetTime ?? null,
+            closedAt: null,
+            createdAt: new Date().toISOString(),
           })
         }
 
@@ -613,6 +621,21 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         }
 
         const result = await pollRepo.closePoll(messageId, groupId, session.playerId)
+
+        // Emit poll.closed over SSE so connected members freeze the card immediately
+        if (deps.broadcastBus) {
+          try {
+            const conversationId = await conversationRepo.resolveGroupConversation(groupId)
+            deps.broadcastBus.emit(conversationId, 'poll.closed', {
+              messageId,
+              pollId: pollMeta.pollId,
+              tally: result.tally,
+              closedAt: result.closedAt,
+            })
+          } catch {
+            // Non-fatal
+          }
+        }
 
         return res.status(200).json({ tally: result.tally, closedAt: result.closedAt })
       } catch (err) {
@@ -693,6 +716,20 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           playerId: session.playerId,
           choice,
         })
+
+        // Emit tally update over SSE so all connected members see live tally
+        if (deps.broadcastBus) {
+          try {
+            const votes = await pollRepo.getVotes(pollId)
+            const conversationId = await conversationRepo.resolveGroupConversation(groupId)
+            deps.broadcastBus.emit(conversationId, 'poll.tally.updated', {
+              pollId,
+              tally: votes.tally,
+            })
+          } catch {
+            // Non-fatal — vote was recorded; tally SSE is best-effort
+          }
+        }
 
         return res.status(201).json({
           pollId,

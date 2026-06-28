@@ -25,6 +25,10 @@ export interface GroupMessageRow {
   createdAt: Date
   removedAt: Date | null
   removedBy: string | null
+  // Present only when type === 'poll'
+  pollId?: string | null
+  targetTime?: Date | null
+  closedAt?: Date | null
 }
 
 export interface SendGroupMessageInput {
@@ -40,7 +44,7 @@ export interface GetGroupHistoryInput {
 }
 
 function rowToGroupMessage(row: any): GroupMessageRow {
-  return {
+  const base: GroupMessageRow = {
     id: row.id as string,
     conversationId: row.conversation_id as string,
     playerId: row.player_id ?? null,
@@ -51,6 +55,12 @@ function rowToGroupMessage(row: any): GroupMessageRow {
     removedAt: row.removed_at ? (row.removed_at instanceof Date ? row.removed_at : new Date(row.removed_at)) : null,
     removedBy: row.removed_by ?? null,
   }
+  if (row.poll_id !== undefined) {
+    base.pollId = row.poll_id ?? null
+    base.targetTime = row.target_time ? (row.target_time instanceof Date ? row.target_time : new Date(row.target_time)) : null
+    base.closedAt = row.closed_at ? (row.closed_at instanceof Date ? row.closed_at : new Date(row.closed_at)) : null
+  }
+  return base
 }
 
 export class GroupMessageRepository {
@@ -234,11 +244,13 @@ export class GroupMessageRepository {
     const { conversationId, limit = 50 } = input
 
     const result = await this.pool.query(
-      `SELECT id, conversation_id, player_id, sender_name_snapshot, body, type, created_at,
-              removed_at, removed_by
-       FROM messaging.group_messages
-       WHERE conversation_id = $1
-       ORDER BY created_at ASC, id ASC
+      `SELECT gm.id, gm.conversation_id, gm.player_id, gm.sender_name_snapshot, gm.body,
+              gm.type, gm.created_at, gm.removed_at, gm.removed_by,
+              p.id AS poll_id, p.target_time, p.closed_at
+       FROM messaging.group_messages gm
+       LEFT JOIN messaging.polls p ON p.message_id = gm.id
+       WHERE gm.conversation_id = $1
+       ORDER BY gm.created_at ASC, gm.id ASC
        LIMIT $2`,
       [conversationId, Math.min(limit, 100)]
     )

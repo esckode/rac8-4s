@@ -75,8 +75,11 @@ type GroupTab = 'chat' | 'members'
 export const GroupDetail: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>()
   const [activeTab, setActiveTab] = useState<GroupTab>('chat')
+  const { groups } = useGroupList()
 
   if (!groupId) return null
+
+  const isOwner = groups.find(g => g.id === groupId)?.role === 'owner'
 
   return (
     <div className="flex flex-col h-full">
@@ -100,7 +103,7 @@ export const GroupDetail: React.FC = () => {
 
       {/* Tab content */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'chat' && <GroupChatPanel groupId={groupId} active />}
+        {activeTab === 'chat' && <GroupChatPanel groupId={groupId} active isOwner={isOwner} />}
         {activeTab === 'members' && <MembersPanel groupId={groupId} />}
       </div>
     </div>

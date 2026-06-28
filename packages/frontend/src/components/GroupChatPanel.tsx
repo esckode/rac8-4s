@@ -10,8 +10,9 @@
  *   MyGroupsUnreadBadge — Unread badge for the My Groups nav tab
  */
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useGroupMessages, GroupMessageRecord } from '../hooks/useGroupMessages'
+import { PollCard, type PollChoice } from './PollCard'
 
 // ─── GroupChatPanel ───────────────────────────────────────────────────────────
 
@@ -19,19 +20,68 @@ interface GroupChatPanelProps {
   groupId: string
   /** When true, clears the unread count (the user is viewing the chat). */
   active?: boolean
+  /** When true, the current user is an owner of this group. */
+  isOwner?: boolean
 }
 
-export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active = false }) => {
+export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active = false, isOwner = false }) => {
   const { messages, send } = useGroupMessages(groupId, active)
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  // Track the current user's vote per poll (keyed by pollId)
+  const [pollVotes, setPollVotes] = useState<Record<string, PollChoice>>({})
+  // Track in-progress poll actions to avoid double submissions
+  const pollActingRef = useRef<Set<string>>(new Set())
 
   // Scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
+
+  const handleVote = useCallback(async (pollId: string, choice: PollChoice) => {
+    if (pollActingRef.current.has(pollId)) return
+    pollActingRef.current.add(pollId)
+    // Optimistic update
+    setPollVotes(prev => ({ ...prev, [pollId]: choice }))
+    try {
+      const token = localStorage.getItem('auth_token')
+      await fetch(`/player/groups/${groupId}/polls/${pollId}/votes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ choice }),
+      })
+    } catch {
+      // Revert on failure — the SSE tally will correct itself on next update
+    } finally {
+      pollActingRef.current.delete(pollId)
+    }
+  }, [groupId])
+
+  const handleClosePoll = useCallback(async (messageId: string, pollId: string) => {
+    if (pollActingRef.current.has(`close:${messageId}`)) return
+    pollActingRef.current.add(`close:${messageId}`)
+    try {
+      const token = localStorage.getItem('auth_token')
+      await fetch(`/player/groups/${groupId}/polls/${messageId}/close`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({}),
+      })
+      // The SSE poll.closed event will update the store — no local state update needed
+    } catch {
+      // Silent fail — SSE will sync
+    } finally {
+      pollActingRef.current.delete(`close:${messageId}`)
+    }
+  }, [groupId])
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
@@ -56,16 +106,47 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
         {messages.length === 0 && (
           <p className="text-center text-sm text-[--ink-500] py-8">No messages yet</p>
         )}
-        {messages.map((m: GroupMessageRecord) => (
-          m.type === 'system' ? (
-            <div
-              key={m.id}
-              data-testid="group-system-event"
-              className="text-center text-xs text-[--ink-500] italic py-1"
-            >
-              {m.body}
-            </div>
-          ) : (
+        {messages.map((m: GroupMessageRecord) => {
+          if (m.type === 'system') {
+            return (
+              <div
+                key={m.id}
+                data-testid="group-system-event"
+                className="text-center text-xs text-[--ink-500] italic py-1"
+              >
+                {m.body}
+              </div>
+            )
+          }
+
+          if (m.type === 'poll' && m.pollId) {
+            return (
+              <div key={m.id} data-testid="group-message-item">
+                <PollCard
+                  groupId={groupId}
+                  messageId={m.id}
+                  pollId={m.pollId}
+                  question={m.body}
+                  targetTime={m.targetTime ?? null}
+                  closedAt={m.closedAt ?? null}
+                  tally={m.tally ?? { in: 0, out: 0, maybe: 0 }}
+                  currentUserVote={m.pollId ? (pollVotes[m.pollId] ?? null) : null}
+                  isOwner={isOwner}
+                  onVote={choice => handleVote(m.pollId!, choice)}
+                  onClose={() => handleClosePoll(m.id, m.pollId!)}
+                />
+                <p className="text-xs text-[--ink-500] mt-1 px-1">
+                  {m.senderName != null ? (
+                    <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
+                  ) : (
+                    new Date(m.createdAt).toLocaleTimeString()
+                  )}
+                </p>
+              </div>
+            )
+          }
+
+          return (
             <div
               key={m.id}
               data-testid="group-message-item"
@@ -81,7 +162,7 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
               </p>
             </div>
           )
-        ))}
+        })}
         <div ref={bottomRef} />
       </div>
 
