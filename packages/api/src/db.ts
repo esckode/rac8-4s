@@ -375,13 +375,13 @@ export class TournamentRepository {
 
   async updateStatus(id: string, status: string): Promise<TournamentRow> {
     // Validate status enum
-    const validStatuses = ['draft', 'registration_open', 'registration_closed', 'group_stage_active', 'group_stage_complete', 'knockout_active', 'tournament_complete', 'knockout_complete', 'completed']
+    const validStatuses = ['draft', 'registration_open', 'registration_closed', 'group_stage_active', 'group_stage_complete', 'knockout_active', 'tournament_complete', 'knockout_complete', 'completed', 'abandoned']
     if (!validStatuses.includes(status)) {
       throw new CheckConstraintError('status')
     }
 
     const now = new Date().toISOString()
-    if (status === 'tournament_complete') {
+    if (status === 'tournament_complete' || status === 'completed') {
       await this.pool.query(
         'UPDATE public.tournaments SET status = $1, updated_at = $2, completed_at = $2 WHERE id = $3',
         [status, now, id]

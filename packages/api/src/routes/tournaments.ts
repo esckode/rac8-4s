@@ -471,6 +471,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
       }
 
+      const isCasual = tournament.mode === 'casual'
+
       const match = await groupRepo.findMatchById(matchId)
       if (!match || match.tournament_id !== tournamentId) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
@@ -479,25 +481,30 @@ export default function tournamentsRouter(deps: AppDependencies) {
       validateMatchFormatConsistency(match)
       const [participant1, participant2] = getMatchParticipantIds(match)
 
-      // For doubles, participant IDs are team IDs; verify player is on the team
-      // For singles, participant IDs are player IDs; verify player is one of them
-      let isParticipant = false
-      if (match.format === 'doubles') {
-        const { TeamRepository } = require('../repositories/team-repository')
-        const teamRepo = new TeamRepository(deps.db)
-        const team1 = await teamRepo.findTeamById(participant1)
-        const team2 = await teamRepo.findTeamById(participant2)
-        isParticipant = (team1 && (team1.player1Id === playerId || team1.player2Id === playerId)) ||
-                       (team2 && (team2.player1Id === playerId || team2.player2Id === playerId))
+      if (isCasual) {
+        // Casual mode: any tournament participant may score any match — no match-level check needed.
+        // (resolveTournamentPlayer already ensured the caller is registered in this tournament.)
       } else {
-        isParticipant = participant1 === playerId || participant2 === playerId
+        // Scheduled mode: only a participant of THIS match may submit a score.
+        let isParticipant = false
+        if (match.format === 'doubles') {
+          const { TeamRepository } = require('../repositories/team-repository')
+          const teamRepo = new TeamRepository(deps.db)
+          const team1 = await teamRepo.findTeamById(participant1)
+          const team2 = await teamRepo.findTeamById(participant2)
+          isParticipant = (team1 && (team1.player1Id === playerId || team1.player2Id === playerId)) ||
+                         (team2 && (team2.player1Id === playerId || team2.player2Id === playerId))
+        } else {
+          isParticipant = participant1 === playerId || participant2 === playerId
+        }
+
+        if (!isParticipant) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
+        }
       }
 
-      if (!isParticipant) {
-        return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
-      }
-
-      if (tournament.group_stage_deadline != null && new Date() > new Date(tournament.group_stage_deadline)) {
+      // Deadline enforcement: only for scheduled tournaments with a set deadline.
+      if (!isCasual && tournament.group_stage_deadline != null && new Date() > new Date(tournament.group_stage_deadline)) {
         return res.status(409).json({ code: 'DEADLINE_PASSED', message: 'Group stage scoring deadline has passed' })
       }
 
@@ -549,6 +556,14 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       log.info('score.submitted', { tournamentId, matchId, score: req.body.score, winnerId, playerId })
 
+      // Casual mode: auto-advance when all group matches in the tournament are scored.
+      if (isCasual) {
+        const pendingCount = await groupRepo.countPendingMatchesByTournament(tournamentId)
+        if (pendingCount === 0 && tournament.status === 'group_stage_active') {
+          await repo.updateStatus(tournamentId, 'group_stage_complete')
+        }
+      }
+
       res.json({
         match: {
           id: updated.id,
@@ -572,6 +587,14 @@ export default function tournamentsRouter(deps: AppDependencies) {
       if (!tournament) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
       }
+
+      // Block edits once the tournament has reached a terminal state.
+      const terminalStatuses = ['completed', 'tournament_complete', 'abandoned']
+      if (terminalStatuses.includes(tournament.status)) {
+        return res.status(409).json({ code: 'TOURNAMENT_COMPLETED', message: 'Scores cannot be edited after the tournament has finished' })
+      }
+
+      const isCasual = tournament.mode === 'casual'
 
       // Authenticate before loading the match: an unauthenticated request must get 401,
       // and a valid organizer who does not own this tournament must get 403 (rather than
@@ -613,8 +636,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Match not found' })
       }
 
-      // Player can only edit their own scores
-      if (!isOrganizer) {
+      // Participant check: organizers bypass; casual participants bypass match-level check;
+      // scheduled-mode players must be in the specific match.
+      if (!isOrganizer && !isCasual) {
         validateMatchFormatConsistency(match)
         const [participant1, participant2] = getMatchParticipantIds(match)
 
