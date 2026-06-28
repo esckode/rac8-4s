@@ -1640,3 +1640,45 @@ Then POST /player/groups/:groupId/invites is called with { email: "newplayer@exa
 - Frontend unit (RTL): `packages/frontend/src/components/__tests__/MyGroups.spec.tsx`
   - GroupList renders; GroupChatPanel message cards "Name · time"; MembersPanel; MyGroupsUnreadBadge
 - Playwright e2e: `packages/frontend/e2e/player-groups.spec.ts` (best-effort; relies on running API+frontend)
+
+## Feature: Player Groups — polls (G3.3)
+
+**Scenario: Member creates a poll — card appears inline in chat stream**
+```
+Given I am a member of a group
+When POST /player/groups/:groupId/polls is called with { question, targetTime? }
+Then a poll card appears inline in the chat stream
+  And the card shows the question text
+  And vote buttons (In / Out / Maybe) are present
+```
+
+**Scenario: Member votes — tally updates live via SSE**
+```
+Given a poll card is visible in the chat
+When I click the "In" vote button
+Then the tally updates to show my vote (optimistic update)
+  And a poll.tally.updated SSE event is emitted to all members
+  And the tally reflects the new count
+```
+
+**Scenario: Re-voting moves the choice**
+```
+Given I have voted "In" on a poll
+When I click the "Out" vote button
+Then the "Out" button becomes active
+  And the tally shows 0 in · 1 out
+```
+
+**Scenario: Group owner closes poll — card freezes**
+```
+Given I am an owner of the group
+  And there is an open poll card in the chat
+When I click the "Close poll" button
+Then a poll.closed SSE event is emitted
+  And the vote buttons disappear
+  And the tally shows "Final: X in · Y out · Z maybe"
+```
+
+**Implementation (G3.3):**
+- RTL unit tests: `packages/frontend/src/__tests__/components/PollCard.spec.tsx`
+- Playwright e2e: `packages/frontend/e2e/poll-cards.spec.ts` (best-effort; requires running API+frontend)
