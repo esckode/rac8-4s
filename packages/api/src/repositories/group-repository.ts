@@ -270,6 +270,28 @@ export class GroupRepository {
   }
 
   /**
+   * Get all members of a group for notification selection.
+   * Returns playerId, notifyLevel, and display name for each member.
+   * Used by G2.4 to compute per-recipient notify eligibility.
+   */
+  async getGroupMembersForNotify(
+    groupId: string
+  ): Promise<Array<{ playerId: string; notifyLevel: string; name: string }>> {
+    const result = await this.pool.query(
+      `SELECT m.player_id, m.notify_level, COALESCE(p.name, '') AS name
+       FROM public.player_group_members m
+       JOIN public.players p ON p.id = m.player_id
+       WHERE m.group_id = $1`,
+      [groupId]
+    )
+    return result.rows.map(row => ({
+      playerId: row.player_id as string,
+      notifyLevel: row.notify_level as string,
+      name: row.name as string,
+    }))
+  }
+
+  /**
    * Get a member's role, or null if not a member.
    */
   async getMemberRole(

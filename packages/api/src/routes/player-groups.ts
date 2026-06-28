@@ -28,6 +28,7 @@ import {
 import { getLogger } from '../logger'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
 import { ConversationRepository } from '../repositories/conversation-repository'
+import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-notify-selector'
 
 const INVITE_TTL_SECONDS = 7 * 24 * 3600 // 7 days
 
@@ -279,6 +280,31 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             type: message.type,
             createdAt: message.createdAt,
           })
+        }
+
+        // G2.4: enqueue messaging.notify jobs per-recipient according to notify_level.
+        // Fetch members + their notify levels, run the selector, then enqueue one job
+        // per recipient (deduped by jobId — debounce/coalesce reusing §17.2 pipeline).
+        if (deps.jobQueue) {
+          const rawMembers = await groupRepo.getGroupMembersForNotify(groupId)
+          const membersForNotify: GroupMemberForNotify[] = rawMembers.map(m => ({
+            playerId: m.playerId,
+            notifyLevel: m.notifyLevel as 'all' | 'mentions_polls' | 'muted',
+            name: m.name,
+          }))
+          const recipientIds = selectNotifyRecipients({
+            members: membersForNotify,
+            messageType: message.type,
+            body: message.body,
+            senderPlayerId: session.playerId,
+          })
+          for (const recipientId of recipientIds) {
+            await deps.jobQueue.add(
+              'messaging.notify',
+              { conversationId, groupId },
+              { jobId: `notify:${conversationId}:${recipientId}` }
+            )
+          }
         }
 
         log.info('group.message.sent', {

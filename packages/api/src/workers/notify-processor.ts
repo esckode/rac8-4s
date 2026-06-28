@@ -6,7 +6,8 @@ const log = getLogger('notify-processor')
 
 export interface MessagingNotifyPayload {
   conversationId: string
-  tournamentId: string
+  tournamentId?: string
+  groupId?: string
 }
 
 interface NotifyProcessorDeps {
