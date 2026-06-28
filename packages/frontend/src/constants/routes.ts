@@ -20,6 +20,8 @@ export const ROUTES = {
   ORGANIZER: '/organizer',
   MATCHES: '/matches',
   STANDINGS: '/standings',
+  GROUPS: '/groups',
+  GROUP_DETAIL: '/groups/:groupId',
   TOURNAMENT_DETAIL: '/tournament/:tournamentId',
   TOURNAMENT_TAB: '/tournament/:tournamentId/:tab',
   TOURNAMENT_MANAGE: '/tournament/:tournamentId/manage',

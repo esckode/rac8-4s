@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { useGroupUnread } from '../../hooks/useGroupUnread'
+import { MyGroupsUnreadBadge } from '../GroupChatPanel'
 import '../../styles/globals.css'
 
 export interface ResponsiveLayoutProps {
@@ -108,13 +110,14 @@ const MoreSheet: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen,
 const BottomNav = () => {
   const location = useLocation()
   const { isAuthenticated } = useAuth()
+  const groupsUnread = useGroupUnread()
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const isActive = (path: string) => location.pathname.startsWith(path)
 
   const tabs = [
-    { path: '/browse', label: 'Tournaments', icon: '🏆' },
-    { path: '/standings', label: 'Standings', icon: '📊' },
-    { path: '/matches', label: 'Matches', icon: '🎾' },
+    { path: '/browse', label: 'Tournaments', icon: '🏆', testId: 'nav-browse' },
+    { path: '/standings', label: 'Standings', icon: '📊', testId: 'nav-standings' },
+    { path: '/matches', label: 'Matches', icon: '🎾', testId: 'nav-matches' },
   ]
 
   return (
@@ -124,6 +127,7 @@ const BottomNav = () => {
           <a
             key={tab.path}
             href={tab.path}
+            data-testid={tab.testId}
             className={`responsive-bottom-nav-item ${isActive(tab.path) ? 'active' : ''}`}
             aria-current={isActive(tab.path) ? 'page' : undefined}
           >
@@ -131,6 +135,24 @@ const BottomNav = () => {
             <span>{tab.label}</span>
           </a>
         ))}
+        {isAuthenticated && (
+          <a
+            href="/groups"
+            data-testid="nav-groups"
+            className={`responsive-bottom-nav-item ${isActive('/groups') ? 'active' : ''}`}
+            aria-current={isActive('/groups') ? 'page' : undefined}
+          >
+            <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
+              👥
+              {groupsUnread > 0 && (
+                <span style={{ position: 'absolute', top: -6, right: -6 }}>
+                  <MyGroupsUnreadBadge count={groupsUnread} />
+                </span>
+              )}
+            </span>
+            <span>Groups</span>
+          </a>
+        )}
         {isAuthenticated && (
           <button
             className="responsive-bottom-nav-item"

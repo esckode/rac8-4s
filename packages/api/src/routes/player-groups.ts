@@ -1,14 +1,17 @@
 /**
- * G1.2 + G1.3 + G2.2 — Player group membership lifecycle, invite flow, and chat routes.
+ * G1.2 + G1.3 + G2.2 + G2.5 — Player group membership lifecycle, invite flow, chat, and UI routes.
  *
  * Mounted at /player/groups. Route ordering §10: static paths before :id.
  *
  * Routes:
+ *   GET    /player/groups                               — list the caller's groups (G2.5)
  *   POST   /player/groups                               — create group (creator becomes owner)
  *   POST   /player/groups/:groupId/invites/accept       — invitee accepts invite (age-gated)
  *   POST   /player/groups/:groupId/invites              — owner creates email-bound invite
+ *   GET    /player/groups/:groupId/members              — member list (G2.5)
  *   POST   /player/groups/:groupId/messages             — member sends a text message (G2.2)
  *   GET    /player/groups/:groupId/messages             — member gets history (G2.2)
+ *   GET    /player/groups/:groupId/events               — SSE stream for the group (G2.5)
  *   POST   /player/groups/:groupId/members/:pid/promote — owner promotes member → owner
  *   POST   /player/groups/:groupId/members/:pid/demote  — owner demotes owner → member
  *   DELETE /player/groups/:groupId/members/:pid/leave   — self-leave (any member)
@@ -52,6 +55,18 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   const playerRepo = new PlayerRepository(deps.db as any)
   const groupMsgRepo = new GroupMessageRepository(deps.db as any)
   const conversationRepo = new ConversationRepository(deps.db as any)
+
+  // GET /player/groups — list the caller's groups (G2.5)
+  // §10: static GET registered before POST and /:groupId param routes
+  router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const groups = await groupRepo.getGroupsForPlayer(session.playerId)
+      return res.status(200).json({ groups })
+    } catch (err) {
+      next(err)
+    }
+  })
 
   // POST /player/groups — create a player group
   // §10: registered before /:groupId param routes
@@ -232,6 +247,87 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         log.info('group.invite.sent', { groupId, actorPlayerId: session.playerId })
 
         return res.status(201).json({ ok: true })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // ─── G2.5 Member list + SSE ──────────────────────────────────────────────
+
+  // GET /player/groups/:groupId/members — list members (G2.5)
+  // §10: literal suffix 'members' registered before /:groupId/members/:pid param routes
+  router.get(
+    '/:groupId/members',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+
+        // Authz: caller must be a member
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can view members' })
+        }
+
+        const members = await groupRepo.getGroupMembers(groupId)
+        return res.status(200).json({
+          members: members.map(m => ({
+            playerId: m.playerId,
+            name: m.name,
+            role: m.role,
+            joinedAt: m.joinedAt,
+          })),
+        })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // GET /player/groups/:groupId/events — SSE stream for the group's conversation (G2.5)
+  // §10: literal suffix 'events' registered before /:groupId param routes
+  router.get(
+    '/:groupId/events',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const groupId = req.params.groupId as string
+
+        if (!deps.broadcastBus) {
+          return res.status(503).json({ code: 'SERVICE_UNAVAILABLE', message: 'SSE not available' })
+        }
+
+        // Support both Authorization header and query param token (EventSource compat)
+        let authHeader = req.headers.authorization
+        if (!authHeader && req.query.token) {
+          const token = Array.isArray(req.query.token) ? req.query.token[0] : req.query.token
+          authHeader = `Bearer ${token}`
+        }
+
+        const session = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
+
+        // Authz: caller must be a member
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Access denied' })
+        }
+
+        const conversationId = await conversationRepo.resolveGroupConversation(groupId)
+
+        res.setHeader('Content-Type', 'text/event-stream')
+        res.setHeader('Cache-Control', 'no-cache')
+        res.setHeader('Connection', 'keep-alive')
+        res.flushHeaders()
+
+        const unsubscribe = deps.broadcastBus.subscribe(conversationId, (event, data) => {
+          if (!res.writableEnded) {
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          }
+        })
+
+        req.on('close', () => {
+          unsubscribe()
+        })
       } catch (err) {
         next(handleGroupError(err))
       }

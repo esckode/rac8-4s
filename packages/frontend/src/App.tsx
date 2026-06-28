@@ -14,6 +14,7 @@ import { BrowseTournaments } from './pages/BrowseTournaments'
 import { TournamentBrowse } from './pages/TournamentBrowse'
 import { TournamentDetail } from './pages/TournamentDetail'
 import { MyTournamentsHub } from './pages/MyTournamentsHub'
+import { GroupList, GroupDetail } from './pages/MyGroups'
 import { PartnerRequestConfirm } from './pages/PartnerRequestConfirm'
 import { OrganizerManage } from './pages/OrganizerManage'
 import { OrganizerDashboard } from './pages/OrganizerDashboard'
@@ -112,6 +113,26 @@ export const App: React.FC = () => {
               <ProtectedRoute>
                 <ResponsiveLayout showHeader showNav>
                   <MyTournamentsHub tab="standings" />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.GROUPS}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <GroupList />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.GROUP_DETAIL}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <GroupDetail />
                 </ResponsiveLayout>
               </ProtectedRoute>
             }

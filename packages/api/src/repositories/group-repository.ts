@@ -270,6 +270,52 @@ export class GroupRepository {
   }
 
   /**
+   * List all groups a player is a member of (G2.5 — My Groups tab).
+   * Returns group id, name, the player's role, and total member count.
+   */
+  async getGroupsForPlayer(
+    playerId: string
+  ): Promise<Array<{ id: string; name: string; role: 'owner' | 'member'; memberCount: number }>> {
+    const result = await this.pool.query(
+      `SELECT g.id, g.name, m.role,
+              (SELECT COUNT(*) FROM public.player_group_members WHERE group_id = g.id)::int AS member_count
+       FROM public.player_groups g
+       JOIN public.player_group_members m ON m.group_id = g.id AND m.player_id = $1
+       ORDER BY g.created_at DESC`,
+      [playerId]
+    )
+    return result.rows.map(row => ({
+      id: row.id as string,
+      name: row.name as string,
+      role: row.role as 'owner' | 'member',
+      memberCount: row.member_count as number,
+    }))
+  }
+
+  /**
+   * List all members of a group (G2.5 — Members panel).
+   * Returns playerId, display name, role, and join date.
+   */
+  async getGroupMembers(
+    groupId: string
+  ): Promise<Array<{ playerId: string; name: string; role: 'owner' | 'member'; joinedAt: Date }>> {
+    const result = await this.pool.query(
+      `SELECT m.player_id, COALESCE(p.name, m.player_id) AS name, m.role, m.joined_at
+       FROM public.player_group_members m
+       JOIN public.players p ON p.id = m.player_id
+       WHERE m.group_id = $1
+       ORDER BY m.joined_at ASC`,
+      [groupId]
+    )
+    return result.rows.map(row => ({
+      playerId: row.player_id as string,
+      name: row.name as string,
+      role: row.role as 'owner' | 'member',
+      joinedAt: row.joined_at instanceof Date ? row.joined_at : new Date(row.joined_at),
+    }))
+  }
+
+  /**
    * Get all members of a group for notification selection.
    * Returns playerId, notifyLevel, and display name for each member.
    * Used by G2.4 to compute per-recipient notify eligibility.
