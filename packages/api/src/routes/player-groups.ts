@@ -583,6 +583,48 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     }
   )
 
+  // POST /player/groups/:groupId/polls/:messageId/close — poll creator or group owner closes (G3.2)
+  // §10: /:groupId/polls/:messageId/close (static suffix 'close') registered before /:groupId/polls/:pollId/votes
+  router.post(
+    '/:groupId/polls/:messageId/close',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+        const messageId = req.params.messageId as string
+
+        // Authz: caller must be a group member
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can close polls' })
+        }
+
+        // Look up the poll to check creator_player_id and closed_at
+        const pollMeta = await pollRepo.getPollByMessageId(messageId)
+        if (!pollMeta) {
+          return res.status(404).json({ code: 'NOT_FOUND', message: 'Poll not found' })
+        }
+
+        // Only the poll creator or a group owner may close
+        const isCreator = pollMeta.creatorPlayerId === session.playerId
+        const isOwner = memberRole === 'owner'
+        if (!isCreator && !isOwner) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the poll creator or a group owner can close this poll' })
+        }
+
+        const result = await pollRepo.closePoll(messageId, groupId, session.playerId)
+
+        return res.status(200).json({ tally: result.tally, closedAt: result.closedAt })
+      } catch (err) {
+        const code = (err as any)?.code
+        if (code === 'POLL_ALREADY_CLOSED') {
+          return res.status(409).json({ code: 'POLL_ALREADY_CLOSED', message: 'Poll is already closed' })
+        }
+        next(handleGroupError(err))
+      }
+    }
+  )
+
   // GET /player/groups/:groupId/polls/:pollId/votes — live tally (members only)
   // §10: /:groupId/polls/:pollId/votes (static suffix) before /:groupId/polls/:pollId
   router.get(
@@ -658,6 +700,10 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           votedAt: result.votedAt,
         })
       } catch (err) {
+        const code = (err as any)?.code
+        if (code === 'POLL_CLOSED') {
+          return res.status(409).json({ code: 'POLL_CLOSED', message: 'Poll is closed' })
+        }
         next(handleGroupError(err))
       }
     }

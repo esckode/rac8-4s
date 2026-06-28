@@ -24,6 +24,11 @@ export interface CreatePollInput {
   targetTime?: Date | null
 }
 
+export interface ClosePollResult {
+  tally: { in: number; out: number; maybe: number }
+  closedAt: Date
+}
+
 export interface CreatePollResult {
   pollId: string
   messageId: string
@@ -108,12 +113,12 @@ export class PollRepository {
       )
       const messageId = msgRes.rows[0].id as string
 
-      // Insert poll metadata
+      // Insert poll metadata (creator_player_id stored so close authz can check without a join)
       const pollRes = await client.query(
-        `INSERT INTO messaging.polls (message_id, question, target_time)
-         VALUES ($1, $2, $3)
+        `INSERT INTO messaging.polls (message_id, question, target_time, creator_player_id)
+         VALUES ($1, $2, $3, $4)
          RETURNING id`,
-        [messageId, question, targetTime ?? null]
+        [messageId, question, targetTime ?? null, creatorPlayerId]
       )
       const pollId = pollRes.rows[0].id as string
 
@@ -135,17 +140,21 @@ export class PollRepository {
    * Upsert: one row per (message_id, player_id) — re-vote replaces prior choice.
    *
    * pollId is messaging.polls.id — we resolve message_id from it.
+   * Throws POLL_CLOSED (409-style) if the poll has been closed.
    */
   async castVote(input: CastVoteInput): Promise<{ choice: PollChoice; votedAt: Date }> {
     const { pollId, playerId, choice } = input
 
-    // Resolve message_id from poll
+    // Resolve message_id from poll and check closed_at
     const pollRow = await this.pool.query(
-      `SELECT message_id FROM messaging.polls WHERE id = $1`,
+      `SELECT message_id, closed_at FROM messaging.polls WHERE id = $1`,
       [pollId]
     )
     if (pollRow.rows.length === 0) {
       throw Object.assign(new Error('Poll not found'), { code: 'NOT_FOUND' })
+    }
+    if (pollRow.rows[0].closed_at !== null) {
+      throw Object.assign(new Error('Poll is closed'), { code: 'POLL_CLOSED' })
     }
     const messageId = pollRow.rows[0].message_id as string
 
@@ -215,6 +224,110 @@ export class PollRepository {
       [pollId]
     )
     return res.rows[0]?.message_id ?? null
+  }
+
+  /**
+   * Look up a poll by its group_message id (messageId = messaging.polls.message_id).
+   * Returns { pollId, creatorPlayerId, closedAt } or null if not found.
+   * Used by the close route which receives the messageId from the URL path.
+   */
+  async getPollByMessageId(
+    messageId: string
+  ): Promise<{ pollId: string; creatorPlayerId: string | null; closedAt: Date | null } | null> {
+    const res = await this.pool.query(
+      `SELECT id, creator_player_id, closed_at FROM messaging.polls WHERE message_id = $1`,
+      [messageId]
+    )
+    if (res.rows.length === 0) return null
+    const row = res.rows[0]
+    return {
+      pollId: row.id as string,
+      creatorPlayerId: row.creator_player_id ?? null,
+      closedAt: row.closed_at ? (row.closed_at instanceof Date ? row.closed_at : new Date(row.closed_at)) : null,
+    }
+  }
+
+  /**
+   * Close a poll:
+   *   1. Sets closed_at = now() on messaging.polls (if not already closed).
+   *   2. Computes the final tally from messaging.poll_votes.
+   *   3. Posts a system group message with the tally summary.
+   *
+   * This is a plain function (takes messageId + groupId) so it can be called from
+   * the manual close route now and plugged into a cron/job scheduler later.
+   *
+   * Throws POLL_ALREADY_CLOSED if closed_at is already set.
+   * Throws NOT_FOUND if the poll does not exist.
+   */
+  async closePoll(messageId: string, groupId: string, closerPlayerId: string): Promise<ClosePollResult> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      // Lock + close the poll atomically
+      const updateRes = await client.query(
+        `UPDATE messaging.polls
+         SET closed_at = now()
+         WHERE message_id = $1
+           AND closed_at IS NULL
+         RETURNING id, closed_at`,
+        [messageId]
+      )
+
+      if (updateRes.rows.length === 0) {
+        // Either not found or already closed — check which
+        const checkRes = await client.query(
+          `SELECT id, closed_at FROM messaging.polls WHERE message_id = $1`,
+          [messageId]
+        )
+        if (checkRes.rows.length === 0) {
+          throw Object.assign(new Error('Poll not found'), { code: 'NOT_FOUND' })
+        }
+        throw Object.assign(new Error('Poll is already closed'), { code: 'POLL_ALREADY_CLOSED' })
+      }
+
+      const closedAt: Date = updateRes.rows[0].closed_at instanceof Date
+        ? updateRes.rows[0].closed_at
+        : new Date(updateRes.rows[0].closed_at)
+
+      // Compute final tally
+      const votesRes = await client.query(
+        `SELECT choice FROM messaging.poll_votes WHERE message_id = $1`,
+        [messageId]
+      )
+      const tally = { in: 0, out: 0, maybe: 0 }
+      for (const row of votesRes.rows) {
+        tally[row.choice as PollChoice]++
+      }
+
+      // Post a system message with the tally summary
+      const conversationId = await this.resolveConversationId(client, groupId)
+      const summaryParts: string[] = []
+      if (tally.in > 0) summaryParts.push(`${tally.in} in`)
+      if (tally.out > 0) summaryParts.push(`${tally.out} out`)
+      if (tally.maybe > 0) summaryParts.push(`${tally.maybe} maybe`)
+      const summaryBody = summaryParts.length > 0
+        ? `Poll closed: ${summaryParts.join(', ')}`
+        : 'Poll closed: no votes'
+
+      await client.query(
+        `INSERT INTO messaging.group_messages
+           (conversation_id, player_id, sender_name_snapshot, body, type)
+         VALUES ($1, NULL, 'system', $2, 'system')`,
+        [conversationId, summaryBody]
+      )
+
+      await client.query('COMMIT')
+
+      log.info('poll.closed', { messageId, groupId, closerPlayerId, tally })
+
+      return { tally, closedAt }
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
   }
 
   /**
