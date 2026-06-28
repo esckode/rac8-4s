@@ -497,7 +497,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
       }
 
-      if (new Date() > new Date(tournament.group_stage_deadline)) {
+      if (tournament.group_stage_deadline != null && new Date() > new Date(tournament.group_stage_deadline)) {
         return res.status(409).json({ code: 'DEADLINE_PASSED', message: 'Group stage scoring deadline has passed' })
       }
 
@@ -1034,7 +1034,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(403).json({ code: 'FORBIDDEN', message: 'You are not a participant in this match' })
       }
 
-      if (new Date() > new Date(tournament.knockout_stage_deadline)) {
+      if (tournament.knockout_stage_deadline != null && new Date() > new Date(tournament.knockout_stage_deadline)) {
         return res.status(409).json({ code: 'DEADLINE_PASSED', message: 'Knockout stage scoring deadline has passed' })
       }
 
@@ -1827,7 +1827,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
       }
 
-      const isBeforeDeadline = new Date() < new Date(tournament.registration_deadline)
+      const isBeforeDeadline = tournament.registration_deadline != null && new Date() < new Date(tournament.registration_deadline)
       const updated = await playerRepo.withdrawRegistration(registrationId, isBeforeDeadline)
 
       const eventName = isBeforeDeadline ? 'registration.withdrawn' : 'registration.withdrawal_requested'

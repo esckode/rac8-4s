@@ -35,13 +35,16 @@ export interface TournamentRow {
   status: string
   max_players: number
   description?: string
-  registration_deadline: string
-  group_stage_deadline: string
-  knockout_stage_deadline: string
+  registration_deadline: string | null
+  group_stage_deadline: string | null
+  knockout_stage_deadline: string | null
   created_at: string
   updated_at: string
   deleted_at?: string | null
   completed_at?: string | null
+  mode: string
+  visibility: string
+  group_id?: string | null
 }
 
 export interface PlayerRow {
@@ -280,7 +283,7 @@ export class TournamentRepository {
 
     const params = [...publishedStatuses]
     const placeholders = publishedStatuses.map((_, i) => `$${i + 1}`).join(',')
-    let query = `SELECT * FROM public.tournaments WHERE status IN (${placeholders}) AND deleted_at IS NULL`
+    let query = `SELECT * FROM public.tournaments WHERE status IN (${placeholders}) AND visibility = 'public' AND deleted_at IS NULL`
 
     if (opts.sport) {
       params.push(opts.sport)
