@@ -33,6 +33,7 @@ import { GroupMessageRepository } from '../repositories/group-message-repository
 import { ConversationRepository } from '../repositories/conversation-repository'
 import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-notify-selector'
 import { PollRepository, type PollChoice } from '../repositories/poll-repository'
+import { LeaderboardRepository } from '../repositories/leaderboard-repository'
 
 const INVITE_TTL_SECONDS = 7 * 24 * 3600 // 7 days
 
@@ -57,6 +58,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   const groupMsgRepo = new GroupMessageRepository(deps.db as any)
   const conversationRepo = new ConversationRepository(deps.db as any)
   const pollRepo = new PollRepository(deps.db as any)
+  const leaderboardRepo = new LeaderboardRepository(deps.db as any)
 
   // GET /player/groups — list the caller's groups (G2.5)
   // §10: static GET registered before POST and /:groupId param routes
@@ -249,6 +251,54 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         log.info('group.invite.sent', { groupId, actorPlayerId: session.playerId })
 
         return res.status(201).json({ ok: true })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // ─── G4.4 Leaderboard endpoints ──────────────────────────────────────────
+  // §10: static suffixes 'leaderboard/individual' and 'leaderboard/pairs' registered
+  // before the bare /:groupId param routes to avoid shadowing.
+
+  // GET /player/groups/:groupId/leaderboard/individual — individual W/L stats
+  router.get(
+    '/:groupId/leaderboard/individual',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+
+        // Authz: caller must be a member
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can view leaderboards' })
+        }
+
+        const leaderboard = await leaderboardRepo.getIndividualLeaderboard(groupId)
+        return res.status(200).json({ leaderboard })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // GET /player/groups/:groupId/leaderboard/pairs — pair W/L stats (doubles)
+  router.get(
+    '/:groupId/leaderboard/pairs',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+
+        // Authz: caller must be a member
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can view leaderboards' })
+        }
+
+        const leaderboard = await leaderboardRepo.getPairLeaderboard(groupId)
+        return res.status(200).json({ leaderboard })
       } catch (err) {
         next(handleGroupError(err))
       }

@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
 import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository, AccountRepository, RegistrationRow, PlayerRow, GroupMatchRow, AgeAttestation, AgeAttestationRequiredError, UnderAgeError } from '../db'
+import { LeaderboardRepository, type ParticipantSlot } from '../repositories/leaderboard-repository'
 import {
   requireOrganizerAuth,
   assertOrganizerOwnsTournament,
@@ -86,6 +87,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
   const knockoutRepo = new KnockoutRepository(deps.db)
   const accountRepo = new AccountRepository(deps.db)
   const conversationRepo = new ConversationRepository(deps.db as any)
+  const leaderboardRepo = new LeaderboardRepository(deps.db as any)
   const sseConnectionCount = new Map<string, number>()
 
   // Resolve the acting player for a tournament from either a magic-link player
@@ -552,6 +554,74 @@ export default function tournamentsRouter(deps: AppDependencies) {
         await processStandingsRecalculate(
           { tournamentId, groupId: match.group_id, conversationId: cid },
           { groupRepo, broadcastBus: deps.broadcastBus }
+        )
+      }
+
+      // Write durable match log for casual group-linked tournaments
+      if (isCasual && tournament.group_id) {
+        const winningSide: 'team1' | 'team2' =
+          match.format === 'doubles'
+            ? (updated.winner_id === match.team1_id ? 'team1' : 'team2')
+            : (updated.winner_id === match.player1_id ? 'team1' : 'team2')
+
+        // Resolve player names for name_snapshot
+        const participantIdList =
+          match.format === 'doubles'
+            ? [match.team1_id, match.team2_id].filter(Boolean)
+            : [match.player1_id, match.player2_id].filter(Boolean)
+
+        // For singles we need player names; look them up from the players table
+        let nameMap: Record<string, string> = {}
+        if (match.format !== 'doubles' && participantIdList.length > 0) {
+          const playerRows = await deps.db.query(
+            `SELECT id, name FROM public.players WHERE id = ANY($1)`,
+            [participantIdList]
+          )
+          for (const row of playerRows.rows) {
+            nameMap[row.id] = row.name
+          }
+        }
+
+        const participants: ParticipantSlot[] = []
+        if (match.format === 'doubles') {
+          // For doubles, teams are the participant IDs — use team_id as fallback name
+          if (match.team1_id) {
+            participants.push({
+              playerId: match.team1_id,
+              nameSnapshot: match.team1_id,
+              side: 'team1',
+            })
+          }
+          if (match.team2_id) {
+            participants.push({
+              playerId: match.team2_id,
+              nameSnapshot: match.team2_id,
+              side: 'team2',
+            })
+          }
+        } else {
+          if (match.player1_id) {
+            participants.push({
+              playerId: match.player1_id,
+              nameSnapshot: nameMap[match.player1_id] ?? match.player1_id,
+              side: 'team1',
+            })
+          }
+          if (match.player2_id) {
+            participants.push({
+              playerId: match.player2_id,
+              nameSnapshot: nameMap[match.player2_id] ?? match.player2_id,
+              side: 'team2',
+            })
+          }
+        }
+
+        await leaderboardRepo.logMatch(
+          tournamentId,
+          tournament.group_id,
+          matchId,
+          winningSide,
+          participants
         )
       }
 

@@ -135,7 +135,7 @@ describe('G4.4 durable cross-tournament leaderboards', () => {
   describe('1. match log written on casual score submission', () => {
     it('writes one group_match_log row and participant slots after a casual group match is scored', async () => {
       // Setup: group → tournament → players → match
-      const { playerId: owner } = await PlayerFactory.create(pool)
+      const { id: owner } = await PlayerFactory.create(pool)
       const groupId = await createPlayerGroup(pool, owner)
       const tournamentId = await createCasualGroupTournament(pool, organizerId, groupId)
 
@@ -181,7 +181,7 @@ describe('G4.4 durable cross-tournament leaderboards', () => {
 
     it('is idempotent — re-submitting the same match_ref does not duplicate the log row', async () => {
       // Insert a log row directly then call logMatch again with the same match_ref
-      const { playerId: owner } = await PlayerFactory.create(pool)
+      const { id: owner } = await PlayerFactory.create(pool)
       const groupId = await createPlayerGroup(pool, owner)
       const tournamentId = await createCasualGroupTournament(pool, organizerId, groupId)
       const { playerId: p1 } = await registerAndGetToken(pool, tokenStore, tournamentId)
@@ -240,7 +240,7 @@ describe('G4.4 durable cross-tournament leaderboards', () => {
 
   describe('3. anonymizeMatchLogSlotsFor', () => {
     it('nulls player_id for erased player; leaves other slots and name_snapshot intact', async () => {
-      const { playerId: owner } = await PlayerFactory.create(pool)
+      const { id: owner } = await PlayerFactory.create(pool)
       const groupId = await createPlayerGroup(pool, owner)
       const tournamentId = await createCasualGroupTournament(pool, organizerId, groupId)
       const { playerId: p1 } = await registerAndGetToken(pool, tokenStore, tournamentId)
@@ -280,7 +280,7 @@ describe('G4.4 durable cross-tournament leaderboards', () => {
     })
 
     it('is idempotent — calling twice does not error', async () => {
-      const { playerId: owner } = await PlayerFactory.create(pool)
+      const { id: owner } = await PlayerFactory.create(pool)
       const groupId = await createPlayerGroup(pool, owner)
       const tournamentId = await createCasualGroupTournament(pool, organizerId, groupId)
       const { playerId: p1 } = await registerAndGetToken(pool, tokenStore, tournamentId)
@@ -301,7 +301,7 @@ describe('G4.4 durable cross-tournament leaderboards', () => {
 
   describe('4. recomputeLeaderboards after anonymization', () => {
     it('excludes anonymized player from individual results; non-anonymized player still appears', async () => {
-      const { playerId: owner } = await PlayerFactory.create(pool)
+      const { id: owner } = await PlayerFactory.create(pool)
       const groupId = await createPlayerGroup(pool, owner)
       const tournamentId = await createCasualGroupTournament(pool, organizerId, groupId)
       const { playerId: p1 } = await registerAndGetToken(pool, tokenStore, tournamentId)
@@ -348,12 +348,9 @@ describe('G4.4 durable cross-tournament leaderboards', () => {
       )
 
       const tournamentId = await createCasualGroupTournament(pool, organizerId, groupId)
-      await pool.query(
-        `INSERT INTO public.player_registrations (player_id, tournament_id, registered_at, status)
-         VALUES ($1, $2, NOW(), 'registered'), ($3, $2, NOW(), 'registered')
-         ON CONFLICT DO NOTHING`,
-        [p1.id, tournamentId, p2.id]
-      )
+      const playerRepo = new PlayerRepository(pool)
+      await playerRepo.createRegistration(p1.id, tournamentId)
+      await playerRepo.createRegistration(p2.id, tournamentId)
 
       const lbRepo = new LeaderboardRepository(pool)
       // p1 wins 3 matches
