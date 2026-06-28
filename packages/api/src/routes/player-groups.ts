@@ -333,8 +333,38 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             body: m.body,
             type: m.type,
             createdAt: m.createdAt,
+            removedAt: m.removedAt ?? null,
           })),
         })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // DELETE /player/groups/:groupId/messages/:messageId — owner tombstones a message (G2.3)
+  // §10: /:groupId/messages/:messageId registered after /:groupId/messages (GET/POST)
+  // and before /:groupId/members to keep member param routes after.
+  router.delete(
+    '/:groupId/messages/:messageId',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+        const messageId = req.params.messageId as string
+
+        // Authz: caller must be an owner
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole !== 'owner') {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group owners can remove messages' })
+        }
+
+        const removed = await groupMsgRepo.removeGroupMessage(messageId, session.playerId)
+        if (!removed) {
+          return res.status(404).json({ code: 'NOT_FOUND', message: 'Message not found' })
+        }
+
+        return res.status(200).json({ ok: true })
       } catch (err) {
         next(handleGroupError(err))
       }

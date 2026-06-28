@@ -299,10 +299,38 @@ describe('G2.3 — History returns tombstone in original order as "message remov
     const group = await createGroup(app, ownerToken)
     await addMember(pool, group.id, member.id)
 
-    // Post 3 messages: before, the one to delete, after
-    await postMessage(app, group.id, ownerToken, 'First message')
-    const toDeleteId = await postMessage(app, group.id, memberToken, 'Message to remove')
-    await postMessage(app, group.id, ownerToken, 'Third message')
+    // Resolve conversation_id and insert messages with explicit staggered timestamps
+    // to guarantee ordering (within a transaction now() is fixed, so we must use
+    // clock_timestamp() or explicit offsets to get distinct timestamps).
+    const convRepo = new ConversationRepository(pool)
+    const convId = await convRepo.resolveGroupConversation(group.id)
+
+    const firstRes = await pool.query(
+      `INSERT INTO messaging.group_messages
+         (conversation_id, player_id, sender_name_snapshot, body, type, created_at)
+       VALUES ($1, $2, $3, 'First message', 'text', clock_timestamp() - INTERVAL '2 seconds')
+       RETURNING id`,
+      [convId, owner.id, owner.name]
+    )
+    const firstId = firstRes.rows[0].id as string
+
+    const midRes = await pool.query(
+      `INSERT INTO messaging.group_messages
+         (conversation_id, player_id, sender_name_snapshot, body, type, created_at)
+       VALUES ($1, $2, $3, 'Message to remove', 'text', clock_timestamp() - INTERVAL '1 second')
+       RETURNING id`,
+      [convId, member.id, member.name]
+    )
+    const toDeleteId = midRes.rows[0].id as string
+
+    const thirdRes = await pool.query(
+      `INSERT INTO messaging.group_messages
+         (conversation_id, player_id, sender_name_snapshot, body, type, created_at)
+       VALUES ($1, $2, $3, 'Third message', 'text', clock_timestamp())
+       RETURNING id`,
+      [convId, owner.id, owner.name]
+    )
+    const thirdId = thirdRes.rows[0].id as string
 
     // Owner tombstones the second message
     const delRes = await request(app)
@@ -325,10 +353,14 @@ describe('G2.3 — History returns tombstone in original order as "message remov
       removedAt: string | null
     }>
 
-    // All 3 messages still present (+ possibly system messages from the test setup)
+    // All 3 messages still present in history
+    const msgIds = messages.map(m => m.id)
+    expect(msgIds).toContain(firstId)
+    expect(msgIds).toContain(toDeleteId)
+    expect(msgIds).toContain(thirdId)
+
+    // The original body is NOT visible — replaced by tombstone display text
     const bodies = messages.map(m => m.body)
-    expect(bodies).toContain('First message')
-    expect(bodies).toContain('Third message')
     expect(bodies).not.toContain('Message to remove')
 
     // The tombstone shows as "message removed"
@@ -340,9 +372,9 @@ describe('G2.3 — History returns tombstone in original order as "message remov
     expect(tombstone!.removedAt).not.toBeNull()
 
     // Order is preserved: First < tombstone < Third
-    const firstIdx = messages.findIndex(m => m.body === 'First message')
+    const firstIdx = messages.findIndex(m => m.id === firstId)
     const tombstoneIdx = messages.findIndex(m => m.id === toDeleteId)
-    const thirdIdx = messages.findIndex(m => m.body === 'Third message')
+    const thirdIdx = messages.findIndex(m => m.id === thirdId)
     expect(firstIdx).toBeGreaterThanOrEqual(0)
     expect(tombstoneIdx).toBeGreaterThanOrEqual(0)
     expect(thirdIdx).toBeGreaterThanOrEqual(0)

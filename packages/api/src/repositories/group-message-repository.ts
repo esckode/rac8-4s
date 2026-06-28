@@ -23,6 +23,8 @@ export interface GroupMessageRow {
   body: string
   type: 'text' | 'poll' | 'system' | 'announcement'
   createdAt: Date
+  removedAt: Date | null
+  removedBy: string | null
 }
 
 export interface SendGroupMessageInput {
@@ -42,10 +44,12 @@ function rowToGroupMessage(row: any): GroupMessageRow {
     id: row.id as string,
     conversationId: row.conversation_id as string,
     playerId: row.player_id ?? null,
-    senderName: row.sender_name_snapshot ?? null,
-    body: row.body as string,
+    senderName: row.sender_name_snapshot !== '' ? (row.sender_name_snapshot ?? null) : null,
+    body: row.removed_at != null ? 'message removed' : (row.body as string),
     type: row.type as GroupMessageRow['type'],
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+    removedAt: row.removed_at ? (row.removed_at instanceof Date ? row.removed_at : new Date(row.removed_at)) : null,
+    removedBy: row.removed_by ?? null,
   }
 }
 
@@ -177,6 +181,47 @@ export class GroupMessageRepository {
   }
 
   /**
+   * Tombstone a group message (owner-only moderation soft-delete).
+   *
+   * Sets:
+   *   - body                 → '' (cleared)
+   *   - player_id            → NULL (attribution dropped)
+   *   - sender_name_snapshot → '' (attribution dropped; distinguishable from DSR
+   *                               which sets it to 'Former player')
+   *   - removed_at           → now() (marks moderation removal; DSR leaves this NULL)
+   *   - removed_by           → actorPlayerId (who removed it; for audit purposes)
+   *
+   * Returns the updated row, or null if the message does not exist (for 404 handling).
+   *
+   * This is distinct from DSR anonymization (anonymizeGroupMessagesFor), which sets
+   * sender_name_snapshot='Former player' and does NOT set removed_at/removed_by.
+   */
+  async removeGroupMessage(
+    messageId: string,
+    actorPlayerId: string
+  ): Promise<GroupMessageRow | null> {
+    const result = await this.pool.query(
+      `UPDATE messaging.group_messages
+       SET body                 = '',
+           player_id            = NULL,
+           sender_name_snapshot = '',
+           removed_at           = now(),
+           removed_by           = $2
+       WHERE id = $1
+       RETURNING id, conversation_id, player_id, sender_name_snapshot, body, type,
+                 created_at, removed_at, removed_by`,
+      [messageId, actorPlayerId]
+    )
+    if (result.rows.length === 0) return null
+    const row = rowToGroupMessage(result.rows[0])
+    log.info('group.message.removed', {
+      messageId,
+      removedBy: actorPlayerId,
+    })
+    return row
+  }
+
+  /**
    * Get paginated history for a group conversation.
    * Returns messages ordered by (created_at ASC, id ASC) — oldest first.
    * Includes text, poll, system, and announcement types so system events appear
@@ -189,7 +234,8 @@ export class GroupMessageRepository {
     const { conversationId, limit = 50 } = input
 
     const result = await this.pool.query(
-      `SELECT id, conversation_id, player_id, sender_name_snapshot, body, type, created_at
+      `SELECT id, conversation_id, player_id, sender_name_snapshot, body, type, created_at,
+              removed_at, removed_by
        FROM messaging.group_messages
        WHERE conversation_id = $1
        ORDER BY created_at ASC, id ASC
