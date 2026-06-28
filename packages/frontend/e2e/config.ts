@@ -291,6 +291,16 @@ export const SELECTORS = {
   INVITE_SUCCESS: '[data-testid="invite-success"]',
   INVITE_ERROR: '[data-testid="invite-error"]',
 
+  // Poll cards — G3.3
+  POLL_CARD: '[data-testid="poll-card"]',
+  POLL_QUESTION: '[data-testid="poll-question"]',
+  POLL_TARGET_TIME: '[data-testid="poll-target-time"]',
+  POLL_VOTE_IN: '[data-testid="poll-vote-in"]',
+  POLL_VOTE_OUT: '[data-testid="poll-vote-out"]',
+  POLL_VOTE_MAYBE: '[data-testid="poll-vote-maybe"]',
+  POLL_TALLY: '[data-testid="poll-tally"]',
+  POLL_CLOSE_BUTTON: '[data-testid="poll-close-button"]',
+
   // Messaging — V5.2 thread model
   MESSAGE_THREAD_PANEL: '[data-testid="message-thread-panel"]',
   CHANNEL_SWITCHER: '[data-testid="channel-switcher"]',
