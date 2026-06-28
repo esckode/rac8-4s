@@ -200,7 +200,7 @@ contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** i
   **Per-store erasure primitive (§0.5):** a contract test proves `anonymizePollVotesFor(playerId)` removes/
   tombstones that player's votes while **other voters' rows and the remaining tally stay correct**, and is
   idempotent.
-- **GREEN:** poll create/vote routes; `poll_votes` table (migration `041`); live tally aggregation; add
+- **GREEN:** poll create/vote routes; `poll_votes` table (migration `042`); live tally aggregation; add
   `anonymizePollVotesFor`.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
@@ -230,7 +230,7 @@ contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** i
   become **nullable**; **existing tournaments unchanged** (all default `scheduled`/`public`, deadlines
   intact). Browse filter: `/browse` returns only `visibility=public` (HL:1140 carve-out) — `unlisted`
   hidden.
-- **GREEN:** migration `042`; relax deadline NOT NULLs; add columns with safe defaults; apply the browse
+- **GREEN:** migration `043`; relax deadline NOT NULLs; add columns with safe defaults; apply the browse
   `visibility=public` filter.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
@@ -277,7 +277,7 @@ contract test land with that store (G2.1/G3.1/G4.4); the thin **orchestrator** i
   (co-participants untouched), and that **`recomputeLeaderboards()` re-derives correct pair + individual
   standings from the mutated log** (drops the anonymized player from the individual board). Aggregation is
   built **re-runnable/idempotent** so G5 can call it after erasure.
-- **GREEN:** migration `043`; per-slot participant model; match-log writer on score finalize; **idempotent**
+- **GREEN:** migration `044`; per-slot participant model; match-log writer on score finalize; **idempotent**
   leaderboard aggregation queries + endpoints; add `anonymizeMatchLogSlotsFor` + `recomputeLeaderboards`.
 - **Verify gate.** **Commit:** `test:` → `feat:`.
 
