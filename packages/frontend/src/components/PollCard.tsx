@@ -27,8 +27,10 @@ export interface PollCardProps {
   tally: PollTally
   currentUserVote: PollChoice | null
   isOwner: boolean
+  isCreator?: boolean
   onVote: (choice: PollChoice) => void
   onClose: () => void
+  onLaunch?: () => void
 }
 
 function formatTargetTime(iso: string): string {
@@ -52,8 +54,10 @@ export const PollCard: React.FC<PollCardProps> = ({
   tally,
   currentUserVote,
   isOwner,
+  isCreator,
   onVote,
   onClose,
+  onLaunch,
 }) => {
   const isClosed = closedAt != null
 
@@ -110,6 +114,17 @@ export const PollCard: React.FC<PollCardProps> = ({
           className="text-xs text-[--ink-500] hover:text-[--rose-600] underline"
         >
           Close poll
+        </button>
+      )}
+
+      {/* Launch tournament button — creator only, closed polls only */}
+      {isCreator && isClosed && onLaunch && (
+        <button
+          data-testid="poll-launch-button"
+          onClick={onLaunch}
+          className="text-xs text-[--court-600] hover:text-[--court-800] font-medium underline"
+        >
+          Launch tournament from In-voters
         </button>
       )}
     </div>
