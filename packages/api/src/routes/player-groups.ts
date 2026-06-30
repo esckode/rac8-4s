@@ -27,6 +27,7 @@ import { PlayerRepository, AgeAttestationRequiredError, UnderAgeError } from '..
 import {
   generateGroupInviteToken,
   validateGroupInviteToken,
+  generatePlayerSession,
 } from '../auth/magic-link'
 import { getLogger } from '../logger'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
@@ -188,7 +189,19 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           [groupId, player.id]
         )
 
-        log.info('group.invite.accepted', { groupId, playerId: player.id })
+        // Mint a player session token so the invitee is immediately authenticated
+        const session = await generatePlayerSession(
+          {
+            playerId: player.id,
+            tournamentId: groupId,
+            email: player.email,
+            createdAt: Date.now(),
+          },
+          deps.config.auth.sessionTtlSeconds,
+          deps.tokenStore
+        )
+
+        log.info('invite.accepted', { groupId, playerId: player.id })
 
         // G2.2: post system event "Name joined" into the group conversation.
         // Fire-and-forget: if this fails it is non-fatal to the invite-accept.
@@ -197,7 +210,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           log.warn('group.system.event.failed', { groupId, playerId: player.id, error: e.message })
         })
 
-        return res.status(200).json({ ok: true, groupId, playerId: player.id })
+        return res.status(200).json({ ok: true, groupId, playerId: player.id, token: session.token })
       } catch (err) {
         next(err)
       }
