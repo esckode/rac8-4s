@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- TODO(token-debt): raw color literals, retrofit to tokens in Phase E5 */
 import React, { useState, useEffect } from 'react'
 
 interface Tournament {
@@ -12,11 +11,11 @@ interface Tournament {
 }
 
 const coverColors: Record<string, string> = {
-  court: '#FFD0B0',
-  lavender: '#DCC6FA',
-  mint: '#BFEACC',
-  peach: '#FFD9C8',
-  gold: '#F4EAA7',
+  court: 'var(--cover-court)',
+  lavender: 'var(--cover-lavender)',
+  mint: 'var(--cover-mint)',
+  peach: 'var(--cover-peach)',
+  gold: 'var(--cover-gold)',
 }
 
 export const BrowseTournaments: React.FC = () => {
@@ -103,7 +102,7 @@ export const BrowseTournaments: React.FC = () => {
               fontWeight: 600,
               whiteSpace: 'nowrap',
               background: filterActive === filter ? 'var(--ink-900)' : 'transparent',
-              color: filterActive === filter ? '#fff' : 'var(--ink-900)',
+              color: filterActive === filter ? 'var(--auth-glass-text)' : 'var(--ink-900)',
               cursor: 'pointer',
             }}
           >
@@ -121,8 +120,8 @@ export const BrowseTournaments: React.FC = () => {
         )}
 
         {error && (
-          <div style={{ padding: '16px 12px', background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 'var(--r-md)', marginBottom: '20px' }}>
-            <p style={{ margin: 0, color: '#991B1B', fontSize: '14px' }}>⚠️ {error}</p>
+          <div style={{ padding: '16px 12px', background: 'var(--auth-danger-wash)', border: '1px solid var(--auth-danger-border)', borderRadius: 'var(--r-md)', marginBottom: '20px' }}>
+            <p style={{ margin: 0, color: 'var(--danger)', fontSize: '14px' }}>⚠️ {error}</p>
           </div>
         )}
 
@@ -141,7 +140,7 @@ export const BrowseTournaments: React.FC = () => {
                 <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--court-600)', letterSpacing: '0.12em', marginBottom: 10 }}>
                   FEATURED
                 </div>
-                <div data-testid="tournament-list tournament-card" style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', marginBottom: 20, display: 'flex', gap: 14, cursor: 'pointer' }} onClick={() => window.location.href = `/tournament/${filteredTournaments[0].id}/browse`}>
+                <div data-testid="tournament-list tournament-card" style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', marginBottom: 20, display: 'flex', gap: 14, cursor: 'pointer' }} onClick={() => window.location.href = `/tournament/${filteredTournaments[0].id}/browse`}>
                   <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[getColorForTournament(0)], flexShrink: 0 }} />
                   <div style={{ flex: 1 }}>
                     <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>{filteredTournaments[0].name}</h3>
@@ -172,7 +171,7 @@ export const BrowseTournaments: React.FC = () => {
                     <div
                       key={tournament.id}
                       data-testid="tournament-card"
-                      style={{ padding: 14, background: '#fff', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', display: 'flex', gap: 14, alignItems: 'flex-start', cursor: 'pointer' }}
+                      style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', display: 'flex', gap: 14, alignItems: 'flex-start', cursor: 'pointer' }}
                       onClick={() => window.location.href = `/tournament/${tournament.id}/browse`}
                     >
                       <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[getColorForTournament(index + 1)], flexShrink: 0 }} />
