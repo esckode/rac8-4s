@@ -918,6 +918,16 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
 
         await groupRepo.promoteMember(groupId, session.playerId, playerId)
 
+        log.info('member.promoted', { groupId, targetPlayerId: playerId })
+
+        // B-ROLEMSG: post system event "Name is now an owner" into the group conversation.
+        // Fire-and-forget: non-fatal to the promote operation.
+        const promoteName = await groupMsgRepo.getPlayerName(playerId)
+        const promoteMsg = `${promoteName ?? 'A member'} is now an owner`
+        groupMsgRepo.postSystemEvent(groupId, promoteMsg).catch((e: Error) => {
+          log.warn('group.system.event.failed', { groupId, playerId, error: e.message })
+        })
+
         return res.status(200).json({ ok: true })
       } catch (err) {
         next(handleGroupError(err))
@@ -935,6 +945,16 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         const playerId = req.params.playerId as string
 
         await groupRepo.demoteMember(groupId, session.playerId, playerId)
+
+        log.info('member.demoted', { groupId, targetPlayerId: playerId })
+
+        // B-ROLEMSG: post system event "Name is now a member" into the group conversation.
+        // Fire-and-forget: non-fatal to the demote operation.
+        const demoteName = await groupMsgRepo.getPlayerName(playerId)
+        const demoteMsg = `${demoteName ?? 'A member'} is now a member`
+        groupMsgRepo.postSystemEvent(groupId, demoteMsg).catch((e: Error) => {
+          log.warn('group.system.event.failed', { groupId, playerId, error: e.message })
+        })
 
         return res.status(200).json({ ok: true })
       } catch (err) {

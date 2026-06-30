@@ -274,7 +274,8 @@ describe('B-ROLEMSG — system events appear in history in correct order', () =>
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(200)
 
-    await new Promise<void>((resolve) => setImmediate(resolve))
+    // Give fire-and-forget postSystemEvent time to commit before the demote starts
+    await new Promise<void>((resolve) => setTimeout(resolve, 50))
 
     // Demote
     await request(app)
@@ -282,7 +283,8 @@ describe('B-ROLEMSG — system events appear in history in correct order', () =>
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(200)
 
-    await new Promise<void>((resolve) => setImmediate(resolve))
+    // Give the demote's system event time to commit before reading history
+    await new Promise<void>((resolve) => setTimeout(resolve, 50))
 
     const messages = await getHistory(app, group.id, ownerToken)
     const systemEvents = messages.filter((m) => m.type === 'system')
