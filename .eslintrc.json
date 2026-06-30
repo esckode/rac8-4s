@@ -64,6 +64,22 @@
       "rules": {
         "no-undef": "off"
       }
+    },
+    {
+      "files": [
+        "packages/frontend/src/**/*.ts",
+        "packages/frontend/src/**/*.tsx"
+      ],
+      "rules": {
+        "no-restricted-syntax": ["warn",
+          { "selector": "Literal[value=/#([0-9a-fA-F]{3}){1,2}/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
+          { "selector": "Literal[value=/rgba?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
+          { "selector": "Literal[value=/hsla?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
+          { "selector": "TemplateElement[value.raw=/#([0-9a-fA-F]{3}){1,2}/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
+          { "selector": "TemplateElement[value.raw=/rgba?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
+          { "selector": "TemplateElement[value.raw=/hsla?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." }
+        ]
+      }
     }
   ]
 }
