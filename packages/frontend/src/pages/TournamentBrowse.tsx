@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- TODO(token-debt): raw color literals, retrofit to tokens in Phase E5 */
 import React, { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -96,7 +95,7 @@ export const TournamentBrowse: React.FC = () => {
       <Link to="/browse" style={{ fontSize: 13, color: 'var(--ink-500)' }}>← Back to browse</Link>
 
       {loading && <div style={{ marginTop: 16 }}>Loading…</div>}
-      {loadError && <div role="alert" style={{ marginTop: 16, color: 'var(--danger, #b00)' }}>{loadError}</div>}
+      {loadError && <div role="alert" style={{ marginTop: 16, color: 'var(--danger)' }}>{loadError}</div>}
 
       {tournament && (
         <>
@@ -116,7 +115,7 @@ export const TournamentBrowse: React.FC = () => {
             </div>
 
             {successMessage ? (
-              <div role="status" style={{ color: 'var(--success, #0a7)' }}>{successMessage}</div>
+              <div role="status" style={{ color: 'var(--success)' }}>{successMessage}</div>
             ) : (
               <form onSubmit={handleRegister}>
                 <div style={{ marginBottom: 12 }}>
@@ -144,7 +143,7 @@ export const TournamentBrowse: React.FC = () => {
                   />
                 </div>
 
-                {submitError && <div role="alert" style={{ color: 'var(--danger, #b00)', marginBottom: 12 }}>{submitError}</div>}
+                {submitError && <div role="alert" style={{ color: 'var(--danger)', marginBottom: 12 }}>{submitError}</div>}
 
                 <button type="submit" disabled={submitting} style={{ padding: '8px 16px', fontWeight: 600 }}>
                   {submitting ? 'Registering…' : 'Register for Tournament'}
