@@ -24,7 +24,7 @@ here.
 | [PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) | Durable groups, group chat, availability polls, casual-mode group-launched tournaments | 📐 **Design (fully grilled, §11–§12)** → has a plan ([PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md)) |
 | [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) | PWA-first now; Capacitor (native wrapper) deferred | 🧭 **Decision** — PWA work pending; Capacitor ⏸️ **Deferred** (trigger documented) |
 | [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (primary) + organizer SaaS (secondary); ads rejected | 📐 **Design (draft)** — **not yet grilled**, needs detail |
-| [DESIGN_SYSTEM.md](assets/planning/DESIGN_SYSTEM.md) | "C U At Court" token-driven design system (tokens + Tailwind v4 + shared component lib) — as-built + gaps (no doc/Storybook/a11y/theming/governance) | 📐 **Design (as-built)** — **not yet grilled**, gaps to scope |
+| [DESIGN_SYSTEM.md](assets/planning/DESIGN_SYSTEM.md) | "C U At Court" token-driven design system (tokens + Tailwind v4 + shared component lib) — as-built + gaps (no doc/Storybook/a11y/theming/governance) | 📐 **Design (as-built)** — **governance gap grilled 2026-06-29** → has a plan ([DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md)); remaining gaps (doc/Storybook/a11y/theming) **not yet grilled** |
 
 ## Implementation plans
 | Plan | Drives | Status |
@@ -33,6 +33,7 @@ here.
 | [MESSAGING_IMPLEMENTATION_V2.md](assets/planning/MESSAGING_IMPLEMENTATION_V2.md) | `conversations` abstraction (V1.0, Player-Groups prereq) + §17 multi-instance foundation (Redis bus/queue/token store, worker, dev distributed stack; Redis-required failure mode) + product gaps (offline notify, sender names, thread model, read-receipts) | ✅ **Built & merged** (V1–V6, migrations 034–037); V7 deferred |
 | [FRONTEND_IMPLEMENTATION.md](assets/planning/FRONTEND_IMPLEMENTATION.md) | Frontend-quality / rendering tasks driving [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) — FE-RENDER-1 (memoize `AuthProvider` value) | 📋 **Plan ready** — not started |
 | [PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md) | Community layer — Phases G0–G5 (compliance/age-gate prereq, group entity+membership, durable chat+moderation, polls, casual tournament engine+launch, DSR erasure cascade). TDD-first, ≥85% coverage; carries R-A reconciliation (G4.7) | 📋 **Plan ready** — not started |
+| [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md) | Token-usage lint gate — Phases E0–E5: (b) repair broken ESLint config + clear 53 errors + gate lint in CI, (a) color-literal `no-restricted-syntax` rule on the unified gate w/ interim baseline + permanent allowlist, (c) husky/lint-staged pre-commit, **(E5 mandatory) full retrofit of all ~301 legacy color literals across 11 files + tear down the baseline** (gate becomes total). TDD-first via ESLint fixture harness | 📋 **Plan ready** — not started |
 
 ## Test scenarios
 | Spec doc | Covers | Status |
@@ -71,6 +72,11 @@ here.
 - **PLAYER_GROUPS_IMPLEMENTATION.md** — community layer, Phases G0–G5 (TDD-first, ≥85%). First task:
   **G0.1** 18+ age gate at `findOrCreatePlayerByEmail` (compliance prereq, gates onboarding). Depends on
   the `conversations` abstraction (migration 034, on `main`). Resolves backlog **R-A** within **G4.7**.
+- **DESIGN_SYSTEM_ENFORCEMENT.md** — token-usage lint gate (TDD-first, Phases E0–E5). First task: **E0.1**
+  ESLint fixture test harness, then **E1** repairs the broken `npm run lint` (53 errors) + puts lint in CI
+  (hard prereq), then **E2** adds the color-literal rule on that gate. Justified by "theming eventually
+  yes" — protects the existing semantic-token layer. E1 also repairs the **broken `npm run lint`** (53
+  pre-existing errors, not in CI) as a hard prerequisite.
 
 ### ⏸️ Deferred (with triggers)
 - **Capacitor native wrapper** — trigger: reliable iOS push / app-store presence / engagement for the
@@ -120,7 +126,10 @@ here.
 - Monetization (MONETIZATION_STRATEGY.md §6): wedge choice (transaction fee vs. organizer SaaS), pricing
   shape, payments integration (Stripe Connect), tax/compliance, free-forever community boundary.
 - Design system (DESIGN_SYSTEM.md §4): formality bar (doc-only vs. + Storybook/visual regression),
-  portability, a11y bar, theming/dark-mode scope, token-usage governance, component API contracts.
+  portability, a11y bar, theming/dark-mode scope, ~~token-usage governance~~ **(governance grilled
+  2026-06-29 → [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md))**, component
+  API contracts. Theming confirmed **in scope "eventually"** (justifies the token gate); still ungrilled
+  for its own implementation.
 - **Frontend (community layer + cross-cutting)** ([FrontEndPlan.md](assets/planning/FrontEndPlan.md)) —
   **gap inventory captured, not yet grilled.** §A Player-Groups FE gaps (member mgmt, notify UI, mentions,
   invite-accept, mixer scoring, launch flow, nav/IA, states, age-gate screen) + §B cross-cutting (design
