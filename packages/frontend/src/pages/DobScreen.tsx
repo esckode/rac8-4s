@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- TODO(token-debt): raw color literals, retrofit to tokens in Phase E5 */
 import { useState } from 'react'
 
 export interface AgeAttestation {
@@ -60,7 +59,7 @@ export function DobScreen({ onConfirm, onBack }: DobScreenProps) {
       style={{
         width: 390,
         minHeight: 400,
-        background: 'linear-gradient(180deg, #1F2D4E 0%, #0F1B2E 100%)',
+        background: 'linear-gradient(180deg, var(--auth-bg-top) 0%, var(--auth-bg-bottom) 100%)',
         display: 'flex',
         flexDirection: 'column',
         padding: '24px 16px',
@@ -80,7 +79,7 @@ export function DobScreen({ onConfirm, onBack }: DobScreenProps) {
           marginBottom: '24px',
           display: 'flex',
           alignItems: 'center',
-          color: '#FFFFFF',
+          color: 'var(--auth-glass-text)',
         }}
         aria-label="Go back"
       >
@@ -92,7 +91,7 @@ export function DobScreen({ onConfirm, onBack }: DobScreenProps) {
       {/* Heading */}
       <h1
         data-testid="dob-heading"
-        style={{ fontSize: '24px', fontWeight: '700', color: '#FFFFFF', marginBottom: '8px' }}
+        style={{ fontSize: '24px', fontWeight: '700', color: 'var(--auth-glass-text)', marginBottom: '8px' }}
       >
         Date of birth
       </h1>
@@ -100,12 +99,12 @@ export function DobScreen({ onConfirm, onBack }: DobScreenProps) {
       {/* 18+ requirement notice */}
       <p
         data-testid="dob-age-notice"
-        style={{ fontSize: '14px', color: '#B0B8C8', marginBottom: '24px' }}
+        style={{ fontSize: '14px', color: 'var(--onboard-muted-text)', marginBottom: '24px' }}
       >
         You must be 18 or older to use this app. By continuing, you confirm you
         meet the age requirement and accept our{' '}
-        <span style={{ color: '#6366F1' }}>Terms of Service</span> and{' '}
-        <span style={{ color: '#6366F1' }}>Privacy Policy</span>.
+        <span style={{ color: 'var(--onboard-accent)' }}>Terms of Service</span> and{' '}
+        <span style={{ color: 'var(--onboard-accent)' }}>Privacy Policy</span>.
       </p>
 
       <form onSubmit={handleSubmit}>
@@ -116,7 +115,7 @@ export function DobScreen({ onConfirm, onBack }: DobScreenProps) {
               display: 'block',
               fontSize: '12px',
               fontWeight: '600',
-              color: '#B0B8C8',
+              color: 'var(--onboard-muted-text)',
               marginBottom: '8px',
               textTransform: 'uppercase',
             }}
@@ -136,10 +135,10 @@ export function DobScreen({ onConfirm, onBack }: DobScreenProps) {
               width: '100%',
               padding: '12px',
               fontSize: '14px',
-              border: `1px solid ${error ? '#FF4444' : '#2A3B5D'}`,
+              border: `1px solid ${error ? 'var(--onboard-danger)' : 'var(--onboard-field-border)'}`,
               borderRadius: '8px',
-              background: '#1A2A42',
-              color: '#FFFFFF',
+              background: 'var(--onboard-field-bg)',
+              color: 'var(--auth-glass-text)',
               boxSizing: 'border-box',
             }}
           />
@@ -147,7 +146,7 @@ export function DobScreen({ onConfirm, onBack }: DobScreenProps) {
             <span
               data-testid="dob-error"
               role="alert"
-              style={{ fontSize: '12px', color: '#FF4444', marginTop: '4px', display: 'block' }}
+              style={{ fontSize: '12px', color: 'var(--onboard-danger)', marginTop: '4px', display: 'block' }}
             >
               {error}
             </span>
@@ -160,8 +159,8 @@ export function DobScreen({ onConfirm, onBack }: DobScreenProps) {
           style={{
             width: '100%',
             padding: '12px',
-            background: '#6366F1',
-            color: '#FFFFFF',
+            background: 'var(--onboard-accent)',
+            color: 'var(--auth-glass-text)',
             border: 'none',
             borderRadius: '8px',
             fontSize: '16px',
