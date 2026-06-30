@@ -82,6 +82,9 @@ const CSS_VAR_STYLE_FIXTURE = `const g = <div style={{ color: 'var(--ink-900)' }
 const NON_COLOR_ARBITRARY_FIXTURE = `const h = <div className="min-h-[44px] max-h-[600px]" />
 `
 
+const HEX_NEW_FILE_FIXTURE = `const i = <div className="bg-[#fff]" />
+`
+
 describe('eslint config (programmatic fixture runner)', () => {
   it('reports 0 errors for a clean .tsx fixture', async () => {
     const results = await lintText(CLEAN_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture.tsx')
@@ -185,6 +188,12 @@ describe('eslint config (programmatic fixture runner)', () => {
 
       const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
       expect(errors).toHaveLength(0)
+    })
+
+    it('reports the color rule as an error (not a warning) on a new, non-legacy file', async () => {
+      const results = await lintText(HEX_NEW_FILE_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/components/NewComponent.tsx')
+
+      expect(results[0].errorCount).toBeGreaterThanOrEqual(1)
     })
   })
 })
