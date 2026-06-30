@@ -33,6 +33,7 @@ here.
 | [MESSAGING_IMPLEMENTATION_V2.md](assets/planning/MESSAGING_IMPLEMENTATION_V2.md) | `conversations` abstraction (V1.0, Player-Groups prereq) + §17 multi-instance foundation (Redis bus/queue/token store, worker, dev distributed stack; Redis-required failure mode) + product gaps (offline notify, sender names, thread model, read-receipts) | ✅ **Built & merged** (V1–V6, migrations 034–037); V7 deferred |
 | [FRONTEND_IMPLEMENTATION.md](assets/planning/FRONTEND_IMPLEMENTATION.md) | Frontend-quality / rendering tasks driving [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) — FE-RENDER-1 (memoize `AuthProvider` value) | 📋 **Plan ready** — not started |
 | [PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md) | Community layer — Phases G0–G5 (compliance/age-gate prereq, group entity+membership, durable chat+moderation, polls, casual tournament engine+launch, DSR erasure cascade). TDD-first, ≥85% coverage; carries R-A reconciliation (G4.7) | ✅ **Built & merged** (G0.1–G5.1, migrations 038–045) |
+| [PLAYER_GROUPS_V2_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_V2_IMPLEMENTATION.md) | Community-layer refinements (FrontEndPlan §A/§B, grilled Q1–Q16) in **3 phases** — P1 member layer (group settings, member mgmt, invite-accept, age-gate wiring, @mentions), P2 personal notification thread (conversation-backed, DM seed), P3 casual play (launch flow + poll auto-launch/min-count + **shared scheduler** + casual scoring/leaderboards). TDD-first, ≥85%; 3 new pages + 1 tab; carries backend deltas + the 🔴 shared scheduler | 📋 **Plan ready** — not started |
 | [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md) | Token-usage lint gate — Phases E0–E5: (b) repair broken ESLint config + clear 53 errors + gate lint in CI, (a) color-literal `no-restricted-syntax` rule on the unified gate w/ interim baseline + permanent allowlist, (c) husky/lint-staged pre-commit, **(E5 mandatory) full retrofit of all ~301 legacy color literals across 11 files + tear down the baseline** (gate becomes total). TDD-first via ESLint fixture harness | ✅ **Built & merged** to `main` |
 
 ## Test scenarios
@@ -78,6 +79,9 @@ here.
 ### 📋 Plan ready → available to tackle
 - **FRONTEND_IMPLEMENTATION.md** — frontend-quality tasks (TDD). First task: **FE-RENDER-1** memoize the
   `AuthProvider` context value.
+- **PLAYER_GROUPS_V2_IMPLEMENTATION.md** — community-layer refinements (TDD-first, ≥85%), 3 phases. First
+  task: **P1.1** reusable state components. Phases are independent deliverables; Phase 3 delivers the 🔴
+  shared scheduler (one scheduler, three consumers). Resolves FrontEndPlan §A/§B.
 
 ### ⏸️ Deferred (with triggers)
 - **Capacitor native wrapper** — trigger: reliable iOS push / app-store presence / engagement for the
@@ -119,12 +123,45 @@ here.
   provisioning, rolling-deploy mixed-mode, live-session migration. Add a closing phase.
 
 ### 🗒️ Open design threads (not yet grilled/decided)
+- **🔴 Legal hold not enforced by the DSR erasure cascade** *(compliance; platform-wide; grill in the DSR
+  track, PLAYER_GROUPS_DESIGN §12).* A legal hold / litigation-preservation obligation **overrides** a DSR
+  erasure for the data in scope (GDPR Art. 17(3) / CCPA "retain to meet a legal obligation or defend
+  claims"), but today `DataSubjectRequestService` anonymizes/hard-deletes with **no hold check**
+  (`dsr-service.ts`), and the only existing `legal_hold` flag is on **tournament messages alone**
+  (`messages.legal_hold`) — no other store has one. **Concrete gap:** an erasure would destroy
+  legally-held data. **To grill:** hold granularity (per-subject vs per-record), which stores need a hold
+  flag, making erasure **hold-aware** (preserve + segregate + log the exemption, proceed on non-held),
+  retention schedule, hold-release. Needs counsel input on retention specifics. *(Surfaced 2026-06-30 while
+  grilling the personal notification thread — every store's DSR primitive, incl. the new personal thread,
+  must become hold-aware once the mechanism lands.)*
+- **Personal notification thread (conversation-backed) — DM foundation** *(grilled 2026-06-30 → planned as
+  **Phase 2** of [PLAYER_GROUPS_V2_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_V2_IMPLEMENTATION.md)).*
+  `conversations.type='personal'`, one
+  lazily-resolved conversation per player, **system/announcement only** (DMs deferred as a separate additive
+  `type='direct'` later). v1 routes **four events**: kick (personal-only), promote, demote, auto-transfer-to-
+  owner (last three also keep their group system event). Surface: 🔔 header bell → dedicated `/notifications`
+  read-only stream (+ add Groups to desktop `TopNav`); mark-read on view. Always-notify (no `notify_level`
+  gating); reuses the grace-window digest email (generalize the hardcoded subject); **hold-aware** hard-delete
+  on DSR. Ties to MESSAGING_DESIGN §17.4 (thread model) / §17.5.
 - MESSAGING_DESIGN §17.2 (offline), §17.4 (thread model), §17.5 (sender names), §17.6 (read-receipt
   visibility) — recommendations only, not yet confirmed.
 - ~~Player Groups: moderation policy, group discovery/privacy, custom-option polls, admin role~~ —
   **RESOLVED 2026-06-24** (PLAYER_GROUPS_DESIGN §11–§12). Remaining deferrals (with triggers): custom-option
-  polls, Elo leaderboard, knockout casual, 7-day idle auto-archive (gated on shared scheduler),
-  self-serve DSR UI.
+  polls, Elo leaderboard, knockout casual, 7-day idle auto-archive (G4.6 — **trigger met:** the shared
+  scheduler is delivered by [PLAYER_GROUPS_V2_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_V2_IMPLEMENTATION.md)
+  P3.1, so this is now buildable as a 4th scheduler consumer), self-serve DSR UI.
+- **V2-grill deferrals (2026-06-30)** — explicitly deferred while grilling
+  [PLAYER_GROUPS_V2_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_V2_IMPLEMENTATION.md); need their own
+  requirements grilling later:
+  - **Direct messages (`conversations.type='direct'`)** *(Q4).* The personal-thread primitive (V2 Phase 2) is
+    the foundation; DMs add a `type='direct'` + a participants model + a compose/send surface, **reusing** the
+    `/notifications`-style stream. Grill **with** MESSAGING_DESIGN §17.4 (thread model) / §17.5 (sender/targeting).
+  - **Structured `@[playerId]` mention storage** *(Q11).* v1 mentions are **name-based** (fragile: breaks on
+    rename, collides on duplicate display names). Trigger: collisions/renames become a real problem → backend
+    `parseMentions` + storage change to id-based markup.
+  - **Casual mid-game late-join (open roster)** *(Q14, option B).* v1 keeps a **fixed roster** (the open poll
+    window is the join window). Trigger: demand to join *after* a casual tournament starts → a **core casual-
+    engine change** (round-robin re-scheduling + social-mixer rotation recompute + re-seeding), not a FE change.
 - Monetization (MONETIZATION_STRATEGY.md §6): wedge choice (transaction fee vs. organizer SaaS), pricing
   shape, payments integration (Stripe Connect), tax/compliance, free-forever community boundary.
 - Design system (DESIGN_SYSTEM.md §4): formality bar (doc-only vs. + Storybook/visual regression),
@@ -132,11 +169,12 @@ here.
   2026-06-29 → [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md))**, component
   API contracts. Theming confirmed **in scope "eventually"** (justifies the token gate); still ungrilled
   for its own implementation.
-- **Frontend (community layer + cross-cutting)** ([FrontEndPlan.md](assets/planning/FrontEndPlan.md)) —
-  **gap inventory captured, not yet grilled.** §A Player-Groups FE gaps (member mgmt, notify UI, mentions,
-  invite-accept, mixer scoring, launch flow, nav/IA, states, age-gate screen) + §B cross-cutting (design
-  system, PWA/web-push, a11y, 4th nav tab, SSE reconnect). → grill, then produce a real FE plan / seed the
-  pending `PWA_FRONTEND_IMPLEMENTATION.md` + a11y spec.
+- ~~**Frontend (community layer + cross-cutting)** ([FrontEndPlan.md](assets/planning/FrontEndPlan.md))~~ —
+  **GRILLED 2026-06-30 (Q1–Q16) → plan written**
+  ([PLAYER_GROUPS_V2_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_V2_IMPLEMENTATION.md), 3 phases). §A
+  Player-Groups FE gaps + §B.4 (nav) + §B.5 (SSE reconnect, FE refetch) all resolved there. **Still deferred
+  to their own tracks:** §B.2 PWA/web-push + offline banner → `PWA_FRONTEND_IMPLEMENTATION.md`; §B.3 cross-app
+  a11y → a11y spec (new surfaces carry inline a11y in the V2 plan); §B.1 design-system governance already ✅.
 
 ---
 

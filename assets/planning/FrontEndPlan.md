@@ -4,9 +4,10 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-06-26
-**Status:** 🗒️ GAP INVENTORY — **not yet grilled, not a plan.** This document exists to **feed a future
-`/grill-me` session** that will resolve the open questions below and produce a real, TDD-first frontend
-implementation plan (or plans). **Do not treat any item here as decided.**
+**Status:** ✅ GRILLED 2026-06-30 (Q1–Q16) → **plan written:**
+[`PLAYER_GROUPS_V2_IMPLEMENTATION.md`](./PLAYER_GROUPS_V2_IMPLEMENTATION.md) (3 phases). §A + §B.4 + §B.5 are
+resolved there. §B.2 (PWA) and §B.3 (a11y) remain routed to their own tracks; §B.1 already ✅. This document
+is retained as the **gap inventory / rationale that fed the grill** — the V2 plan is the source of truth.
 **Update (2026-06-30):** the **baseline** Player-Groups FE shipped with
 [`PLAYER_GROUPS_IMPLEMENTATION.md`](./PLAYER_GROUPS_IMPLEMENTATION.md) (G0.1 DOB screen, G2.5 My Groups
 tab/group page/unread badge, G3.3 poll cards, G4.8 launch + leaderboards — all merged to `main`). The **§A
@@ -137,7 +138,7 @@ missed-message backfill on the client matters.
   `develop-frontend-page` skill.
 
 ## Next step
-Run a **`/grill-me` session over §A + §B** to resolve the open questions, then convert the outcomes into a
-real TDD-first frontend plan (expand `FRONTEND_IMPLEMENTATION.md` or create `PLAYER_GROUPS_FRONTEND.md`, and
-seed the pending `PWA_FRONTEND_IMPLEMENTATION.md` / accessibility spec). The baseline Player-Groups FE has
-shipped; the §A refinements above are what remain to be grilled and built on top of it.
+✅ Done — the `/grill-me` session (2026-06-30, Q1–Q16) resolved §A + §B.4 + §B.5 into
+[`PLAYER_GROUPS_V2_IMPLEMENTATION.md`](./PLAYER_GROUPS_V2_IMPLEMENTATION.md) (3 phases, TDD-first). Remaining:
+execute that plan; seed `PWA_FRONTEND_IMPLEMENTATION.md` (§B.2) and the accessibility spec (§B.3) from their
+own tracks.
