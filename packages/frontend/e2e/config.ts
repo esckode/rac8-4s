@@ -271,6 +271,12 @@ export const SELECTORS = {
   UNREAD_BADGE: '[data-testid="messages-unread-badge"]',
   MESSAGES_TAB: '[data-testid="tab-messages"]',
 
+  // Shared state components — P1.1
+  EMPTY_STATE: '[data-testid="empty-state"]',
+  LOADING_STATE: '[data-testid="loading-state"]',
+  ERROR_STATE: '[data-testid="error-state"]',
+  RECONNECTING_INDICATOR: '[data-testid="reconnecting-indicator"]',
+
   // Groups — G2.5
   NAV_GROUPS: '[data-testid="nav-groups"]',
   GROUPS_UNREAD_BADGE: '[data-testid="groups-unread-badge"]',
