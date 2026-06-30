@@ -22,7 +22,7 @@ import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/d
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { InMemoryTokenStore } from '../../auth/token-store'
 import { InMemoryEmailAdapter } from '../../email-adapter'
-import { generatePlayerSession } from '../../auth/magic-link'
+import { generatePlayerSession, generateGroupInviteToken } from '../../auth/magic-link'
 import { PlayerRepository } from '../../db'
 import { defaultAdultAttestation } from '../factories/player.factory'
 
@@ -464,6 +464,199 @@ describe('G1.3 — Group invite flow', () => {
         [group.id, owner.id]
       )
       expect(rows.rows).toHaveLength(1) // exactly one row
+    })
+  })
+
+  // ─── P1.2 B-SESSION: invite accept returns player session token ──────────────
+
+  describe('P1.2 B-SESSION — accept returns a player session token', () => {
+    it('new invitee accept → 200 body includes token', async () => {
+      const owner = await createPlayer(pool)
+      const ownerTok = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerTok)
+      const inviteeEmail = `b-session-new-${uid()}@test.local`
+
+      emailAdapter.clear()
+      await request(app)
+        .post(`/player/groups/${group.id}/invites`)
+        .set('Authorization', `Bearer ${ownerTok}`)
+        .send({ email: inviteeEmail })
+
+      const sent = emailAdapter.getSentTo(inviteeEmail)
+      const token = extractTokenFromEmail(sent[0].body)
+
+      const dob = new Date()
+      dob.setFullYear(dob.getFullYear() - 22)
+      const res = await request(app)
+        .post(`/player/groups/${group.id}/invites/accept`)
+        .send({
+          token,
+          email: inviteeEmail,
+          name: `B-Session Player ${uid()}`,
+          ageAttestation: { dateOfBirth: dob.toISOString().slice(0, 10), policyVersion: 'v1' },
+        })
+
+      expect(res.status).toBe(200)
+      expect(typeof res.body.token).toBe('string')
+      expect(res.body.token).toBeTruthy()
+    })
+
+    it('existing player accept → 200 body includes token', async () => {
+      const owner = await createPlayer(pool)
+      const existingInvitee = await createPlayer(pool)
+      const ownerTok = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerTok)
+
+      emailAdapter.clear()
+      await request(app)
+        .post(`/player/groups/${group.id}/invites`)
+        .set('Authorization', `Bearer ${ownerTok}`)
+        .send({ email: existingInvitee.email })
+
+      const sent = emailAdapter.getSentTo(existingInvitee.email)
+      const token = extractTokenFromEmail(sent[0].body)
+
+      const res = await request(app)
+        .post(`/player/groups/${group.id}/invites/accept`)
+        .send({ token, email: existingInvitee.email, name: existingInvitee.email })
+
+      expect(res.status).toBe(200)
+      expect(typeof res.body.token).toBe('string')
+      expect(res.body.token).toBeTruthy()
+    })
+
+    it('returned session token resolves the joined player (can authenticate)', async () => {
+      const owner = await createPlayer(pool)
+      const ownerTok = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerTok)
+      const inviteeEmail = `b-session-auth-${uid()}@test.local`
+
+      emailAdapter.clear()
+      await request(app)
+        .post(`/player/groups/${group.id}/invites`)
+        .set('Authorization', `Bearer ${ownerTok}`)
+        .send({ email: inviteeEmail })
+
+      const sent = emailAdapter.getSentTo(inviteeEmail)
+      const inviteToken = extractTokenFromEmail(sent[0].body)
+
+      const dob = new Date()
+      dob.setFullYear(dob.getFullYear() - 25)
+      const acceptRes = await request(app)
+        .post(`/player/groups/${group.id}/invites/accept`)
+        .send({
+          token: inviteToken,
+          email: inviteeEmail,
+          name: `Auth Test ${uid()}`,
+          ageAttestation: { dateOfBirth: dob.toISOString().slice(0, 10), policyVersion: 'v1' },
+        })
+
+      expect(acceptRes.status).toBe(200)
+      const sessionToken = acceptRes.body.token
+
+      // The session token must authenticate on a member-gated endpoint
+      const groupsRes = await request(app)
+        .get('/player/groups')
+        .set('Authorization', `Bearer ${sessionToken}`)
+
+      expect(groupsRes.status).toBe(200)
+    })
+
+    it('NEGATIVE: TOKEN_INVALID → 400 (unchanged)', async () => {
+      const owner = await createPlayer(pool)
+      const ownerTok = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerTok)
+
+      const res = await request(app)
+        .post(`/player/groups/${group.id}/invites/accept`)
+        .send({ token: 'a'.repeat(64), email: `any-${uid()}@test.local`, name: 'Test' })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('TOKEN_INVALID')
+    })
+
+    it('NEGATIVE: UNDERAGE → 400 (unchanged)', async () => {
+      const owner = await createPlayer(pool)
+      const ownerTok = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerTok)
+      const inviteeEmail = `b-session-underage-${uid()}@test.local`
+
+      emailAdapter.clear()
+      await request(app)
+        .post(`/player/groups/${group.id}/invites`)
+        .set('Authorization', `Bearer ${ownerTok}`)
+        .send({ email: inviteeEmail })
+
+      const sent = emailAdapter.getSentTo(inviteeEmail)
+      const token = extractTokenFromEmail(sent[0].body)
+
+      const dob = new Date()
+      dob.setFullYear(dob.getFullYear() - 16)
+      const res = await request(app)
+        .post(`/player/groups/${group.id}/invites/accept`)
+        .send({
+          token,
+          email: inviteeEmail,
+          name: `Underage ${uid()}`,
+          ageAttestation: { dateOfBirth: dob.toISOString().slice(0, 10), policyVersion: 'v1' },
+        })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('UNDERAGE')
+    })
+
+    it('NEGATIVE: AGE_ATTESTATION_REQUIRED → 400 (unchanged)', async () => {
+      const owner = await createPlayer(pool)
+      const ownerTok = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerTok)
+      const inviteeEmail = `b-session-no-attest-${uid()}@test.local`
+
+      emailAdapter.clear()
+      await request(app)
+        .post(`/player/groups/${group.id}/invites`)
+        .set('Authorization', `Bearer ${ownerTok}`)
+        .send({ email: inviteeEmail })
+
+      const sent = emailAdapter.getSentTo(inviteeEmail)
+      const token = extractTokenFromEmail(sent[0].body)
+
+      const res = await request(app)
+        .post(`/player/groups/${group.id}/invites/accept`)
+        .send({ token, email: inviteeEmail, name: `No Attest ${uid()}` })
+
+      expect(res.status).toBe(400)
+      expect(res.body.code).toBe('AGE_ATTESTATION_REQUIRED')
+    })
+
+    it('NEGATIVE: NOT_FOUND → 404 for non-existent group', async () => {
+      const fakeGroupId = crypto.randomUUID() // valid UUID that has no DB row
+      const someEmail = `b-session-nf-${uid()}@test.local`
+
+      // Mint a valid group-invite token directly (no route needed) for the non-existent group
+      const { token } = await generateGroupInviteToken(
+        {
+          type: 'group-invite',
+          groupId: fakeGroupId,
+          email: someEmail.toLowerCase(),
+          createdAt: Date.now(),
+        },
+        3600,
+        tokenStore
+      )
+
+      const dob = new Date()
+      dob.setFullYear(dob.getFullYear() - 22)
+      const res = await request(app)
+        .post(`/player/groups/${fakeGroupId}/invites/accept`)
+        .send({
+          token,
+          email: someEmail,
+          name: 'Ghost',
+          ageAttestation: { dateOfBirth: dob.toISOString().slice(0, 10), policyVersion: 'v1' },
+        })
+
+      expect(res.status).toBe(404)
+      expect(res.body.code).toBe('NOT_FOUND')
     })
   })
 
