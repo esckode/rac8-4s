@@ -32,7 +32,8 @@
     "test:e2e:multi-instance": "playwright test --config playwright.config.multi-instance.ts --retries=2",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
@@ -46,7 +47,9 @@
     "eslint": "^8.57.1",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-security": "^4.0.0",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
+    "lint-staged": "^17.0.8",
     "playwright": "^1.60.0",
     "postcss": "^8.5.14",
     "tailwindcss": "^4.3.0",
@@ -57,5 +60,10 @@
     "dotenv": "^17.4.2",
     "react-window": "^2.2.7",
     "reconnecting-eventsource": "^1.6.5"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --max-warnings 0 --fix"
+    ]
   }
 }
