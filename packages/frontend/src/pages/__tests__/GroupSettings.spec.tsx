@@ -1,5 +1,5 @@
 /**
- * P1.4 — Group page header + Group Settings shell (RED phase)
+ * P1.4 + P1.5 — Group page header + Group Settings shell + notify-level + leave
  *
  * Tests cover:
  * - GroupDetail renders a header with data-testid="group-detail-header"
@@ -9,12 +9,20 @@
  * - Owner sees data-testid="group-settings-owner-section"
  * - Member does NOT see data-testid="group-settings-owner-section"
  * - Both owner and member see data-testid="group-settings-member-section"
+ * - NotifyLevelControl appears in the member section
+ * - Leave button appears in the member section and calls DELETE + navigates
  */
 
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { GroupDetail, GroupSettings } from '../MyGroups'
+
+const mockNavigate = jest.fn()
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
+}))
 
 // ── Fetch mock ────────────────────────────────────────────────────────────────
 
@@ -177,6 +185,95 @@ describe('GroupSettings — member', () => {
     renderGroupSettings('grp_1', 'member')
     await waitFor(() => {
       expect(screen.queryByTestId('group-settings-owner-section')).not.toBeInTheDocument()
+    })
+  })
+})
+
+// ── P1.5: NotifyLevelControl + Leave in member section ────────────────────────
+
+describe('GroupSettings — P1.5 notify-level control', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockFetch.mockResolvedValue(makeGroupsResponse('member'))
+  })
+
+  it('shows the notify-level control inside the member section', async () => {
+    renderGroupSettings('grp_1', 'member')
+    await waitFor(() => {
+      const memberSection = screen.getByTestId('group-settings-member-section')
+      expect(memberSection).toBeInTheDocument()
+      expect(memberSection.querySelector('[data-testid="notify-level-control"]')).toBeTruthy()
+    })
+  })
+
+  it('renders all three notify-level options', async () => {
+    renderGroupSettings('grp_1', 'member')
+    await waitFor(() => {
+      expect(screen.getByTestId('notify-level-option-all')).toBeInTheDocument()
+      expect(screen.getByTestId('notify-level-option-mentions-polls')).toBeInTheDocument()
+      expect(screen.getByTestId('notify-level-option-muted')).toBeInTheDocument()
+    })
+  })
+
+  it('selecting an option calls PATCH notify-level endpoint', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponse('member'))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) })
+
+    renderGroupSettings('grp_1', 'member')
+    await waitFor(() => {
+      expect(screen.getByTestId('notify-level-option-muted')).toBeInTheDocument()
+    })
+
+    const mutedInput = screen.getByRole('radio', { name: /muted/i })
+    fireEvent.click(mutedInput)
+
+    await waitFor(() => {
+      const patchCall = mockFetch.mock.calls.find(
+        ([url]: [string]) => typeof url === 'string' && url.includes('/notify-level')
+      )
+      expect(patchCall).toBeDefined()
+      expect(patchCall[1]).toMatchObject({
+        method: 'PATCH',
+        body: JSON.stringify({ notifyLevel: 'muted' }),
+      })
+    })
+  })
+})
+
+describe('GroupSettings — P1.5 leave group', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockFetch.mockResolvedValue(makeGroupsResponse('member'))
+  })
+
+  it('shows a leave-group button inside the member section', async () => {
+    renderGroupSettings('grp_1', 'member')
+    await waitFor(() => {
+      const memberSection = screen.getByTestId('group-settings-member-section')
+      expect(memberSection.querySelector('[data-testid="leave-group-button"]')).toBeTruthy()
+    })
+  })
+
+  it('leave button calls DELETE .../leave and navigates to /groups', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponse('member'))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) })
+
+    renderGroupSettings('grp_1', 'member')
+    await waitFor(() => {
+      expect(screen.getByTestId('leave-group-button')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId('leave-group-button'))
+
+    await waitFor(() => {
+      const deleteCall = mockFetch.mock.calls.find(
+        ([url]: [string]) => typeof url === 'string' && url.includes('/leave')
+      )
+      expect(deleteCall).toBeDefined()
+      expect(deleteCall[1]).toMatchObject({ method: 'DELETE' })
+      expect(mockNavigate).toHaveBeenCalledWith('/groups')
     })
   })
 })
