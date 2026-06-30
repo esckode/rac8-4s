@@ -52,8 +52,23 @@ Primitives: `Button`, `Badge`, `Modal`, `ErrorBanner` / `SuccessBanner`, `Loadin
   (see backlog / [e2e-scenarios.md](../../e2e-scenarios.md)); tokens/components aren't yet checked against
   keyboard / contrast / labeling.
 - **No dark mode / theming story** — tokens are a single light theme; no documented theming contract.
-- **Token governance** — no stated rule that components must use tokens (no lint guard against raw
-  hex / off-scale spacing).
+- ~~**Token governance** — no stated rule that components must use tokens (no lint guard against raw
+  hex / off-scale spacing).~~ **Resolved** — see [§3.1](#31-token-governance-color).
+
+### 3.1 Token governance (color)
+All color values in `packages/frontend/src/**/*.{ts,tsx}` must use CSS design tokens (e.g.,
+`text-[--ink-900]`, `var(--court-500)`). Raw hex, `rgb()/rgba()`, `hsl()/hsla()` literals are banned by an
+ESLint `no-restricted-syntax` rule that CI enforces at `--max-warnings 0`.
+
+**Permanent allowlist** (exempt forever): `Logo.tsx` / `LogoMark.tsx` (brand-mark SVG fills), `tokens.css`
+(defines the colors), and `DesignSpec.tsx` (unrouted reference artifact).
+
+**Interim baseline:** 10 legacy files carry `/* eslint-disable no-restricted-syntax -- TODO(token-debt) */`
+at the top. These are tracked debt, greppable via `grep -rn 'TODO(token-debt)' packages/frontend/src`. Each
+will be retrofitted in Phase E5 and its disable comment removed. Touching a baselined file before E5 is
+permitted — remove the disable comment once the file is clean.
+
+Full implementation plan: [DESIGN_SYSTEM_ENFORCEMENT.md](./DESIGN_SYSTEM_ENFORCEMENT.md).
 
 ## 4. Open questions for the grilling session
 - **How formal does this need to be?** Doc-only, or doc + Storybook + visual regression?
@@ -61,7 +76,8 @@ Primitives: `Button`, `Badge`, `Modal`, `ErrorBanner` / `SuccessBanner`, `Loadin
 - **A11y bar** — fold the 5 Accessibility e2e scenarios in here, or keep them separate (per backlog they're
   general frontend quality)?
 - **Theming** — is dark mode / multi-theme in scope, or explicitly out?
-- **Governance** — enforce token usage via lint, or leave as convention?
+- ~~**Governance** — enforce token usage via lint, or leave as convention?~~ **Resolved** — lint-enforced,
+  see [§3.1](#31-token-governance-color).
 - **Component API contracts** — document/standardize props (variants, sizes) across the shared primitives?
 
 ## 5. Relationship to other docs
