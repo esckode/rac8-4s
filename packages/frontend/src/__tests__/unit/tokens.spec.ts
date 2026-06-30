@@ -32,6 +32,8 @@ const NEW_TOKENS = [
   '--auth-glass-text-strong',
   '--auth-glass-text-muted',
   '--auth-glass-text-faint',
+  '--auth-glass-placeholder',
+  '--auth-glass-icon-muted',
   '--auth-glass-divider',
 
   // Auth info/danger/warning glass washes
@@ -41,6 +43,7 @@ const NEW_TOKENS = [
   '--auth-danger-wash',
   '--auth-danger-wash-strong',
   '--auth-danger-ring',
+  '--auth-danger-border',
   '--auth-warning-wash',
   '--auth-warning-border',
 
@@ -49,6 +52,7 @@ const NEW_TOKENS = [
   '--onboard-field-border',
   '--onboard-disabled',
   '--onboard-accent',
+  '--onboard-danger',
   '--onboard-muted-text',
 
   // Tournament cover chips (BrowseTournaments)

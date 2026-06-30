@@ -119,6 +119,79 @@
   --phase-group: var(--court-400);
   --phase-knockout: var(--lavender-400);
   --phase-complete: var(--gold-400);
+
+  /* =========================================================
+     E5.0 — tokens added for the legacy-file retrofit (E5.1–E5.4)
+     See assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md E5.0 for the
+     full literal → token mapping. Tokens below have no existing
+     equivalent in the palettes above.
+     ========================================================= */
+
+  /* ---------- Scrim (ResponsiveLayout modal overlay) ----------
+     rgba(0,0,0,0.4) */
+  --scrim: rgba(0, 0, 0, 0.4);
+
+  /* ---------- Auth dark panel (Login/ResetPassword/ForgotPassword/Landing)
+     #1F2D4E / #0F1B2E gradient stops; #FF8FA8, #FFBFCE danger;
+     #FFC107, #FFC966 warning ---------- */
+  --auth-bg-top: #1F2D4E;
+  --auth-bg-bottom: #0F1B2E;
+  --auth-danger: #FF8FA8;
+  --auth-danger-soft: #FF8FA8;
+  --auth-danger-text: #FFBFCE;
+  --auth-warning: #FFC107;
+  --auth-warning-text: #FFC966;
+  --auth-info-glow: #A8D5FF;
+
+  /* ---------- Auth glass surfaces (white-on-dark alpha steps) ----------
+     rgba(255,255,255,0.06|0.08|0.12|0.14|0.16|0.4|0.45|0.6|0.65|0.75) */
+  --auth-glass-bg: rgba(255, 255, 255, 0.06);
+  --auth-glass-bg-hover: rgba(255, 255, 255, 0.08);
+  --auth-glass-border: rgba(255, 255, 255, 0.14);
+  --auth-glass-border-strong: rgba(255, 255, 255, 0.16);
+  --auth-glass-divider: rgba(255, 255, 255, 0.12);
+  --auth-glass-text: #FFFFFF;
+  --auth-glass-text-strong: rgba(255, 255, 255, 0.75);
+  --auth-glass-text-muted: rgba(255, 255, 255, 0.65);
+  --auth-glass-text-faint: rgba(255, 255, 255, 0.45);
+  --auth-glass-placeholder: rgba(255, 255, 255, 0.4);
+  --auth-glass-icon-muted: rgba(255, 255, 255, 0.6);
+
+  /* ---------- Auth info/danger/warning glass washes ----------
+     rgba(168,213,255,0.10|0.32|0.4); rgba(255,143,168,0.08|0.10|0.12|0.32);
+     rgba(255,193,7,0.10|0.32) */
+  --auth-info-wash: rgba(168, 213, 255, 0.10);
+  --auth-info-border: rgba(168, 213, 255, 0.32);
+  --auth-info-underline: rgba(168, 213, 255, 0.4);
+  --auth-danger-wash: rgba(255, 143, 168, 0.08);
+  --auth-danger-wash-strong: rgba(255, 143, 168, 0.10);
+  --auth-danger-ring: rgba(255, 143, 168, 0.12);
+  --auth-danger-border: rgba(255, 143, 168, 0.32);
+  --auth-warning-wash: rgba(255, 193, 7, 0.10);
+  --auth-warning-border: rgba(255, 193, 7, 0.32);
+
+  /* ---------- Onboarding form (Signup/DobScreen) ----------
+     #1A2A42 field bg; #2A3B5D field border; #3A4B6B disabled;
+     #6366F1 accent; #FF4444 danger; #B0B8C8 muted text */
+  --onboard-field-bg: #1A2A42;
+  --onboard-field-border: #2A3B5D;
+  --onboard-disabled: #3A4B6B;
+  --onboard-accent: #6366F1;
+  --onboard-danger: #FF4444;
+  --onboard-muted-text: #B0B8C8;
+
+  /* ---------- Tournament cover chips (BrowseTournaments) ----------
+     #FFD0B0, #DCC6FA, #BFEACC, #FFD9C8, #F4EAA7 */
+  --cover-court: #FFD0B0;
+  --cover-lavender: #DCC6FA;
+  --cover-mint: #BFEACC;
+  --cover-peach: #FFD9C8;
+  --cover-gold: #F4EAA7;
+
+  /* ---------- Ad-hoc var() fallback colors (TournamentBrowse) ----------
+     var(--danger, #b00); var(--success, #0a7) */
+  --danger: #b00;
+  --success: #0a7;
 }
 
 /* ---------- Base reset ---------- */
