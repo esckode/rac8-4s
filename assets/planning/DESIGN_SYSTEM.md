@@ -63,10 +63,11 @@ ESLint `no-restricted-syntax` rule that CI enforces at `--max-warnings 0`.
 **Permanent allowlist** (exempt forever): `Logo.tsx` / `LogoMark.tsx` (brand-mark SVG fills), `tokens.css`
 (defines the colors), and `DesignSpec.tsx` (unrouted reference artifact).
 
-**Interim baseline:** 10 legacy files carry `/* eslint-disable no-restricted-syntax -- TODO(token-debt) */`
-at the top. These are tracked debt, greppable via `grep -rn 'TODO(token-debt)' packages/frontend/src`. Each
-will be retrofitted in Phase E5 and its disable comment removed. Touching a baselined file before E5 is
-permitted — remove the disable comment once the file is clean.
+**Interim baseline: fully retired (Phase E5 complete).** The 10 legacy files that previously carried
+`/* eslint-disable no-restricted-syntax -- TODO(token-debt) */` have all been retrofitted to use design
+tokens and their disable comments removed. `grep -rn 'TODO(token-debt)' packages/frontend/src` returns
+nothing. The color-literal gate is now total: `error` for every file in `packages/frontend/src/**`, new and
+existing, except the permanent allowlist above.
 
 Full implementation plan: [DESIGN_SYSTEM_ENFORCEMENT.md](./DESIGN_SYSTEM_ENFORCEMENT.md).
 

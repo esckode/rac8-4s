@@ -290,7 +290,7 @@ It remains a **deletion candidate**: the file is unrouted and unimported dead co
 allowlist entry stays until the owner decides to delete the file — that delete-vs-keep call is for the
 owner, not decided here.
 
-### E5.6 — Tear down the interim baseline (completion)
+### E5.6 — Tear down the interim baseline (completion) ✅ done
 **Tests (write first, commit red):** harness fixture under a *formerly-baselined* path now reports the color
 rule at **`error`**. *Fails while baseline still exists.*
 **Implementation:** delete the entire temporary baseline `overrides` block; only the permanent allowlist
@@ -298,6 +298,10 @@ remains. Confirm `grep -rn 'TODO(token-debt)' src` returns **nothing**.
 **Done when:** baseline removed, no `TODO(token-debt)` left, `npm run lint --max-warnings 0` green, full jest
 + type-check + the touched e2e green. The gate is now total. **Commit.** Update `DESIGN_SYSTEM.md` (E2.3
 note) from "interim baseline" → "fully enforced."
+
+**Status:** verified — `grep -rn 'TODO(token-debt)' packages/frontend/src` (excluding `__tests__`) returns
+nothing; `npm run lint -- --max-warnings 0` exits 0; the formerly-baselined-path fixture test in
+`eslint-config.spec.ts` passes. The color-literal gate is total for all frontend code.
 
 ---
 
