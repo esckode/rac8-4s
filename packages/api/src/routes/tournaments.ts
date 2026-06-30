@@ -2232,12 +2232,16 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
     try {
       playerPayload = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
-    } catch {}
+    } catch {
+      // intentional: fall through to organizer auth attempt below
+    }
 
     if (!playerPayload) {
       try {
         organizerPayload = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
-      } catch {}
+      } catch {
+        // intentional: both auth attempts failed, handled by the check below
+      }
     }
 
     if (!playerPayload && !organizerPayload) {

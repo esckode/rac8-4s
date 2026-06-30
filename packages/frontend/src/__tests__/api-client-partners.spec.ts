@@ -78,7 +78,7 @@ describe('API Client — partner requests', () => {
 
   describe('sendPartnerRequest', () => {
     it('POSTs /tournaments/:id/partner-requests with targetPlayerId and token', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ registrationId: 'r1', targetPlayerId: 'p2', status: 'pending_partner_confirm' }), { status: 201 })
       )
 
@@ -92,7 +92,7 @@ describe('API Client — partner requests', () => {
     })
 
     it('throws an ApiError carrying the backend code on 409', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ code: 'INVALID_STATE', message: 'already paired' }), { status: 409 })
       )
 
@@ -105,7 +105,7 @@ describe('API Client — partner requests', () => {
 
   describe('confirmPartner', () => {
     it('PATCHes /tournaments/registrations/:registrationId/confirm with the token', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ registrationId: 'r1', status: 'registered', partnerConfirmed: true }), { status: 200 })
       )
 
@@ -118,7 +118,7 @@ describe('API Client — partner requests', () => {
     })
 
     it('throws an ApiError carrying the backend code on 403', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ code: 'FORBIDDEN', message: 'only partner' }), { status: 403 })
       )
 

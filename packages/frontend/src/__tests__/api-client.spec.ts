@@ -101,7 +101,7 @@ describe('API Client', () => {
     })
 
     it('should throw ApiError on 401', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ code: 'UNAUTHORIZED' }), { status: 401 })
       )
 
@@ -115,7 +115,7 @@ describe('API Client', () => {
     })
 
     it('should throw ApiError on 500', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ code: 'INTERNAL_ERROR' }), { status: 500 })
       )
 
@@ -127,7 +127,7 @@ describe('API Client', () => {
     })
 
     it('should wrap network errors into ApiError', async () => {
-      ;(global.fetch as jest.Mock).mockRejectedValue(new Error('Network timeout'))
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network timeout'))
 
       await expect(
         fetchPublicTournaments({ offset: 0, limit: 10 })
@@ -176,7 +176,7 @@ describe('API Client', () => {
     })
 
     it('should throw ApiError on 401', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ code: 'UNAUTHORIZED' }), { status: 401 })
       )
 
@@ -249,7 +249,7 @@ describe('API Client', () => {
     })
 
     it('should throw ApiError on 404', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 })
       )
 
@@ -404,7 +404,7 @@ describe('API Client', () => {
     })
 
     it('should throw ApiError on 404 when bracket not generated', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(
           JSON.stringify({ code: 'BRACKET_NOT_GENERATED' }),
           { status: 404 }

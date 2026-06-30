@@ -39,7 +39,7 @@ describe('API Client — organizer lifecycle', () => {
 
   describe('advanceTournament', () => {
     it('POSTs /tournaments/:id/advance with the action and bearer token', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ status: 'registration_closed', previousStatus: 'registration_open', message: 'ok' }), { status: 200 })
       )
 
@@ -54,7 +54,7 @@ describe('API Client — organizer lifecycle', () => {
     })
 
     it('includes forceAdvance when passed', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ status: 'group_stage_complete', previousStatus: 'group_stage_active', message: 'ok' }), { status: 200 })
       )
 
@@ -65,7 +65,7 @@ describe('API Client — organizer lifecycle', () => {
     })
 
     it('throws an ApiError carrying the backend code on 409 GUARD_FAILED', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ code: 'GUARD_FAILED', message: 'guard' }), { status: 409 })
       )
 
@@ -78,7 +78,7 @@ describe('API Client — organizer lifecycle', () => {
 
   describe('createGroups', () => {
     it('POSTs /tournaments/:id/groups with the body and token', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ groups: [{ id: 'g1', name: 'A', playerCount: 2, advancingCount: 1 }] }), { status: 201 })
       )
 
@@ -93,7 +93,7 @@ describe('API Client — organizer lifecycle', () => {
     })
 
     it('surfaces 409 INVALID_STATE', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(
+      (global.fetch as jest.Mock).mockResolvedValue(
         new Response(JSON.stringify({ code: 'INVALID_STATE', message: 'bad state' }), { status: 409 })
       )
       await expect(createGroups('t1', { numGroups: 1, advancingPerGroup: 1 }, 'tok')).rejects.toMatchObject({
@@ -104,7 +104,7 @@ describe('API Client — organizer lifecycle', () => {
 
   describe('generateBracket / publishBracket', () => {
     it('generateBracket POSTs /tournaments/:id/bracket/generate with the token', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(new Response(JSON.stringify({ bracket: {} }), { status: 200 }))
+      (global.fetch as jest.Mock).mockResolvedValue(new Response(JSON.stringify({ bracket: {} }), { status: 200 }))
       await generateBracket('t1', 'tok')
       const [url, options] = lastCall()
       expect(url).toContain('/tournaments/t1/bracket/generate')
@@ -113,7 +113,7 @@ describe('API Client — organizer lifecycle', () => {
     })
 
     it('publishBracket POSTs /tournaments/:id/bracket/publish with the token', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValue(new Response(JSON.stringify({ matches: [] }), { status: 200 }))
+      (global.fetch as jest.Mock).mockResolvedValue(new Response(JSON.stringify({ matches: [] }), { status: 200 }))
       await publishBracket('t1', 'tok')
       const [url, options] = lastCall()
       expect(url).toContain('/tournaments/t1/bracket/publish')

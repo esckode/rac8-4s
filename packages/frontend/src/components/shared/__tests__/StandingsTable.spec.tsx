@@ -628,7 +628,7 @@ describe('StandingsTable', () => {
 
   describe('Edge Cases', () => {
     it('handles undefined player name', () => {
-      ;(playerCacheModule.playerCache.get as jest.Mock).mockReturnValueOnce(null)
+      (playerCacheModule.playerCache.get as jest.Mock).mockReturnValueOnce(null)
 
       const standings = [mockStanding({ participantId: 'missing_player' })]
       render(<StandingsTable standings={standings} />)

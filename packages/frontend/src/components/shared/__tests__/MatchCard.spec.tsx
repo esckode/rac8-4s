@@ -103,7 +103,7 @@ describe('MatchCard', () => {
     })
 
     it('renders player ID when player name is not in cache', () => {
-      ;(playerCacheModule.playerCache.get as jest.Mock).mockReturnValueOnce(null)
+      (playerCacheModule.playerCache.get as jest.Mock).mockReturnValueOnce(null)
 
       const match = mockMatch({ player1Id: 'unknown_player' })
       render(<MatchCard match={match} />)
@@ -508,7 +508,7 @@ describe('MatchCard', () => {
     })
 
     it('handles both players missing from cache', () => {
-      ;(playerCacheModule.playerCache.get as jest.Mock).mockReturnValue(null)
+      (playerCacheModule.playerCache.get as jest.Mock).mockReturnValue(null)
 
       const match = mockMatch({ player1Id: 'unknown_1', player2Id: 'unknown_2' })
       render(<MatchCard match={match} />)
@@ -604,7 +604,7 @@ describe('MatchCard', () => {
 
   describe('Integration', () => {
     it('renders complete player vs player match', () => {
-      ;(playerCacheModule.playerCache.get as jest.Mock).mockImplementation(
+      (playerCacheModule.playerCache.get as jest.Mock).mockImplementation(
         (id: string) => ({
           id,
           name: id === 'alice' ? 'Alice' : 'Bob',
@@ -626,7 +626,7 @@ describe('MatchCard', () => {
     })
 
     it('renders pending match with Submit Score for player', () => {
-      ;(playerCacheModule.playerCache.get as jest.Mock).mockImplementation(
+      (playerCacheModule.playerCache.get as jest.Mock).mockImplementation(
         (id: string) => ({
           id,
           name: `Player ${id}`,

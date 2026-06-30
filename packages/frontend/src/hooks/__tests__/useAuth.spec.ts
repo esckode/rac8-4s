@@ -111,7 +111,7 @@ describe('useAuth', () => {
 
     it('clears invalid token on 401 response', async () => {
       // /me rejects it, and the /player/session fallback also rejects it
-      ;(global.fetch as jest.Mock)
+      (global.fetch as jest.Mock)
         .mockResolvedValueOnce({ ok: false, status: 401 })
         .mockResolvedValueOnce({ ok: false, status: 401 })
 
@@ -129,7 +129,7 @@ describe('useAuth', () => {
     })
 
     it('clears token on network error during session restoration', async () => {
-      ;(global.fetch as jest.Mock).mockRejectedValueOnce(
+      (global.fetch as jest.Mock).mockRejectedValueOnce(
         new Error('Network error')
       )
 
@@ -147,7 +147,7 @@ describe('useAuth', () => {
 
     it('restores a magic-link player session when /me does not recognize the token', async () => {
       // First call: /api/auth/me rejects the player-session token (not an account JWT)
-      ;(global.fetch as jest.Mock)
+      (global.fetch as jest.Mock)
         .mockResolvedValueOnce({ ok: false, status: 401 })
         // Second call: /player/session validates it and returns the player identity
         .mockResolvedValueOnce({
@@ -179,7 +179,7 @@ describe('useAuth', () => {
     })
 
     it('clears the token only when neither /me nor /player/session validate it', async () => {
-      ;(global.fetch as jest.Mock)
+      (global.fetch as jest.Mock)
         .mockResolvedValueOnce({ ok: false, status: 401 })
         .mockResolvedValueOnce({ ok: false, status: 401 })
 
@@ -247,7 +247,7 @@ describe('useAuth', () => {
     })
 
     it('handles login error response', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 401,
         json: async () => ({ message: 'Invalid email or password' }),
@@ -270,7 +270,7 @@ describe('useAuth', () => {
     })
 
     it('handles login network error', async () => {
-      ;(global.fetch as jest.Mock).mockRejectedValueOnce(
+      (global.fetch as jest.Mock).mockRejectedValueOnce(
         new Error('Network error')
       )
 
@@ -375,7 +375,7 @@ describe('useAuth', () => {
     })
 
     it('handles signup error', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 409,
         json: async () => ({ message: 'Email already in use' }),
@@ -448,7 +448,7 @@ describe('useAuth', () => {
     })
 
     it('clears token even if logout endpoint fails', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           id: 'user-123',
@@ -479,7 +479,7 @@ describe('useAuth', () => {
     })
 
     it('clears token even if logout endpoint throws', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           id: 'user-123',
@@ -533,7 +533,7 @@ describe('useAuth', () => {
 
   describe('forgotPassword', () => {
     it('successfully requests password reset', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           message: 'If an account exists for this email, a reset code has been sent',
@@ -560,7 +560,7 @@ describe('useAuth', () => {
     })
 
     it('handles forgot password error', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 400,
         json: async () => ({ message: 'Invalid email' }),
@@ -582,7 +582,7 @@ describe('useAuth', () => {
 
   describe('resetPassword', () => {
     it('successfully resets password', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ message: 'Password reset successfully' }),
       })
@@ -615,7 +615,7 @@ describe('useAuth', () => {
     })
 
     it('handles reset password error', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 400,
         json: async () => ({ message: 'Invalid reset code' }),
@@ -699,7 +699,7 @@ describe('useAuth', () => {
 
   describe('error handling', () => {
     it('handles fetch response without json when error occurs', async () => {
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 500,
         json: jest.fn().mockRejectedValueOnce(new Error('Not JSON')),

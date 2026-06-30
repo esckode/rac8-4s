@@ -176,41 +176,33 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
   )
 
   const forgotPassword = useCallback(async (email: string): Promise<void> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      })
+    const response = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    })
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Request failed' }))
-        throw new Error(errorData.message || `Request failed with status ${response.status}`)
-      }
-    } catch (error) {
-      throw error
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Request failed' }))
+      throw new Error(errorData.message || `Request failed with status ${response.status}`)
     }
   }, [])
 
   const resetPassword = useCallback(
     async (email: string, code: string, password: string): Promise<void> => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, code, password }),
-        })
+      const response = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, code, password }),
+      })
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ message: 'Reset failed' }))
-          throw new Error(errorData.message || `Reset failed with status ${response.status}`)
-        }
-      } catch (error) {
-        throw error
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Reset failed' }))
+        throw new Error(errorData.message || `Reset failed with status ${response.status}`)
       }
     },
     []

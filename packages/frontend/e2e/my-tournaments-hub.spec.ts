@@ -19,6 +19,7 @@ test.describe('My tournaments hubs — single-tournament redirect', () => {
 
     await page.goto('/standings')
 
+    // eslint-disable-next-line security/detect-non-literal-regexp -- fx.tournamentId comes from the test fixture's own setup, not user input
     await expect(page).toHaveURL(new RegExp(`/tournament/${fx.tournamentId}/standings`))
     await expect(page.locator(SELECTORS.STANDINGS_TABLE)).toBeVisible()
   })
@@ -33,6 +34,7 @@ test.describe('My tournaments hubs — single-tournament redirect', () => {
 
     await page.goto('/matches')
 
+    // eslint-disable-next-line security/detect-non-literal-regexp -- fx.tournamentId comes from the test fixture's own setup, not user input
     await expect(page).toHaveURL(new RegExp(`/tournament/${fx.tournamentId}/matches`))
     await expect(page.locator(SELECTORS.BRACKET_MATCHES).first()).toBeVisible()
   })

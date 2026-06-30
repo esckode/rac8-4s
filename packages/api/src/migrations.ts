@@ -18,6 +18,7 @@ export async function runMigrations(pool: Pool, migrationsDir: string): Promise<
     `)
 
     // Get list of migration files
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- migrationsDir is a fixed app-config path, not user input
     const migrationFiles = fs
       .readdirSync(migrationsDir)
       .filter((f) => f.endsWith('.sql'))
@@ -30,6 +31,7 @@ export async function runMigrations(pool: Pool, migrationsDir: string): Promise<
       if (result.rows.length === 0) {
         try {
           const filePath = path.join(migrationsDir, migrationFile)
+          // eslint-disable-next-line security/detect-non-literal-fs-filename -- filePath is built from the fixed migrationsDir and a filename already read from that same directory listing
           const sql = fs.readFileSync(filePath, 'utf-8')
 
           console.log(`Running migration: ${migrationFile}`)

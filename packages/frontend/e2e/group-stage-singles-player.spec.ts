@@ -36,6 +36,7 @@ test.describe('Group Stage Singles - Player view', () => {
     await page.goto(`/tournament/${tournamentId}/standings`)
 
     // Must NOT be bounced to login — the player session satisfies auth
+    // eslint-disable-next-line security/detect-non-literal-regexp -- tournamentId comes from the test fixture's own setup, not user input
     await expect(page).toHaveURL(new RegExp(`/tournament/${tournamentId}/standings`))
 
     const table = page.locator(SELECTORS.STANDINGS_TABLE)
@@ -45,6 +46,7 @@ test.describe('Group Stage Singles - Player view', () => {
   test('player views upcoming matches', async ({ page }) => {
     await page.goto(`/tournament/${tournamentId}/matches`)
 
+    // eslint-disable-next-line security/detect-non-literal-regexp -- tournamentId comes from the test fixture's own setup, not user input
     await expect(page).toHaveURL(new RegExp(`/tournament/${tournamentId}/matches`))
 
     const matchCards = page.locator(SELECTORS.BRACKET_MATCHES)

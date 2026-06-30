@@ -29,6 +29,7 @@ test.describe('Organizer Home', () => {
     await expect(row).toBeVisible()
 
     await row.click()
+    // eslint-disable-next-line security/detect-non-literal-regexp -- tournamentId comes from the test fixture's own setup, not user input
     await expect(page).toHaveURL(new RegExp(`/tournament/${tournamentId}/manage`))
   })
 })

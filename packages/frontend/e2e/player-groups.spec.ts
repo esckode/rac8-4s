@@ -130,6 +130,7 @@ test.describe('G2.5 — Player Groups', () => {
     await page.locator('[data-testid="group-list-item"]').first().click()
 
     // Should navigate to /groups/<id>
+    // eslint-disable-next-line security/detect-non-literal-regexp -- groupId comes from the test fixture's own setup, not user input
     await expect(page).toHaveURL(new RegExp(`/groups/${groupId}`), { timeout: 5000 })
 
     // Chat panel visible

@@ -64,7 +64,7 @@ export function parseMentions(body: string): string[] {
 
   // Then match @Word (single-word, unquoted)
   // Strip trailing punctuation that isn't part of the name
-  const wordRe = /@([A-Za-z0-9_\-]+)/g
+  const wordRe = /@([A-Za-z0-9_-]+)/g
   while ((m = wordRe.exec(body)) !== null) {
     mentions.add(m[1])
   }
