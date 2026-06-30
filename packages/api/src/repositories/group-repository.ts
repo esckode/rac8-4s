@@ -370,6 +370,58 @@ export class GroupRepository {
   }
 
   /**
+   * Update group name and/or default_match_format. Actor must be an owner.
+   * Returns the updated group row.
+   */
+  async updateGroup(
+    groupId: string,
+    actorPlayerId: string,
+    updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles' }
+  ): Promise<GroupRow> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      await this.assertOwner(client, groupId, actorPlayerId)
+
+      const setClauses: string[] = []
+      const params: unknown[] = [groupId]
+
+      if (updates.name !== undefined) {
+        params.push(updates.name)
+        setClauses.push(`name = $${params.length}`)
+      }
+      if (updates.defaultMatchFormat !== undefined) {
+        params.push(updates.defaultMatchFormat)
+        setClauses.push(`default_match_format = $${params.length}`)
+      }
+
+      if (setClauses.length === 0) {
+        // Nothing to update — return current row
+        const current = await client.query(
+          `SELECT id, name, created_by, default_match_format, created_at FROM public.player_groups WHERE id = $1`,
+          [groupId]
+        )
+        await client.query('COMMIT')
+        return rowToGroup(current.rows[0])
+      }
+
+      const result = await client.query(
+        `UPDATE public.player_groups SET ${setClauses.join(', ')} WHERE id = $1
+         RETURNING id, name, created_by, default_match_format, created_at`,
+        params
+      )
+
+      await client.query('COMMIT')
+      return rowToGroup(result.rows[0])
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
    * Get a member's role, or null if not a member.
    */
   async getMemberRole(

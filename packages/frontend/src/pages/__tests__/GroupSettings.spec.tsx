@@ -1,5 +1,6 @@
 /**
- * P1.4 + P1.5 — Group page header + Group Settings shell + notify-level + leave
+ * P1.4 + P1.5 + P1.6 — Group page header + Group Settings shell + notify-level + leave +
+ *   owner member management + group config
  *
  * Tests cover:
  * - GroupDetail renders a header with data-testid="group-detail-header"
@@ -11,6 +12,15 @@
  * - Both owner and member see data-testid="group-settings-member-section"
  * - NotifyLevelControl appears in the member section
  * - Leave button appears in the member section and calls DELETE + navigates
+ * P1.6:
+ * - ManageMembersList renders with data-testid="manage-members-list"
+ * - Member rows render with promote button but no demote button
+ * - Owner rows render with demote button but no promote button
+ * - Kick button opens confirm dialog
+ * - Kick confirm calls DELETE .../kick
+ * - 409 LAST_OWNER shows inline error message
+ * - Group name input and save button call PATCH
+ * - Match format select calls PATCH
  */
 
 import React from 'react'
@@ -274,6 +284,322 @@ describe('GroupSettings — P1.5 leave group', () => {
       expect(deleteCall).toBeDefined()
       expect(deleteCall[1]).toMatchObject({ method: 'DELETE' })
       expect(mockNavigate).toHaveBeenCalledWith('/groups')
+    })
+  })
+})
+
+// ── P1.6: ManageMembersList ────────────────────────────────────────────────────
+
+function makeOwnerSettingsWithMembers(members: unknown[]) {
+  mockFetch
+    .mockResolvedValueOnce(makeGroupsResponse('owner'))          // useGroupList
+    .mockResolvedValueOnce({                                     // members fetch
+      ok: true,
+      json: async () => ({ members }),
+    })
+}
+
+describe('GroupSettings — P1.6 ManageMembersList', () => {
+  const selfId = 'player_1'  // matches auth mock
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('renders manage-members-list inside the owner section', async () => {
+    makeOwnerSettingsWithMembers([
+      { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+    ])
+    renderGroupSettings('grp_1', 'owner')
+    await waitFor(() => {
+      expect(screen.getByTestId('manage-members-list')).toBeInTheDocument()
+    })
+  })
+
+  it('shows a member row for each member', async () => {
+    makeOwnerSettingsWithMembers([
+      { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+      { playerId: 'player_2', name: 'Alice', role: 'member', joinedAt: '' },
+    ])
+    renderGroupSettings('grp_1', 'owner')
+    await waitFor(() => {
+      expect(screen.getByTestId(`member-row-${selfId}`)).toBeInTheDocument()
+      expect(screen.getByTestId('member-row-player_2')).toBeInTheDocument()
+    })
+  })
+
+  it('shows promote button for member rows, not for owner rows', async () => {
+    makeOwnerSettingsWithMembers([
+      { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+      { playerId: 'player_2', name: 'Alice', role: 'member', joinedAt: '' },
+    ])
+    renderGroupSettings('grp_1', 'owner')
+    await waitFor(() => {
+      const memberRow = screen.getByTestId('member-row-player_2')
+      expect(memberRow.querySelector('[data-testid="promote-button"]')).toBeTruthy()
+      const ownerRow = screen.getByTestId(`member-row-${selfId}`)
+      expect(ownerRow.querySelector('[data-testid="promote-button"]')).toBeFalsy()
+    })
+  })
+
+  it('shows demote button for other owner rows, not for member rows', async () => {
+    makeOwnerSettingsWithMembers([
+      { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+      { playerId: 'player_2', name: 'Alice', role: 'owner', joinedAt: '' },
+      { playerId: 'player_3', name: 'Bob', role: 'member', joinedAt: '' },
+    ])
+    renderGroupSettings('grp_1', 'owner')
+    await waitFor(() => {
+      const aliceRow = screen.getByTestId('member-row-player_2')
+      expect(aliceRow.querySelector('[data-testid="demote-button"]')).toBeTruthy()
+      const bobRow = screen.getByTestId('member-row-player_3')
+      expect(bobRow.querySelector('[data-testid="demote-button"]')).toBeFalsy()
+    })
+  })
+
+  it('clicking promote calls POST .../promote', async () => {
+    makeOwnerSettingsWithMembers([
+      { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+      { playerId: 'player_2', name: 'Alice', role: 'member', joinedAt: '' },
+    ])
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    renderGroupSettings('grp_1', 'owner')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('member-row-player_2')).toBeInTheDocument()
+    })
+
+    const memberRow = screen.getByTestId('member-row-player_2')
+    const promoteBtn = memberRow.querySelector('[data-testid="promote-button"]') as HTMLElement
+    fireEvent.click(promoteBtn)
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(
+        ([url]: [string]) => typeof url === 'string' && url.includes('/promote')
+      )
+      expect(call).toBeDefined()
+      expect(call[1]).toMatchObject({ method: 'POST' })
+    })
+  })
+
+  it('clicking demote calls POST .../demote', async () => {
+    makeOwnerSettingsWithMembers([
+      { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+      { playerId: 'player_2', name: 'Alice', role: 'owner', joinedAt: '' },
+    ])
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    renderGroupSettings('grp_1', 'owner')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('member-row-player_2')).toBeInTheDocument()
+    })
+
+    const aliceRow = screen.getByTestId('member-row-player_2')
+    const demoteBtn = aliceRow.querySelector('[data-testid="demote-button"]') as HTMLElement
+    fireEvent.click(demoteBtn)
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(
+        ([url]: [string]) => typeof url === 'string' && url.includes('/demote')
+      )
+      expect(call).toBeDefined()
+      expect(call[1]).toMatchObject({ method: 'POST' })
+    })
+  })
+
+  it('kicking a member opens a confirm dialog', async () => {
+    makeOwnerSettingsWithMembers([
+      { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+      { playerId: 'player_2', name: 'Alice', role: 'member', joinedAt: '' },
+    ])
+    renderGroupSettings('grp_1', 'owner')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('member-row-player_2')).toBeInTheDocument()
+    })
+
+    const memberRow = screen.getByTestId('member-row-player_2')
+    const kickBtn = memberRow.querySelector('[data-testid="kick-button"]') as HTMLElement
+    fireEvent.click(kickBtn)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('kick-confirm-dialog')).toBeInTheDocument()
+    })
+  })
+
+  it('confirming kick calls DELETE .../kick', async () => {
+    makeOwnerSettingsWithMembers([
+      { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+      { playerId: 'player_2', name: 'Alice', role: 'member', joinedAt: '' },
+    ])
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    renderGroupSettings('grp_1', 'owner')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('member-row-player_2')).toBeInTheDocument()
+    })
+
+    const memberRow = screen.getByTestId('member-row-player_2')
+    fireEvent.click(memberRow.querySelector('[data-testid="kick-button"]') as HTMLElement)
+    await waitFor(() => expect(screen.getByTestId('kick-confirm-button')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('kick-confirm-button'))
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(
+        ([url]: [string]) => typeof url === 'string' && url.includes('/members/player_2') && !url.includes('promote') && !url.includes('demote') && !url.includes('leave') && !url.includes('notify')
+      )
+      expect(call).toBeDefined()
+      expect(call[1]).toMatchObject({ method: 'DELETE' })
+    })
+  })
+
+  it('409 LAST_OWNER from demote shows inline error', async () => {
+    // Two owners: me and Alice. Demoting Alice returns 409 (race condition).
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponse('owner'))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [
+        { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+        { playerId: 'player_2', name: 'Alice', role: 'owner', joinedAt: '' },
+      ]}) })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({ code: 'LAST_OWNER', message: 'Cannot remove the last owner' }),
+      })
+
+    renderGroupSettings('grp_1', 'owner')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('member-row-player_2')).toBeInTheDocument()
+    })
+
+    const aliceRow = screen.getByTestId('member-row-player_2')
+    fireEvent.click(aliceRow.querySelector('[data-testid="demote-button"]') as HTMLElement)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('last-owner-error')).toBeInTheDocument()
+    })
+  })
+
+  it('409 LAST_OWNER from kick shows inline error', async () => {
+    makeOwnerSettingsWithMembers([
+      { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+      { playerId: 'player_2', name: 'Alice', role: 'owner', joinedAt: '' },
+    ])
+    // First call: groups list; second call: members; third call: kick returns 409
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponse('owner'))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [
+        { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
+        { playerId: 'player_2', name: 'Alice', role: 'owner', joinedAt: '' },
+      ]}) })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({ code: 'LAST_OWNER', message: 'Cannot remove the last owner' }),
+      })
+
+    renderGroupSettings('grp_1', 'owner')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('member-row-player_2')).toBeInTheDocument()
+    })
+
+    const aliceRow = screen.getByTestId('member-row-player_2')
+    fireEvent.click(aliceRow.querySelector('[data-testid="kick-button"]') as HTMLElement)
+    await waitFor(() => expect(screen.getByTestId('kick-confirm-button')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('kick-confirm-button'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('last-owner-error')).toBeInTheDocument()
+    })
+  })
+})
+
+// ── P1.6: Group config (rename + match format) ────────────────────────────────
+
+describe('GroupSettings — P1.6 group config', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('renders group-name-input and group-name-save inside the owner section', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponse('owner'))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [] }) })
+    renderGroupSettings('grp_1', 'owner')
+    await waitFor(() => {
+      expect(screen.getByTestId('group-name-input')).toBeInTheDocument()
+      expect(screen.getByTestId('group-name-save')).toBeInTheDocument()
+    })
+  })
+
+  it('renders match-format-select inside the owner section', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponse('owner'))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [] }) })
+    renderGroupSettings('grp_1', 'owner')
+    await waitFor(() => {
+      expect(screen.getByTestId('match-format-select')).toBeInTheDocument()
+    })
+  })
+
+  it('saving a new group name calls PATCH /player/groups/:groupId with name', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponse('owner'))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'grp_1', name: 'Renamed', defaultMatchFormat: 'singles' }) })
+
+    renderGroupSettings('grp_1', 'owner')
+    await waitFor(() => {
+      expect(screen.getByTestId('group-name-input')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('group-name-input'), { target: { value: 'Renamed' } })
+    fireEvent.click(screen.getByTestId('group-name-save'))
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(
+        ([url]: [string]) => typeof url === 'string' && url.includes('/player/groups/grp_1') && !url.includes('/members')
+      )
+      expect(call).toBeDefined()
+      expect(call[1]).toMatchObject({ method: 'PATCH' })
+      const body = JSON.parse(call[1].body)
+      expect(body.name).toBe('Renamed')
+    })
+  })
+
+  it('changing match format calls PATCH /player/groups/:groupId with defaultMatchFormat', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponse('owner'))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'grp_1', name: 'Pickleball Crew', defaultMatchFormat: 'doubles' }) })
+
+    renderGroupSettings('grp_1', 'owner')
+    await waitFor(() => {
+      expect(screen.getByTestId('match-format-select')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByTestId('match-format-select'), { target: { value: 'doubles' } })
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(
+        ([url]: [string]) => typeof url === 'string' && url.includes('/player/groups/grp_1') && !url.includes('/members')
+      )
+      expect(call).toBeDefined()
+      expect(call[1]).toMatchObject({ method: 'PATCH' })
+      const body = JSON.parse(call[1].body)
+      expect(body.defaultMatchFormat).toBe('doubles')
+    })
+  })
+
+  it('does not show owner controls to members', async () => {
+    mockFetch.mockResolvedValue(makeGroupsResponse('member'))
+    renderGroupSettings('grp_1', 'member')
+    await waitFor(() => {
+      expect(screen.queryByTestId('manage-members-list')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('group-name-input')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('match-format-select')).not.toBeInTheDocument()
     })
   })
 })

@@ -6,6 +6,7 @@
  * Routes:
  *   GET    /player/groups                               — list the caller's groups (G2.5)
  *   POST   /player/groups                               — create group (creator becomes owner)
+ *   PATCH  /player/groups/:groupId                      — owner updates name / default_match_format (P1.6)
  *   POST   /player/groups/:groupId/invites/accept       — invitee accepts invite (age-gated)
  *   POST   /player/groups/:groupId/invites              — owner creates email-bound invite
  *   GET    /player/groups/:groupId/members              — member list (G2.5)
@@ -113,6 +114,49 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
       })
     } catch (err) {
       next(err)
+    }
+  })
+
+  // PATCH /player/groups/:groupId — owner updates group name and/or default_match_format (P1.6)
+  router.patch('/:groupId', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const groupId = req.params.groupId as string
+      const { name, defaultMatchFormat } = req.body as {
+        name?: unknown
+        defaultMatchFormat?: unknown
+      }
+
+      const updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles' } = {}
+
+      if (name !== undefined) {
+        if (typeof name !== 'string' || !name.trim()) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'name must be a non-empty string' })
+        }
+        updates.name = name.trim()
+      }
+
+      if (defaultMatchFormat !== undefined) {
+        if (defaultMatchFormat !== 'singles' && defaultMatchFormat !== 'doubles') {
+          return res.status(400).json({
+            code: 'VALIDATION_ERROR',
+            message: "defaultMatchFormat must be 'singles' or 'doubles'",
+          })
+        }
+        updates.defaultMatchFormat = defaultMatchFormat
+      }
+
+      const group = await groupRepo.updateGroup(groupId, session.playerId, updates)
+
+      log.info('group.updated', { groupId, actorPlayerId: session.playerId, updates })
+
+      return res.status(200).json({
+        id: group.id,
+        name: group.name,
+        defaultMatchFormat: group.defaultMatchFormat,
+      })
+    } catch (err) {
+      next(handleGroupError(err))
     }
   })
 
