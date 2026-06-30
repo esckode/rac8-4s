@@ -58,6 +58,30 @@ const EMPTY_BLOCK_FIXTURE = `export function h(): void {
 }
 `
 
+const HEX_CLASSNAME_FIXTURE = `const a = <div className="bg-[#fff]" />
+`
+
+const HEX_STYLE_STRING_FIXTURE = `const b = <div style={{ color: '#FFF' }} />
+`
+
+const HEX_6_DIGIT_FIXTURE = `const c = <div className="text-[#1a1a1a]" />
+`
+
+const RGBA_STYLE_FIXTURE = `const d = <div style={{ background: 'rgba(0,0,0,0.5)' }} />
+`
+
+const HSL_STRING_FIXTURE = `const e = 'hsl(210 100% 50%)'
+`
+
+const CSS_VAR_CLASSNAME_FIXTURE = `const f = <div className="text-[--ink-900] bg-[--court-500]" />
+`
+
+const CSS_VAR_STYLE_FIXTURE = `const g = <div style={{ color: 'var(--ink-900)' }} />
+`
+
+const NON_COLOR_ARBITRARY_FIXTURE = `const h = <div className="min-h-[44px] max-h-[600px]" />
+`
+
 describe('eslint config (programmatic fixture runner)', () => {
   it('reports 0 errors for a clean .tsx fixture', async () => {
     const results = await lintText(CLEAN_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture.tsx')
@@ -104,5 +128,63 @@ describe('eslint config (programmatic fixture runner)', () => {
 
     const errors = results[0].messages.filter((m) => m.ruleId === 'no-empty')
     expect(errors.length).toBeGreaterThanOrEqual(1)
+  })
+
+  describe('no-restricted-syntax: color literals banned', () => {
+    it('reports a no-restricted-syntax error for a hex color in className', async () => {
+      const results = await lintText(HEX_CLASSNAME_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-hex-classname.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('reports a no-restricted-syntax error for a hex color in a style string', async () => {
+      const results = await lintText(HEX_STYLE_STRING_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-hex-style.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('reports a no-restricted-syntax error for a 6-digit hex color in className', async () => {
+      const results = await lintText(HEX_6_DIGIT_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-hex-6digit.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('reports a no-restricted-syntax error for rgba in a style string', async () => {
+      const results = await lintText(RGBA_STYLE_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-rgba-style.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('reports a no-restricted-syntax error for an hsl string', async () => {
+      const results = await lintText(HSL_STRING_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-hsl-string.ts')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('reports 0 no-restricted-syntax errors for a CSS var token in className', async () => {
+      const results = await lintText(CSS_VAR_CLASSNAME_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-cssvar-classname.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors).toHaveLength(0)
+    })
+
+    it('reports 0 no-restricted-syntax errors for a CSS var in a style string', async () => {
+      const results = await lintText(CSS_VAR_STYLE_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-cssvar-style.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors).toHaveLength(0)
+    })
+
+    it('reports 0 no-restricted-syntax errors for a non-color arbitrary value', async () => {
+      const results = await lintText(NON_COLOR_ARBITRARY_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-noncolor-arbitrary.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors).toHaveLength(0)
+    })
   })
 })
