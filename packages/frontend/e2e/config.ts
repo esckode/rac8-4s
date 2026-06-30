@@ -312,6 +312,19 @@ export const SELECTORS = {
   NOTIFY_LEVEL_OPTION_MUTED: '[data-testid="notify-level-option-muted"]',
   LEAVE_GROUP_BUTTON: '[data-testid="leave-group-button"]',
 
+  // Owner member management + Group config — P1.6
+  MANAGE_MEMBERS_LIST: '[data-testid="manage-members-list"]',
+  MEMBER_ROW: (playerId: string) => `[data-testid="member-row-${playerId}"]`,
+  PROMOTE_BUTTON: '[data-testid="promote-button"]',
+  DEMOTE_BUTTON: '[data-testid="demote-button"]',
+  KICK_BUTTON: '[data-testid="kick-button"]',
+  KICK_CONFIRM_DIALOG: '[data-testid="kick-confirm-dialog"]',
+  KICK_CONFIRM_BUTTON: '[data-testid="kick-confirm-button"]',
+  LAST_OWNER_ERROR: '[data-testid="last-owner-error"]',
+  GROUP_NAME_INPUT: '[data-testid="group-name-input"]',
+  GROUP_NAME_SAVE: '[data-testid="group-name-save"]',
+  MATCH_FORMAT_SELECT: '[data-testid="match-format-select"]',
+
   // Poll cards — G3.3
   POLL_CARD: '[data-testid="poll-card"]',
   POLL_QUESTION: '[data-testid="poll-question"]',

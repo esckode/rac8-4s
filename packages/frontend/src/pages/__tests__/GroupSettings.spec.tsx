@@ -482,11 +482,9 @@ describe('GroupSettings — P1.6 ManageMembersList', () => {
   })
 
   it('409 LAST_OWNER from kick shows inline error', async () => {
-    makeOwnerSettingsWithMembers([
-      { playerId: selfId, name: 'Me', role: 'owner', joinedAt: '' },
-      { playerId: 'player_2', name: 'Alice', role: 'owner', joinedAt: '' },
-    ])
-    // First call: groups list; second call: members; third call: kick returns 409
+    // Exactly 3 Once items: groups → members → kick-409.
+    // Do NOT call makeOwnerSettingsWithMembers here — that would add 2 more
+    // items and leave the 409 unconsumed, poisoning subsequent tests.
     mockFetch
       .mockResolvedValueOnce(makeGroupsResponse('owner'))
       .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [

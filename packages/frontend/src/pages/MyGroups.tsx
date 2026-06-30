@@ -1,16 +1,19 @@
 /**
- * MyGroups — G2.5
+ * MyGroups — G2.5 + P1.6
  *
- * Two components:
- *   GroupList   — /groups route. Lists the player's groups.
- *   GroupDetail — /groups/:groupId route. Chat · Members · Invite tabs.
+ * Components:
+ *   GroupList          — /groups route. Lists the player's groups.
+ *   GroupDetail        — /groups/:groupId route. Chat · Members · Invite tabs.
+ *   GroupSettings      — /groups/:groupId/settings. Preferences + owner management.
+ *   ManageMembersList  — Owner-only member management rows (promote/demote/kick).
+ *   KickConfirmDialog  — Accessible modal confirming kick action.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { useGroupList } from '../hooks/useGroupList'
 import { useAuth } from '../hooks/useAuth'
-import { GroupChatPanel, MembersPanel } from '../components/GroupChatPanel'
+import { GroupChatPanel, MembersPanel, type MemberSummary } from '../components/GroupChatPanel'
 import { NotifyLevelControl, type NotifyLevel } from '../components/NotifyLevelControl'
 
 // ─── GearIcon ─────────────────────────────────────────────────────────────────
@@ -149,13 +152,319 @@ export const GroupDetail: React.FC = () => {
   )
 }
 
+// ─── KickConfirmDialog ────────────────────────────────────────────────────────
+
+interface KickConfirmDialogProps {
+  memberName: string
+  onConfirm: () => void
+  onCancel: () => void
+}
+
+const KickConfirmDialog: React.FC<KickConfirmDialogProps> = ({ memberName, onConfirm, onCancel }) => {
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  // Focus the cancel button when dialog opens
+  useEffect(() => {
+    cancelRef.current?.focus()
+  }, [])
+
+  // Dismiss on Escape
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  // Trap focus within dialog
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key !== 'Tab' || !dialogRef.current) return
+    const focusable = Array.from(
+      dialogRef.current.querySelectorAll<HTMLElement>('button, [href], input, [tabindex]:not([tabindex="-1"])')
+    )
+    if (focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus() }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[--ink-900]/50"
+      aria-modal="true"
+      role="dialog"
+      aria-labelledby="kick-dialog-title"
+      data-testid="kick-confirm-dialog"
+      onKeyDown={handleKeyDown}
+      ref={dialogRef}
+    >
+      <div className="bg-[--surface] rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+        <h2 id="kick-dialog-title" className="text-base font-semibold text-[--ink-900]">
+          Remove {memberName}?
+        </h2>
+        <p className="text-sm text-[--ink-600]">
+          {memberName} will be removed from the group and lose access to all group content.
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button
+            ref={cancelRef}
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-[--ink-700] hover:text-[--ink-900] rounded-lg hover:bg-[--ink-100] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            data-testid="kick-confirm-button"
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-medium text-white bg-[--rose-700] hover:bg-[--rose-900] rounded-lg transition-colors"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── ManageMembersList ────────────────────────────────────────────────────────
+
+interface ManageMembersListProps {
+  groupId: string
+  selfPlayerId: string
+}
+
+const ManageMembersList: React.FC<ManageMembersListProps> = ({ groupId, selfPlayerId }) => {
+  const [members, setMembers] = useState<MemberSummary[]>([])
+  const [kickTarget, setKickTarget] = useState<MemberSummary | null>(null)
+  const [lastOwnerError, setLastOwnerError] = useState(false)
+
+  const fetchMembers = useCallback(() => {
+    const token = localStorage.getItem('auth_token')
+    fetch(`/player/groups/${groupId}/members`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then((data: { members: MemberSummary[] } | null) => {
+        if (data?.members) setMembers(data.members)
+      })
+      .catch(() => {})
+  }, [groupId])
+
+  useEffect(() => { fetchMembers() }, [fetchMembers])
+
+  async function callAction(method: 'POST' | 'DELETE', url: string) {
+    setLastOwnerError(false)
+    const token = localStorage.getItem('auth_token')
+    const res = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { code?: string }
+      if (body.code === 'LAST_OWNER') {
+        setLastOwnerError(true)
+        return
+      }
+    }
+    fetchMembers()
+  }
+
+  async function handlePromote(playerId: string) {
+    await callAction('POST', `/player/groups/${groupId}/members/${playerId}/promote`)
+  }
+
+  async function handleDemote(playerId: string) {
+    await callAction('POST', `/player/groups/${groupId}/members/${playerId}/demote`)
+  }
+
+  async function handleKickConfirm() {
+    if (!kickTarget) return
+    const targetId = kickTarget.playerId
+    setKickTarget(null)
+    await callAction('DELETE', `/player/groups/${groupId}/members/${targetId}`)
+  }
+
+  return (
+    <>
+      <div data-testid="manage-members-list" className="mt-4 space-y-2">
+        <h3 className="text-sm font-semibold text-[--ink-700] uppercase tracking-wide">Members</h3>
+
+        {lastOwnerError && (
+          <p
+            data-testid="last-owner-error"
+            className="text-sm text-[--rose-700] bg-[--rose-50] rounded-lg px-3 py-2"
+          >
+            Can&apos;t remove the last owner — promote another member first
+          </p>
+        )}
+
+        {members.map(m => (
+          <div
+            key={m.playerId}
+            data-testid={`member-row-${m.playerId}`}
+            className="flex items-center justify-between py-2 px-1 border-b border-[--border] last:border-0"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-[--ink-900]">{m.name}</span>
+              {m.role === 'owner' && (
+                <span className="text-xs font-medium text-[--court-600]">Owner</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {m.role === 'member' && (
+                <button
+                  data-testid="promote-button"
+                  onClick={() => handlePromote(m.playerId)}
+                  className="text-xs font-medium text-[--court-600] hover:text-[--court-800] px-2 py-1 rounded hover:bg-[--court-50] transition-colors"
+                  aria-label={`Promote ${m.name} to owner`}
+                >
+                  Promote
+                </button>
+              )}
+              {m.role === 'owner' && m.playerId !== selfPlayerId && (
+                <button
+                  data-testid="demote-button"
+                  onClick={() => handleDemote(m.playerId)}
+                  className="text-xs font-medium text-[--ink-500] hover:text-[--ink-700] px-2 py-1 rounded hover:bg-[--ink-100] transition-colors"
+                  aria-label={`Demote ${m.name} to member`}
+                >
+                  Demote
+                </button>
+              )}
+              <button
+                data-testid="kick-button"
+                onClick={() => setKickTarget(m)}
+                className="text-xs font-medium text-[--rose-700] hover:text-[--rose-900] px-2 py-1 rounded hover:bg-[--rose-50] transition-colors"
+                aria-label={`Remove ${m.name} from group`}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {kickTarget && (
+        <KickConfirmDialog
+          memberName={kickTarget.name}
+          onConfirm={handleKickConfirm}
+          onCancel={() => setKickTarget(null)}
+        />
+      )}
+    </>
+  )
+}
+
+// ─── GroupConfig ──────────────────────────────────────────────────────────────
+
+interface GroupConfigProps {
+  groupId: string
+  initialName: string
+  initialFormat: 'singles' | 'doubles'
+}
+
+const GroupConfig: React.FC<GroupConfigProps> = ({ groupId, initialName, initialFormat }) => {
+  const [name, setName] = useState(initialName)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSaveName(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed || saving) return
+    setSaving(true)
+    try {
+      const token = localStorage.getItem('auth_token')
+      await fetch(`/player/groups/${groupId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ name: trimmed }),
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleFormatChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const defaultMatchFormat = e.target.value as 'singles' | 'doubles'
+    const token = localStorage.getItem('auth_token')
+    await fetch(`/player/groups/${groupId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ defaultMatchFormat }),
+    })
+  }
+
+  return (
+    <div className="mt-6 pt-4 border-t border-[--border] space-y-4">
+      <h3 className="text-sm font-semibold text-[--ink-700] uppercase tracking-wide">Group Config</h3>
+
+      {/* Rename */}
+      <form onSubmit={handleSaveName} className="flex gap-2 items-center">
+        <label htmlFor="group-name-input" className="sr-only">Group name</label>
+        <input
+          id="group-name-input"
+          data-testid="group-name-input"
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          className="flex-1 text-sm border border-[--border] rounded-lg px-3 py-2 text-[--ink-900] bg-[--surface] focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+          aria-label="Group name"
+        />
+        <button
+          data-testid="group-name-save"
+          type="submit"
+          disabled={saving || !name.trim()}
+          className="text-sm font-medium text-[--court-600] hover:text-[--court-800] px-3 py-2 rounded-lg hover:bg-[--court-50] transition-colors disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </form>
+
+      {/* Match format */}
+      <div className="flex items-center gap-3">
+        <label htmlFor="match-format-select" className="text-sm text-[--ink-700]">
+          Default match format
+        </label>
+        <select
+          id="match-format-select"
+          data-testid="match-format-select"
+          defaultValue={initialFormat}
+          onChange={handleFormatChange}
+          className="text-sm border border-[--border] rounded-lg px-3 py-2 text-[--ink-900] bg-[--surface] focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+        >
+          <option value="singles">Singles</option>
+          <option value="doubles">Doubles</option>
+        </select>
+      </div>
+    </div>
+  )
+}
+
 // ─── GroupSettings ────────────────────────────────────────────────────────────
 
 /**
  * GroupSettings — /groups/:groupId/settings
  *
  * Member section (P1.5): notify-level control + leave action.
- * Owner section (P1.5): placeholder for owner management controls.
+ * Owner section (P1.6): ManageMembersList + group config (rename + match format).
  */
 export const GroupSettings: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>()
@@ -170,6 +479,7 @@ export const GroupSettings: React.FC = () => {
   const isOwner = group?.role === 'owner'
   const playerId = user?.playerId ?? ''
   const currentLevel: NotifyLevel = 'mentions_polls'
+  const groupName = group?.name ?? ''
 
   async function handleLeave() {
     if (leaving || !playerId) return
@@ -217,14 +527,21 @@ export const GroupSettings: React.FC = () => {
         </div>
       </section>
 
-      {/* Owner-only section — group management, invite controls, etc. */}
+      {/* Owner-only section — member management + group config */}
       {isOwner && (
         <section
           data-testid="group-settings-owner-section"
           className="rounded-xl border border-[--border] p-4 bg-[--surface]"
         >
           <h2 className="text-base font-semibold text-[--ink-800]">Group Management</h2>
-          <p className="mt-1 text-sm text-[--ink-500]">Owner controls coming soon.</p>
+
+          <ManageMembersList groupId={groupId} selfPlayerId={playerId} />
+
+          <GroupConfig
+            groupId={groupId}
+            initialName={groupName}
+            initialFormat="singles"
+          />
         </section>
       )}
     </div>
