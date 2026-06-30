@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- TODO(token-debt): raw color literals, retrofit to tokens in Phase E5 */
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
@@ -18,15 +17,15 @@ export const Landing: React.FC = () => {
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        background: 'linear-gradient(180deg, #1F2D4E 0%, #0F1B2E 100%)',
+        background: 'linear-gradient(180deg, var(--auth-bg-top) 0%, var(--auth-bg-bottom) 100%)',
         position: 'relative',
         overflow: 'hidden',
       }}>
         {/* Decorative SVG circles */}
         <div className="absolute inset-0 opacity-[0.18] pointer-events-none">
           <svg width="100%" height="100%" viewBox="0 0 390 844" preserveAspectRatio="none">
-            <circle cx="320" cy="120" r="180" fill="#7BC3FF" opacity="0.5" />
-            <circle cx="60" cy="500" r="200" fill="#A98AE0" opacity="0.4" />
+            <circle cx="320" cy="120" r="180" fill="var(--court-400)" opacity="0.5" />
+            <circle cx="60" cy="500" r="200" fill="var(--lavender-400)" opacity="0.4" />
           </svg>
         </div>
 
@@ -39,7 +38,7 @@ export const Landing: React.FC = () => {
           <div>
             {/* Logo Mark */}
             <div className="mb-7">
-              <LogoMark size={88} color="#A8D5FF" accent="#7BC3FF" />
+              <LogoMark size={88} color="var(--court-300)" accent="var(--court-400)" />
             </div>
 
             {/* Heading */}
