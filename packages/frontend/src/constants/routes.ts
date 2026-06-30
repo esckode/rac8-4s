@@ -22,6 +22,7 @@ export const ROUTES = {
   STANDINGS: '/standings',
   GROUPS: '/groups',
   GROUP_DETAIL: '/groups/:groupId',
+  GROUP_SETTINGS: '/groups/:groupId/settings',
   TOURNAMENT_DETAIL: '/tournament/:tournamentId',
   TOURNAMENT_TAB: '/tournament/:tournamentId/:tab',
   TOURNAMENT_MANAGE: '/tournament/:tournamentId/manage',

@@ -21,6 +21,9 @@ import { GroupDetail, GroupSettings } from '../MyGroups'
 const mockFetch = jest.fn()
 global.fetch = mockFetch
 
+// jsdom doesn't implement scrollIntoView
+window.HTMLElement.prototype.scrollIntoView = jest.fn()
+
 // ── Mock reconnecting-eventsource (SSE not in jsdom) ─────────────────────────
 
 jest.mock('reconnecting-eventsource', () => {

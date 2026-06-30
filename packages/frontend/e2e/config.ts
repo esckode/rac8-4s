@@ -55,6 +55,7 @@ export const ROUTES = {
   // Groups (G2.5)
   GROUPS: '/groups',
   GROUP_DETAIL: (groupId: string) => `/groups/${groupId}`,
+  GROUP_SETTINGS: (groupId: string) => `/groups/${groupId}/settings`,
 }
 
 // ============================================================================
@@ -296,6 +297,13 @@ export const SELECTORS = {
   INVITE_SEND_BUTTON: '[data-testid="invite-send-button"]',
   INVITE_SUCCESS: '[data-testid="invite-success"]',
   INVITE_ERROR: '[data-testid="invite-error"]',
+
+  // Group Settings — P1.4
+  GROUP_DETAIL_HEADER: '[data-testid="group-detail-header"]',
+  GROUP_SETTINGS_GEAR: '[data-testid="group-settings-gear"]',
+  GROUP_SETTINGS_PAGE: '[data-testid="group-settings-page"]',
+  GROUP_SETTINGS_OWNER_SECTION: '[data-testid="group-settings-owner-section"]',
+  GROUP_SETTINGS_MEMBER_SECTION: '[data-testid="group-settings-member-section"]',
 
   // Poll cards — G3.3
   POLL_CARD: '[data-testid="poll-card"]',
