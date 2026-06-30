@@ -350,6 +350,26 @@ export class GroupRepository {
   }
 
   /**
+   * Update the notify_level for a group member (B-NOTIFYLVL).
+   * Throws NOT_FOUND if the player is not a member of the group.
+   */
+  async updateNotifyLevel(
+    groupId: string,
+    playerId: string,
+    notifyLevel: 'all' | 'mentions_polls' | 'muted'
+  ): Promise<void> {
+    const result = await this.pool.query(
+      `UPDATE public.player_group_members
+       SET notify_level = $3
+       WHERE group_id = $1 AND player_id = $2`,
+      [groupId, playerId, notifyLevel]
+    )
+    if (result.rowCount === 0) {
+      throw Object.assign(new Error('Member not found'), { code: 'NOT_FOUND' })
+    }
+  }
+
+  /**
    * Get a member's role, or null if not a member.
    */
   async getMemberRole(

@@ -305,6 +305,13 @@ export const SELECTORS = {
   GROUP_SETTINGS_OWNER_SECTION: '[data-testid="group-settings-owner-section"]',
   GROUP_SETTINGS_MEMBER_SECTION: '[data-testid="group-settings-member-section"]',
 
+  // Notify-level control + Leave — P1.5
+  NOTIFY_LEVEL_CONTROL: '[data-testid="notify-level-control"]',
+  NOTIFY_LEVEL_OPTION_ALL: '[data-testid="notify-level-option-all"]',
+  NOTIFY_LEVEL_OPTION_MENTIONS_POLLS: '[data-testid="notify-level-option-mentions-polls"]',
+  NOTIFY_LEVEL_OPTION_MUTED: '[data-testid="notify-level-option-muted"]',
+  LEAVE_GROUP_BUTTON: '[data-testid="leave-group-button"]',
+
   // Poll cards — G3.3
   POLL_CARD: '[data-testid="poll-card"]',
   POLL_QUESTION: '[data-testid="poll-question"]',

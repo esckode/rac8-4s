@@ -7,9 +7,11 @@
  */
 
 import React, { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { useGroupList } from '../hooks/useGroupList'
+import { useAuth } from '../hooks/useAuth'
 import { GroupChatPanel, MembersPanel } from '../components/GroupChatPanel'
+import { NotifyLevelControl, type NotifyLevel } from '../components/NotifyLevelControl'
 
 // ─── GearIcon ─────────────────────────────────────────────────────────────────
 
@@ -152,31 +154,70 @@ export const GroupDetail: React.FC = () => {
 /**
  * GroupSettings — /groups/:groupId/settings
  *
- * Scaffold only (P1.4). Sections are filled in by P1.5 (owner management)
- * and P1.6 (member preferences). Role-gating is enforced here.
+ * Member section (P1.5): notify-level control + leave action.
+ * Owner section (P1.5): placeholder for owner management controls.
  */
 export const GroupSettings: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>()
   const { groups } = useGroupList()
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const [leaving, setLeaving] = useState(false)
 
   if (!groupId) return null
 
-  const isOwner = groups.find(g => g.id === groupId)?.role === 'owner'
+  const group = groups.find(g => g.id === groupId)
+  const isOwner = group?.role === 'owner'
+  const playerId = user?.playerId ?? ''
+  const currentLevel: NotifyLevel = 'mentions_polls'
+
+  async function handleLeave() {
+    if (leaving || !playerId) return
+    setLeaving(true)
+    try {
+      const token = localStorage.getItem('auth_token')
+      await fetch(`/player/groups/${groupId}/members/${playerId}/leave`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      navigate('/groups')
+    } finally {
+      setLeaving(false)
+    }
+  }
 
   return (
     <div data-testid="group-settings-page" className="p-4 space-y-6">
       <h1 className="text-2xl font-bold text-[--ink-900]">Group Settings</h1>
 
-      {/* Member-visible section — preferences, notifications, etc. (P1.6) */}
+      {/* Member-visible section — notify-level + leave */}
       <section
         data-testid="group-settings-member-section"
         className="rounded-xl border border-[--border] p-4 bg-[--surface]"
       >
         <h2 className="text-base font-semibold text-[--ink-800]">Preferences</h2>
-        <p className="mt-1 text-sm text-[--ink-500]">Notification and display settings coming soon.</p>
+
+        {playerId && (
+          <NotifyLevelControl
+            groupId={groupId}
+            playerId={playerId}
+            currentLevel={currentLevel}
+          />
+        )}
+
+        <div className="mt-6 pt-4 border-t border-[--border]">
+          <button
+            data-testid="leave-group-button"
+            onClick={handleLeave}
+            disabled={leaving}
+            className="text-sm font-medium text-[--rose-700] hover:text-[--rose-900] disabled:opacity-50"
+          >
+            {leaving ? 'Leaving…' : 'Leave group'}
+          </button>
+        </div>
       </section>
 
-      {/* Owner-only section — group management, invite controls, etc. (P1.5) */}
+      {/* Owner-only section — group management, invite controls, etc. */}
       {isOwner && (
         <section
           data-testid="group-settings-owner-section"

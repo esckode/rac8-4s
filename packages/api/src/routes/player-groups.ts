@@ -12,10 +12,11 @@
  *   POST   /player/groups/:groupId/messages             — member sends a text message (G2.2)
  *   GET    /player/groups/:groupId/messages             — member gets history (G2.2)
  *   GET    /player/groups/:groupId/events               — SSE stream for the group (G2.5)
- *   POST   /player/groups/:groupId/members/:pid/promote — owner promotes member → owner
- *   POST   /player/groups/:groupId/members/:pid/demote  — owner demotes owner → member
- *   DELETE /player/groups/:groupId/members/:pid/leave   — self-leave (any member)
- *   DELETE /player/groups/:groupId/members/:pid         — owner kicks member
+ *   POST   /player/groups/:groupId/members/:pid/promote        — owner promotes member → owner
+ *   POST   /player/groups/:groupId/members/:pid/demote         — owner demotes owner → member
+ *   PATCH  /player/groups/:groupId/members/:pid/notify-level   — update notify_level (self or owner)
+ *   DELETE /player/groups/:groupId/members/:pid/leave          — self-leave (any member)
+ *   DELETE /player/groups/:groupId/members/:pid                — owner kicks member
  */
 
 import { Router, Request, Response, NextFunction } from 'express'
@@ -954,6 +955,49 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         const demoteMsg = `${demoteName ?? 'A member'} is now a member`
         groupMsgRepo.postSystemEvent(groupId, demoteMsg).catch((e: Error) => {
           log.warn('group.system.event.failed', { groupId, playerId, error: e.message })
+        })
+
+        return res.status(200).json({ ok: true })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // PATCH /player/groups/:groupId/members/:playerId/notify-level — update notify_level (B-NOTIFYLVL)
+  // §10: literal suffix '/notify-level' registered before the bare /:playerId DELETE
+  router.patch(
+    '/:groupId/members/:playerId/notify-level',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+        const playerId = req.params.playerId as string
+
+        const VALID_LEVELS = ['all', 'mentions_polls', 'muted'] as const
+        type NotifyLevel = (typeof VALID_LEVELS)[number]
+        const { notifyLevel } = req.body as { notifyLevel?: unknown }
+
+        if (!VALID_LEVELS.includes(notifyLevel as NotifyLevel)) {
+          return res.status(400).json({
+            code: 'INVALID_NOTIFY_LEVEL',
+            message: `notifyLevel must be one of: ${VALID_LEVELS.join(', ')}`,
+          })
+        }
+
+        // Actor must be the player themselves OR an owner of the group
+        const actorRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (session.playerId !== playerId && actorRole !== 'owner') {
+          return next(new ForbiddenError('group'))
+        }
+
+        await groupRepo.updateNotifyLevel(groupId, playerId, notifyLevel as NotifyLevel)
+
+        log.info('member.notify_level.updated', {
+          groupId,
+          targetPlayerId: playerId,
+          actorPlayerId: session.playerId,
+          notifyLevel,
         })
 
         return res.status(200).json({ ok: true })
