@@ -71,7 +71,7 @@
         "packages/frontend/src/**/*.tsx"
       ],
       "rules": {
-        "no-restricted-syntax": ["warn",
+        "no-restricted-syntax": ["error",
           { "selector": "Literal[value=/#([0-9a-fA-F]{3}){1,2}/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
           { "selector": "Literal[value=/rgba?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
           { "selector": "Literal[value=/hsla?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
@@ -79,6 +79,19 @@
           { "selector": "TemplateElement[value.raw=/rgba?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
           { "selector": "TemplateElement[value.raw=/hsla?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." }
         ]
+      }
+    },
+    {
+      "files": [
+        "packages/frontend/src/components/shared/Logo.tsx",
+        "packages/frontend/src/components/shared/LogoMark.tsx",
+        "packages/frontend/src/components/shared/__tests__/Logo.spec.tsx",
+        "packages/frontend/src/styles/tokens.css",
+        "packages/frontend/src/pages/DesignSpec.tsx",
+        "packages/frontend/src/__tests__/lint/eslint-config.spec.ts"
+      ],
+      "rules": {
+        "no-restricted-syntax": "off"
       }
     }
   ]

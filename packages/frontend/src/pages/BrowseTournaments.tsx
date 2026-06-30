@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- TODO(token-debt): raw color literals, retrofit to tokens in Phase E5 */
 import React, { useState, useEffect } from 'react'
 
 interface Tournament {
