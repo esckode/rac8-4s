@@ -94,6 +94,9 @@ G0.1 names a "neutral DOB screen" but no FE spec.
 - **Open:** Must all new surfaces (poll card, leaderboard, chat, member mgmt) use the token/component lib?
   Formality bar (doc-only vs + Storybook/visual-regression)? Component API contracts? Theming/dark-mode
   scope? Token-usage governance? *(Mirrors the backlog "design system §4" open thread.)*
+- **Resolved (token-usage governance):** See
+  [DESIGN_SYSTEM_ENFORCEMENT.md](./DESIGN_SYSTEM_ENFORCEMENT.md) — token-usage lint gate is implemented and
+  enforced in CI.
 
 ### B.2 — PWA / mobile / web push (`FRONTEND_PLATFORM_STRATEGY.md`, PWA pending)
 - **Open:** §11.7 notifications on mobile **are web push** (PWA capability, still pending). Group chat is

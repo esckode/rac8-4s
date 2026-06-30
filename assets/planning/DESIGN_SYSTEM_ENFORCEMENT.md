@@ -3,7 +3,7 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-06-29
-**Status:** 📋 Plan — TDD-first (CLAUDE.md §4/§11), not started.
+**Status:** ✅ Built — merged to feat/design-system-enforcement.
 **Drives:** the **governance** gap in [`DESIGN_SYSTEM.md`](./DESIGN_SYSTEM.md) §3/§4 ("no token-usage
 governance — no lint guard against raw hex / off-scale color") and the cross-cutting design-system bar in
 [`FrontEndPlan.md`](./FrontEndPlan.md) §B.1.
@@ -202,6 +202,7 @@ bypasses; CI still catches a bypassed violation. **Commit.**
 ## Phase E4 — Final verify coverage + docs *(runs last, after E5.6)*
 
 ### E4.1 — Coverage + final wiring
+**Status:** ✅ done.
 **Done when:**
 - The lint harness tests (E0–E2, E5) are part of the jest run and keep the project ≥85% gate green
   (`packages/api/jest.config.js` thresholds; harness lives in frontend project — confirm no regression).
@@ -210,6 +211,14 @@ bypasses; CI still catches a bypassed violation. **Commit.**
 - `grep -rn 'TODO(token-debt)' packages/frontend/src` returns nothing (retrofit complete).
 - BACKLOG.md updated (plan → built once merged).
 **Commit** (docs).
+
+**Verified 2026-06-30:** lint harness tests pass (part of the frontend jest run, 1035 tests green).
+`DESIGN_SYSTEM.md` §3.1 and `FrontEndPlan.md` §B.1 are cross-linked. `TODO(token-debt)` grep returns
+nothing. **Coverage gates:** both the frontend (80%) and API (85%) global coverage thresholds were already
+failing on `main` before this branch (frontend statements 63.73%, API branches 77.48%/77.53%) — confirmed
+via a clean worktree checkout of `main`; this branch's own changes (`lint-text.ts`, token retrofits) are
+fully covered and introduce no regression. The pre-existing gate failures are a separate, broader issue
+than this plan's scope and are out of scope for E4.1 to fix.
 
 ---
 
