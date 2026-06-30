@@ -12,10 +12,11 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import ReconnectingEventSource from 'reconnecting-eventsource'
-import { GroupMessageStore, GroupMessageRecord, PollTally } from '../state/group-message-state'
+import { GroupMessageStore } from '../state/group-message-state'
+import type { GroupMessageRecord, PollTally } from '../state/group-message-state'
 import { groupUnreadStore } from '../state/group-unread-state'
 
-export { GroupMessageRecord, PollTally }
+export type { GroupMessageRecord, PollTally }
 
 // Per-groupId singleton stores: avoids re-fetching when the component remounts
 // during navigation but the same group is still in scope.
