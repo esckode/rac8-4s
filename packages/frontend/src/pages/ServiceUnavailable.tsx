@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- TODO(token-debt): raw color literals, retrofit to tokens in Phase E5 */
 import React from 'react'
 
 /**
@@ -11,7 +10,7 @@ export const ServiceUnavailable: React.FC = () => {
     <div style={{ textAlign: 'center', padding: '4rem 2rem', fontFamily: 'sans-serif' }}>
       <h1>Service Temporarily Unavailable</h1>
       <p>We&apos;re experiencing a temporary issue. Please try again in a few moments.</p>
-      <p style={{ color: '#888', fontSize: '0.9rem' }}>
+      <p style={{ color: 'var(--ink-400)', fontSize: '0.9rem' }}>
         If the problem persists, please contact support.
       </p>
     </div>
