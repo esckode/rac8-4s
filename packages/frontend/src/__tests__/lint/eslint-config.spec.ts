@@ -85,6 +85,9 @@ const NON_COLOR_ARBITRARY_FIXTURE = `const h = <div className="min-h-[44px] max-
 const HEX_NEW_FILE_FIXTURE = `const i = <div className="bg-[#fff]" />
 `
 
+const HEX_FORMERLY_BASELINED_FIXTURE = `const x = <div className="bg-[#fff]" />
+`
+
 describe('eslint config (programmatic fixture runner)', () => {
   it('reports 0 errors for a clean .tsx fixture', async () => {
     const results = await lintText(CLEAN_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture.tsx')
@@ -192,6 +195,12 @@ describe('eslint config (programmatic fixture runner)', () => {
 
     it('reports the color rule as an error (not a warning) on a new, non-legacy file', async () => {
       const results = await lintText(HEX_NEW_FILE_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/components/NewComponent.tsx')
+
+      expect(results[0].errorCount).toBeGreaterThanOrEqual(1)
+    })
+
+    it('reports the color rule as an error on a formerly-baselined path now that the interim baseline is torn down (E5.6)', async () => {
+      const results = await lintText(HEX_FORMERLY_BASELINED_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/pages/Login.tsx')
 
       expect(results[0].errorCount).toBeGreaterThanOrEqual(1)
     })
