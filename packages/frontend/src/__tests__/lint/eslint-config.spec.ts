@@ -6,7 +6,7 @@ interface GreetingProps {
   name: string
 }
 
-export function Greeting({ name }: GreetingProps): JSX.Element {
+export function Greeting({ name }: GreetingProps) {
   return <div>Hello, {name}!</div>
 }
 `
