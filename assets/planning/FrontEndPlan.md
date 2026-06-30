@@ -7,11 +7,17 @@
 **Status:** 🗒️ GAP INVENTORY — **not yet grilled, not a plan.** This document exists to **feed a future
 `/grill-me` session** that will resolve the open questions below and produce a real, TDD-first frontend
 implementation plan (or plans). **Do not treat any item here as decided.**
+**Update (2026-06-30):** the **baseline** Player-Groups FE shipped with
+[`PLAYER_GROUPS_IMPLEMENTATION.md`](./PLAYER_GROUPS_IMPLEMENTATION.md) (G0.1 DOB screen, G2.5 My Groups
+tab/group page/unread badge, G3.3 poll cards, G4.8 launch + leaderboards — all merged to `main`). The **§A
+refinements below remain ungrilled** (member-mgmt actions, per-group notify UI, @mention composer,
+invite-accept landing, mixer display, launch sheet, empty/error states) — they go beyond what shipped.
 **Why this exists:** there is currently **no consolidated frontend implementation plan**. FE coverage is
 scattered across a one-task stub (`FRONTEND_IMPLEMENTATION.md`), a strategy decision
 (`FRONTEND_PLATFORM_STRATEGY.md`), an un-grilled design system (`DESIGN_SYSTEM.md`), historical task specs
-(`TASK19_*`, `TASK7_1/7_2`), and **4 sketch tasks** inside `PLAYER_GROUPS_IMPLEMENTATION.md` (G0.1, G2.5,
-G3.3, G4.8). This doc collects what's missing so it can be grilled in one pass.
+(`TASK19_*`, `TASK7_1/7_2`), and the **now-built baseline FE tasks** inside
+`PLAYER_GROUPS_IMPLEMENTATION.md` (G0.1, G2.5, G3.3, G4.8). This doc collects what's still missing (§A
+refinements + §B cross-cutting) so it can be grilled in one pass.
 
 ---
 
@@ -23,7 +29,7 @@ G3.3, G4.8). This doc collects what's missing so it can be grilled in one pass.
 | `DESIGN_SYSTEM.md` | "C U At Court" tokens + Tailwind v4 + shared lib (as-built) | **not yet grilled**; no governance/a11y/theming bar |
 | `FRONTEND_TECH_STACK.md` | stack reference | n/a |
 | `TASK19_*`, `TASK7_1_RESPONSIVE_DESIGN`, `TASK7_2_ACCESSIBILITY_AUDIT` | **historical** per-task design specs/wireflows | not forward-looking for community features |
-| `PLAYER_GROUPS_IMPLEMENTATION.md` (G0.1/G2.5/G3.3/G4.8) | 4 one-line FE tasks | backend-complete, **frontend-sketched** |
+| `PLAYER_GROUPS_IMPLEMENTATION.md` (G0.1/G2.5/G3.3/G4.8) | baseline FE ✅ **built & merged** (DOB screen, My Groups tab/page, poll cards, leaderboards) | §A refinements still open |
 | `ResponsiveLayout.tsx` | the bottom-nav shell (current tabs 🏆/📊/🎾) | adding 👥 = a 4th slot (§B.4) |
 | `a11y-audit.spec.tsx` | an existing a11y audit spec | new surfaces not covered (§B.3) |
 
@@ -120,8 +126,8 @@ missed-message backfill on the client matters.
 ---
 
 ## Cross-references
-- Community backend tasks: [`PLAYER_GROUPS_IMPLEMENTATION.md`](./PLAYER_GROUPS_IMPLEMENTATION.md) (FE tasks
-  G0.1/G2.5/G3.3/G4.8 to be expanded once grilled).
+- Community backend + baseline FE: [`PLAYER_GROUPS_IMPLEMENTATION.md`](./PLAYER_GROUPS_IMPLEMENTATION.md)
+  (✅ built & merged, incl. FE tasks G0.1/G2.5/G3.3/G4.8; §A refinements below extend it).
 - Decisions feeding the FE: [`PLAYER_GROUPS_DESIGN.md`](./PLAYER_GROUPS_DESIGN.md) §4 (UI), §5 (polls), §6
   (launch), §11 (decisions), §12 (age-gate onboarding).
 - Cross-cutting tracks: [`FRONTEND_PLATFORM_STRATEGY.md`](./FRONTEND_PLATFORM_STRATEGY.md) (PWA),
@@ -133,5 +139,5 @@ missed-message backfill on the client matters.
 ## Next step
 Run a **`/grill-me` session over §A + §B** to resolve the open questions, then convert the outcomes into a
 real TDD-first frontend plan (expand `FRONTEND_IMPLEMENTATION.md` or create `PLAYER_GROUPS_FRONTEND.md`, and
-seed the pending `PWA_FRONTEND_IMPLEMENTATION.md` / accessibility spec). Until grilled, the §A FE tasks in
-the Player Groups plan remain sketches.
+seed the pending `PWA_FRONTEND_IMPLEMENTATION.md` / accessibility spec). The baseline Player-Groups FE has
+shipped; the §A refinements above are what remain to be grilled and built on top of it.

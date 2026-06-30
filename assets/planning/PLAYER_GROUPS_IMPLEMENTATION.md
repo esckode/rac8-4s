@@ -4,7 +4,7 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-06-25
-**Status:** 📋 PLAN — not started.
+**Status:** ✅ BUILT & MERGED to `main` — all phases G0.1–G5.1 complete (migrations 038–045).
 **Design source of truth:** [`PLAYER_GROUPS_DESIGN.md`](./PLAYER_GROUPS_DESIGN.md) — esp. **§11** (the 14 grilled
 decisions) and **§12** (CCPA/DSR + 18+ age gate). Data model in §7.
 **Foundation dependency:** the **`conversations` abstraction** from
