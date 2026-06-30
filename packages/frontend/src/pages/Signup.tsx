@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- TODO(token-debt): raw color literals, retrofit to tokens in Phase E5 */
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -176,7 +175,7 @@ export function Signup() {
       style={{
         width: 390,
         height: 844,
-        background: 'linear-gradient(180deg, #1F2D4E 0%, #0F1B2E 100%)',
+        background: 'linear-gradient(180deg, var(--auth-bg-top) 0%, var(--auth-bg-bottom) 100%)',
         display: 'flex',
         flexDirection: 'column',
         padding: '16px',
@@ -194,7 +193,7 @@ export function Signup() {
           paddingTop: '8px',
           paddingBottom: '16px',
           fontSize: '12px',
-          color: '#FFFFFF',
+          color: 'var(--auth-glass-text)',
         }}
       >
         <span>9:41</span>
@@ -224,7 +223,7 @@ export function Signup() {
           height="18"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#FFFFFF"
+          stroke="var(--auth-glass-text)"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -238,7 +237,7 @@ export function Signup() {
         style={{
           width: '40px',
           height: '40px',
-          background: '#FFFFFF',
+          background: 'var(--surface)',
           borderRadius: '8px',
           display: 'flex',
           alignItems: 'center',
@@ -246,7 +245,7 @@ export function Signup() {
           marginBottom: '32px',
           fontSize: '24px',
           fontWeight: 'bold',
-          color: '#1F2D4E',
+          color: 'var(--auth-bg-top)',
         }}
       >
         ◆
@@ -257,7 +256,7 @@ export function Signup() {
         style={{
           fontSize: '28px',
           fontWeight: '700',
-          color: '#FFFFFF',
+          color: 'var(--auth-glass-text)',
           marginBottom: '8px',
           margin: '0 0 8px 0',
         }}
@@ -268,7 +267,7 @@ export function Signup() {
       <p
         style={{
           fontSize: '14px',
-          color: '#B0B8C8',
+          color: 'var(--onboard-muted-text)',
           marginBottom: '32px',
           margin: '0 0 32px 0',
         }}
@@ -280,8 +279,8 @@ export function Signup() {
       {generalError && (
         <div
           style={{
-            background: '#FF4444',
-            color: '#FFFFFF',
+            background: 'var(--onboard-danger)',
+            color: 'var(--auth-glass-text)',
             padding: '12px',
             borderRadius: '8px',
             marginBottom: '16px',
@@ -301,7 +300,7 @@ export function Signup() {
               display: 'block',
               fontSize: '12px',
               fontWeight: '600',
-              color: '#B0B8C8',
+              color: 'var(--onboard-muted-text)',
               marginBottom: '8px',
               textTransform: 'uppercase',
             }}
@@ -319,16 +318,16 @@ export function Signup() {
               width: '100%',
               padding: '12px',
               fontSize: '14px',
-              border: `1px solid ${errors.email ? '#FF4444' : '#2A3B5D'}`,
+              border: `1px solid ${errors.email ? 'var(--onboard-danger)' : 'var(--onboard-field-border)'}`,
               borderRadius: '8px',
-              background: '#1A2A42',
-              color: '#FFFFFF',
+              background: 'var(--onboard-field-bg)',
+              color: 'var(--auth-glass-text)',
               boxSizing: 'border-box',
               outline: 'none',
             }}
           />
           {errors.email && (
-            <span role="alert" style={{ fontSize: '12px', color: '#FF4444', marginTop: '4px', display: 'block' }}>
+            <span role="alert" style={{ fontSize: '12px', color: 'var(--onboard-danger)', marginTop: '4px', display: 'block' }}>
               {errors.email}
             </span>
           )}
@@ -341,7 +340,7 @@ export function Signup() {
               display: 'block',
               fontSize: '12px',
               fontWeight: '600',
-              color: '#B0B8C8',
+              color: 'var(--onboard-muted-text)',
               marginBottom: '8px',
               textTransform: 'uppercase',
             }}
@@ -359,16 +358,16 @@ export function Signup() {
               width: '100%',
               padding: '12px',
               fontSize: '14px',
-              border: `1px solid ${errors.name ? '#FF4444' : '#2A3B5D'}`,
+              border: `1px solid ${errors.name ? 'var(--onboard-danger)' : 'var(--onboard-field-border)'}`,
               borderRadius: '8px',
-              background: '#1A2A42',
-              color: '#FFFFFF',
+              background: 'var(--onboard-field-bg)',
+              color: 'var(--auth-glass-text)',
               boxSizing: 'border-box',
               outline: 'none',
             }}
           />
           {errors.name && (
-            <span style={{ fontSize: '12px', color: '#FF4444', marginTop: '4px', display: 'block' }}>
+            <span style={{ fontSize: '12px', color: 'var(--onboard-danger)', marginTop: '4px', display: 'block' }}>
               {errors.name}
             </span>
           )}
@@ -388,7 +387,7 @@ export function Signup() {
               style={{
                 fontSize: '12px',
                 fontWeight: '600',
-                color: '#B0B8C8',
+                color: 'var(--onboard-muted-text)',
                 textTransform: 'uppercase',
               }}
             >
@@ -403,7 +402,7 @@ export function Signup() {
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: '#B0B8C8',
+                color: 'var(--onboard-muted-text)',
                 fontSize: '12px',
                 padding: '0',
               }}
@@ -419,16 +418,16 @@ export function Signup() {
               width: '100%',
               padding: '12px',
               fontSize: '14px',
-              border: `1px solid ${errors.password ? '#FF4444' : '#2A3B5D'}`,
+              border: `1px solid ${errors.password ? 'var(--onboard-danger)' : 'var(--onboard-field-border)'}`,
               borderRadius: '8px',
-              background: '#1A2A42',
-              color: '#FFFFFF',
+              background: 'var(--onboard-field-bg)',
+              color: 'var(--auth-glass-text)',
               boxSizing: 'border-box',
               outline: 'none',
             }}
           />
           {errors.password && (
-            <span style={{ fontSize: '12px', color: '#FF4444', marginTop: '4px', display: 'block' }}>
+            <span style={{ fontSize: '12px', color: 'var(--onboard-danger)', marginTop: '4px', display: 'block' }}>
               {errors.password}
             </span>
           )}
@@ -448,7 +447,7 @@ export function Signup() {
               style={{
                 fontSize: '12px',
                 fontWeight: '600',
-                color: '#B0B8C8',
+                color: 'var(--onboard-muted-text)',
                 textTransform: 'uppercase',
               }}
             >
@@ -458,7 +457,7 @@ export function Signup() {
               {formData.confirmPassword &&
                 formData.password &&
                 formData.confirmPassword === formData.password && (
-                  <span style={{ color: '#4CAF50', fontSize: '14px' }}>✓</span>
+                  <span style={{ color: 'var(--mint-600)', fontSize: '14px' }}>✓</span>
                 )}
               <button
                 type="button"
@@ -469,7 +468,7 @@ export function Signup() {
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  color: '#B0B8C8',
+                  color: 'var(--onboard-muted-text)',
                   fontSize: '12px',
                   padding: '0',
                 }}
@@ -486,16 +485,16 @@ export function Signup() {
               width: '100%',
               padding: '12px',
               fontSize: '14px',
-              border: `1px solid ${errors.confirmPassword ? '#FF4444' : '#2A3B5D'}`,
+              border: `1px solid ${errors.confirmPassword ? 'var(--onboard-danger)' : 'var(--onboard-field-border)'}`,
               borderRadius: '8px',
-              background: '#1A2A42',
-              color: '#FFFFFF',
+              background: 'var(--onboard-field-bg)',
+              color: 'var(--auth-glass-text)',
               boxSizing: 'border-box',
               outline: 'none',
             }}
           />
           {errors.confirmPassword && (
-            <span role="alert" style={{ fontSize: '12px', color: '#FF4444', marginTop: '4px', display: 'block' }}>
+            <span role="alert" style={{ fontSize: '12px', color: 'var(--onboard-danger)', marginTop: '4px', display: 'block' }}>
               {errors.confirmPassword}
             </span>
           )}
@@ -508,8 +507,8 @@ export function Signup() {
           style={{
             width: '100%',
             padding: '12px',
-            background: isFormValid() && !loading ? '#6366F1' : '#3A4B6B',
-            color: '#FFFFFF',
+            background: isFormValid() && !loading ? 'var(--onboard-accent)' : 'var(--onboard-disabled)',
+            color: 'var(--auth-glass-text)',
             border: 'none',
             borderRadius: '8px',
             fontSize: '16px',
@@ -549,7 +548,7 @@ export function Signup() {
 
       {/* Sign In Link */}
       <div style={{ textAlign: 'center' }}>
-        <span style={{ color: '#B0B8C8', fontSize: '14px' }}>
+        <span style={{ color: 'var(--onboard-muted-text)', fontSize: '14px' }}>
           Already have an account?{' '}
           <button
             type="button"
@@ -558,7 +557,7 @@ export function Signup() {
             style={{
               background: 'none',
               border: 'none',
-              color: '#6366F1',
+              color: 'var(--onboard-accent)',
               cursor: 'pointer',
               fontSize: '14px',
               fontWeight: '600',
