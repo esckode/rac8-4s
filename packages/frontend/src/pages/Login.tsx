@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- TODO(token-debt): raw color literals, retrofit to tokens in Phase E5 */
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
@@ -91,9 +90,9 @@ export const Login: React.FC = () => {
       style={{
         width: 390,
         height: 844,
-        background: 'linear-gradient(180deg, #1F2D4E 0%, #0F1B2E 100%)',
+        background: 'linear-gradient(180deg, var(--auth-bg-top) 0%, var(--auth-bg-bottom) 100%)',
         fontFamily: 'var(--font-ui)',
-        color: '#FFFFFF',
+        color: 'var(--auth-glass-text)',
         position: 'relative',
         overflow: 'hidden',
         display: 'flex',
@@ -104,8 +103,8 @@ export const Login: React.FC = () => {
       {/* Decorative blobs */}
       <div style={{ position: 'absolute', inset: 0, opacity: 0.18, pointerEvents: 'none', filter: 'blur(0.5px)' }}>
         <svg width="100%" height="100%" viewBox="0 0 390 844" preserveAspectRatio="none">
-          <circle cx="320" cy="120" r="180" fill="#7BC3FF" opacity="0.5" />
-          <circle cx="60" cy="500" r="200" fill="#A98AE0" opacity="0.4" />
+          <circle cx="320" cy="120" r="180" fill="var(--court-400)" opacity="0.5" />
+          <circle cx="60" cy="500" r="200" fill="var(--lavender-400)" opacity="0.4" />
         </svg>
       </div>
 
@@ -122,17 +121,17 @@ export const Login: React.FC = () => {
           zIndex: 1,
         }}
       >
-        <span style={{ fontSize: 14, fontWeight: 700, color: '#FFFFFF' }}>9:41</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--auth-glass-text)' }}>9:41</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <svg width="16" height="10" viewBox="0 0 16 10">
-            <path d="M0 8h2v2H0zM4 6h2v4H4zM8 3h2v7H8zM12 0h2v10h-2z" fill="#FFFFFF" />
+            <path d="M0 8h2v2H0zM4 6h2v4H4zM8 3h2v7H8zM12 0h2v10h-2z" fill="var(--auth-glass-text)" />
           </svg>
           <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
-            <path d="M1 4a8 8 0 0 1 12 0M3 6a5 5 0 0 1 8 0M5 8a2 2 0 0 1 4 0" stroke="#FFFFFF" strokeWidth="1.3" strokeLinecap="round" />
+            <path d="M1 4a8 8 0 0 1 12 0M3 6a5 5 0 0 1 8 0M5 8a2 2 0 0 1 4 0" stroke="var(--auth-glass-text)" strokeWidth="1.3" strokeLinecap="round" />
           </svg>
           <svg width="22" height="10" viewBox="0 0 22 10">
-            <rect x="0.5" y="0.5" width="18" height="9" rx="2" fill="none" stroke="#FFFFFF" strokeOpacity=".5" />
-            <rect x="2" y="2" width="14" height="6" rx="1" fill="#FFFFFF" />
+            <rect x="0.5" y="0.5" width="18" height="9" rx="2" fill="none" stroke="var(--auth-glass-text)" strokeOpacity=".5" />
+            <rect x="2" y="2" width="14" height="6" rx="1" fill="var(--auth-glass-text)" />
           </svg>
         </div>
       </div>
@@ -155,9 +154,9 @@ export const Login: React.FC = () => {
             width: 40,
             height: 40,
             borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.14)',
-            background: 'rgba(255,255,255,0.08)',
-            color: '#FFFFFF',
+            border: '1px solid var(--auth-glass-border)',
+            background: 'var(--auth-glass-bg-hover)',
+            color: 'var(--auth-glass-text)',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -169,7 +168,7 @@ export const Login: React.FC = () => {
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
         </button>
-        <LogoMark size={28} color="#A8D5FF" accent="#7BC3FF" />
+        <LogoMark size={28} color="var(--court-300)" accent="var(--court-400)" />
         <div style={{ width: 40 }} />
       </div>
 
@@ -191,13 +190,13 @@ export const Login: React.FC = () => {
             fontWeight: 600,
             letterSpacing: '-0.03em',
             lineHeight: 1.05,
-            color: '#FFFFFF',
+            color: 'var(--auth-glass-text)',
             marginBottom: 10,
           }}
         >
           Welcome back.
         </div>
-        <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+        <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5 }}>
           Sign in to see your matches, standings, and tonight's tournaments.
         </div>
 
@@ -211,20 +210,20 @@ export const Login: React.FC = () => {
               alignItems: 'flex-start',
               gap: 10,
               padding: '12px 14px',
-              background: 'rgba(255,143,168,0.10)',
-              border: '1px solid rgba(255,143,168,0.32)',
+              background: 'var(--auth-danger-wash-strong)',
+              border: '1px solid var(--auth-danger-border)',
               borderRadius: 12,
               fontSize: 13,
               lineHeight: 1.45,
-              color: '#FFBFCE',
+              color: 'var(--auth-danger-text)',
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="#FF8FA8" style={{ flexShrink: 0, marginTop: 2 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--auth-danger)" style={{ flexShrink: 0, marginTop: 2 }}>
               <circle cx="12" cy="12" r="10" />
               <text x="12" y="16" textAnchor="middle" fill="white" fontSize="12" fontWeight="bold">!</text>
             </svg>
             <div style={{ flex: 1 }}>
-              <strong style={{ color: '#FFFFFF' }}>{apiError}</strong>
+              <strong style={{ color: 'var(--auth-glass-text)' }}>{apiError}</strong>
             </div>
           </div>
         )}
@@ -240,7 +239,7 @@ export const Login: React.FC = () => {
                 justifyContent: 'space-between',
                 fontSize: 12,
                 fontWeight: 700,
-                color: 'rgba(255,255,255,0.75)',
+                color: 'var(--auth-glass-text-strong)',
                 letterSpacing: '0.04em',
                 textTransform: 'uppercase',
                 marginBottom: 8,
@@ -260,13 +259,13 @@ export const Login: React.FC = () => {
                 width: '100%',
                 height: 52,
                 padding: '0 14px',
-                background: errors.email ? 'rgba(255,143,168,0.08)' : 'rgba(255,255,255,0.06)',
-                border: errors.email ? '1.5px solid #FF8FA8' : '1px solid rgba(255,255,255,0.14)',
+                background: errors.email ? 'var(--auth-danger-wash)' : 'var(--auth-glass-bg)',
+                border: errors.email ? '1.5px solid var(--auth-danger)' : '1px solid var(--auth-glass-border)',
                 borderRadius: 14,
-                boxShadow: errors.email ? '0 0 0 4px rgba(255,143,168,0.12)' : 'none',
+                boxShadow: errors.email ? '0 0 0 4px var(--auth-danger-ring)' : 'none',
                 fontSize: 15,
                 fontFamily: 'var(--font-ui)',
-                color: formData.email ? '#FFFFFF' : 'rgba(255,255,255,0.4)',
+                color: formData.email ? 'var(--auth-glass-text)' : 'var(--auth-glass-placeholder)',
                 letterSpacing: '-0.005em',
                 fontWeight: formData.email ? 500 : 500,
                 transition: 'all .15s ease',
@@ -284,10 +283,10 @@ export const Login: React.FC = () => {
                   marginTop: 8,
                   fontSize: 12,
                   fontWeight: 600,
-                  color: '#FFBFCE',
+                  color: 'var(--auth-danger-text)',
                 }}
               >
-                <span style={{ width: 4, height: 4, borderRadius: 2, background: '#FF8FA8' }} />
+                <span style={{ width: 4, height: 4, borderRadius: 2, background: 'var(--auth-danger)' }} />
                 {errors.email}
               </div>
             )}
@@ -302,20 +301,20 @@ export const Login: React.FC = () => {
                 justifyContent: 'space-between',
                 fontSize: 12,
                 fontWeight: 700,
-                color: 'rgba(255,255,255,0.75)',
+                color: 'var(--auth-glass-text-strong)',
                 letterSpacing: '0.04em',
                 textTransform: 'uppercase',
                 marginBottom: 8,
               }}
             >
-              <label style={{ fontWeight: 700, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Password</label>
+              <label style={{ fontWeight: 700, color: 'var(--auth-glass-text-strong)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Password</label>
               <button
                 type="button"
                 onClick={() => navigate('/forgot-password')}
                 tabIndex={-1}
                 style={{
                   fontWeight: 700,
-                  color: '#A8D5FF',
+                  color: 'var(--court-300)',
                   textTransform: 'none',
                   background: 'none',
                   border: 'none',
@@ -333,10 +332,10 @@ export const Login: React.FC = () => {
                 gap: 10,
                 height: 52,
                 padding: '0 14px',
-                background: errors.password ? 'rgba(255,143,168,0.08)' : 'rgba(255,255,255,0.06)',
-                border: errors.password ? '1.5px solid #FF8FA8' : '1px solid rgba(255,255,255,0.14)',
+                background: errors.password ? 'var(--auth-danger-wash)' : 'var(--auth-glass-bg)',
+                border: errors.password ? '1.5px solid var(--auth-danger)' : '1px solid var(--auth-glass-border)',
                 borderRadius: 14,
-                boxShadow: errors.password ? '0 0 0 4px rgba(255,143,168,0.12)' : 'none',
+                boxShadow: errors.password ? '0 0 0 4px var(--auth-danger-ring)' : 'none',
                 transition: 'all .15s ease',
               }}
             >
@@ -350,7 +349,7 @@ export const Login: React.FC = () => {
                   flex: 1,
                   fontSize: 15,
                   fontFamily: 'var(--font-ui)',
-                  color: formData.password ? '#FFFFFF' : 'rgba(255,255,255,0.4)',
+                  color: formData.password ? 'var(--auth-glass-text)' : 'var(--auth-glass-placeholder)',
                   letterSpacing: '-0.005em',
                   fontWeight: 500,
                   border: 'none',
@@ -370,7 +369,7 @@ export const Login: React.FC = () => {
                   border: 'none',
                   cursor: 'pointer',
                   background: 'transparent',
-                  color: 'rgba(255,255,255,0.6)',
+                  color: 'var(--auth-glass-icon-muted)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -405,10 +404,10 @@ export const Login: React.FC = () => {
                   marginTop: 8,
                   fontSize: 12,
                   fontWeight: 600,
-                  color: '#FFBFCE',
+                  color: 'var(--auth-danger-text)',
                 }}
               >
-                <span style={{ width: 4, height: 4, borderRadius: 2, background: '#FF8FA8' }} />
+                <span style={{ width: 4, height: 4, borderRadius: 2, background: 'var(--auth-danger)' }} />
                 {errors.password}
               </div>
             )}
@@ -461,9 +460,9 @@ export const Login: React.FC = () => {
 
         {/* Divider */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0 20px' }}>
-          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.12)' }} />
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.12em' }}>OR</span>
-          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.12)' }} />
+          <div style={{ flex: 1, height: 1, background: 'var(--auth-glass-divider)' }} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--auth-glass-text-faint)', letterSpacing: '0.12em' }}>OR</span>
+          <div style={{ flex: 1, height: 1, background: 'var(--auth-glass-divider)' }} />
         </div>
 
         {/* Browse tournaments button */}
@@ -474,9 +473,9 @@ export const Login: React.FC = () => {
           tabIndex={-1}
           style={{
             width: '100%',
-            background: 'rgba(255,255,255,0.06)',
-            color: '#FFFFFF',
-            border: '1px solid rgba(255,255,255,0.16)',
+            background: 'var(--auth-glass-bg)',
+            color: 'var(--auth-glass-text)',
+            border: '1px solid var(--auth-glass-border-strong)',
           }}
         >
           Browse tournaments
@@ -486,16 +485,16 @@ export const Login: React.FC = () => {
         <div style={{ flex: 1 }} />
 
         {/* Bottom link */}
-        <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.65)', fontWeight: 500 }}>
+        <div style={{ textAlign: 'center', fontSize: 14, color: 'var(--auth-glass-text-muted)', fontWeight: 500 }}>
           New to U At Court?{' '}
           <button
             onClick={() => navigate('/signup')}
             tabIndex={-1}
             style={{
-              color: '#A8D5FF',
+              color: 'var(--court-300)',
               fontWeight: 700,
               textDecoration: 'underline',
-              textDecorationColor: 'rgba(168,213,255,0.4)',
+              textDecorationColor: 'var(--auth-info-underline)',
               textUnderlineOffset: 3,
               background: 'none',
               border: 'none',
