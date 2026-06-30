@@ -15,6 +15,9 @@ export const ROUTES = {
   FORGOT_PASSWORD: '/forgot-password',
   RESET_PASSWORD: '/reset-password',
 
+  // Public invite landing (no auth required)
+  GROUP_INVITE: '/groups/:groupId/invite',
+
   // Protected routes (require authentication)
   BROWSE: '/browse',
   ORGANIZER: '/organizer',

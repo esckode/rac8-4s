@@ -56,6 +56,10 @@ export const ROUTES = {
   GROUPS: '/groups',
   GROUP_DETAIL: (groupId: string) => `/groups/${groupId}`,
   GROUP_SETTINGS: (groupId: string) => `/groups/${groupId}/settings`,
+
+  // Invite accept landing (P1.7)
+  GROUP_INVITE: (groupId: string, token: string, email: string) =>
+    `/groups/${groupId}/invite?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`,
 }
 
 // ============================================================================
@@ -311,6 +315,14 @@ export const SELECTORS = {
   NOTIFY_LEVEL_OPTION_MENTIONS_POLLS: '[data-testid="notify-level-option-mentions-polls"]',
   NOTIFY_LEVEL_OPTION_MUTED: '[data-testid="notify-level-option-muted"]',
   LEAVE_GROUP_BUTTON: '[data-testid="leave-group-button"]',
+
+  // Invite accept landing — P1.7
+  INVITE_ACCEPT_PAGE: '[data-testid="invite-accept-page"]',
+  INVITE_AGE_GATE: '[data-testid="invite-age-gate"]',
+  INVITE_UNDERAGE: '[data-testid="invite-underage"]',
+  INVITE_INVALID: '[data-testid="invite-invalid"]',
+  INVITE_NOT_FOUND: '[data-testid="invite-not-found"]',
+  // INVITE_SUCCESS already declared above (shared with invite-send flow)
 
   // Owner member management + Group config — P1.6
   MANAGE_MEMBERS_LIST: '[data-testid="manage-members-list"]',

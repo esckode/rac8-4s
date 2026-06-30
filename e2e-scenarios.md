@@ -1728,3 +1728,71 @@ Then POST /tournaments/:id/end-session is called
 - RTL unit: `packages/frontend/src/__tests__/components/LeaderboardPanel.spec.tsx`
 - RTL unit: updated `packages/frontend/src/__tests__/components/PollCard.spec.tsx` (launch button)
 - Playwright e2e: `packages/frontend/e2e/casual-tournament.spec.ts` (best-effort)
+
+## Feature: Player Groups — invite accept (P1.7)
+
+**Scenario: Valid invite link — new player, no age gate**
+```
+Given an email-bound invite link /groups/:groupId/invite?token=T&email=E
+  And the invitee has never used the app (new player)
+When the page loads
+Then POST /player/groups/:groupId/invites/accept is auto-submitted
+  And a 200 response stores the session token in localStorage
+  And "You've joined the group!" success UI is shown
+  And the browser navigates to /groups/:groupId
+```
+
+**Scenario: Existing player accepts invite**
+```
+Given an invite link for a player who already has a durable player record
+When the page loads
+Then POST /player/groups/:groupId/invites/accept is auto-submitted
+  And the existing player is added to the group (idempotent)
+  And a session token is returned and stored
+  And the browser navigates to /groups/:groupId
+```
+
+**Scenario: Age attestation required — new player 18+**
+```
+Given the invitee is a brand-new player
+  And POST /player/groups/:groupId/invites/accept returns AGE_ATTESTATION_REQUIRED
+When the page loads
+Then the DobScreen age-gate is shown
+When the user enters a DOB indicating 18+ years old and submits
+Then POST is re-submitted with ageAttestation: { dateOfBirth, policyVersion }
+  And the 200 response stores the session token
+  And the browser navigates to /groups/:groupId
+```
+
+**Scenario: Underage player — terminal rejection**
+```
+Given the invitee submitted a DOB indicating under 18
+  And POST returns UNDERAGE
+When the underage response is received
+Then a terminal rejection message is shown
+  And no redirect occurs
+  And no token is stored
+```
+
+**Scenario: Invalid or expired invite token**
+```
+Given the invite link contains an expired or tampered token
+  And POST returns TOKEN_INVALID
+When the page loads
+Then an error message is shown: "invalid or expired invite link"
+  And no redirect occurs
+```
+
+**Scenario: Group not found**
+```
+Given the groupId in the URL does not exist in the backend
+  And POST returns NOT_FOUND
+When the page loads
+Then an error message is shown: "group not found"
+  And no redirect occurs
+```
+
+**Implementation (P1.7):**
+- RTL unit: `packages/frontend/src/__tests__/components/InviteAcceptPage.spec.tsx`
+- Route: `/groups/:groupId/invite` (public, no auth required)
+- Playwright e2e: `packages/frontend/e2e/invite-accept.spec.ts` (best-effort)
