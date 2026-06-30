@@ -275,13 +275,20 @@ Same procedure; guard with the public-browse e2e + lint. **One commit per file**
 `ResponsiveLayout` scrim → `var(--scrim)` (from E5.0), guarded by any modal/layout test. `Landing` /
 `ServiceUnavailable` → screenshot parity. **One commit per file** (3 commits).
 
-### E5.5 — Resolve `DesignSpec.tsx` (20) — allowlist, not retrofit
+### E5.5 — Resolve `DesignSpec.tsx` (20) — allowlist, not retrofit ✅ done
 **Problem:** it's **unrouted, unimported dead/reference code** (its own stub components + SVGs).
 Tokenizing it is wasted effort; deleting it is an unrequested removal (CLAUDE.md §3).
 **Implementation:** add `DesignSpec.tsx` to the **permanent allowlist** (color rule `off`) with a comment
 marking it a reference artifact **and a deletion candidate** to raise with the owner.
 **Done when:** it's permanently exempt and flagged; **surface the delete-vs-keep question to the user
 separately** rather than deciding here. **Commit** (config + note).
+
+**Status:** confirmed in E5.5 — `DesignSpec.tsx` is on the **permanent allowlist** in `.eslintrc.json`
+(`no-restricted-syntax: off`, alongside `Logo.tsx`/`LogoMark.tsx`/`tokens.css`), carries no
+`TODO(token-debt)` comment (it was never part of the interim baseline) and no `eslint-disable` comment.
+It remains a **deletion candidate**: the file is unrouted and unimported dead code. The permanent
+allowlist entry stays until the owner decides to delete the file — that delete-vs-keep call is for the
+owner, not decided here.
 
 ### E5.6 — Tear down the interim baseline (completion)
 **Tests (write first, commit red):** harness fixture under a *formerly-baselined* path now reports the color
