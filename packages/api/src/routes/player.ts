@@ -150,6 +150,61 @@ export default function playerRouter(deps: AppDependencies) {
     }
   })
 
+  // GET /player/notifications/messages - personal notification history
+  router.get('/notifications/messages', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePlayerId(req.headers.authorization)
+      const limit = req.query.limit ? Math.min(parseInt(req.query.limit as string), 100) : 50
+
+      const result = await deps.db.query(
+        `SELECT gm.id, gm.body, gm.type, gm.created_at
+         FROM messaging.group_messages gm
+         JOIN messaging.conversations c ON c.id = gm.conversation_id
+         WHERE c.type = 'personal' AND c.player_id = $1
+         ORDER BY gm.created_at ASC
+         LIMIT $2`,
+        [playerId, limit]
+      )
+
+      res.json({
+        messages: result.rows.map((r: any) => ({
+          id: r.id,
+          body: r.body,
+          type: r.type,
+          createdAt: r.created_at,
+        })),
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /player/notifications/read - mark all personal notifications as read
+  router.post('/notifications/read', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePlayerId(req.headers.authorization)
+
+      await deps.db.query(
+        `UPDATE messaging.group_message_recipients gmr
+         SET read_at = now()
+         FROM messaging.group_messages gm
+         JOIN messaging.conversations c ON c.id = gm.conversation_id
+         WHERE gmr.message_id = gm.id
+           AND c.type = 'personal'
+           AND c.player_id = $1
+           AND gmr.player_id = $1
+           AND gmr.read_at IS NULL`,
+        [playerId]
+      )
+
+      log.info('notifications.read', { playerId })
+
+      res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // GET /player/notifications/unread - count of unread personal notifications
   router.get('/notifications/unread', async (req: Request, res: Response, next: NextFunction) => {
     try {
