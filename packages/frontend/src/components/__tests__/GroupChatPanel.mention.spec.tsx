@@ -3,6 +3,7 @@
  */
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { GroupChatPanel } from '../GroupChatPanel'
 
 const mockMessages = [
@@ -54,7 +55,7 @@ global.fetch = jest.fn().mockResolvedValue({
 
 describe('GroupChatPanel mention rendering (P1.9)', () => {
   it('renders @"Alice Smith" as a highlighted mention chip', async () => {
-    render(<GroupChatPanel groupId="grp-1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp-1" /></MemoryRouter>)
     await waitFor(() =>
       expect(screen.getAllByTestId('mention-chip').length).toBeGreaterThan(0)
     )
@@ -63,7 +64,7 @@ describe('GroupChatPanel mention rendering (P1.9)', () => {
   })
 
   it('renders self-mention with a distinct testid', async () => {
-    render(<GroupChatPanel groupId="grp-1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp-1" /></MemoryRouter>)
     await waitFor(() =>
       expect(screen.getByTestId('mention-chip-self')).toBeInTheDocument()
     )
@@ -73,7 +74,7 @@ describe('GroupChatPanel mention rendering (P1.9)', () => {
 
 describe('GroupChatPanel @mention composer (P1.9)', () => {
   it('opens autocomplete when @ is typed in the input', async () => {
-    render(<GroupChatPanel groupId="grp-1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp-1" /></MemoryRouter>)
     const input = screen.getByTestId('group-message-input')
     fireEvent.change(input, { target: { value: '@' } })
     await waitFor(() =>
@@ -82,7 +83,7 @@ describe('GroupChatPanel @mention composer (P1.9)', () => {
   })
 
   it('inserts @"Member Name" when a suggestion is selected', async () => {
-    render(<GroupChatPanel groupId="grp-1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp-1" /></MemoryRouter>)
     const input = screen.getByTestId('group-message-input')
     fireEvent.change(input, { target: { value: '@' } })
     await waitFor(() => screen.getByTestId('mention-autocomplete'))
@@ -92,7 +93,7 @@ describe('GroupChatPanel @mention composer (P1.9)', () => {
   })
 
   it('closes autocomplete when Escape is pressed', async () => {
-    render(<GroupChatPanel groupId="grp-1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp-1" /></MemoryRouter>)
     const input = screen.getByTestId('group-message-input')
     fireEvent.change(input, { target: { value: '@' } })
     await waitFor(() => screen.getByTestId('mention-autocomplete'))
@@ -102,7 +103,7 @@ describe('GroupChatPanel @mention composer (P1.9)', () => {
   })
 
   it('does not show autocomplete for a non-member query', async () => {
-    render(<GroupChatPanel groupId="grp-1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp-1" /></MemoryRouter>)
     const input = screen.getByTestId('group-message-input')
     fireEvent.change(input, { target: { value: '@xyz_nobody' } })
     // Still shows autocomplete but with no options
