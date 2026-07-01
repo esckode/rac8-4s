@@ -11,12 +11,19 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useGroupMessages, GroupMessageRecord } from '../hooks/useGroupMessages'
 import { useAuth } from '../hooks/useAuth'
 import { PollCard, type PollChoice } from './PollCard'
+import { LaunchConfirmSheet } from './LaunchConfirmSheet'
 import { MentionAutocomplete } from './MentionAutocomplete'
 import { parseMentions } from '../utils/parseMentions'
 import { ReconnectingIndicator } from './shared'
+
+interface VoterSummary {
+  voterName: string
+  playerId: string
+}
 
 // ─── GroupChatPanel ───────────────────────────────────────────────────────────
 
@@ -31,6 +38,7 @@ interface GroupChatPanelProps {
 export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active = false, isOwner = false }) => {
   const { messages, send, reconnecting } = useGroupMessages(groupId, active)
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -43,6 +51,8 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
   const [members, setMembers] = useState<MemberSummary[]>([])
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionStart, setMentionStart] = useState<number | null>(null)
+  // Launch confirmation sheet state
+  const [launchSheet, setLaunchSheet] = useState<{ messageId: string; voters: VoterSummary[] } | null>(null)
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -103,6 +113,36 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
     }
   }, [groupId])
 
+  const handleLaunch = useCallback(async (messageId: string) => {
+    const token = localStorage.getItem('auth_token')
+    const res = await fetch(`/player/groups/${groupId}/polls/${messageId}/votes`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    const data = res.ok ? await res.json() : { votes: [] }
+    const inVoters: VoterSummary[] = (data.votes ?? [])
+      .filter((v: any) => v.choice === 'in')
+      .map((v: any) => ({ playerId: v.playerId, voterName: v.voterName ?? v.playerId }))
+    setLaunchSheet({ messageId, voters: inVoters })
+  }, [groupId])
+
+  const handleConfirmLaunch = useCallback(async (opts: { matchFormat: string }) => {
+    if (!launchSheet) return
+    const token = localStorage.getItem('auth_token')
+    const res = await fetch(`/player/groups/${groupId}/polls/${launchSheet.messageId}/launch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ matchFormat: opts.matchFormat }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setLaunchSheet(null)
+      navigate(`/tournament/${data.tournamentId}`)
+    }
+  }, [groupId, launchSheet, navigate])
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
     const trimmed = body.trim()
@@ -128,18 +168,30 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
         )}
         {messages.map((m: GroupMessageRecord) => {
           if (m.type === 'system') {
+            const tournamentId = (m.metadata as any)?.tournament_id as string | undefined
             return (
               <div
                 key={m.id}
                 data-testid="group-system-event"
                 className="text-center text-xs text-[--ink-500] italic py-1"
               >
-                {m.body}
+                {tournamentId ? (
+                  <a
+                    data-testid="tournament-deep-link"
+                    href={`/tournament/${tournamentId}`}
+                    className="underline hover:text-[--court-600]"
+                  >
+                    {m.body}
+                  </a>
+                ) : (
+                  m.body
+                )}
               </div>
             )
           }
 
           if (m.type === 'poll' && m.pollId) {
+            const isCreator = m.playerId != null && m.playerId === user?.playerId
             return (
               <div key={m.id} data-testid="group-message-item">
                 <PollCard
@@ -149,11 +201,15 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
                   question={m.body}
                   targetTime={m.targetTime ?? null}
                   closedAt={m.closedAt ?? null}
+                  autoCloseAt={m.autoCloseAt ?? null}
+                  autoLaunch={m.autoLaunch ?? false}
                   tally={m.tally ?? { in: 0, out: 0, maybe: 0 }}
                   currentUserVote={m.pollId ? (pollVotes[m.pollId] ?? null) : null}
                   isOwner={isOwner}
+                  isCreator={isCreator}
                   onVote={choice => handleVote(m.pollId!, choice)}
                   onClose={() => handleClosePoll(m.id, m.pollId!)}
+                  onLaunch={() => handleLaunch(m.id)}
                 />
                 <p className="text-xs text-[--ink-500] mt-1 px-1">
                   {m.senderName != null ? (
@@ -199,6 +255,15 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
         })}
         <div ref={bottomRef} />
       </div>
+
+      {/* Launch confirmation sheet */}
+      {launchSheet && (
+        <LaunchConfirmSheet
+          inVoterNames={launchSheet.voters.map(v => v.voterName)}
+          onConfirm={handleConfirmLaunch}
+          onCancel={() => setLaunchSheet(null)}
+        />
+      )}
 
       {/* Reconnecting indicator */}
       <ReconnectingIndicator visible={reconnecting} />

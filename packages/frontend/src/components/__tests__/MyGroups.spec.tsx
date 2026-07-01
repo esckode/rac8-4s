@@ -166,12 +166,12 @@ describe('GroupChatPanel', () => {
   })
 
   it('renders chat panel container', async () => {
-    render(<GroupChatPanel groupId="grp_1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
     expect(screen.getByTestId('group-chat-panel')).toBeInTheDocument()
   })
 
   it('shows "No messages yet" when empty', async () => {
-    render(<GroupChatPanel groupId="grp_1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
     await waitFor(() => {
       expect(screen.getByText('No messages yet')).toBeInTheDocument()
     })
@@ -184,7 +184,7 @@ describe('GroupChatPanel', () => {
       json: async () => ({ messages: [msg] }),
     })
 
-    render(<GroupChatPanel groupId="grp_1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
 
     await waitFor(() => {
       expect(screen.getByTestId('group-message-item')).toBeInTheDocument()
@@ -204,7 +204,7 @@ describe('GroupChatPanel', () => {
       json: async () => ({ messages: msgs }),
     })
 
-    render(<GroupChatPanel groupId="grp_1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
 
     await waitFor(() => {
       expect(screen.getByText(/Alice Smith/)).toBeInTheDocument()
@@ -225,7 +225,7 @@ describe('GroupChatPanel', () => {
       json: async () => ({ messages: [sysMsg] }),
     })
 
-    render(<GroupChatPanel groupId="grp_1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
 
     await waitFor(() => {
       expect(screen.getByTestId('group-system-event')).toBeInTheDocument()
@@ -234,7 +234,7 @@ describe('GroupChatPanel', () => {
   })
 
   it('renders the message input and send button', () => {
-    render(<GroupChatPanel groupId="grp_1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
     expect(screen.getByTestId('group-message-input')).toBeInTheDocument()
     expect(screen.getByTestId('group-message-send-button')).toBeInTheDocument()
   })
@@ -246,7 +246,7 @@ describe('GroupChatPanel', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => [] })                  // members
       .mockResolvedValueOnce({ ok: true, json: async () => returned })            // POST send
 
-    render(<GroupChatPanel groupId="grp_1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
     // Wait for both render-time fetches (history + members) to settle
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
 
@@ -272,7 +272,7 @@ describe('GroupChatPanel', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => [] })                  // members
       .mockResolvedValueOnce({ ok: false, json: async () => ({ message: 'Send failed' }) }) // POST fails
 
-    render(<GroupChatPanel groupId="grp_1" />)
+    render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
     // Wait for both render-time fetches (history + members) to settle
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
 

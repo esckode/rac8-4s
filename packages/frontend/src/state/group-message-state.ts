@@ -21,10 +21,13 @@ export interface GroupMessageRecord {
   type: 'text' | 'system' | 'poll' | 'announcement'
   createdAt: string
   removedAt: string | null
+  metadata?: Record<string, unknown> | null
   // Present only when type === 'poll'
   pollId?: string | null
   targetTime?: string | null
   closedAt?: string | null
+  autoCloseAt?: string | null
+  autoLaunch?: boolean
   tally?: PollTally | null
 }
 

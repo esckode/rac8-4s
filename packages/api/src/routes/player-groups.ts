@@ -885,6 +885,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         return res.status(200).json({
           votes: result.votes.map(v => ({
             playerId: v.playerId,
+            voterName: v.voterName ?? null,
             choice: v.choice,
             votedAt: v.votedAt,
           })),

@@ -45,6 +45,7 @@ export interface CreatePollResult {
 
 export interface PollVoteRow {
   playerId: string
+  voterName: string | null
   choice: PollChoice
   votedAt: Date
 }
@@ -223,15 +224,17 @@ export class PollRepository {
     const { message_id: messageId, auto_close_at, auto_launch, min_players, launch_match_format } = pollRow.rows[0]
 
     const res = await this.pool.query(
-      `SELECT player_id, choice, voted_at
-       FROM messaging.poll_votes
-       WHERE message_id = $1
-       ORDER BY voted_at ASC`,
+      `SELECT pv.player_id, pv.choice, pv.voted_at, p.name AS voter_name
+       FROM messaging.poll_votes pv
+       LEFT JOIN public.players p ON p.id = pv.player_id
+       WHERE pv.message_id = $1
+       ORDER BY pv.voted_at ASC`,
       [messageId]
     )
 
     const votes: PollVoteRow[] = res.rows.map(r => ({
       playerId: r.player_id as string,
+      voterName: r.voter_name as string | null,
       choice: r.choice as PollChoice,
       votedAt: r.voted_at instanceof Date ? r.voted_at : new Date(r.voted_at),
     }))
