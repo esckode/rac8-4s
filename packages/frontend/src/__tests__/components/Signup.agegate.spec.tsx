@@ -24,11 +24,13 @@ function renderSignup() {
 }
 
 function fillAndSubmit() {
-  fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'alice@example.com' } })
-  fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'Alice' } })
-  const [pwField, cpwField] = screen.getAllByDisplayValue('')
-  fireEvent.change(pwField, { target: { value: 'password123' } })
-  fireEvent.change(cpwField, { target: { value: 'password123' } })
+  const textboxes = screen.getAllByRole('textbox')
+  fireEvent.change(textboxes[0], { target: { value: 'alice@example.com' } })
+  fireEvent.change(textboxes[1], { target: { value: 'Alice' } })
+  // password inputs aren't textboxes — find by type attribute
+  const allInputs = document.querySelectorAll('input[type="password"]')
+  fireEvent.change(allInputs[0], { target: { value: 'password123' } })
+  fireEvent.change(allInputs[1], { target: { value: 'password123' } })
   fireEvent.click(screen.getByRole('button', { name: /create account/i }))
 }
 

@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useAgeGate } from '../hooks/useAgeGate';
+import { DobScreen, type AgeAttestation } from './DobScreen';
 
 export function Signup() {
   const navigate = useNavigate();
   const { signup: authSignup } = useAuth();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
+  const { ageGatePhase, handleAgeCode, dismissAgeGate } = useAgeGate();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -137,29 +140,21 @@ export function Signup() {
     return valid;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    console.log('handleSubmit called');
-    e.preventDefault();
-
-    if (!isFormValid()) {
-      console.log('Form is not valid');
-      return;
-    }
-    console.log('Form is valid, proceeding with submission');
-
+  const doSignup = async (attestation?: AgeAttestation) => {
     setLoading(true);
     setGeneralError('');
-
     try {
-      console.log('Submitting signup with:', { email: formData.email });
-      await authSignup(formData.email, formData.name, formData.password, token || undefined);
-      // Navigation happens after auth context is updated
+      await authSignup(formData.email, formData.name, formData.password, token || undefined, attestation);
       navigate('/browse');
     } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === 'AGE_ATTESTATION_REQUIRED' || code === 'UNDERAGE') {
+        handleAgeCode(code);
+        setLoading(false);
+        return;
+      }
       const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
-      console.log('Signup error:', message);
       setLoading(false);
-
       if (message.includes('Email already in use')) {
         setGeneralError('Email already in use');
       } else if (message.includes('expired') || message.includes('invalid')) {
@@ -169,6 +164,32 @@ export function Signup() {
       }
     }
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isFormValid()) return;
+    await doSignup();
+  };
+
+  const handleDobConfirm = (attestation: AgeAttestation) => {
+    doSignup(attestation);
+  };
+
+  if (ageGatePhase === 'required') {
+    return <DobScreen onConfirm={handleDobConfirm} onBack={dismissAgeGate} />;
+  }
+
+  if (ageGatePhase === 'underage') {
+    return (
+      <div
+        data-testid="signup-underage-error"
+        role="alert"
+        style={{ padding: 32, textAlign: 'center' }}
+      >
+        <p>You must be 18 or older to create an account.</p>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useAgeGate } from '../hooks/useAgeGate'
+import { DobScreen, type AgeAttestation } from './DobScreen'
 
 /**
  * Public tournament details + guest registration page (/tournament/:id/browse).
@@ -30,6 +32,8 @@ export const TournamentBrowse: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
+  const { ageGatePhase, handleAgeCode, dismissAgeGate } = useAgeGate()
+
   useEffect(() => {
     let active = true
     const load = async () => {
@@ -54,33 +58,34 @@ export const TournamentBrowse: React.FC = () => {
     }
   }, [tournamentId])
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const doRegister = async (attestation?: AgeAttestation) => {
     setSubmitting(true)
     setSubmitError(null)
     setSuccessMessage(null)
     try {
+      const body: Record<string, unknown> = { email, name }
+      if (attestation) body.dobAttestation = attestation
       const res = await fetch(`/tournaments/${tournamentId}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name }),
+        body: JSON.stringify(body),
       })
       if (res.ok) {
         setSuccessMessage('Check your email to complete your registration.')
         return
       }
+      let errorBody: { code?: string; message?: string } = {}
+      try { errorBody = await res.json() } catch { /* ignore */ }
+      const code = errorBody.code ?? ''
+      if (code === 'AGE_ATTESTATION_REQUIRED' || code === 'UNDERAGE') {
+        handleAgeCode(code)
+        return
+      }
       let message = 'Registration failed. Please try again.'
-      try {
-        const body = await res.json()
-        if (res.status === 409) {
-          message = body?.message
-            ? `This email is already registered for this tournament.`
-            : 'This email is already registered for this tournament.'
-        } else if (body?.message) {
-          message = body.message
-        }
-      } catch {
-        /* ignore body parse errors */
+      if (res.status === 409) {
+        message = 'This email is already registered for this tournament.'
+      } else if (errorBody.message) {
+        message = errorBody.message
       }
       setSubmitError(message)
     } catch (err) {
@@ -88,6 +93,31 @@ export const TournamentBrowse: React.FC = () => {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await doRegister()
+  }
+
+  const handleDobConfirm = (attestation: AgeAttestation) => {
+    doRegister(attestation)
+  }
+
+  if (ageGatePhase === 'required') {
+    return <DobScreen onConfirm={handleDobConfirm} onBack={dismissAgeGate} />
+  }
+
+  if (ageGatePhase === 'underage') {
+    return (
+      <div
+        data-testid="registration-underage-error"
+        role="alert"
+        style={{ padding: 32, textAlign: 'center', maxWidth: 560, margin: '0 auto' }}
+      >
+        <p>You must be 18 or older to register for this tournament.</p>
+      </div>
+    )
   }
 
   return (

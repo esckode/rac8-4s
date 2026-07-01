@@ -18,7 +18,7 @@ export interface AuthContextType {
   isAuthenticated: boolean
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  signup: (email: string, name: string, password: string, token?: string) => Promise<void>
+  signup: (email: string, name: string, password: string, token?: string, dobAttestation?: { dateOfBirth: string; policyVersion: string }) => Promise<void>
   forgotPassword: (email: string) => Promise<void>
   resetPassword: (email: string, code: string, password: string) => Promise<void>
   logout: () => Promise<void>
@@ -144,13 +144,12 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
   }, [])
 
   const signup = useCallback(
-    async (email: string, name: string, password: string, token?: string): Promise<void> => {
+    async (email: string, name: string, password: string, token?: string, dobAttestation?: { dateOfBirth: string; policyVersion: string }): Promise<void> => {
       setLoading(true)
       try {
-        const body: Record<string, string> = { email, name, password }
-        if (token !== undefined) {
-          body.token = token
-        }
+        const body: Record<string, unknown> = { email, name, password }
+        if (token !== undefined) body.token = token
+        if (dobAttestation) body.dobAttestation = dobAttestation
 
         const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
           method: 'POST',
@@ -162,7 +161,9 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ message: 'Signup failed' }))
-          throw new Error(errorData.message || `Signup failed with status ${response.status}`)
+          const err = new Error(errorData.message || `Signup failed with status ${response.status}`) as Error & { code?: string }
+          err.code = errorData.code
+          throw err
         }
 
         const data = (await response.json()) as SignupResponse
