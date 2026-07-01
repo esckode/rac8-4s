@@ -24,6 +24,8 @@ export interface PollCardProps {
   question: string
   targetTime: string | null
   closedAt: string | null
+  autoCloseAt?: string | null
+  autoLaunch?: boolean
   tally: PollTally
   currentUserVote: PollChoice | null
   isOwner: boolean
@@ -47,10 +49,21 @@ function formatTargetTime(iso: string): string {
   }
 }
 
+function formatCloseWindow(iso: string, autoLaunch: boolean): string {
+  const formatted = formatTargetTime(iso)
+  const msUntilClose = new Date(iso).getTime() - Date.now()
+  const closingSoon = msUntilClose > 0 && msUntilClose < 60 * 60 * 1000
+  const suffix = closingSoon ? ' (closing soon)' : ''
+  if (autoLaunch) return `Closes & auto-starts ${formatted}${suffix}`
+  return `Voting closes ${formatted}${suffix}`
+}
+
 export const PollCard: React.FC<PollCardProps> = ({
   question,
   targetTime,
   closedAt,
+  autoCloseAt,
+  autoLaunch = false,
   tally,
   currentUserVote,
   isOwner,
@@ -75,6 +88,13 @@ export const PollCard: React.FC<PollCardProps> = ({
       {targetTime && (
         <p data-testid="poll-target-time" className="text-xs text-[--ink-500]">
           {formatTargetTime(targetTime)}
+        </p>
+      )}
+
+      {/* Close-window banner — shown on open polls when autoCloseAt is set */}
+      {!isClosed && autoCloseAt && (
+        <p data-testid="poll-close-window" className="text-xs text-[--ink-500] italic">
+          {formatCloseWindow(autoCloseAt, autoLaunch)}
         </p>
       )}
 
