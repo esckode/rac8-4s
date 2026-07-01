@@ -15,6 +15,7 @@ import { TournamentBrowse } from './pages/TournamentBrowse'
 import { TournamentDetail } from './pages/TournamentDetail'
 import { MyTournamentsHub } from './pages/MyTournamentsHub'
 import { GroupList, GroupDetail, GroupSettings } from './pages/MyGroups'
+import { InviteAcceptPage } from './pages/InviteAcceptPage'
 import { PartnerRequestConfirm } from './pages/PartnerRequestConfirm'
 import { OrganizerManage } from './pages/OrganizerManage'
 import { OrganizerDashboard } from './pages/OrganizerDashboard'
@@ -116,6 +117,10 @@ export const App: React.FC = () => {
                 </ResponsiveLayout>
               </ProtectedRoute>
             }
+          />
+          <Route
+            path={ROUTES.GROUP_INVITE}
+            element={<InviteAcceptPage />}
           />
           <Route
             path={ROUTES.GROUPS}
