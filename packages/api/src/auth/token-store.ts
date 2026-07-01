@@ -7,6 +7,12 @@ export interface TokenStore {
   set(key: string, value: string, ttlSeconds: number): Promise<void>
   get(key: string): Promise<string | null>
   del(key: string): Promise<void>
+
+  /**
+   * Optional teardown — close any underlying connections.
+   * Called on graceful shutdown or in test afterEach.
+   */
+  close?(): Promise<void>
 }
 
 export class InMemoryTokenStore implements TokenStore {

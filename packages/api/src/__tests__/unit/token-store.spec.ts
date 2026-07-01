@@ -36,6 +36,10 @@ function runContractSuite(label: string, factory: () => TokenStore) {
       store = factory()
     })
 
+    afterEach(async () => {
+      await store.close?.()
+    })
+
     it('set + get returns the stored value within TTL', async () => {
       await store.set('k1', 'v1', 60)
       const result = await store.get('k1')

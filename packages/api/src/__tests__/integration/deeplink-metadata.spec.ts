@@ -95,19 +95,24 @@ let pool: Pool
 let app: Express
 let tokenStore: InMemoryTokenStore
 
-beforeAll(async () => {
-  pool = await getTestPool()
-  await beginTransaction(pool)
-  const deps = createTestApp(pool)
-  app = deps.app
-  tokenStore = deps.tokenStore
-})
-
-afterAll(async () => {
-  await rollbackTransaction()
-})
-
 describe('P3.5 — Deep-link metadata on launch system messages', () => {
+  // Nested one level inside the describe (rather than at file top-level) so this
+  // afterAll runs — and releases the suite connection — before the global afterAll
+  // in setup.ts calls closeTestPool(). Same-scope afterAll hooks run in registration
+  // order, so a top-level afterAll here would race the global one and pool.end()
+  // would hang forever waiting for this still-checked-out client.
+  beforeAll(async () => {
+    pool = await getTestPool()
+    await beginTransaction(pool)
+    const deps = createTestApp(pool)
+    app = deps.app
+    tokenStore = deps.tokenStore
+  })
+
+  afterAll(async () => {
+    await rollbackTransaction()
+  })
+
   it('schema: messaging.group_messages has a metadata JSONB column', async () => {
     const res = await pool.query(
       `SELECT column_name, data_type

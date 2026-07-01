@@ -138,16 +138,21 @@ async function getSystemMessages(pool: Pool, conversationId: string): Promise<st
 
 let pool: Pool
 
-beforeAll(async () => {
-  pool = await getTestPool()
-  await beginTransaction(pool)
-})
-
-afterAll(async () => {
-  await rollbackTransaction()
-})
-
 describe('P3.4 — Auto-launch hook', () => {
+  // Nested one level inside the describe (rather than at file top-level) so this
+  // afterAll runs — and releases the suite connection — before the global afterAll
+  // in setup.ts calls closeTestPool(). Same-scope afterAll hooks run in registration
+  // order, so a top-level afterAll here would race the global one and pool.end()
+  // would hang forever waiting for this still-checked-out client.
+  beforeAll(async () => {
+    pool = await getTestPool()
+    await beginTransaction(pool)
+  })
+
+  afterAll(async () => {
+    await rollbackTransaction()
+  })
+
   it('launches a tournament when in_count >= min_players', async () => {
     const creator = await createPlayer(pool)
     const voter1 = await createPlayer(pool)

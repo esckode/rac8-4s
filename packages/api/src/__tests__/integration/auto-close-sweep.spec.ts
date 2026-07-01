@@ -94,16 +94,21 @@ async function createPollInGroup(
 
 let pool: Pool
 
-beforeAll(async () => {
-  pool = await getTestPool()
-  await beginTransaction(pool)
-})
-
-afterAll(async () => {
-  await rollbackTransaction()
-})
-
 describe('processAutoCloseSweep', () => {
+  // Nested one level inside the describe (rather than at file top-level) so this
+  // afterAll runs — and releases the suite connection — before the global afterAll
+  // in setup.ts calls closeTestPool(). Same-scope afterAll hooks run in registration
+  // order, so a top-level afterAll here would race the global one and pool.end()
+  // would hang forever waiting for this still-checked-out client.
+  beforeAll(async () => {
+    pool = await getTestPool()
+    await beginTransaction(pool)
+  })
+
+  afterAll(async () => {
+    await rollbackTransaction()
+  })
+
   it('closes a poll with auto_close_at in the past', async () => {
     const owner = await createPlayer(pool)
     const groupId = await createGroup(pool, owner.id)

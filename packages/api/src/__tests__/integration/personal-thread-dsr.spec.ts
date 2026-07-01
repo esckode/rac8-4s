@@ -101,16 +101,23 @@ async function seedGroupMessage(pool: Pool, playerId: string, body: string): Pro
 
 let pool: Pool
 
-beforeAll(async () => {
-  pool = await getTestPool()
-  await beginTransaction(pool)
-})
+// Wrapping describe exists solely so beforeAll/afterAll below are nested one level
+// inside it (rather than at file top-level). That makes the afterAll here run — and
+// release the suite connection — before the global afterAll in setup.ts calls
+// closeTestPool(). Same-scope afterAll hooks run in registration order, so a
+// top-level afterAll here would race the global one and pool.end() would hang
+// forever waiting for this still-checked-out client.
+describe('P2.6 — personal thread DSR', () => {
+  beforeAll(async () => {
+    pool = await getTestPool()
+    await beginTransaction(pool)
+  })
 
-afterAll(async () => {
-  await rollbackTransaction()
-})
+  afterAll(async () => {
+    await rollbackTransaction()
+  })
 
-describe('GroupMessageRepository.deletePersonalThreadFor', () => {
+  describe('GroupMessageRepository.deletePersonalThreadFor', () => {
   it('hard-deletes the personal conversation and messages (happy path)', async () => {
     const player = await PlayerFactory.create(pool)
     const { convId, msgId } = await seedPersonalNotification(pool, player.id)
@@ -193,5 +200,6 @@ describe('DataSubjectRequestService.erase composes personal thread deletion', ()
       [convId],
     )
     expect(convRows.rows).toHaveLength(0)
+  })
   })
 })
