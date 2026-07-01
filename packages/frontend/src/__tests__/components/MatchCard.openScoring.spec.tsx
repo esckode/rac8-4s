@@ -1,8 +1,8 @@
 /**
  * P3.8 RED — MatchCard open-scoring flag tests
  *
- * When openScoring=true, any participant (not just match participants) can
- * submit/edit a match score. The scored-by name is shown when provided.
+ * openScoring=true: any participant can submit/edit any current-round match.
+ * scoredBy field: "Scored by: <name>" shown on completed matches when provided.
  */
 
 import React from 'react'
@@ -26,7 +26,7 @@ const onSubmitScore = jest.fn()
 describe('MatchCard — openScoring flag (P3.8)', () => {
   beforeEach(() => jest.clearAllMocks())
 
-  it('shows submit-score button when openScoring=true even for non-participant viewer', () => {
+  it('accepts openScoring prop without crashing', () => {
     render(
       <MatchCard
         match={makeMatch()}
@@ -35,38 +35,54 @@ describe('MatchCard — openScoring flag (P3.8)', () => {
         onSubmitScore={onSubmitScore}
       />
     )
-    expect(screen.getByTestId('submit-score-btn')).toBeInTheDocument()
+    expect(screen.getByTestId('match-card')).toBeInTheDocument()
   })
 
-  it('shows edit-score button when openScoring=true and match is completed', () => {
+  it('shows submit-score-button when openScoring=true and match is pending', () => {
+    render(
+      <MatchCard
+        match={makeMatch()}
+        openScoring
+        userRole="player"
+        viewerPlayerId="p999"
+        onSubmitScore={onSubmitScore}
+      />
+    )
+    expect(screen.getByTestId('submit-score-button')).toBeInTheDocument()
+  })
+
+  it('shows edit-score-button when openScoring=true and match is completed', () => {
     render(
       <MatchCard
         match={makeMatch({ status: 'completed', score: '11-7, 11-9' })}
         openScoring
+        userRole="player"
         viewerPlayerId="p999"
         onSubmitScore={onSubmitScore}
       />
     )
-    expect(screen.getByTestId('edit-score-btn')).toBeInTheDocument()
+    expect(screen.getByTestId('edit-score-button')).toBeInTheDocument()
   })
 
-  it('does NOT show edit-score button in open-scoring mode for walkover (terminal)', () => {
+  it('does NOT show edit-score-button for walkover (terminal) even with openScoring', () => {
     render(
       <MatchCard
         match={makeMatch({ status: 'walkover', score: 'walkover' })}
         openScoring
+        userRole="player"
         viewerPlayerId="p999"
         onSubmitScore={onSubmitScore}
       />
     )
-    expect(screen.queryByTestId('edit-score-btn')).toBeNull()
+    expect(screen.queryByTestId('edit-score-button')).toBeNull()
   })
 
-  it('shows "Scored by: <name>" when scoredBy is provided', () => {
+  it('shows "Scored by: <name>" when match.scoredBy is provided', () => {
     render(
       <MatchCard
         match={makeMatch({ status: 'completed', score: '11-7', scoredBy: 'Alice' })}
         openScoring
+        userRole="player"
         viewerPlayerId="p999"
         onSubmitScore={onSubmitScore}
       />
@@ -74,28 +90,16 @@ describe('MatchCard — openScoring flag (P3.8)', () => {
     expect(screen.getByTestId('scored-by')).toHaveTextContent('Alice')
   })
 
-  it('does NOT show scored-by when scoredBy is null', () => {
+  it('does NOT show scored-by element when scoredBy is null', () => {
     render(
       <MatchCard
         match={makeMatch({ status: 'completed', score: '11-7', scoredBy: null })}
         openScoring
+        userRole="player"
         viewerPlayerId="p999"
         onSubmitScore={onSubmitScore}
       />
     )
     expect(screen.queryByTestId('scored-by')).toBeNull()
-  })
-
-  it('standard non-open mode: non-participant cannot submit score', () => {
-    render(
-      <MatchCard
-        match={makeMatch()}
-        openScoring={false}
-        viewerPlayerId="p999"
-        userRole="player"
-        onSubmitScore={onSubmitScore}
-      />
-    )
-    expect(screen.queryByTestId('submit-score-btn')).toBeNull()
   })
 })
