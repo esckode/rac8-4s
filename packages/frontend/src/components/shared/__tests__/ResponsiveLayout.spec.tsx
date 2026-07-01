@@ -67,6 +67,17 @@ describe('ResponsiveLayout', () => {
     expect(screen.queryByText('Standings')).not.toBeInTheDocument()
   })
 
+  it('renders a Groups link in the desktop TopNav (P1.10)', () => {
+    renderWithRouter(
+      <ResponsiveLayout showNav>
+        <div>Content</div>
+      </ResponsiveLayout>
+    )
+    // TopNav is desktop-only; at least one "Groups" link should exist
+    const groupLinks = screen.getAllByRole('link', { name: /groups/i })
+    expect(groupLinks.some(l => l.getAttribute('href') === '/groups')).toBe(true)
+  })
+
   it('has Account button in header', () => {
     renderWithRouter(
       <ResponsiveLayout showHeader>
