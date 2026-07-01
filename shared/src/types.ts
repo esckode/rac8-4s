@@ -29,6 +29,7 @@ export interface Match {
   player2Id?: string // For singles
   status: 'pending' | 'completed' | 'walkover'
   score?: string
+  scoredBy?: string | null
   deadline?: Date
 }
 

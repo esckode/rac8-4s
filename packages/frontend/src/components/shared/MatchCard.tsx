@@ -22,6 +22,8 @@ export interface MatchCardProps {
   onMessageOpponent?: (args: MessageOpponentArgs) => void
   /** V5.2: the viewer's playerId, used to identify which player is the opponent */
   viewerPlayerId?: string
+  /** P3.8: casual mode — any participant can submit/edit any match */
+  openScoring?: boolean
   className?: string
 }
 
@@ -34,6 +36,7 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
   onOverride,
   onMessageOpponent,
   viewerPlayerId,
+  openScoring = false,
   className,
 }) => {
   const player1 = playerCache.get(match.player1Id)
@@ -65,8 +68,8 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
     }
   }
 
-  const canSubmitScore = userRole === 'player' && match.status === 'pending'
-  const canEditScore = userRole === 'player' && match.status === 'completed'
+  const canSubmitScore = (userRole === 'player' || openScoring) && match.status === 'pending'
+  const canEditScore = (userRole === 'player' || openScoring) && match.status === 'completed'
   const canOverride = userRole === 'organizer'
 
   // V5.2: "Message opponent" is available to players when both sides are known
@@ -136,6 +139,12 @@ const MatchCardComponent: React.FC<MatchCardProps> = ({
           <p className="text-xl font-bold text-[--ink-900]">{match.score}</p>
         )}
       </div>
+
+      {match.scoredBy && (
+        <p className="text-xs text-[--ink-500] mb-[--s-2]">
+          Scored by: <span data-testid="scored-by">{match.scoredBy}</span>
+        </p>
+      )}
 
       {/* Actions section */}
       <div className="flex gap-[--s-2]">
