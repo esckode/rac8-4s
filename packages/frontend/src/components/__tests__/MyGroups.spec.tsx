@@ -242,11 +242,13 @@ describe('GroupChatPanel', () => {
   it('submits a message and clears the input', async () => {
     const returned = makeMessage({ id: 'msg_new', body: 'Hi group', senderName: 'Me' })
     mockFetch
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [] }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => returned })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [] }) }) // history
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })                  // members
+      .mockResolvedValueOnce({ ok: true, json: async () => returned })            // POST send
 
     render(<GroupChatPanel groupId="grp_1" />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    // Wait for both render-time fetches (history + members) to settle
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
 
     const input = screen.getByTestId('group-message-input') as HTMLInputElement
     fireEvent.change(input, { target: { value: 'Hi group' } })
@@ -266,11 +268,13 @@ describe('GroupChatPanel', () => {
 
   it('shows error when send fails', async () => {
     mockFetch
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [] }) })
-      .mockResolvedValueOnce({ ok: false, json: async () => ({ message: 'Send failed' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [] }) }) // history
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })                  // members
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ message: 'Send failed' }) }) // POST fails
 
     render(<GroupChatPanel groupId="grp_1" />)
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    // Wait for both render-time fetches (history + members) to settle
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
 
     const input = screen.getByTestId('group-message-input')
     fireEvent.change(input, { target: { value: 'oops' } })
