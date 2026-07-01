@@ -627,18 +627,23 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can create polls' })
         }
 
-        const { question, targetTime } = req.body
+        const { question, targetTime, autoCloseAt, autoLaunch, minPlayers, launchMatchFormat } = req.body
         if (!question || typeof question !== 'string' || !question.trim()) {
           return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'question is required' })
         }
 
         const parsedTargetTime = targetTime ? new Date(targetTime) : null
+        const parsedAutoCloseAt = autoCloseAt ? new Date(autoCloseAt) : null
 
         const poll = await pollRepo.createPoll({
           groupId,
           creatorPlayerId: session.playerId,
           question: question.trim(),
           targetTime: parsedTargetTime,
+          autoCloseAt: parsedAutoCloseAt,
+          autoLaunch: typeof autoLaunch === 'boolean' ? autoLaunch : undefined,
+          minPlayers: typeof minPlayers === 'number' ? minPlayers : undefined,
+          launchMatchFormat: typeof launchMatchFormat === 'string' ? launchMatchFormat : undefined,
         })
 
         // Resolve conversation_id for bus emit and notify
@@ -694,6 +699,10 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           pollId: poll.pollId,
           messageId: poll.messageId,
           question: poll.question,
+          autoCloseAt: poll.autoCloseAt ?? null,
+          autoLaunch: poll.autoLaunch,
+          minPlayers: poll.minPlayers ?? null,
+          launchMatchFormat: poll.launchMatchFormat ?? null,
         })
       } catch (err) {
         next(handleGroupError(err))
@@ -879,6 +888,10 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             votedAt: v.votedAt,
           })),
           tally: result.tally,
+          autoCloseAt: result.autoCloseAt ?? null,
+          autoLaunch: result.autoLaunch,
+          minPlayers: result.minPlayers ?? null,
+          launchMatchFormat: result.launchMatchFormat ?? null,
         })
       } catch (err) {
         next(handleGroupError(err))

@@ -22,6 +22,10 @@ export interface CreatePollInput {
   creatorPlayerId: string
   question: string
   targetTime?: Date | null
+  autoCloseAt?: Date | null
+  autoLaunch?: boolean
+  minPlayers?: number | null
+  launchMatchFormat?: string | null
 }
 
 export interface ClosePollResult {
@@ -33,6 +37,10 @@ export interface CreatePollResult {
   pollId: string
   messageId: string
   question: string
+  autoCloseAt: Date | null
+  autoLaunch: boolean
+  minPlayers: number | null
+  launchMatchFormat: string | null
 }
 
 export interface PollVoteRow {
@@ -44,6 +52,10 @@ export interface PollVoteRow {
 export interface GetVotesResult {
   votes: PollVoteRow[]
   tally: { in: number; out: number; maybe: number }
+  autoCloseAt: Date | null
+  autoLaunch: boolean
+  minPlayers: number | null
+  launchMatchFormat: string | null
 }
 
 export interface CastVoteInput {
@@ -88,7 +100,10 @@ export class PollRepository {
    * Returns pollId (messaging.polls.id) + messageId (messaging.group_messages.id).
    */
   async createPoll(input: CreatePollInput): Promise<CreatePollResult> {
-    const { groupId, creatorPlayerId, question, targetTime } = input
+    const {
+      groupId, creatorPlayerId, question, targetTime,
+      autoCloseAt, autoLaunch = false, minPlayers, launchMatchFormat,
+    } = input
 
     const client = await this.pool.connect()
     try {
@@ -115,18 +130,32 @@ export class PollRepository {
 
       // Insert poll metadata (creator_player_id stored so close authz can check without a join)
       const pollRes = await client.query(
-        `INSERT INTO messaging.polls (message_id, question, target_time, creator_player_id)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id`,
-        [messageId, question, targetTime ?? null, creatorPlayerId]
+        `INSERT INTO messaging.polls
+           (message_id, question, target_time, creator_player_id,
+            auto_close_at, auto_launch, min_players, launch_match_format)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, auto_close_at, auto_launch, min_players, launch_match_format`,
+        [
+          messageId, question, targetTime ?? null, creatorPlayerId,
+          autoCloseAt ?? null, autoLaunch, minPlayers ?? null, launchMatchFormat ?? null,
+        ]
       )
-      const pollId = pollRes.rows[0].id as string
+      const pollRow = pollRes.rows[0]
+      const pollId = pollRow.id as string
 
       await client.query('COMMIT')
 
       log.info('poll.created', { groupId, conversationId, messageId, pollId, creatorPlayerId })
 
-      return { pollId, messageId, question }
+      return {
+        pollId,
+        messageId,
+        question,
+        autoCloseAt: pollRow.auto_close_at ? new Date(pollRow.auto_close_at) : null,
+        autoLaunch: pollRow.auto_launch as boolean,
+        minPlayers: pollRow.min_players as number | null,
+        launchMatchFormat: pollRow.launch_match_format as string | null,
+      }
     } catch (err) {
       await client.query('ROLLBACK')
       throw err
@@ -182,15 +211,16 @@ export class PollRepository {
    * Tally is computed from the current vote rows.
    */
   async getVotes(pollId: string): Promise<GetVotesResult> {
-    // Resolve message_id from poll
+    // Resolve message_id + config from poll
     const pollRow = await this.pool.query(
-      `SELECT message_id FROM messaging.polls WHERE id = $1`,
+      `SELECT message_id, auto_close_at, auto_launch, min_players, launch_match_format
+       FROM messaging.polls WHERE id = $1`,
       [pollId]
     )
     if (pollRow.rows.length === 0) {
       throw Object.assign(new Error('Poll not found'), { code: 'NOT_FOUND' })
     }
-    const messageId = pollRow.rows[0].message_id as string
+    const { message_id: messageId, auto_close_at, auto_launch, min_players, launch_match_format } = pollRow.rows[0]
 
     const res = await this.pool.query(
       `SELECT player_id, choice, voted_at
@@ -211,7 +241,14 @@ export class PollRepository {
       tally[v.choice]++
     }
 
-    return { votes, tally }
+    return {
+      votes,
+      tally,
+      autoCloseAt: auto_close_at ? new Date(auto_close_at) : null,
+      autoLaunch: auto_launch as boolean,
+      minPlayers: min_players as number | null,
+      launchMatchFormat: launch_match_format as string | null,
+    }
   }
 
   /**
