@@ -973,6 +973,11 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           log.warn('group.system.event.failed', { groupId, playerId, error: e.message })
         })
 
+        // P2.2: personal notification to the promoted player
+        groupMsgRepo.postPersonalNotification(playerId, `You've been promoted to owner in a group`).catch((e: Error) => {
+          log.warn('personal.notification.failed', { playerId, error: e.message })
+        })
+
         return res.status(200).json({ ok: true })
       } catch (err) {
         next(handleGroupError(err))
@@ -999,6 +1004,11 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         const demoteMsg = `${demoteName ?? 'A member'} is now a member`
         groupMsgRepo.postSystemEvent(groupId, demoteMsg).catch((e: Error) => {
           log.warn('group.system.event.failed', { groupId, playerId, error: e.message })
+        })
+
+        // P2.2: personal notification to the demoted player
+        groupMsgRepo.postPersonalNotification(playerId, `You've been changed to a member in a group`).catch((e: Error) => {
+          log.warn('personal.notification.failed', { playerId, error: e.message })
         })
 
         return res.status(200).json({ ok: true })
@@ -1078,7 +1088,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         // Fetch player's name BEFORE leaving (player row stays in public.players)
         const playerName = await groupMsgRepo.getPlayerName(playerId)
 
-        await groupRepo.leaveGroup(groupId, playerId)
+        const { autoTransferredTo } = await groupRepo.leaveGroup(groupId, playerId)
 
         // G2.2: post system event "Name left" into the group conversation
         // Fire-and-forget: if this fails it is non-fatal to the leave operation.
@@ -1086,6 +1096,13 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         groupMsgRepo.postSystemEvent(groupId, leaveMsg).catch((e: Error) => {
           log.warn('group.system.event.failed', { groupId, playerId, error: e.message })
         })
+
+        // P2.2: personal notification to the auto-transferred new owner
+        if (autoTransferredTo) {
+          groupMsgRepo.postPersonalNotification(autoTransferredTo, `You've been made an owner of a group`).catch((e: Error) => {
+            log.warn('personal.notification.failed', { playerId: autoTransferredTo, error: e.message })
+          })
+        }
 
         return res.status(200).json({ ok: true })
       } catch (err) {
@@ -1140,6 +1157,11 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         }
 
         await groupRepo.kickMember(groupId, session.playerId, playerId)
+
+        // P2.2: personal notification to the kicked player (no group chat message)
+        groupMsgRepo.postPersonalNotification(playerId, `You've been removed from a group`).catch((e: Error) => {
+          log.warn('personal.notification.failed', { playerId, error: e.message })
+        })
 
         return res.status(200).json({ ok: true })
       } catch (err) {

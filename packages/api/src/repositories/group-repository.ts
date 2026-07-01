@@ -199,8 +199,9 @@ export class GroupRepository {
    *
    * The check+mutate is in one transaction to prevent races.
    */
-  async leaveGroup(groupId: string, playerId: string): Promise<void> {
+  async leaveGroup(groupId: string, playerId: string): Promise<{ autoTransferredTo?: string }> {
     const client = await this.pool.connect()
+    let autoTransferredTo: string | undefined
     try {
       await client.query('BEGIN')
 
@@ -243,6 +244,8 @@ export class GroupRepository {
             [groupId, newOwnerPlayerId]
           )
 
+          autoTransferredTo = newOwnerPlayerId
+
           log.info('group.ownership.transferred', {
             groupId,
             fromPlayerId: playerId,
@@ -267,6 +270,7 @@ export class GroupRepository {
     } finally {
       client.release()
     }
+    return { autoTransferredTo }
   }
 
   /**

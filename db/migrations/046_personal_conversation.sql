@@ -26,15 +26,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_player_id
   ON messaging.conversations (player_id)
   WHERE player_id IS NOT NULL;
 
--- 4. group_message_recipients — unread + digest tracking for non-tournament messages
---    (group chat and personal notification threads both write here)
-CREATE TABLE IF NOT EXISTS messaging.group_message_recipients (
-  message_id   UUID         NOT NULL REFERENCES messaging.group_messages(id),
-  player_id    TEXT         NOT NULL,
-  read_at      TIMESTAMPTZ,
-  notified_at  TIMESTAMPTZ,
-  PRIMARY KEY (message_id, player_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_group_message_recipients_player_read
-  ON messaging.group_message_recipients (player_id, read_at);

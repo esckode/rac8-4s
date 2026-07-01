@@ -232,6 +232,63 @@ export class GroupMessageRepository {
   }
 
   /**
+   * Post a system notification into a player's personal conversation thread.
+   * Used for private events: kick, promote, demote, auto-transfer.
+   * Writes a recipient row so the unread badge and digest processor can act on it.
+   */
+  async postPersonalNotification(playerId: string, body: string): Promise<void> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      // Resolve or create the personal conversation for this player
+      const convResult = await client.query(
+        `INSERT INTO messaging.conversations (type, player_id)
+         VALUES ('personal', $1)
+         ON CONFLICT (player_id) WHERE player_id IS NOT NULL DO NOTHING
+         RETURNING id`,
+        [playerId]
+      )
+      let conversationId: string
+      if (convResult.rows.length > 0) {
+        conversationId = convResult.rows[0].id as string
+      } else {
+        const sel = await client.query(
+          `SELECT id FROM messaging.conversations WHERE player_id = $1`,
+          [playerId]
+        )
+        conversationId = sel.rows[0].id as string
+      }
+
+      const msgResult = await client.query(
+        `INSERT INTO messaging.group_messages
+           (conversation_id, player_id, sender_name_snapshot, body, type)
+         VALUES ($1, NULL, 'system', $2, 'system')
+         RETURNING id`,
+        [conversationId, body]
+      )
+      const messageId = msgResult.rows[0].id as string
+
+      // Write recipient row for unread + digest tracking
+      await client.query(
+        `INSERT INTO messaging.group_message_recipients (message_id, player_id)
+         VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
+        [messageId, playerId]
+      )
+
+      await client.query('COMMIT')
+
+      log.info('personal.notification.posted', { playerId, conversationId, body })
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
    * Get paginated history for a group conversation.
    * Returns messages ordered by (created_at ASC, id ASC) — oldest first.
    * Includes text, poll, system, and announcement types so system events appear

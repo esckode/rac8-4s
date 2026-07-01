@@ -259,9 +259,9 @@ describe('P2.2 — personal notifications for group events', () => {
 
       const beforePersonal = await getPersonalMessages(pool, convRepo, member.id)
 
-      // Owner leaves — auto-transfers to member
+      // Owner leaves via the self-leave endpoint — auto-transfers to member
       await request(app)
-        .delete(`/player/groups/${groupId}/members/${owner.id}`)
+        .delete(`/player/groups/${groupId}/members/${owner.id}/leave`)
         .set('Authorization', `Bearer ${ownerTok}`)
         .expect(200)
 
