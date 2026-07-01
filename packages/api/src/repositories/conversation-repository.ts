@@ -88,6 +88,31 @@ export class ConversationRepository {
    * Spans all group conversations this player ever participated in (no
    * conversation_id filter — a DSR must be complete across the platform).
    */
+  /**
+   * Return the conversation_id for a player's personal notification thread,
+   * creating one if it does not exist yet. Idempotent.
+   */
+  async resolvePersonalConversation(playerId: string): Promise<string> {
+    const result = await this.pool.query(
+      `INSERT INTO messaging.conversations (type, player_id)
+       VALUES ('personal', $1)
+       ON CONFLICT (player_id) WHERE player_id IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [playerId]
+    )
+
+    if (result.rows.length > 0) {
+      log.debug('conversation.personal.created', { playerId, conversationId: result.rows[0].id })
+      return result.rows[0].id as string
+    }
+
+    const existing = await this.pool.query(
+      `SELECT id FROM messaging.conversations WHERE player_id = $1`,
+      [playerId]
+    )
+    return existing.rows[0].id as string
+  }
+
   async anonymizeGroupMessagesFor(playerId: string): Promise<void> {
     await this.pool.query(
       `UPDATE messaging.group_messages
