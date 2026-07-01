@@ -1843,3 +1843,48 @@ Then no close-window banner is shown
 - RTL unit additions: `packages/frontend/src/__tests__/components/PollCard.spec.tsx`
 - New component: `packages/frontend/src/components/PollConfigForm.tsx`
 - Updated component: `packages/frontend/src/components/PollCard.tsx`
+
+---
+
+## Feature: Player Groups — Launch Confirmation Sheet (P3.7)
+
+### Scenario: Poll creator launches a tournament from a closed poll (Q12)
+```
+Given a group has a closed poll with in-voters
+  And the current user is the poll creator
+
+When the user views the group chat
+Then a "Launch tournament" button is visible on the closed PollCard
+
+When the user clicks "Launch tournament"
+Then a confirmation sheet appears
+  And it shows the names of all in-voters
+  And it shows a format selector pre-set to the group's default format
+
+When the user changes the format and clicks "Confirm Launch"
+Then a POST /player/groups/:groupId/polls/:messageId/launch is sent
+  And on 201 the user is navigated to /tournament/:id
+
+When the user clicks "Cancel"
+Then the sheet closes with no POST sent
+```
+
+### Scenario: System message deep-link after tournament launch (P3.5 + P3.7)
+```
+Given a tournament was launched from a poll (auto or manual)
+When a group member views the group chat
+Then the system message "Tournament started: <name>" renders as a clickable link
+  And the link navigates to /tournament/:id
+  And the tournament_id comes from message.metadata.tournament_id (structured field)
+
+Given a system message has no metadata.tournament_id (role events, etc.)
+When a member views the group chat
+Then the message renders as plain italic text with no link
+```
+
+**Implementation (P3.7):**
+- RTL unit: `packages/frontend/src/__tests__/components/LaunchConfirmSheet.spec.tsx`
+- RTL unit: `packages/frontend/src/__tests__/components/GroupChatPanelLaunch.spec.tsx`
+- New component: `packages/frontend/src/components/LaunchConfirmSheet.tsx`
+- Updated: `packages/frontend/src/components/GroupChatPanel.tsx`
+- Updated: `packages/frontend/src/state/group-message-state.ts` (metadata field)
