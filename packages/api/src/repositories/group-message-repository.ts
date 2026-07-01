@@ -314,4 +314,58 @@ export class GroupMessageRepository {
 
     return result.rows.map(rowToGroupMessage)
   }
+
+  // Seam for legal-hold check — returns false until the legal-hold mechanism lands.
+  async isUnderLegalHold(_playerId: string): Promise<boolean> {
+    return false
+  }
+
+  async deletePersonalThreadFor(playerId: string): Promise<void> {
+    if (await this.isUnderLegalHold(playerId)) {
+      log.info('personal.thread.hold.skipped', { playerId })
+      return
+    }
+
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      const convRes = await client.query(
+        `SELECT id FROM messaging.conversations WHERE type = 'personal' AND player_id = $1`,
+        [playerId],
+      )
+      if (convRes.rows.length === 0) {
+        await client.query('COMMIT')
+        return
+      }
+      const conversationId = convRes.rows[0].id as string
+
+      // Delete recipients first (FK → group_messages)
+      await client.query(
+        `DELETE FROM messaging.group_message_recipients
+         WHERE message_id IN (
+           SELECT id FROM messaging.group_messages WHERE conversation_id = $1
+         )`,
+        [conversationId],
+      )
+      // Delete messages
+      await client.query(
+        `DELETE FROM messaging.group_messages WHERE conversation_id = $1`,
+        [conversationId],
+      )
+      // Delete conversation
+      await client.query(
+        `DELETE FROM messaging.conversations WHERE id = $1`,
+        [conversationId],
+      )
+
+      await client.query('COMMIT')
+      log.info('personal.thread.deleted', { playerId, conversationId })
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
 }

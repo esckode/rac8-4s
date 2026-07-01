@@ -102,12 +102,12 @@ async function seedGroupMessage(pool: Pool, playerId: string, body: string): Pro
 let pool: Pool
 
 beforeAll(async () => {
-  pool = getTestPool()
+  pool = await getTestPool()
   await beginTransaction(pool)
 })
 
 afterAll(async () => {
-  await rollbackTransaction(pool)
+  await rollbackTransaction()
 })
 
 describe('GroupMessageRepository.deletePersonalThreadFor', () => {

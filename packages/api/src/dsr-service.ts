@@ -5,6 +5,7 @@ import { ConversationRepository } from './repositories/conversation-repository'
 import { PollRepository } from './repositories/poll-repository'
 import { LeaderboardRepository } from './repositories/leaderboard-repository'
 import { GroupRepository } from './repositories/group-repository'
+import { GroupMessageRepository } from './repositories/group-message-repository'
 
 const log = getLogger('dsr-service')
 
@@ -27,6 +28,7 @@ export class DataSubjectRequestService {
   private pollRepo: PollRepository
   private leaderboardRepo: LeaderboardRepository
   private groupRepo: GroupRepository
+  private groupMsgRepo: GroupMessageRepository
 
   constructor(private pool: Pool) {
     this.playerRepo = new PlayerRepository(pool as any)
@@ -34,6 +36,7 @@ export class DataSubjectRequestService {
     this.pollRepo = new PollRepository(pool as any)
     this.leaderboardRepo = new LeaderboardRepository(pool)
     this.groupRepo = new GroupRepository(pool as any)
+    this.groupMsgRepo = new GroupMessageRepository(pool as any)
   }
 
   /**
@@ -54,6 +57,7 @@ export class DataSubjectRequestService {
     await this.conversationRepo.anonymizeGroupMessagesFor(playerId)
     await this.pollRepo.anonymizePollVotesFor(playerId)
     await this.leaderboardRepo.anonymizeMatchLogSlotsFor(playerId)
+    await this.groupMsgRepo.deletePersonalThreadFor(playerId)
 
     // Hard-delete membership
     await this.groupRepo.removeFromAllGroups(playerId)
