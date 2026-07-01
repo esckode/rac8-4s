@@ -8,6 +8,7 @@ export interface MessagingNotifyPayload {
   conversationId: string
   tournamentId?: string
   groupId?: string
+  conversationType?: 'tournament' | 'group' | 'personal'
 }
 
 interface NotifyProcessorDeps {
@@ -36,7 +37,7 @@ export async function processMessagingNotify(
   payload: MessagingNotifyPayload,
   deps: NotifyProcessorDeps
 ): Promise<void> {
-  const { conversationId, tournamentId } = payload
+  const { conversationId, tournamentId, conversationType } = payload
   const { pool, emailAdapter } = deps
 
   try {
@@ -76,7 +77,9 @@ export async function processMessagingNotify(
       }
 
       const count = Number(unreadCount)
-      const subject = `You have ${count} unread message${count === 1 ? '' : 's'} in your tournament`
+      const subject = conversationType === 'personal'
+        ? `You have ${count} new notification${count === 1 ? '' : 's'}`
+        : `You have ${count} unread message${count === 1 ? '' : 's'} in your tournament`
       const body = `You have ${count} unread message${count === 1 ? '' : 's'} waiting for you. Log in to read them.`
 
       await emailAdapter.send(playerEmail, subject, body)
