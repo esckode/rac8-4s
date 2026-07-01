@@ -206,13 +206,13 @@ describe('G4.5 — launch: system message contains tournament ID', () => {
     expect(launchRes.status).toBe(201)
     const tournamentId = launchRes.body.tournamentId
 
-    // Query for the system message
+    // Query for the system message — tournament ID now lives in metadata, not body
     const msgRes = await pool.query(
-      `SELECT gm.body, gm.type
+      `SELECT gm.body, gm.type, gm.metadata
        FROM messaging.group_messages gm
        JOIN messaging.conversations c ON c.id = gm.conversation_id
-       WHERE c.group_id = $1 AND gm.type = 'system' AND gm.body LIKE $2`,
-      [group.id, `%${tournamentId}%`]
+       WHERE c.group_id = $1 AND gm.type = 'system' AND gm.metadata->>'tournament_id' = $2`,
+      [group.id, tournamentId]
     )
     expect(msgRes.rows.length).toBeGreaterThanOrEqual(1)
     expect(msgRes.rows[0].type).toBe('system')
