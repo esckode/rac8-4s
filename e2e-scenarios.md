@@ -1888,3 +1888,40 @@ Then the message renders as plain italic text with no link
 - New component: `packages/frontend/src/components/LaunchConfirmSheet.tsx`
 - Updated: `packages/frontend/src/components/GroupChatPanel.tsx`
 - Updated: `packages/frontend/src/state/group-message-state.ts` (metadata field)
+
+---
+
+## Feature: Player Groups — Casual Scoring View + Mixer (P3.8; A.5)
+
+### Scenario: Casual tournament open scoring
+```
+Given a casual tournament was launched from a group poll
+When a registered participant views the tournament
+
+Then the current round's matches are shown as MatchCards
+  And each MatchCard has a "Submit score" button (any participant can score any match)
+  And the open-scoring flag allows editing until the match is terminal
+
+When a participant submits a score for any match (not just their own)
+Then the match updates to 'completed'
+  And the score and "Scored by: <name>" are shown
+
+When SSE emits a round advance event
+Then the next round's matches are loaded without a full page refresh
+```
+
+### Scenario: Mixer sit-out panel
+```
+Given a casual tournament with a mixer format
+When the current round has some players sitting out (roster - round participants)
+
+Then the MixerStatePanel shows "Sitting out this round: Alice, Bob"
+  And the sitting-out list is derived client-side from registered roster minus current participants
+  And the list updates when SSE advances the round
+```
+
+**Implementation (P3.8):**
+- RTL unit: `packages/frontend/src/__tests__/components/MatchCard.openScoring.spec.tsx`
+- RTL unit: `packages/frontend/src/__tests__/components/MixerStatePanel.spec.tsx`
+- Updated: `packages/frontend/src/components/shared/MatchCard.tsx` (openScoring flag, scoredBy display)
+- New: `packages/frontend/src/components/MixerStatePanel.tsx`
