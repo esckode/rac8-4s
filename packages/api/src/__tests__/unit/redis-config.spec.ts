@@ -88,7 +88,10 @@ describe('createRedisClient()', () => {
       maxRetriesPerRequest: 0,
     })
     expect(client).not.toBeNull()
-    await client!.quit().catch(() => {})
+    // disconnect() (not quit()) — quit() only disconnects on rejection when
+    // enableOfflineQueue is true; with it false (our fail-fast config) quit()
+    // just rejects and leaves the pending reconnect retry timer running.
+    client!.disconnect()
   })
 
   it('attempts connection and rejects quickly when given an unreachable host', async () => {
@@ -114,7 +117,7 @@ describe('createRedisClient()', () => {
       })
     ).rejects.toThrow()
 
-    await client!.quit().catch(() => {}) // best-effort cleanup
+    client!.disconnect() // stops the pending reconnect retry timer; see note above
   }, 3000)
 })
 
