@@ -1,4 +1,6 @@
 export { JobQueue, InMemoryJobQueue, DEFAULT_RETRY_CONFIG } from './job-queue'
+export { InMemoryScheduler } from './scheduler'
+export type { SchedulerHandler, SchedulerHandlerContext } from './scheduler'
 export { BullMQJobQueue } from './bullmq-queue'
 export { createWorker } from './worker'
 export { registerPartitionJobs } from './partition-scheduler'
