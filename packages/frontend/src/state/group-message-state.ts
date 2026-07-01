@@ -55,6 +55,17 @@ export class GroupMessageStore {
     this.notifySubscribers()
   }
 
+  /** Merge re-fetched history without duplicating existing messages. */
+  mergeHistory(messages: GroupMessageRecord[]): void {
+    const existingIds = new Set(this.messages.map(m => m.id))
+    const newOnes = messages.filter(m => !existingIds.has(m.id))
+    if (newOnes.length === 0) return
+    this.messages = [...this.messages, ...newOnes].sort(
+      (a, b) => a.createdAt.localeCompare(b.createdAt)
+    )
+    this.notifySubscribers()
+  }
+
   /** Update the tally for a poll message (SSE poll.tally.updated). */
   updatePollTally(pollId: string, tally: PollTally): void {
     const idx = this.messages.findIndex(m => m.pollId === pollId)

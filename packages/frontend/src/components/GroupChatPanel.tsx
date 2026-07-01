@@ -16,6 +16,7 @@ import { useAuth } from '../hooks/useAuth'
 import { PollCard, type PollChoice } from './PollCard'
 import { MentionAutocomplete } from './MentionAutocomplete'
 import { parseMentions } from '../utils/parseMentions'
+import { ReconnectingIndicator } from './shared'
 
 // ─── GroupChatPanel ───────────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ interface GroupChatPanelProps {
 }
 
 export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active = false, isOwner = false }) => {
-  const { messages, send } = useGroupMessages(groupId, active)
+  const { messages, send, reconnecting } = useGroupMessages(groupId, active)
   const { user } = useAuth()
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
@@ -198,6 +199,9 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
         })}
         <div ref={bottomRef} />
       </div>
+
+      {/* Reconnecting indicator */}
+      <ReconnectingIndicator visible={reconnecting} />
 
       {/* Error */}
       {error && (

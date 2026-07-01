@@ -37,13 +37,16 @@ export function clearGroupMessageStores(): void {
 export interface UseGroupMessagesResult {
   messages: GroupMessageRecord[]
   unreadCount: number
+  reconnecting: boolean
   send: (body: string) => Promise<void>
 }
 
 export function useGroupMessages(groupId: string, active = false): UseGroupMessagesResult {
   const store = getStore(groupId)
   const [messages, setMessages] = useState<GroupMessageRecord[]>(() => store.all())
+  const [reconnecting, setReconnecting] = useState(false)
   const fetchedRef = useRef(false)
+  const connectedRef = useRef(false)
   const eventSourceRef = useRef<ReconnectingEventSource | null>(null)
 
   // Subscribe to store changes
@@ -71,6 +74,7 @@ export function useGroupMessages(groupId: string, active = false): UseGroupMessa
       .then((data: { messages: GroupMessageRecord[] } | undefined) => {
         if (data?.messages) {
           store.setHistory(data.messages)
+          connectedRef.current = true
         }
       })
       .catch(() => {
@@ -88,6 +92,27 @@ export function useGroupMessages(groupId: string, active = false): UseGroupMessa
     try {
       const es = new ReconnectingEventSource(url, { maxReconnectionDelay: 8000 } as any)
       eventSourceRef.current = es
+
+      es.addEventListener('open', () => {
+        if (connectedRef.current) {
+          // Reconnect: refetch history to fill gap
+          const tok = localStorage.getItem('auth_token')
+          fetch(`/player/groups/${groupId}/messages`, {
+            headers: { 'Content-Type': 'application/json', ...(tok ? { Authorization: `Bearer ${tok}` } : {}) },
+          })
+            .then(r => r.ok ? r.json() : undefined)
+            .then((data: { messages: GroupMessageRecord[] } | undefined) => {
+              if (data?.messages) store.mergeHistory(data.messages)
+            })
+            .catch(() => {})
+            .finally(() => setReconnecting(false))
+        }
+        connectedRef.current = true
+      })
+
+      es.addEventListener('error', () => {
+        if (connectedRef.current) setReconnecting(true)
+      })
 
       es.addEventListener('message.created', (event: Event) => {
         if (event instanceof MessageEvent) {
@@ -176,5 +201,5 @@ export function useGroupMessages(groupId: string, active = false): UseGroupMessa
     [groupId, store]
   )
 
-  return { messages, unreadCount, send }
+  return { messages, unreadCount, reconnecting, send }
 }
