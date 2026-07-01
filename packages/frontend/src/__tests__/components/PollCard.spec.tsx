@@ -24,6 +24,8 @@ function makePoll(overrides: Partial<PollCardProps> = {}): PollCardProps {
     question: 'Are you coming tonight?',
     targetTime: null,
     closedAt: null,
+    autoCloseAt: null,
+    autoLaunch: false,
     tally: { in: 0, out: 0, maybe: 0 },
     currentUserVote: null,
     isOwner: false,
@@ -154,5 +156,40 @@ describe('PollCard', () => {
     const onLaunch = jest.fn()
     render(<PollCard {...makePoll({ isCreator: true, closedAt: null, onLaunch })} />)
     expect(screen.queryByTestId('poll-launch-button')).not.toBeInTheDocument()
+  })
+})
+
+// ── P3.6 close-window display tests ──────────────────────────────────────────
+
+describe('PollCard — close-window display (P3.6)', () => {
+  it('shows "Voting closes <time>" when autoCloseAt is set (far future)', () => {
+    const far = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    render(<PollCard {...makePoll({ autoCloseAt: far })} />)
+    expect(screen.getByTestId('poll-close-window')).toBeInTheDocument()
+    expect(screen.getByTestId('poll-close-window').textContent).toMatch(/voting closes/i)
+  })
+
+  it('shows "closing soon" hint when autoCloseAt is under 1 hour away', () => {
+    const soon = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+    render(<PollCard {...makePoll({ autoCloseAt: soon })} />)
+    expect(screen.getByTestId('poll-close-window').textContent).toMatch(/closing soon/i)
+  })
+
+  it('shows "Closes & auto-starts <time>" when autoLaunch is true', () => {
+    const far = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    render(<PollCard {...makePoll({ autoCloseAt: far, autoLaunch: true })} />)
+    const banner = screen.getByTestId('poll-close-window')
+    expect(banner.textContent).toMatch(/closes & auto-starts/i)
+  })
+
+  it('does not render close-window when autoCloseAt is null', () => {
+    render(<PollCard {...makePoll({ autoCloseAt: null })} />)
+    expect(screen.queryByTestId('poll-close-window')).toBeNull()
+  })
+
+  it('does not render close-window on already-closed polls', () => {
+    const far = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    render(<PollCard {...makePoll({ autoCloseAt: far, closedAt: '2026-07-01T10:00:00Z' })} />)
+    expect(screen.queryByTestId('poll-close-window')).toBeNull()
   })
 })

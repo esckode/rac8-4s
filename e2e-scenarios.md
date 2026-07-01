@@ -1796,3 +1796,50 @@ Then an error message is shown: "group not found"
 - RTL unit: `packages/frontend/src/__tests__/components/InviteAcceptPage.spec.tsx`
 - Route: `/groups/:groupId/invite` (public, no auth required)
 - Playwright e2e: `packages/frontend/e2e/invite-accept.spec.ts` (best-effort)
+
+---
+
+## Feature: Player Groups — Poll Config & Close-Window (P3.6)
+
+### Scenario: Poll creation with auto-close time (Q13/Q14)
+```
+Given a group member is composing a poll
+When they open the poll creation form (PollConfigForm)
+Then they see an auto-close datetime picker
+  And an auto-launch toggle (initially disabled)
+  And no min-players or format fields are visible
+
+When they set an auto-close datetime
+Then the auto-launch toggle becomes enabled
+
+When they enable auto-launch
+Then a min-players number input appears
+  And a match-format selector (singles/doubles) appears
+
+When they clear the auto-close datetime
+Then auto-launch is forced off
+  And min-players + format fields disappear
+```
+
+### Scenario: PollCard shows close-window banner to all members (Q13)
+```
+Given a group has an open poll with an auto_close_at time set
+When any group member views the group chat
+Then the PollCard shows "Voting closes <time>" under the question
+  And when the close time is less than 1 hour away, "closing soon" is appended
+
+Given the poll has auto_launch=true
+When any member views the PollCard
+Then the close-window banner reads "Closes & auto-starts <time>"
+  (distinct from target_time, which is the optional play-session time)
+
+Given the poll is already closed (closedAt is set)
+When any member views the PollCard
+Then no close-window banner is shown
+```
+
+**Implementation (P3.6):**
+- RTL unit: `packages/frontend/src/__tests__/components/PollConfigForm.spec.tsx`
+- RTL unit additions: `packages/frontend/src/__tests__/components/PollCard.spec.tsx`
+- New component: `packages/frontend/src/components/PollConfigForm.tsx`
+- Updated component: `packages/frontend/src/components/PollCard.tsx`
