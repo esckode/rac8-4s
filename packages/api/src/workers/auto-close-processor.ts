@@ -11,11 +11,16 @@ export interface AutoCloseSweepDeps {
   now?: Date
 }
 
-async function postSystemMessage(pool: Pool, conversationId: string, body: string): Promise<void> {
+async function postSystemMessage(
+  pool: Pool,
+  conversationId: string,
+  body: string,
+  metadata?: Record<string, unknown> | null,
+): Promise<void> {
   await pool.query(
-    `INSERT INTO messaging.group_messages (conversation_id, player_id, sender_name_snapshot, body, type)
-     VALUES ($1, NULL, 'system', $2, 'system')`,
-    [conversationId, body],
+    `INSERT INTO messaging.group_messages (conversation_id, player_id, sender_name_snapshot, body, type, metadata)
+     VALUES ($1, NULL, 'system', $2, 'system', $3)`,
+    [conversationId, body, metadata ? JSON.stringify(metadata) : null],
   )
 }
 
@@ -100,7 +105,7 @@ async function tryAutoLaunch(
 
   await tournamentRepo.updateStatus(tournament.id, 'registration_closed')
 
-  await postSystemMessage(pool, conversationId, `Tournament started: ${tournament.name} (ID: ${tournament.id})`)
+  await postSystemMessage(pool, conversationId, `Tournament started: ${tournament.name}`, { tournament_id: tournament.id })
 
   log.info('auto_launch.tournament.created', {
     tournamentId: tournament.id,

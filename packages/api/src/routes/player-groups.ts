@@ -568,6 +568,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             type: m.type,
             createdAt: m.createdAt,
             removedAt: m.removedAt ?? null,
+            metadata: m.metadata ?? null,
             ...(m.type === 'poll' && {
               pollId: m.pollId ?? null,
               targetTime: m.targetTime ?? null,
@@ -783,9 +784,9 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         // Post system message into group conversation
         const conversationId = await conversationRepo.resolveGroupConversation(groupId)
         await (deps.db as any).query(
-          `INSERT INTO messaging.group_messages (conversation_id, player_id, sender_name_snapshot, body, type)
-           VALUES ($1, NULL, 'system', $2, 'system')`,
-          [conversationId, `Tournament started: ${tournament.name} (ID: ${tournament.id})`]
+          `INSERT INTO messaging.group_messages (conversation_id, player_id, sender_name_snapshot, body, type, metadata)
+           VALUES ($1, NULL, 'system', $2, 'system', $3)`,
+          [conversationId, `Tournament started: ${tournament.name}`, JSON.stringify({ tournament_id: tournament.id })]
         )
 
         log.info('tournament.launched', {

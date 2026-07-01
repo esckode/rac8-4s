@@ -25,6 +25,7 @@ export interface GroupMessageRow {
   createdAt: Date
   removedAt: Date | null
   removedBy: string | null
+  metadata: Record<string, unknown> | null
   // Present only when type === 'poll'
   pollId?: string | null
   targetTime?: Date | null
@@ -54,6 +55,7 @@ function rowToGroupMessage(row: any): GroupMessageRow {
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
     removedAt: row.removed_at ? (row.removed_at instanceof Date ? row.removed_at : new Date(row.removed_at)) : null,
     removedBy: row.removed_by ?? null,
+    metadata: row.metadata ?? null,
   }
   if (row.poll_id !== undefined) {
     base.pollId = row.poll_id ?? null
@@ -302,7 +304,7 @@ export class GroupMessageRepository {
 
     const result = await this.pool.query(
       `SELECT gm.id, gm.conversation_id, gm.player_id, gm.sender_name_snapshot, gm.body,
-              gm.type, gm.created_at, gm.removed_at, gm.removed_by,
+              gm.type, gm.created_at, gm.removed_at, gm.removed_by, gm.metadata,
               p.id AS poll_id, p.target_time, p.closed_at
        FROM messaging.group_messages gm
        LEFT JOIN messaging.polls p ON p.message_id = gm.id
