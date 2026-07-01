@@ -66,6 +66,7 @@ describe('GroupDetail — Leaderboard tab (P3.9)', () => {
   })
 
   it('clicking Leaderboard tab shows leaderboard panel', async () => {
+    renderGroupDetail()
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -74,7 +75,6 @@ describe('GroupDetail — Leaderboard tab (P3.9)', () => {
         ],
       }),
     })
-    renderGroupDetail()
     fireEvent.click(screen.getByTestId('group-tab-leaderboard'))
     await waitFor(() => {
       expect(screen.getByTestId('leaderboard-panel')).toBeInTheDocument()
@@ -82,10 +82,6 @@ describe('GroupDetail — Leaderboard tab (P3.9)', () => {
   })
 
   it('fetches leaderboard from the group endpoint when tab is clicked', async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ leaderboard: [] }),
-    })
     renderGroupDetail()
     fireEvent.click(screen.getByTestId('group-tab-leaderboard'))
     await waitFor(() => expect(mockFetch).toHaveBeenCalled())
@@ -94,6 +90,8 @@ describe('GroupDetail — Leaderboard tab (P3.9)', () => {
   })
 
   it('renders player names (nameSnapshot), not UUIDs, in leaderboard', async () => {
+    renderGroupDetail()
+    // Override mock AFTER initial render so leaderboard fetch gets Alice data
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -102,7 +100,6 @@ describe('GroupDetail — Leaderboard tab (P3.9)', () => {
         ],
       }),
     })
-    renderGroupDetail()
     fireEvent.click(screen.getByTestId('group-tab-leaderboard'))
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
     expect(screen.queryByText('plr_deadbeef')).toBeNull()

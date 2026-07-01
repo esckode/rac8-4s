@@ -1,7 +1,7 @@
 import React from 'react'
 
-export interface IndividualRow { playerId: string; wins: number; losses: number }
-export interface PairRow { playerA: string; playerB: string; wins: number; losses: number }
+export interface IndividualRow { playerId: string; nameSnapshot?: string; wins: number; losses: number }
+export interface PairRow { playerA: string; nameA?: string; playerB: string; nameB?: string; wins: number; losses: number }
 
 interface LeaderboardPanelProps {
   individuals: IndividualRow[]
@@ -31,7 +31,7 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ individuals,
             <tbody>
               {individuals.map(r => (
                 <tr key={r.playerId} data-testid="leaderboard-individual-row">
-                  <td className="py-0.5 text-[--ink-700] truncate">{r.playerId}</td>
+                  <td className="py-0.5 text-[--ink-700] truncate">{r.nameSnapshot ?? r.playerId}</td>
                   <td className="py-0.5 text-right text-[--ink-700]">{r.wins}</td>
                   <td className="py-0.5 text-right text-[--ink-500]">{r.losses}</td>
                 </tr>
@@ -58,7 +58,7 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ individuals,
             <tbody>
               {pairs.map(r => (
                 <tr key={`${r.playerA}-${r.playerB}`} data-testid="leaderboard-pair-row">
-                  <td className="py-0.5 text-[--ink-700] truncate">{r.playerA} + {r.playerB}</td>
+                  <td className="py-0.5 text-[--ink-700] truncate">{r.nameA ?? r.playerA} + {r.nameB ?? r.playerB}</td>
                   <td className="py-0.5 text-right text-[--ink-700]">{r.wins}</td>
                   <td className="py-0.5 text-right text-[--ink-500]">{r.losses}</td>
                 </tr>

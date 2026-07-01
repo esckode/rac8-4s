@@ -15,6 +15,7 @@ import { useGroupList } from '../hooks/useGroupList'
 import { useAuth } from '../hooks/useAuth'
 import { GroupChatPanel, MembersPanel, type MemberSummary } from '../components/GroupChatPanel'
 import { NotifyLevelControl, type NotifyLevel } from '../components/NotifyLevelControl'
+import { LeaderboardPanel, type IndividualRow } from '../components/LeaderboardPanel'
 
 // ─── GearIcon ─────────────────────────────────────────────────────────────────
 
@@ -94,12 +95,26 @@ export const GroupList: React.FC = () => {
 
 // ─── GroupDetail ──────────────────────────────────────────────────────────────
 
-type GroupTab = 'chat' | 'members'
+type GroupTab = 'chat' | 'members' | 'leaderboard'
 
 export const GroupDetail: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>()
   const [activeTab, setActiveTab] = useState<GroupTab>('chat')
+  const [lbRows, setLbRows] = useState<IndividualRow[]>([])
+  const [lbLoading, setLbLoading] = useState(false)
   const { groups } = useGroupList()
+
+  useEffect(() => {
+    if (activeTab !== 'leaderboard' || !groupId) return
+    const token = localStorage.getItem('auth_token')
+    setLbLoading(true)
+    fetch(`/player/groups/${groupId}/leaderboard/individual`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(data => setLbRows(data.leaderboard ?? []))
+      .finally(() => setLbLoading(false))
+  }, [activeTab, groupId])
 
   if (!groupId) return null
 
@@ -141,12 +156,24 @@ export const GroupDetail: React.FC = () => {
         >
           Members
         </button>
+        <button
+          data-testid="group-tab-leaderboard"
+          onClick={() => setActiveTab('leaderboard')}
+          className={`flex-1 py-3 text-sm font-medium ${activeTab === 'leaderboard' ? 'text-[--court-600] border-b-2 border-[--court-600]' : 'text-[--ink-500]'}`}
+        >
+          Leaderboard
+        </button>
       </div>
 
       {/* Tab content */}
       <div className="flex-1 overflow-hidden">
         {activeTab === 'chat' && <GroupChatPanel groupId={groupId} active isOwner={isOwner} />}
         {activeTab === 'members' && <MembersPanel groupId={groupId} />}
+        {activeTab === 'leaderboard' && (
+          <div className="p-4 overflow-y-auto h-full">
+            <LeaderboardPanel individuals={lbRows} pairs={[]} loading={lbLoading} />
+          </div>
+        )}
       </div>
     </div>
   )

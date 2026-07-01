@@ -11,13 +11,16 @@ export interface ParticipantSlot {
 
 export interface PairLeaderboardRow {
   playerA: string
+  nameA: string
   playerB: string
+  nameB: string
   wins: number
   losses: number
 }
 
 export interface IndividualLeaderboardRow {
   playerId: string
+  nameSnapshot: string
   wins: number
   losses: number
 }
@@ -96,13 +99,17 @@ export class LeaderboardRepository {
   async getPairLeaderboard(groupId: string): Promise<PairLeaderboardRow[]> {
     const result = await this.pool.query<{
       player_a: string
+      name_a: string
       player_b: string
+      name_b: string
       wins: string
       losses: string
     }>(
       `SELECT
-         LEAST(p1.player_id, p2.player_id)    AS player_a,
-         GREATEST(p1.player_id, p2.player_id) AS player_b,
+         LEAST(p1.player_id, p2.player_id)         AS player_a,
+         GREATEST(p1.player_id, p2.player_id)      AS player_b,
+         MIN(p1.name_snapshot) FILTER (WHERE p1.player_id < p2.player_id) AS name_a,
+         MIN(p2.name_snapshot) FILTER (WHERE p1.player_id < p2.player_id) AS name_b,
          COUNT(*) FILTER (WHERE ml.winning_side = p1.side) AS wins,
          COUNT(*) FILTER (WHERE ml.winning_side != p1.side) AS losses
        FROM public.group_match_participants p1
@@ -113,13 +120,15 @@ export class LeaderboardRepository {
          AND p2.player_id    IS NOT NULL
        JOIN public.group_match_log ml ON ml.id = p1.match_log_id
        WHERE p1.player_id IS NOT NULL AND ml.group_id = $1
-       GROUP BY 1, 2
+       GROUP BY player_a, player_b
        ORDER BY wins DESC, losses ASC`,
       [groupId]
     )
     return result.rows.map(r => ({
       playerA: r.player_a,
+      nameA: r.name_a ?? r.player_a,
       playerB: r.player_b,
+      nameB: r.name_b ?? r.player_b,
       wins: Number(r.wins),
       losses: Number(r.losses),
     }))
@@ -129,11 +138,13 @@ export class LeaderboardRepository {
   async getIndividualLeaderboard(groupId: string): Promise<IndividualLeaderboardRow[]> {
     const result = await this.pool.query<{
       player_id: string
+      name_snapshot: string
       wins: string
       losses: string
     }>(
       `SELECT
          p.player_id,
+         MIN(p.name_snapshot) AS name_snapshot,
          COUNT(*) FILTER (WHERE ml.winning_side = p.side) AS wins,
          COUNT(*) FILTER (WHERE ml.winning_side != p.side) AS losses
        FROM public.group_match_participants p
@@ -145,6 +156,7 @@ export class LeaderboardRepository {
     )
     return result.rows.map(r => ({
       playerId: r.player_id,
+      nameSnapshot: r.name_snapshot ?? r.player_id,
       wins: Number(r.wins),
       losses: Number(r.losses),
     }))
