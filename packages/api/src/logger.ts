@@ -65,7 +65,7 @@ function emit(level: LogLevel, module: string, msg: string, ctx?: Record<string,
   const effectiveStr = moduleOverride && moduleOverride in LEVEL_RANK ? (moduleOverride as LogLevel) : baseline
   const effectiveRank = effectiveStr ? LEVEL_RANK[effectiveStr] : null
 
-  if (effectiveRank === null || transports.length === 0 || LEVEL_RANK[level] > effectiveRank) {
+  if (effectiveRank === null || transports.length === 0 || LEVEL_RANK[level] < effectiveRank) {
     return
   }
 
