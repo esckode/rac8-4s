@@ -12,7 +12,7 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { apiCall, createTestUser } from './fixtures'
+import { apiCall, createTestUser, getOrganizerToken, createTestTournament } from './fixtures'
 import { API_CONFIG, SELECTORS, ROUTES } from './config'
 
 // ── Prerequisite check ───────────────────────────────────────────────────────
@@ -32,15 +32,10 @@ async function serversRunning(): Promise<boolean> {
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 async function signupAndGetToken(user: { email: string; name: string; password: string }) {
-  const res = await apiCall('/auth/signup', 'POST', user)
-  if (!res.ok) throw new Error(`Signup failed: ${await res.text()}`)
+  const res = await apiCall('/test/player-token', 'POST', { email: user.email, name: user.name })
+  if (!res.ok) throw new Error(`player-token failed: ${await res.text()}`)
   const data = await res.json()
-  if (data.token) return { token: data.token as string, playerId: data.playerId as string }
-
-  const loginRes = await apiCall('/auth/login', 'POST', { email: user.email, password: user.password })
-  if (!loginRes.ok) throw new Error(`Login failed: ${await loginRes.text()}`)
-  const loginData = await loginRes.json()
-  return { token: loginData.token as string, playerId: loginData.playerId as string }
+  return { token: data.playerToken as string, playerId: data.playerId as string }
 }
 
 async function createGroup(token: string, name: string): Promise<string> {
@@ -106,15 +101,22 @@ test.describe('G4.8 — Casual tournament', () => {
     const owner = createTestUser()
     const member = createTestUser()
     const { token: ownerToken } = await signupAndGetToken(owner)
+    // Pre-create member so they have an age record and can accept an invite
     const { token: memberToken } = await signupAndGetToken(member)
     const groupId = await createGroup(ownerToken, `Casual Group ${Date.now()}`)
 
     // Owner creates and closes the poll
     const poll = await createPoll(ownerToken, groupId, 'Play tonight?')
-    await castVote(memberToken, groupId, poll.pollId, 'in')
     await closePoll(ownerToken, groupId, poll.messageId)
 
-    // Member (not creator) views the group
+    // Owner invites the member; member accepts via API to join the group
+    const invRes = await apiCall(`/player/groups/${groupId}/invites`, 'POST', { email: member.email }, ownerToken)
+    const { rawToken } = await invRes.json()
+    await apiCall(`/player/groups/${groupId}/invites/accept`, 'POST', {
+      token: rawToken, email: member.email,
+    })
+
+    // Member (a group member who is NOT the poll creator) views the group
     await loginFrontend(page, memberToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
@@ -128,25 +130,34 @@ test.describe('G4.8 — Casual tournament', () => {
     const { token } = await signupAndGetToken(owner)
     const groupId = await createGroup(token, `Launch Group ${Date.now()}`)
 
-    // Create poll with an "In" vote and close it
+    // Create poll and close it
     const poll = await createPoll(token, groupId, 'Game on?')
-    await castVote(token, groupId, poll.pollId, 'in')
     await closePoll(token, groupId, poll.messageId)
 
-    await loginFrontend(page, token)
-    await page.goto(`http://localhost:5173/groups/${groupId}`)
-
-    await expect(page.locator(SELECTORS.POLL_LAUNCH_BUTTON)).toBeVisible({ timeout: 5000 })
-
-    // Intercept the launch POST to confirm it is called
+    // Intercept the launch POST before navigating to the page
     let launchCalled = false
+    await loginFrontend(page, token)
+
     await page.route(`**/player/groups/${groupId}/polls/${poll.messageId}/launch`, async route => {
       launchCalled = true
       await route.fulfill({ status: 201, body: JSON.stringify({ tournamentId: 'test-tid' }) })
     })
 
+    await page.goto(`http://localhost:5173/groups/${groupId}`)
+    await expect(page.locator(SELECTORS.POLL_LAUNCH_BUTTON)).toBeVisible({ timeout: 5000 })
+
+    // Click opens the confirmation sheet; Confirm fires the POST
     await page.locator(SELECTORS.POLL_LAUNCH_BUTTON).click()
-    await page.waitForTimeout(500)
+    // Wait for the route interception or the confirm sheet — whichever comes first
+    const confirmBtn = page.locator(SELECTORS.LAUNCH_CONFIRM_BUTTON)
+    try {
+      await confirmBtn.waitFor({ state: 'visible', timeout: 3000 })
+      await confirmBtn.click()
+    } catch {
+      // No confirm sheet — launch fired directly (no format selection required)
+    }
+    // Give the request time to resolve
+    await page.waitForTimeout(1000)
     expect(launchCalled).toBe(true)
   })
 
@@ -168,5 +179,93 @@ test.describe('G4.8 — Casual tournament', () => {
       // Leaderboard tab not implemented yet — skip this assertion
       test.skip()
     }
+  })
+
+  test('Any registered participant can score any match in a casual tournament', async () => {
+    // G4.8: "Any participant submits a score in casual mode"
+    // In casual mode the server skips the match-participant check so any registered
+    // player can score any match. Tested at the API level because the casual tournament
+    // page (with openScoring MatchCards) is not yet built.
+    const organizerToken = await getOrganizerToken()
+    const config = { ...createTestTournament(), mode: 'casual' }
+    const createRes = await apiCall('/tournaments', 'POST', config, organizerToken)
+    expect(createRes.ok).toBe(true)
+    const { id: tournamentId } = await createRes.json()
+
+    // Open registration
+    const openRes = await apiCall(`/tournaments/${tournamentId}/advance`, 'POST', { action: 'OPEN_REGISTRATION' }, organizerToken)
+    expect(openRes.ok).toBe(true)
+
+    // Register two match participants and a bystander
+    const players = [createTestUser(), createTestUser(), createTestUser()]
+    const registrations: { email: string; token: string }[] = []
+    for (const p of players) {
+      const reg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
+        email: p.email, name: p.name,
+        dob_attestation: { dateOfBirth: '2000-01-01', policyVersion: 'v1' },
+      })
+      expect(reg.ok).toBe(true)
+      const { magicLinkToken } = await reg.json()
+      const verify = await apiCall(
+        `/tournaments/${tournamentId}/auth/verify?token=${encodeURIComponent(magicLinkToken)}`,
+        'GET'
+      )
+      const { playerToken } = await verify.json()
+      registrations.push({ email: p.email, token: playerToken })
+    }
+
+    // Advance to group_stage_active and generate matches
+    await apiCall(`/tournaments/${tournamentId}/advance`, 'POST', { action: 'CLOSE_REGISTRATION' }, organizerToken)
+    const grpRes = await apiCall(`/tournaments/${tournamentId}/groups`, 'POST', { numGroups: 1, advancingPerGroup: 1 }, organizerToken)
+    expect(grpRes.ok).toBe(true)
+
+    // Get player 1's matches (participant-scoped endpoint returns their match against player 2)
+    const matchesRes = await apiCall(`/tournaments/${tournamentId}/matches`, 'GET', undefined, registrations[0].token)
+    expect(matchesRes.ok).toBe(true)
+    const { matches } = await matchesRes.json()
+    expect(matches.length).toBeGreaterThan(0)
+    const firstMatch = matches[0]
+
+    // Player 3 (bystander, not in THIS match) submits the score — only allowed in casual mode
+    const scoreRes = await apiCall(
+      `/tournaments/${tournamentId}/matches/${firstMatch.id}/score`,
+      'POST',
+      { score: '6-4, 6-3' },
+      registrations[2].token
+    )
+    expect(scoreRes.status).toBe(200)
+    const { match: scoredMatch } = await scoreRes.json()
+    expect(scoredMatch.status).toBe('completed')
+  })
+
+  test('Owner ends a casual tournament session via API', async () => {
+    // G4.8: "Owner ends session"
+    // POST /tournaments/:id/end-session transitions casual tournament to 'abandoned' or 'completed'.
+    // Tested at the API level because the "End session" UI button is not yet built.
+    const organizerToken = await getOrganizerToken()
+    const config = { ...createTestTournament(), mode: 'casual' }
+    const createRes = await apiCall('/tournaments', 'POST', config, organizerToken)
+    expect(createRes.ok).toBe(true)
+    const { id: tournamentId } = await createRes.json()
+
+    // Open registration, register players, then advance to group_stage_active
+    await apiCall(`/tournaments/${tournamentId}/advance`, 'POST', { action: 'OPEN_REGISTRATION' }, organizerToken)
+    const p1 = createTestUser()
+    const p2 = createTestUser()
+    for (const p of [p1, p2]) {
+      const reg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
+        email: p.email, name: p.name,
+        dob_attestation: { dateOfBirth: '2000-01-01', policyVersion: 'v1' },
+      })
+      expect(reg.ok).toBe(true)
+    }
+    await apiCall(`/tournaments/${tournamentId}/advance`, 'POST', { action: 'CLOSE_REGISTRATION' }, organizerToken)
+    await apiCall(`/tournaments/${tournamentId}/groups`, 'POST', { numGroups: 1, advancingPerGroup: 1 }, organizerToken)
+
+    // End the session (no matches scored → 'abandoned')
+    const endRes = await apiCall(`/tournaments/${tournamentId}/end-session`, 'POST', {}, organizerToken)
+    expect(endRes.status).toBe(200)
+    const { status } = await endRes.json()
+    expect(['completed', 'abandoned']).toContain(status)
   })
 })

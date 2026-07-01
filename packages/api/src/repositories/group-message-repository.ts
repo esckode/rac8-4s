@@ -30,6 +30,8 @@ export interface GroupMessageRow {
   pollId?: string | null
   targetTime?: Date | null
   closedAt?: Date | null
+  autoCloseAt?: Date | null
+  autoLaunch?: boolean
 }
 
 export interface SendGroupMessageInput {
@@ -61,6 +63,8 @@ function rowToGroupMessage(row: any): GroupMessageRow {
     base.pollId = row.poll_id ?? null
     base.targetTime = row.target_time ? (row.target_time instanceof Date ? row.target_time : new Date(row.target_time)) : null
     base.closedAt = row.closed_at ? (row.closed_at instanceof Date ? row.closed_at : new Date(row.closed_at)) : null
+    base.autoCloseAt = row.poll_auto_close_at ? (row.poll_auto_close_at instanceof Date ? row.poll_auto_close_at : new Date(row.poll_auto_close_at)) : null
+    base.autoLaunch = row.poll_auto_launch ?? false
   }
   return base
 }
@@ -305,7 +309,8 @@ export class GroupMessageRepository {
     const result = await this.pool.query(
       `SELECT gm.id, gm.conversation_id, gm.player_id, gm.sender_name_snapshot, gm.body,
               gm.type, gm.created_at, gm.removed_at, gm.removed_by, gm.metadata,
-              p.id AS poll_id, p.target_time, p.closed_at
+              p.id AS poll_id, p.target_time, p.closed_at,
+              p.auto_close_at AS poll_auto_close_at, p.auto_launch AS poll_auto_launch
        FROM messaging.group_messages gm
        LEFT JOIN messaging.polls p ON p.message_id = gm.id
        WHERE gm.conversation_id = $1

@@ -24,6 +24,8 @@ import type { IBroadcastBus } from './broadcast-bus'
 import type { AppConfig } from './config'
 import type { EmailAdapter } from './email-adapter'
 import { QueueMonitor } from './queue-monitor'
+import { generatePlayerSession } from './auth/magic-link'
+import { PlayerRepository } from './db'
 import type { Redis } from 'ioredis'
 import { RedisHealthState, probeRedisHealth, isRedisSelected } from './redis-health'
 import type { PartitionManager } from './services/partition-manager'
@@ -170,6 +172,33 @@ export function createApp(deps: AppDependencies): Express {
   app.use('/player/groups', playerGroupsRouter(appDeps))
   app.use('/api/analytics', analyticsRouter(appDeps))
   app.use('/api/auth', authRouter(appDeps))
+
+  // Test-only endpoint — creates/finds a player and returns an opaque player session token.
+  // Disabled in production to prevent auth bypass.
+  if (process.env.NODE_ENV !== 'production') {
+    app.post('/test/player-token', async (req: Request, res: Response) => {
+      try {
+        const { email, name } = req.body as { email: string; name: string }
+        if (!email || !name) return res.status(400).json({ error: 'email and name required' })
+        const playerRepo = new PlayerRepository(appDeps.db as any)
+        const player = await playerRepo.findOrCreatePlayerByEmail(
+          email.toLowerCase(),
+          name,
+          undefined,
+          undefined,
+          { dateOfBirth: '2000-01-01', policyVersion: 'v1' }
+        )
+        const session = await generatePlayerSession(
+          { playerId: player.id, tournamentId: 'test', email: player.email, createdAt: Date.now() },
+          3600,
+          appDeps.tokenStore
+        )
+        return res.json({ playerToken: session.token, playerId: player.id })
+      } catch (err) {
+        return res.status(500).json({ error: String(err) })
+      }
+    })
+  }
   app.use('/api/admin', adminRouter(appDeps))
 
   // ─── Health endpoints ──────────────────────────────────────────────────────

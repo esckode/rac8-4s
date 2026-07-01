@@ -148,6 +148,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         groupStageDeadline: req.body.groupStageDeadline,
         knockoutStageDeadline: req.body.knockoutStageDeadline,
         creatorId: payload.sub,
+        mode: req.body.mode === 'casual' ? 'casual' : 'scheduled',
       })
 
       log.info('tournament.created', { tournamentId: tournament.id, name: tournament.name, organizerId: payload.sub, status: tournament.status })

@@ -33,7 +33,7 @@ here.
 | [MESSAGING_IMPLEMENTATION_V2.md](assets/planning/MESSAGING_IMPLEMENTATION_V2.md) | `conversations` abstraction (V1.0, Player-Groups prereq) + §17 multi-instance foundation (Redis bus/queue/token store, worker, dev distributed stack; Redis-required failure mode) + product gaps (offline notify, sender names, thread model, read-receipts) | ✅ **Built & merged** (V1–V6, migrations 034–037); V7 deferred |
 | [FRONTEND_IMPLEMENTATION.md](assets/planning/FRONTEND_IMPLEMENTATION.md) | Frontend-quality / rendering tasks driving [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) — FE-RENDER-1 (memoize `AuthProvider` value) | 📋 **Plan ready** — not started |
 | [PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md) | Community layer — Phases G0–G5 (compliance/age-gate prereq, group entity+membership, durable chat+moderation, polls, casual tournament engine+launch, DSR erasure cascade). TDD-first, ≥85% coverage; carries R-A reconciliation (G4.7) | ✅ **Built & merged** (G0.1–G5.1, migrations 038–045) |
-| [PLAYER_GROUPS_V2_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_V2_IMPLEMENTATION.md) | Community-layer refinements (FrontEndPlan §A/§B, grilled Q1–Q16) in **3 phases** — P1 member layer (group settings, member mgmt, invite-accept, age-gate wiring, @mentions), P2 personal notification thread (conversation-backed, DM seed), P3 casual play (launch flow + poll auto-launch/min-count + **shared scheduler** + casual scoring/leaderboards). TDD-first, ≥85%; 3 new pages + 1 tab; carries backend deltas + the 🔴 shared scheduler | 📋 **Plan ready** — not started |
+| [PLAYER_GROUPS_V2_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_V2_IMPLEMENTATION.md) | Community-layer refinements (FrontEndPlan §A/§B, grilled Q1–Q16) in **3 phases** — P1 member layer (group settings, member mgmt, invite-accept, age-gate wiring, @mentions), P2 personal notification thread (conversation-backed, DM seed), P3 casual play (launch flow + poll auto-launch/min-count + **shared scheduler** + casual scoring/leaderboards). TDD-first, ≥85%; 3 new pages + 1 tab; carries backend deltas + the 🔴 shared scheduler | ✅ **Built & merged** (P1.1–P3.9, migrations 046–048) |
 | [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md) | Token-usage lint gate — Phases E0–E5: (b) repair broken ESLint config + clear 53 errors + gate lint in CI, (a) color-literal `no-restricted-syntax` rule on the unified gate w/ interim baseline + permanent allowlist, (c) husky/lint-staged pre-commit, **(E5 mandatory) full retrofit of all ~301 legacy color literals across 11 files + tear down the baseline** (gate becomes total). TDD-first via ESLint fixture harness | ✅ **Built & merged** to `main` |
 
 ## Test scenarios
@@ -62,6 +62,13 @@ here.
   moderation + 3-level notify/@mentions (G2), availability polls with live SSE tally (G3), casual tournament
   engine + social-mixer doubles + durable cross-tournament leaderboards + group→tournament launch (G4),
   operator DSR erase/export orchestration (G5). Migrations 038–045. Resolves **R-A** (casual mode) in G4.7.
+- **PLAYER_GROUPS_V2_IMPLEMENTATION.md** — community-layer refinements, Phases P1–P3 (TDD-first, ≥85%) ✅:
+  member layer (group settings + member mgmt + invite-accept landing + age-gate lazy wiring + @mentions +
+  desktop TopNav Groups link + refetch-on-reconnect; P1.1–P1.11, migrations 046–046b), personal notification
+  thread (schema + 4 events + header bell + /notifications stream + digest generalization + hold-aware DSR;
+  P2.1–P2.6), casual play (shared scheduler + poll auto-launch config + auto-close consumer + auto-launch hook
+  + launch deep-link metadata + poll-config form + launch confirmation sheet + open-scoring MatchCard +
+  leaderboard tab; P3.1–P3.9, migrations 047–048). Resolves FrontEndPlan §A/§B.
 
 ### 📐 Design → needs an implementation plan
 - *(done)* ~~**Player Groups** → `PLAYER_GROUPS_IMPLEMENTATION.md`~~ — **✅ Built & merged** (G0.1–G5.1,
@@ -79,9 +86,6 @@ here.
 ### 📋 Plan ready → available to tackle
 - **FRONTEND_IMPLEMENTATION.md** — frontend-quality tasks (TDD). First task: **FE-RENDER-1** memoize the
   `AuthProvider` context value.
-- **PLAYER_GROUPS_V2_IMPLEMENTATION.md** — community-layer refinements (TDD-first, ≥85%), 3 phases. First
-  task: **P1.1** reusable state components. Phases are independent deliverables; Phase 3 delivers the 🔴
-  shared scheduler (one scheduler, three consumers). Resolves FrontEndPlan §A/§B.
 
 ### ⏸️ Deferred (with triggers)
 - **Capacitor native wrapper** — trigger: reliable iOS push / app-store presence / engagement for the
@@ -110,6 +114,27 @@ here.
   mandates PWA + Service Workers + IndexedDB sync queue + "Offline - will retry" banner (HL
   21/112/137/172/589) — the PWA plan **folds these in, doesn't reinvent**. Promote **push notifications
   "future" → in-scope** (web push). Update the HL roadmap status; reference existing offline reqs.
+
+### 🔍 Frontend gaps (surfaced by e2e work, 2026-07-01)
+> Small, standalone implementation gaps found while writing Playwright specs. No design grilling needed —
+> the desired behaviour is clear from the existing scenario docs and API contracts.
+
+- **FE-GAP-1 — Login 429 rate-limit UI.** `Login.tsx` doesn't handle a `429 RATE_LIMITED` response from
+  `POST /api/auth/login`. The API correctly returns `{ code: 'RATE_LIMITED', message: 'Too many attempts.
+  Try again later.' }` after 5 failed attempts (verified in `offline.spec.ts`), but the login form shows
+  nothing (no error message, no disabled state). Target behaviour (per `e2e-scenarios.md`): display "Too
+  many attempts" text, disable the form fields, show a retry countdown. Compare with `ResetPassword.tsx`
+  which already handles `status === 429`. The e2e test (`offline.spec.ts` — "Rate limit countdown UI") is
+  written and self-skips until this is built.
+
+- **FE-GAP-2 — Groups unread badge not SSE-driven.** `MyGroupsUnreadBadge` and the `groupsUnread` state
+  variable are wired into `ResponsiveLayout.tsx`, but the count is never incremented via SSE while the user
+  is away from the group page. The SSE bus emits `message.created` events; a listener in the auth/groups
+  context needs to increment the badge counter when a new message arrives for a group the user isn't
+  currently viewing, and reset it to zero when they open that group. Distinct from **P1.11**
+  (refetch-on-reconnect), which is about history refresh, not the nav badge. The e2e test
+  (`player-groups.spec.ts` — "Unread badge appears on My Groups nav tab") is written and self-skips until
+  this is built.
 
 ### 🚀 Production readiness (before multi-instance prod cutover)
 > Cross-cutting gaps surfaced during the messaging V2 build — **not** blocking the build (V1–V6 done), but

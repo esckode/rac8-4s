@@ -37,15 +37,10 @@ async function serversRunning(): Promise<boolean> {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function signupAndGetToken(user: { email: string; name: string; password: string }) {
-  const res = await apiCall('/auth/signup', 'POST', user)
-  if (!res.ok) throw new Error(`Signup failed: ${await res.text()}`)
+  const res = await apiCall('/test/player-token', 'POST', { email: user.email, name: user.name })
+  if (!res.ok) throw new Error(`player-token failed: ${await res.text()}`)
   const data = await res.json()
-  if (data.token) return { token: data.token as string, playerId: data.playerId as string }
-
-  const loginRes = await apiCall('/auth/login', 'POST', { email: user.email, password: user.password })
-  if (!loginRes.ok) throw new Error(`Login failed: ${await loginRes.text()}`)
-  const loginData = await loginRes.json()
-  return { token: loginData.token as string, playerId: loginData.playerId as string }
+  return { token: data.playerToken as string, playerId: data.playerId as string }
 }
 
 async function createGroup(token: string, name: string) {

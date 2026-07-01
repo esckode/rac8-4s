@@ -310,7 +310,10 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
 
         log.info('group.invite.sent', { groupId, actorPlayerId: session.playerId })
 
-        return res.status(201).json({ ok: true })
+        // rawToken is included in non-production environments for e2e testing
+        const body: { ok: boolean; rawToken?: string } = { ok: true }
+        if (process.env.NODE_ENV !== 'production') body.rawToken = token
+        return res.status(201).json(body)
       } catch (err) {
         next(handleGroupError(err))
       }
@@ -573,6 +576,8 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
               pollId: m.pollId ?? null,
               targetTime: m.targetTime ?? null,
               closedAt: m.closedAt ?? null,
+              autoCloseAt: m.autoCloseAt ?? null,
+              autoLaunch: m.autoLaunch ?? false,
             }),
           })),
         })

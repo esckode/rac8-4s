@@ -350,6 +350,7 @@ export async function createSinglesTournamentInGroupStage(
   const focusReg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
     email: focus.email,
     name: focus.name,
+    dob_attestation: { dateOfBirth: '2000-01-01', policyVersion: 'v1' },
   })
   if (!focusReg.ok) {
     throw new Error(`Failed to register focus player: ${focusReg.status} ${await focusReg.text()}`)
@@ -365,6 +366,7 @@ export async function createSinglesTournamentInGroupStage(
     const reg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
       email: filler.email,
       name: filler.name,
+      dob_attestation: { dateOfBirth: '2000-01-01', policyVersion: 'v1' },
     })
     if (!reg.ok) {
       throw new Error(`Failed to register filler player: ${reg.status} ${await reg.text()}`)
@@ -441,6 +443,7 @@ export async function createDoublesTournamentInGroupStage(
   const focusReg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
     email: focus.email,
     name: focus.name,
+    dob_attestation: { dateOfBirth: '2000-01-01', policyVersion: 'v1' },
   })
   if (!focusReg.ok) {
     throw new Error(`Failed to register focus player: ${focusReg.status} ${await focusReg.text()}`)
@@ -456,6 +459,7 @@ export async function createDoublesTournamentInGroupStage(
     const reg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
       email: filler.email,
       name: filler.name,
+      dob_attestation: { dateOfBirth: '2000-01-01', policyVersion: 'v1' },
     })
     if (!reg.ok) {
       throw new Error(`Failed to register filler player: ${reg.status} ${await reg.text()}`)
@@ -535,6 +539,7 @@ export async function createDoublesTournamentWithSoloRegistrants(
     const reg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
       email: user.email,
       name: user.name,
+      dob_attestation: { dateOfBirth: '2000-01-01', policyVersion: 'v1' },
     })
     if (!reg.ok) {
       throw new Error(`Failed to register solo player: ${reg.status} ${await reg.text()}`)
@@ -613,6 +618,7 @@ export async function createTournamentInKnockoutStage(
     const reg = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
       email: user.email,
       name: user.name,
+      dob_attestation: { dateOfBirth: '2000-01-01', policyVersion: 'v1' },
     })
     if (!reg.ok) throw new Error(`Failed to register player: ${reg.status} ${await reg.text()}`)
     const { magicLinkToken } = await reg.json()

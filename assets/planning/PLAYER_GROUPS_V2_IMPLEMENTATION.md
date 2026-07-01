@@ -4,7 +4,7 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-06-30
-**Status:** 📋 PLAN — not started.
+**Status:** ✅ **Built & merged** to `main` (P1.1–P3.9, migrations 046–048).
 **Design source of truth:** [`PLAYER_GROUPS_DESIGN.md`](./PLAYER_GROUPS_DESIGN.md) (§4 UI, §5 polls, §6 launch,
 §11 decisions, §12 compliance) and the gap inventory [`FrontEndPlan.md`](./FrontEndPlan.md) §A/§B. This plan
 is the **grilled** resolution of that inventory (decisions Q1–Q16 below, grilled 2026-06-30).
