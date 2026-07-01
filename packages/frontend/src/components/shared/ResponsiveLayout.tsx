@@ -174,6 +174,7 @@ const TopNav = () => {
   const isActive = (path: string) => location.pathname.startsWith(path)
 
   const links = [
+    { path: '/groups', label: 'Groups' },
     { path: '/standings', label: 'Standings' },
     { path: '/matches', label: 'Matches' },
     { path: '/bracket', label: 'Bracket' },
