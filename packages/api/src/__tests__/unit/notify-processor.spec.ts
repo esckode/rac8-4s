@@ -285,3 +285,75 @@ describe('processMessagingNotify', () => {
     )
   })
 })
+
+// ── P2.5: conversation-type-aware subject ────────────────────────────────────
+
+describe('processMessagingNotify — conversation-type-aware subject (P2.5)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('uses "new notifications" subject for personal conversations', async () => {
+    const emailAdapter = new InMemoryEmailAdapter()
+    const pool = makePool(async (sql) => {
+      if (sql.includes('SELECT') || sql.includes('select')) {
+        return {
+          rows: [{ player_id: 'p-1', player_email: 'p@test.local', unread_count: 2 }],
+        }
+      }
+      return { rows: [] }
+    })
+
+    await processMessagingNotify(
+      { conversationId: 'conv-personal', conversationType: 'personal' },
+      { pool, emailAdapter }
+    )
+
+    expect(emailAdapter.sent[0].subject).toContain('notifications')
+    expect(emailAdapter.sent[0].subject).not.toContain('tournament')
+  })
+
+  it('uses tournament subject for tournament conversations', async () => {
+    const emailAdapter = new InMemoryEmailAdapter()
+    const pool = makePool(async (sql) => {
+      if (sql.includes('SELECT') || sql.includes('select')) {
+        return {
+          rows: [{ player_id: 'p-2', player_email: 'q@test.local', unread_count: 1 }],
+        }
+      }
+      return { rows: [] }
+    })
+
+    await processMessagingNotify(
+      { conversationId: 'conv-t', tournamentId: 'tour-1', conversationType: 'tournament' },
+      { pool, emailAdapter }
+    )
+
+    expect(emailAdapter.sent[0].subject).toContain('tournament')
+  })
+
+  it('personal digest still sets notified_at (idempotency preserved)', async () => {
+    const emailAdapter = new InMemoryEmailAdapter()
+    const updates: string[] = []
+    const pool = makePool(async (sql) => {
+      if (sql.includes('SELECT') || sql.includes('select')) {
+        return {
+          rows: [{ player_id: 'p-3', player_email: 'r@test.local', unread_count: 1 }],
+        }
+      }
+      if (sql.includes('UPDATE')) {
+        updates.push(sql)
+        return { rows: [] }
+      }
+      return { rows: [] }
+    })
+
+    await processMessagingNotify(
+      { conversationId: 'conv-personal-2', conversationType: 'personal' },
+      { pool, emailAdapter }
+    )
+
+    expect(updates.length).toBeGreaterThan(0)
+    expect(updates[0]).toContain('notified_at')
+  })
+})
