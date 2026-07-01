@@ -12,7 +12,10 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useGroupMessages, GroupMessageRecord } from '../hooks/useGroupMessages'
+import { useAuth } from '../hooks/useAuth'
 import { PollCard, type PollChoice } from './PollCard'
+import { MentionAutocomplete } from './MentionAutocomplete'
+import { parseMentions } from '../utils/parseMentions'
 
 // ─── GroupChatPanel ───────────────────────────────────────────────────────────
 
@@ -26,6 +29,7 @@ interface GroupChatPanelProps {
 
 export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active = false, isOwner = false }) => {
   const { messages, send } = useGroupMessages(groupId, active)
+  const { user } = useAuth()
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,11 +38,26 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
   const [pollVotes, setPollVotes] = useState<Record<string, PollChoice>>({})
   // Track in-progress poll actions to avoid double submissions
   const pollActingRef = useRef<Set<string>>(new Set())
+  // @mention autocomplete state
+  const [members, setMembers] = useState<MemberSummary[]>([])
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionStart, setMentionStart] = useState<number | null>(null)
 
   // Scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
+
+  // Fetch group members for mention autocomplete
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token')
+    fetch(`/player/groups/${groupId}/members`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then((data: MemberSummary[]) => setMembers(data))
+      .catch(() => {})
+  }, [groupId])
 
   const handleVote = useCallback(async (pollId: string, choice: PollChoice) => {
     if (pollActingRef.current.has(pollId)) return
@@ -152,7 +171,21 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
               data-testid="group-message-item"
               className="rounded-lg p-3 text-sm bg-[--ink-50]"
             >
-              <p className="text-[--ink-900]">{m.body}</p>
+              <p className="text-[--ink-900]">
+                {parseMentions(m.body).map((seg, i) => {
+                  if (seg.type === 'text') return <span key={i}>{seg.text}</span>
+                  const isSelf = seg.name === user?.name
+                  return (
+                    <span
+                      key={i}
+                      data-testid={isSelf ? 'mention-chip-self' : 'mention-chip'}
+                      className={isSelf ? 'bg-[--gold-200] text-[--gold-900] rounded px-1 font-medium' : 'bg-[--court-100] text-[--court-800] rounded px-1 font-medium'}
+                    >
+                      {seg.name}
+                    </span>
+                  )
+                })}
+              </p>
               <p className="text-xs text-[--ink-500] mt-1">
                 {m.senderName != null ? (
                   <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
@@ -172,12 +205,39 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
       )}
 
       {/* Send form */}
-      <form onSubmit={handleSend} className="border-t border-[--border] p-3 flex gap-2">
+      <form onSubmit={handleSend} className="border-t border-[--border] p-3 flex gap-2 relative">
+        {mentionQuery !== null && (
+          <MentionAutocomplete
+            members={members}
+            query={mentionQuery}
+            onSelect={name => {
+              const before = body.slice(0, mentionStart ?? body.length)
+              const after = body.slice((mentionStart ?? 0) + 1 + mentionQuery.length)
+              setBody(`${before}@"${name}" ${after}`)
+              setMentionQuery(null)
+              setMentionStart(null)
+            }}
+            onClose={() => { setMentionQuery(null); setMentionStart(null) }}
+          />
+        )}
         <input
           data-testid="group-message-input"
           type="text"
           value={body}
-          onChange={e => setBody(e.target.value)}
+          onChange={e => {
+            const val = e.target.value
+            setBody(val)
+            const pos = e.target.selectionStart ?? val.length
+            const before = val.slice(0, pos)
+            const atMatch = before.match(/@([^"@\s]*)$/)
+            if (atMatch) {
+              setMentionQuery(atMatch[1])
+              setMentionStart(pos - atMatch[0].length)
+            } else {
+              setMentionQuery(null)
+              setMentionStart(null)
+            }
+          }}
           placeholder="Send a message…"
           disabled={sending}
           className="flex-1 border border-[--border] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--court-400]"

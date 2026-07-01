@@ -37,6 +37,8 @@ const mockMembers = [
   { playerId: 'pid-bob', name: 'Bob Jones', role: 'owner' as const, joinedAt: '2026-01-01T00:00:00Z' },
 ]
 
+window.HTMLElement.prototype.scrollIntoView = jest.fn()
+
 jest.mock('../../hooks/useGroupMessages', () => ({
   useGroupMessages: () => ({ messages: mockMessages, send: jest.fn() }),
 }))
@@ -85,7 +87,7 @@ describe('GroupChatPanel @mention composer (P1.9)', () => {
     fireEvent.change(input, { target: { value: '@' } })
     await waitFor(() => screen.getByTestId('mention-autocomplete'))
 
-    fireEvent.click(screen.getByText('Alice Smith'))
+    fireEvent.click(screen.getByRole('option', { name: 'Alice Smith' }))
     expect((input as HTMLInputElement).value).toBe('@"Alice Smith" ')
   })
 
