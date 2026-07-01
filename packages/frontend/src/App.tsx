@@ -16,6 +16,7 @@ import { TournamentDetail } from './pages/TournamentDetail'
 import { MyTournamentsHub } from './pages/MyTournamentsHub'
 import { GroupList, GroupDetail, GroupSettings } from './pages/MyGroups'
 import { InviteAcceptPage } from './pages/InviteAcceptPage'
+import { Notifications } from './pages/Notifications'
 import { PartnerRequestConfirm } from './pages/PartnerRequestConfirm'
 import { OrganizerManage } from './pages/OrganizerManage'
 import { OrganizerDashboard } from './pages/OrganizerDashboard'
@@ -148,6 +149,16 @@ export const App: React.FC = () => {
               <ProtectedRoute>
                 <ResponsiveLayout showHeader showNav>
                   <GroupDetail />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.NOTIFICATIONS}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <Notifications />
                 </ResponsiveLayout>
               </ProtectedRoute>
             }

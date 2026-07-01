@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useGroupUnread } from '../../hooks/useGroupUnread'
+import { useNotificationUnread } from '../../hooks/useNotificationUnread'
 import { MyGroupsUnreadBadge } from '../GroupChatPanel'
 import '../../styles/globals.css'
 
@@ -111,6 +112,7 @@ const BottomNav = () => {
   const location = useLocation()
   const { isAuthenticated } = useAuth()
   const groupsUnread = useGroupUnread()
+  const notificationUnread = useNotificationUnread()
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const isActive = (path: string) => location.pathname.startsWith(path)
 
@@ -151,6 +153,29 @@ const BottomNav = () => {
               )}
             </span>
             <span>Groups</span>
+          </a>
+        )}
+        {isAuthenticated && (
+          <a
+            href="/notifications"
+            data-testid="nav-notifications"
+            className={`responsive-bottom-nav-item ${isActive('/notifications') ? 'active' : ''}`}
+            aria-current={isActive('/notifications') ? 'page' : undefined}
+            aria-label={notificationUnread > 0 ? `Notifications, ${notificationUnread} unread` : 'Notifications'}
+          >
+            <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
+              🔔
+              {notificationUnread > 0 && (
+                <span
+                  data-testid="notification-unread-badge"
+                  style={{ position: 'absolute', top: -6, right: -6 }}
+                  className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-[--rose-500] text-white rounded-full"
+                >
+                  {notificationUnread > 99 ? '99+' : notificationUnread}
+                </span>
+              )}
+            </span>
+            <span>Notifications</span>
           </a>
         )}
         {isAuthenticated && (

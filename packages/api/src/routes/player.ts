@@ -150,5 +150,28 @@ export default function playerRouter(deps: AppDependencies) {
     }
   })
 
+  // GET /player/notifications/unread - count of unread personal notifications
+  router.get('/notifications/unread', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePlayerId(req.headers.authorization)
+
+      const result = await deps.db.query(
+        `SELECT COUNT(*) AS n
+         FROM messaging.group_message_recipients gmr
+         JOIN messaging.group_messages gm ON gm.id = gmr.message_id
+         JOIN messaging.conversations c ON c.id = gm.conversation_id
+         WHERE c.type = 'personal'
+           AND c.player_id = $1
+           AND gmr.player_id = $1
+           AND gmr.read_at IS NULL`,
+        [playerId]
+      )
+
+      res.json({ unread: Number(result.rows[0].n) })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   return router
 }

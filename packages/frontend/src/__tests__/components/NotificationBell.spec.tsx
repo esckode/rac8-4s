@@ -46,8 +46,13 @@ function renderLayout() {
 describe('P2.3 — Notification bell', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    localStorage.setItem('auth_token', 'test-token')
     // suppress noise
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) } as any)
+  })
+
+  afterEach(() => {
+    localStorage.clear()
   })
 
   afterEach(() => {
