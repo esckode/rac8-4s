@@ -78,7 +78,7 @@ All environment differences are controlled via `.tfvars` files. Create new envir
 | Parameter | Type | Production | UAT | Dev | Purpose |
 |---|---|---|---|---|---|
 | `environment` | string | `production` | `uat` | `dev` | Environment identifier |
-| `aws_region` | string | `us-east-1` | `us-east-1` | `us-east-1` | AWS region |
+| `aws_region` | string | `us-east-2` | `us-east-2` | `us-east-2` | AWS region |
 | `vpc_cidr` | string | `10.0.0.0/16` | `10.1.0.0/16` | `10.2.0.0/16` | VPC CIDR block (isolated per env) |
 
 #### Compute Parameters
@@ -178,7 +178,7 @@ terraform {
     bucket  = "tournament-app-tofu-state"
     encrypt = true  # ✅ Encrypted at rest with SSE-S3
     key     = "tournament-app.tfstate"
-    region  = "us-east-1"
+    region  = "us-east-2"
   }
 }
 ```

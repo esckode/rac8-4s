@@ -32,10 +32,10 @@ IaC-implementation.md (You are here - Actually build it)
 
 ### Required
 
-- ✅ OpenTofu installed: `brew install opentofu`
-- ✅ AWS CLI configured: `aws configure`
-- ✅ AWS account access
-- ✅ This repository cloned locally
+- [x] OpenTofu installed: v1.12.3 baseline (standalone binary in `~/.local/bin`; macOS alternative: `brew install opentofu`). State was written with this version — don't downgrade below it.
+- [x] AWS CLI v2 (2.35.15) with the `tournament` IAM Identity Center profile (see `~/.aws/config`): `aws sso login --profile tournament`, then `export AWS_PROFILE=tournament`
+- [x] AWS account access (verified via `aws sts get-caller-identity`)
+- [x] This repository cloned locally
 
 ### Recommended
 
@@ -46,11 +46,13 @@ IaC-implementation.md (You are here - Actually build it)
 
 ## One-Time Setup (Do This First)
 
+**Status: ✅ completed 2026-07-06** — `tournament-app-tofu-state` created in us-east-2; versioning and AES256 encryption enabled, all three validations passed.
+
 ### Create S3 State Bucket
 
 ```bash
 # Create bucket for Terraform state
-aws s3 mb s3://tournament-app-tofu-state --region us-east-1
+aws s3 mb s3://tournament-app-tofu-state --region us-east-2
 
 # Enable versioning (allows recovery if state is corrupted)
 aws s3api put-bucket-versioning \
@@ -91,59 +93,76 @@ aws s3api get-bucket-versioning --bucket tournament-app-tofu-state
 
 ## Step 1: Initialize OpenTofu & Create Base Files
 
-### Create Directory Structure
+Broken into micro-steps **1a–1g**: each creates one file or runs one command, has its own verify gate, and leaves the repo in a consistent, stoppable state. Do them in order; check the box when the verification passes. All AWS interaction in this step is read-only (state bucket + STS) — no billable resources are created. First real spend is Step 3 (RDS).
+
+**Progress:**
+
+- [ ] 1a. Directory skeleton
+- [ ] 1b. Git hygiene (`.gitignore`)
+- [ ] 1c. `backend.tf` + first `tofu init` (backend connection only)
+- [ ] 1d. `variables.tf`
+- [ ] 1e. `main.tf` + second `tofu init` (providers)
+- [ ] 1f. `environments/uat.tfvars` + no-op plan
+- [ ] 1g. `environments/production.tfvars` (deferrable)
+
+> **Changed from the original plan:** the root `outputs.tf` is no longer created in Step 1 — its blocks reference modules that don't exist until Steps 2–6, so `tofu validate` would fail. Each output block is now added by the step that introduces its module.
+
+### 1a. Directory Skeleton
 
 ```bash
 cd /home/esckode/projects/claude/rac8-4s
 mkdir -p infra/{modules/{networking,secrets,database,api,frontend,audit},environments}
-cd infra
 ```
 
-### Create `backend.tf`
+**Verify:** `find infra -type d` lists the 6 module dirs + `environments/`; pre-existing `infra/nginx/` untouched.
+
+### 1b. Git Hygiene
+
+Ignore OpenTofu artifacts before anything can generate them:
 
 ```bash
+cat >> .gitignore << 'EOF'
+
+# OpenTofu
+infra/.terraform/
+*.tfstate
+*.tfstate.*
+EOF
+```
+
+`.terraform/` holds provider binaries — never commit it. `.terraform.lock.hcl` (appears in 1e) **should** be committed: it pins provider versions.
+
+**Verify:** `git check-ignore infra/.terraform/x` and `git check-ignore infra/foo.tfstate` both match.
+
+### 1c. Create `backend.tf` + First `tofu init`
+
+Only the backend block — with no providers declared yet, `init` does exactly one thing: connect to the S3 state bucket. A failure here can only be credentials (SSO expired? re-run `aws sso login --profile tournament`) or bucket config.
+
+```bash
+cd infra
 cat > backend.tf << 'EOF'
 terraform {
   backend "s3" {
     bucket         = "tournament-app-tofu-state"
     key            = "tournament-app.tfstate"
-    region         = "us-east-1"
+    region         = "us-east-2"
     encrypt        = true
     use_lockfile   = true
   }
 }
 EOF
+
+export AWS_PROFILE=tournament
+tofu init
 ```
 
-### Create `main.tf` (Provider Only)
+**Verify:** output includes `Successfully configured the backend "s3"`.
 
-```bash
-cat > main.tf << 'EOF'
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
-  }
-  required_version = ">= 1.7.0"
-}
-
-provider "aws" {
-  region = var.aws_region
-}
-
-data "aws_caller_identity" "current" {}
-EOF
-```
-
-### Create `variables.tf`
+### 1d. Create `variables.tf`
 
 **Reference:** For complete variable list, see **`IaC-architecture.md`** → "All Available Parameters"
+
+Bare variable declarations are valid config on their own. This must precede `main.tf` (1e), which references `var.aws_region`.
 
 ```bash
 cat > variables.tf << 'EOF'
@@ -159,7 +178,7 @@ variable "environment" {
 variable "aws_region" {
   description = "AWS region"
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 variable "vpc_cidr" {
@@ -277,108 +296,51 @@ variable "log_retention_days" {
 EOF
 ```
 
-### Create `outputs.tf`
+**Verify:** `tofu validate` → "Success! The configuration is valid."
+
+### 1e. Create `main.tf` (Providers) + Second `tofu init`
 
 ```bash
-cat > outputs.tf << 'EOF'
-output "vpc_id" {
-  value       = module.networking.vpc_id
-  description = "VPC ID"
+cat > main.tf << 'EOF'
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+  }
+  required_version = ">= 1.7.0"
 }
 
-output "public_subnet_ids" {
-  value       = module.networking.public_subnet_ids
-  description = "Public subnet IDs"
+provider "aws" {
+  region = var.aws_region
 }
 
-output "alb_dns_name" {
-  value       = module.api.alb_dns_name
-  description = "ALB DNS name"
-}
-
-output "alb_arn" {
-  value       = module.api.alb_arn
-  description = "ALB ARN"
-}
-
-output "alb_target_group_arn" {
-  value       = module.api.target_group_arn
-  description = "ALB target group ARN"
-}
-
-output "ec2_instance_id" {
-  value       = module.api.instance_id
-  description = "EC2 instance ID"
-}
-
-output "rds_endpoint" {
-  value       = module.database.endpoint
-  description = "RDS endpoint"
-}
-
-output "frontend_bucket_name" {
-  value       = module.frontend.bucket_name
-  description = "S3 bucket name for frontend"
-}
-
-output "cloudfront_distribution_id" {
-  value       = module.frontend.distribution_id
-  description = "CloudFront distribution ID"
-}
-
-output "cloudfront_url" {
-  value       = module.frontend.distribution_domain_name
-  description = "CloudFront distribution domain"
-}
-
-output "iam_instance_profile_name" {
-  value       = module.api.instance_profile_name
-  description = "IAM instance profile name"
-}
+data "aws_caller_identity" "current" {}
 EOF
+
+tofu init
 ```
 
-### Create Environment Config Files
+Re-running `init` here has exactly one new job: downloading the two providers.
+
+**Verify:**
+- `tofu validate` → "Success! The configuration is valid."
+- `ls .terraform/providers/registry.opentofu.org/hashicorp/` → `aws` and `random`
+- `.terraform.lock.hcl` was created — commit it (pins provider versions)
+
+### 1f. Create `environments/uat.tfvars`
 
 **Reference:** See **`IaC-architecture.md`** → "Parameters & Configuration" for all available parameters and how to customize.
 
-**`environments/production.tfvars`:**
-```bash
-cat > environments/production.tfvars << 'EOF'
-environment                    = "production"
-aws_region                     = "us-east-1"
-vpc_cidr                       = "10.0.0.0/16"
-
-ec2_instance_type              = "t2.micro"
-ec2_volume_size                = 30
-enable_ssh                     = false
-allowed_ssh_cidr               = null
-
-db_instance_class              = "db.t3.micro"
-db_allocated_storage           = 20
-db_backup_retention_period     = 7
-db_skip_final_snapshot         = false
-
-health_check_interval          = 30
-health_check_timeout           = 5
-health_check_healthy_threshold = 2
-health_check_unhealthy_threshold = 3
-
-email_service                  = "aws_ses"
-email_from_address             = "noreply@tournament-app.com"
-
-enable_cloudtrail              = true
-enable_cloudwatch_logs         = true
-enable_mfa_delete              = true
-log_retention_days             = 2555
-EOF
-```
-
-**`environments/uat.tfvars`:**
 ```bash
 cat > environments/uat.tfvars << 'EOF'
 environment                    = "uat"
-aws_region                     = "us-east-1"
+aws_region                     = "us-east-2"
 vpc_cidr                       = "10.1.0.0/16"
 
 ec2_instance_type              = "t2.micro"
@@ -406,35 +368,53 @@ log_retention_days             = 30
 EOF
 ```
 
-### Initialize OpenTofu
+**Verify:** end-to-end no-op plan —
 
 ```bash
-tofu init
-
-# Expected output:
-# Initializing the backend...
-# Initializing modules...
-# Initializing provider plugins...
-# [success] Terraform has been successfully initialized!
+tofu plan -var-file=environments/uat.tfvars
+# Expected: "No changes." (0 to add, 0 to change, 0 to destroy)
 ```
 
-### Validate
+This proves variables and tfvars agree, credentials work, and state I/O works — while creating nothing.
+
+### 1g. Create `environments/production.tfvars` (Deferrable)
+
+Not needed until the production deployment — skipping it blocks nothing in Steps 2–9. Creating it now keeps the two environment profiles diffable side by side.
 
 ```bash
-# Check that state backend is configured
-ls -la .terraform/
-# Expected: backend.tf config file
+cat > environments/production.tfvars << 'EOF'
+environment                    = "production"
+aws_region                     = "us-east-2"
+vpc_cidr                       = "10.0.0.0/16"
 
-# Verify providers are installed
-ls .terraform/providers/
-# Expected: aws and random providers
+ec2_instance_type              = "t2.micro"
+ec2_volume_size                = 30
+enable_ssh                     = false
+allowed_ssh_cidr               = null
 
-# Test syntax
-tofu validate
-# Expected: "Success! The configuration is valid."
+db_instance_class              = "db.t3.micro"
+db_allocated_storage           = 20
+db_backup_retention_period     = 7
+db_skip_final_snapshot         = false
+
+health_check_interval          = 30
+health_check_timeout           = 5
+health_check_healthy_threshold = 2
+health_check_unhealthy_threshold = 3
+
+email_service                  = "aws_ses"
+email_from_address             = "noreply@tournament-app.com"
+
+enable_cloudtrail              = true
+enable_cloudwatch_logs         = true
+enable_mfa_delete              = true
+log_retention_days             = 2555
+EOF
 ```
 
-✅ **Validation passed if:** `tofu validate` succeeds with "Success!" message
+**Verify:** `tofu plan -var-file=environments/production.tfvars` also reports no changes.
+
+✅ **Step 1 complete when:** 1a–1f are checked (1g optional).
 
 ---
 
@@ -464,6 +444,22 @@ module "networking" {
 
   environment = var.environment
   vpc_cidr    = var.vpc_cidr
+}
+EOF
+```
+
+### Add Root Outputs (Networking)
+
+```bash
+cat >> outputs.tf << 'EOF'
+output "vpc_id" {
+  value       = module.networking.vpc_id
+  description = "VPC ID"
+}
+
+output "public_subnet_ids" {
+  value       = module.networking.public_subnet_ids
+  description = "Public subnet IDs"
 }
 EOF
 ```
@@ -501,7 +497,19 @@ aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$(tofu output -ra
 
 **For detailed HCL code, see:** `/home/esckode/.claude/plans/piped-zooming-mist.md` → "Database Module"
 
-[Follow same pattern: Create files → Wire module → Validate]
+[Follow same pattern: Create files → Wire module → Add root outputs → Validate]
+
+### Add Root Outputs (Database)
+
+```bash
+cat >> outputs.tf << 'EOF'
+
+output "rds_endpoint" {
+  value       = module.database.endpoint
+  description = "RDS endpoint"
+}
+EOF
+```
 
 ### Validate Database
 
@@ -513,7 +521,7 @@ aws rds describe-db-instances --db-instance-identifier uat-tournament-db \
 
 # Verify endpoint
 tofu output rds_endpoint
-# Expected: uat-tournament-db.xxxxx.us-east-1.rds.amazonaws.com
+# Expected: uat-tournament-db.xxxxx.us-east-2.rds.amazonaws.com
 ```
 
 ✅ **Validation passed if:** RDS instance is "available"
@@ -523,6 +531,8 @@ tofu output rds_endpoint
 ## Step 4: Create Secrets Module
 
 **For detailed HCL code, see:** `/home/esckode/.claude/plans/piped-zooming-mist.md` → "Secrets Module"
+
+(This module adds no root outputs.)
 
 ### Validate Secrets
 
@@ -544,6 +554,38 @@ aws ssm get-parameter --name /uat/api/jwt_secret --query 'Parameter.Type'
 ## Step 5: Create API Module
 
 **For detailed HCL code, see:** `/home/esckode/.claude/plans/piped-zooming-mist.md` → "API Module"
+
+### Add Root Outputs (API)
+
+```bash
+cat >> outputs.tf << 'EOF'
+
+output "alb_dns_name" {
+  value       = module.api.alb_dns_name
+  description = "ALB DNS name"
+}
+
+output "alb_arn" {
+  value       = module.api.alb_arn
+  description = "ALB ARN"
+}
+
+output "alb_target_group_arn" {
+  value       = module.api.target_group_arn
+  description = "ALB target group ARN"
+}
+
+output "ec2_instance_id" {
+  value       = module.api.instance_id
+  description = "EC2 instance ID"
+}
+
+output "iam_instance_profile_name" {
+  value       = module.api.instance_profile_name
+  description = "IAM instance profile name"
+}
+EOF
+```
 
 ### Validate API
 
@@ -571,6 +613,28 @@ aws elbv2 describe-target-health --target-group-arn $(tofu output -raw alb_targe
 ## Step 6: Create Frontend Module
 
 **For detailed HCL code, see:** `/home/esckode/.claude/plans/piped-zooming-mist.md` → "Frontend Module"
+
+### Add Root Outputs (Frontend)
+
+```bash
+cat >> outputs.tf << 'EOF'
+
+output "frontend_bucket_name" {
+  value       = module.frontend.bucket_name
+  description = "S3 bucket name for frontend"
+}
+
+output "cloudfront_distribution_id" {
+  value       = module.frontend.distribution_id
+  description = "CloudFront distribution ID"
+}
+
+output "cloudfront_url" {
+  value       = module.frontend.distribution_domain_name
+  description = "CloudFront distribution domain"
+}
+EOF
+```
 
 ### Validate Frontend
 
@@ -689,7 +753,7 @@ aws s3 ls s3://<bucket>/ --recursive
 
 ## Complete Checklist
 
-- [ ] Step 1: OpenTofu initialized
+- [ ] Step 1: OpenTofu initialized (progress checkboxes for 1a–1g live in the Step 1 section — that's the canonical tracker)
 - [ ] Step 2: Networking created & validated
 - [ ] Step 3: Database created & validated
 - [ ] Step 4: Secrets created & validated
