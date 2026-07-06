@@ -76,3 +76,8 @@ test-results/
 /test-results/
 /playwright-report/
 .browser-data/
+
+# OpenTofu
+infra/.terraform/
+*.tfstate
+*.tfstate.*

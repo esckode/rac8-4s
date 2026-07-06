@@ -97,13 +97,13 @@ Broken into micro-steps **1a–1g**: each creates one file or runs one command, 
 
 **Progress:**
 
-- [ ] 1a. Directory skeleton
-- [ ] 1b. Git hygiene (`.gitignore`)
-- [ ] 1c. `backend.tf` + first `tofu init` (backend connection only)
-- [ ] 1d. `variables.tf`
-- [ ] 1e. `main.tf` + second `tofu init` (providers)
-- [ ] 1f. `environments/uat.tfvars` + no-op plan
-- [ ] 1g. `environments/production.tfvars` (deferrable)
+- [x] 1a. Directory skeleton
+- [x] 1b. Git hygiene (`.gitignore`)
+- [x] 1c. `backend.tf` + first `tofu init` (backend connection only)
+- [x] 1d. `variables.tf`
+- [x] 1e. `main.tf` + second `tofu init` (providers)
+- [x] 1f. `environments/uat.tfvars` + no-op plan
+- [ ] 1g. `environments/production.tfvars` — **skipped 2026-07-06**, deferred to the production milestone (see note in 1g)
 
 > **Changed from the original plan:** the root `outputs.tf` is no longer created in Step 1 — its blocks reference modules that don't exist until Steps 2–6, so `tofu validate` would fail. Each output block is now added by the step that introduces its module.
 
@@ -379,7 +379,12 @@ This proves variables and tfvars agree, credentials work, and state I/O works �
 
 ### 1g. Create `environments/production.tfvars` (Deferrable)
 
-Not needed until the production deployment — skipping it blocks nothing in Steps 2–9. Creating it now keeps the two environment profiles diffable side by side.
+> **Decision (2026-07-06): skipped for now.** This stack uses a single state file, so `tofu apply -var-file=environments/production.tfvars` would not create a second environment — it would try to **mutate the existing UAT environment into production** (mass renames, VPC CIDR replacement, backup/email changes). Until the file exists, that accident is impossible. When the production milestone arrives, do these together as one micro-step:
+> 1. Create per-environment **workspaces** (`tofu workspace new uat` / `production`) so each environment gets its own state file — Step 8 already assumes workspaces exist, but no step currently creates them.
+> 2. Add a **workspace guard** in `main.tf` — a `precondition` asserting `terraform.workspace == var.environment` — so applying the wrong var-file hard-fails before touching anything.
+> 3. Only then create `production.tfvars` (below). Never use `-auto-approve` against production.
+
+Not needed until the production deployment — skipping it blocks nothing in Steps 2–9.
 
 ```bash
 cat > environments/production.tfvars << 'EOF'
@@ -682,6 +687,8 @@ curl https://$FRONTEND_URL/health
 ---
 
 ## Step 8: Seed Database (UAT Only)
+
+> **Note:** `tofu workspace select uat` assumes per-environment workspaces, but no earlier step creates them — everything through Step 7 runs in the `default` workspace. Workspaces + the workspace/environment guard are introduced at the production milestone (see the 1g note). Until then, skip the `workspace select` line.
 
 ```bash
 tofu workspace select uat
