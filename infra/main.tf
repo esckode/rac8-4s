@@ -17,3 +17,12 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "current" {}
+
+module "networking" {
+  source = "./modules/networking"
+
+  environment      = var.environment
+  vpc_cidr         = var.vpc_cidr
+  enable_ssh       = var.enable_ssh
+  allowed_ssh_cidr = var.allowed_ssh_cidr
+}
