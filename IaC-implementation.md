@@ -143,11 +143,11 @@ cd infra
 cat > backend.tf << 'EOF'
 terraform {
   backend "s3" {
-    bucket         = "tournament-app-tofu-state"
-    key            = "tournament-app.tfstate"
-    region         = "us-east-2"
-    encrypt        = true
-    use_lockfile   = true
+    bucket       = "tournament-app-tofu-state"
+    key          = "tournament-app.tfstate"
+    region       = "us-east-2"
+    encrypt      = true
+    use_lockfile = true
   }
 }
 EOF
@@ -339,32 +339,32 @@ Re-running `init` here has exactly one new job: downloading the two providers.
 
 ```bash
 cat > environments/uat.tfvars << 'EOF'
-environment                    = "uat"
-aws_region                     = "us-east-2"
-vpc_cidr                       = "10.1.0.0/16"
+environment = "uat"
+aws_region  = "us-east-2"
+vpc_cidr    = "10.1.0.0/16"
 
-ec2_instance_type              = "t2.micro"
-ec2_volume_size                = 20
-enable_ssh                     = true
-allowed_ssh_cidr               = "0.0.0.0/0"
+ec2_instance_type = "t2.micro"
+ec2_volume_size   = 20
+enable_ssh        = true
+allowed_ssh_cidr  = "0.0.0.0/0"
 
-db_instance_class              = "db.t3.micro"
-db_allocated_storage           = 20
-db_backup_retention_period     = 0
-db_skip_final_snapshot         = true
+db_instance_class          = "db.t3.micro"
+db_allocated_storage       = 20
+db_backup_retention_period = 0
+db_skip_final_snapshot     = true
 
-health_check_interval          = 30
-health_check_timeout           = 5
-health_check_healthy_threshold = 2
+health_check_interval            = 30
+health_check_timeout             = 5
+health_check_healthy_threshold   = 2
 health_check_unhealthy_threshold = 3
 
-email_service                  = "mock"
-email_from_address             = "noreply@uat.example.com"
+email_service      = "mock"
+email_from_address = "noreply@uat.example.com"
 
-enable_cloudtrail              = true
-enable_cloudwatch_logs         = false
-enable_mfa_delete              = false
-log_retention_days             = 30
+enable_cloudtrail      = true
+enable_cloudwatch_logs = false
+enable_mfa_delete      = false
+log_retention_days     = 30
 EOF
 ```
 
@@ -425,21 +425,75 @@ EOF
 
 ## Step 2: Create Networking Module
 
-**For detailed HCL code, see:** `/home/esckode/.claude/plans/piped-zooming-mist.md` → "Networking Module"
+Broken into micro-steps **2a–2e**, one infrastructure layer each. The rhythm per step: append HCL → `tofu plan` (assert the **exact** resource count) → `tofu apply` → verify against live AWS → check the box. Every resource in this step is free; the first billable resource remains Step 3 (RDS). Total after 2e: **13 managed resources**.
 
-### Create `modules/networking/main.tf`
+> **Note:** the original pointer to `~/.claude/plans/piped-zooming-mist.md` → "Networking Module" was dangling — that file contains no networking HCL. The module code below is authored here, following the plan file's design rules: security groups admit traffic by **group reference, not IP ranges**; the DB subnets have **no internet route** (and no NAT gateway — deliberate cost tradeoff); 2 AZs because RDS subnet groups require two.
 
-[Create networking module with VPC, subnets, IGW, route tables, security groups]
+**Progress:**
 
-### Create `modules/networking/variables.tf`
+- [x] 2a. Module skeleton + VPC (plan: +1)
+- [x] 2b. Subnets — 2 public, 2 private, 2 AZs (plan: +4)
+- [x] 2c. Internet routing — IGW, route table, route, associations (plan: +5)
+- [x] 2d. Security groups ×3, chained by reference (plan: +3)
+- [x] 2e. Converge check — fmt, validate, no-op plan (plan: ±0)
 
-[Standard variables: environment, vpc_cidr]
+### 2a. Module Skeleton + VPC
 
-### Create `modules/networking/outputs.tf`
+Module variables — declares everything the whole module will eventually need, so the root wiring below never has to be edited again:
 
-[Output VPC ID, subnet IDs, security group IDs]
+```bash
+cat > modules/networking/variables.tf << 'EOF'
+variable "environment" {
+  description = "Environment name"
+  type        = string
+}
 
-### Wire Into Root `main.tf`
+variable "vpc_cidr" {
+  description = "VPC CIDR block"
+  type        = string
+}
+
+variable "api_port" {
+  description = "Port the API listens on (ALB -> EC2 rule)"
+  type        = number
+  default     = 3001
+}
+
+variable "enable_ssh" {
+  description = "Add SSH ingress to the API security group"
+  type        = bool
+  default     = false
+}
+
+variable "allowed_ssh_cidr" {
+  description = "SSH source CIDR (null to disable)"
+  type        = string
+  default     = null
+}
+EOF
+
+cat > modules/networking/main.tf << 'EOF'
+resource "aws_vpc" "main" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name        = "${var.environment}-vpc"
+    Environment = var.environment
+  }
+}
+EOF
+
+cat > modules/networking/outputs.tf << 'EOF'
+output "vpc_id" {
+  value       = aws_vpc.main.id
+  description = "VPC ID"
+}
+EOF
+```
+
+Wire into root `main.tf` (SSH vars passed now so this block is append-once), plus the first root output:
 
 ```bash
 cat >> main.tf << 'EOF'
@@ -447,20 +501,91 @@ cat >> main.tf << 'EOF'
 module "networking" {
   source = "./modules/networking"
 
-  environment = var.environment
-  vpc_cidr    = var.vpc_cidr
+  environment      = var.environment
+  vpc_cidr         = var.vpc_cidr
+  enable_ssh       = var.enable_ssh
+  allowed_ssh_cidr = var.allowed_ssh_cidr
 }
 EOF
-```
 
-### Add Root Outputs (Networking)
-
-```bash
 cat >> outputs.tf << 'EOF'
 output "vpc_id" {
   value       = module.networking.vpc_id
   description = "VPC ID"
 }
+EOF
+
+tofu init   # new module reference needs re-init (local, instant)
+```
+
+**Verify:**
+
+```bash
+tofu validate
+# Expected: "Success! The configuration is valid."
+
+tofu plan -var-file=environments/uat.tfvars
+# Expected: exactly "1 to add" — aws_vpc.main
+
+tofu apply -var-file=environments/uat.tfvars -auto-approve
+
+aws ec2 describe-vpcs --filters "Name=cidr,Values=10.1.0.0/16" --query 'Vpcs[0].VpcId'
+# Expected: "vpc-..."
+```
+
+### 2b. Subnets (2 Public + 2 Private, 2 AZs)
+
+CIDRs are derived from `vpc_cidr` via `cidrsubnet(...)` — /24s numbered 1, 2 (public) and 11, 12 (private). UAT: `10.1.1.0/24`, `10.1.2.0/24`, `10.1.11.0/24`, `10.1.12.0/24`; works unchanged for production's `10.0.0.0/16`.
+
+```bash
+cat >> modules/networking/main.tf << 'EOF'
+
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+resource "aws_subnet" "public" {
+  count                   = 2
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index + 1)
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name        = "${var.environment}-public-${element(["a", "b"], count.index)}"
+    Environment = var.environment
+    Tier        = "public"
+  }
+}
+
+resource "aws_subnet" "private" {
+  count             = 2
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 11)
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+
+  tags = {
+    Name        = "${var.environment}-private-${element(["a", "b"], count.index)}"
+    Environment = var.environment
+    Tier        = "private"
+  }
+}
+EOF
+
+cat >> modules/networking/outputs.tf << 'EOF'
+
+output "public_subnet_ids" {
+  value       = aws_subnet.public[*].id
+  description = "Public subnet IDs"
+}
+
+output "private_subnet_ids" {
+  value       = aws_subnet.private[*].id
+  description = "Private subnet IDs (for the RDS subnet group)"
+}
+EOF
+
+cat >> outputs.tf << 'EOF'
 
 output "public_subnet_ids" {
   value       = module.networking.public_subnet_ids
@@ -469,32 +594,226 @@ output "public_subnet_ids" {
 EOF
 ```
 
-### Validate Networking
+**Verify:**
 
 ```bash
-# Syntax check
+tofu plan -var-file=environments/uat.tfvars
+# Expected: exactly "4 to add" — 2 public + 2 private subnets
+
+tofu apply -var-file=environments/uat.tfvars -auto-approve
+
+aws ec2 describe-subnets --filters "Name=vpc-id,Values=$(tofu output -raw vpc_id)" \
+  --query 'Subnets[*].[CidrBlock,MapPublicIpOnLaunch]' --output text | sort
+# Expected: 4 rows; 10.1.1.0/24 and 10.1.2.0/24 with True, 10.1.11.0/24 and 10.1.12.0/24 with False
+```
+
+### 2c. Internet Routing
+
+IGW + public route table + default route + 2 associations (public subnets only). The private subnets stay on the VPC's main route table, which has **no** internet route — that absence *is* the database-isolation guarantee.
+
+```bash
+cat >> modules/networking/main.tf << 'EOF'
+
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name        = "${var.environment}-igw"
+    Environment = var.environment
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name        = "${var.environment}-public-rt"
+    Environment = var.environment
+  }
+}
+
+resource "aws_route" "public_internet" {
+  route_table_id         = aws_route_table.public.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.main.id
+}
+
+resource "aws_route_table_association" "public" {
+  count          = 2
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+EOF
+```
+
+**Verify:**
+
+```bash
+tofu plan -var-file=environments/uat.tfvars
+# Expected: exactly "5 to add" — IGW, route table, route, 2 associations
+
+tofu apply -var-file=environments/uat.tfvars -auto-approve
+
+aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$(tofu output -raw vpc_id)" \
+  --query 'RouteTables[*].Routes[?DestinationCidrBlock==`0.0.0.0/0`].GatewayId' --output text
+# Expected: exactly one igw-... (the main route table contributes nothing)
+```
+
+### 2d. Security Groups (Chained by Reference)
+
+Internet →`:80/:443`→ `alb-sg` →`:3001`→ `api-sg` →`:5432`→ `rds-sg`. Each group admits only the *group* before it, so rules survive IP churn. SSH ingress on `api-sg` exists only when `enable_ssh = true` **and** a CIDR is set (UAT yes, production no). Explicit egress blocks are required — OpenTofu strips AWS's default allow-all egress on managed SGs.
+
+```bash
+cat >> modules/networking/main.tf << 'EOF'
+
+resource "aws_security_group" "alb" {
+  name   = "${var.environment}-alb-sg"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.environment}-alb-sg"
+    Environment = var.environment
+  }
+}
+
+resource "aws_security_group" "api" {
+  name   = "${var.environment}-api-sg"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port       = var.api_port
+    to_port         = var.api_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  dynamic "ingress" {
+    for_each = var.enable_ssh && var.allowed_ssh_cidr != null ? [1] : []
+    content {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [var.allowed_ssh_cidr]
+    }
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.environment}-api-sg"
+    Environment = var.environment
+  }
+}
+
+resource "aws_security_group" "rds" {
+  name   = "${var.environment}-rds-sg"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.api.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.environment}-rds-sg"
+    Environment = var.environment
+  }
+}
+EOF
+
+cat >> modules/networking/outputs.tf << 'EOF'
+
+output "alb_security_group_id" {
+  value       = aws_security_group.alb.id
+  description = "ALB security group ID"
+}
+
+output "api_security_group_id" {
+  value       = aws_security_group.api.id
+  description = "API (EC2) security group ID"
+}
+
+output "rds_security_group_id" {
+  value       = aws_security_group.rds.id
+  description = "RDS security group ID"
+}
+EOF
+```
+
+(These three IDs are module outputs consumed by the database/API modules in Steps 3 and 5 — they don't need to be root outputs.)
+
+**Verify:**
+
+```bash
+tofu plan -var-file=environments/uat.tfvars
+# Expected: exactly "3 to add" — the three security groups
+
+tofu apply -var-file=environments/uat.tfvars -auto-approve
+
+aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$(tofu output -raw vpc_id)" \
+  --query 'SecurityGroups[*].GroupName'
+# Expected: default, uat-alb-sg, uat-api-sg, uat-rds-sg
+
+# The chain is by reference, not IP: rds-sg's ingress source must be api-sg's group ID
+aws ec2 describe-security-groups --filters "Name=group-name,Values=uat-rds-sg" \
+  --query 'SecurityGroups[0].IpPermissions[0].UserIdGroupPairs[0].GroupId'
+# Expected: the sg-... ID of uat-api-sg
+```
+
+### 2e. Converge Check
+
+No new resources — proves the whole layer is stable and styled:
+
+```bash
+tofu fmt -recursive -check
+# Expected: no output (all files formatted)
+
 tofu validate
 # Expected: "Success! The configuration is valid."
 
-# Preview what will be created
 tofu plan -var-file=environments/uat.tfvars
-# Expected: ~8 resources (VPC, subnets, IGW, route table, security groups)
+# Expected: "No changes."
 
-# Create the networking
-tofu apply -var-file=environments/uat.tfvars -auto-approve
-
-# Verify resources exist
-aws ec2 describe-vpcs --filters "Name=cidr,Values=10.1.0.0/16" --query 'Vpcs[0].VpcId'
-# Expected: vpc-xxxxx
-
-aws ec2 describe-subnets --filters "Name=vpc-id,Values=$(tofu output -raw vpc_id)" --query 'Subnets[*].SubnetId'
-# Expected: 4 subnet IDs
-
-aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$(tofu output -raw vpc_id)" --query 'SecurityGroups[*].GroupName'
-# Expected: uat-alb-sg, uat-api-sg, uat-rds-sg
+tofu state list | grep '^module\.networking' | grep -v '\.data\.' | wc -l
+# Expected: 13 (1 VPC + 4 subnets + IGW + route table + route + 2 associations + 3 SGs)
 ```
 
-✅ **Validation passed if:** All AWS resources exist with correct IDs
+✅ **Step 2 complete when:** 2a–2e are checked and the final plan shows "No changes."
 
 ---
 
