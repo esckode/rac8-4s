@@ -835,9 +835,9 @@ Broken into micro-steps **3a–3c**. Same rhythm as Step 2: append HCL → `tofu
 
 **Progress:**
 
-- [ ] 3a. Module skeleton — password + subnet group (plan: +2)
-- [ ] 3b. RDS instance (plan: +1, ~10 min apply) 💰
-- [ ] 3c. Root output + converge check (plan: ±0 resources)
+- [x] 3a. Module skeleton — password + subnet group (plan: +2)
+- [x] 3b. RDS instance (plan: +1, ~10 min apply) 💰
+- [x] 3c. Root output + converge check (plan: ±0 resources)
 
 ### 3a. Module Skeleton: Password + Subnet Group
 
@@ -2599,7 +2599,7 @@ psql "postgresql://tournament_user:<password>@localhost:15432/tournament_app"
 
 - [x] Step 1: OpenTofu initialized (progress checkboxes for 1a–1g live in the Step 1 section — that's the canonical tracker)
 - [x] Step 2: Networking created & validated
-- [ ] Step 3: Database created & validated
+- [x] Step 3: Database created & validated
 - [ ] Step 3.5: Cache (ElastiCache Redis) created & validated
 - [ ] Step 4: Secrets created & validated
 - [ ] Step 5: API created & validated

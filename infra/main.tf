@@ -26,3 +26,15 @@ module "networking" {
   enable_ssh       = var.enable_ssh
   allowed_ssh_cidr = var.allowed_ssh_cidr
 }
+
+module "database" {
+  source = "./modules/database"
+
+  environment                = var.environment
+  private_subnet_ids         = module.networking.private_subnet_ids
+  rds_security_group_id      = module.networking.rds_security_group_id
+  db_instance_class          = var.db_instance_class
+  db_allocated_storage       = var.db_allocated_storage
+  db_backup_retention_period = var.db_backup_retention_period
+  db_skip_final_snapshot     = var.db_skip_final_snapshot
+}
