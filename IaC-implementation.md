@@ -1063,9 +1063,9 @@ tofu state list | grep '^module\.database' | grep -v '\.data\.' | wc -l
 
 **Progress:**
 
-- [ ] 3.5a. `redis-sg` appended to the networking module (plan: +1)
-- [ ] 3.5b. Cache module skeleton — subnet group + parameter group (plan: +2)
-- [ ] 3.5c. ElastiCache cluster + converge (plan: +1, ~5–10 min apply) 💰
+- [x] 3.5a. `redis-sg` appended to the networking module (plan: +1)
+- [x] 3.5b. Cache module skeleton — subnet group + parameter group (plan: +2)
+- [x] 3.5c. ElastiCache cluster + converge (plan: +1, ~5–10 min apply) 💰
 
 ### 3.5a. Extend the Security-Group Chain
 
@@ -2600,7 +2600,7 @@ psql "postgresql://tournament_user:<password>@localhost:15432/tournament_app"
 - [x] Step 1: OpenTofu initialized (progress checkboxes for 1a–1g live in the Step 1 section — that's the canonical tracker)
 - [x] Step 2: Networking created & validated
 - [x] Step 3: Database created & validated
-- [ ] Step 3.5: Cache (ElastiCache Redis) created & validated
+- [x] Step 3.5: Cache (ElastiCache Redis) created & validated
 - [ ] Step 4: Secrets created & validated
 - [ ] Step 5: API created & validated
 - [ ] Step 6: Frontend created & validated

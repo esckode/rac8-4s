@@ -38,3 +38,11 @@ module "database" {
   db_backup_retention_period = var.db_backup_retention_period
   db_skip_final_snapshot     = var.db_skip_final_snapshot
 }
+
+module "cache" {
+  source = "./modules/cache"
+
+  environment             = var.environment
+  private_subnet_ids      = module.networking.private_subnet_ids
+  redis_security_group_id = module.networking.redis_security_group_id
+}
