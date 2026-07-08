@@ -1,16 +1,16 @@
-# RAC8-4S: Doubles Pickleball Cup Tournament Management System
+# RAC8-4S: Social Racket Sport Tournament Management System
 ## High-Level Requirements Document
 
 **Document Version:** 1.0  
 **Last Updated:** 2026-05-31  
-**Project:** Doubles Pickleball Cup  
-**Status:** ✅ Production Ready
+**Project:** RAC8-4S  
+**Status:** 🧪 Active UAT testing
 
 ---
 
 ## Executive Summary
 
-RAC8-4S is a modern, mobile-first web application for managing and participating in doubles pickleball tournaments. The system supports tournament creation, player registration, automated group stage management with real-time standings, knockout bracket generation, and secure user authentication. Built with React 19, Express.js, PostgreSQL, and Server-Sent Events (SSE) for real-time updates.
+RAC8-4S is a modern, mobile-first web application for managing and participating in racket sport tournaments. Sport and match format are independent, configurable parameters. The system supports tournament creation, player registration, automated group stage management with real-time standings, knockout bracket generation, and secure user authentication. Built with React 19, Express.js, PostgreSQL, and Server-Sent Events (SSE) for real-time updates.
 
 **Key Achievements:**
 - ✅ All 30 authentication tasks completed (JWT + opaque tokens)

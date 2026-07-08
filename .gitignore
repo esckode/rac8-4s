@@ -51,6 +51,12 @@ screenshots/
 *.jpg
 *.jpeg
 
+# Exception: README product screenshots
+!assets/screenshots/
+!assets/screenshots/*.jpg
+!assets/screenshots/*.jpeg
+!assets/screenshots/*.png
+
 # Generated HTML files (testing artifacts)
 /landing-mobile-screenshot.html
 /view-landing-mobile.html
