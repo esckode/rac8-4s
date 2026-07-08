@@ -1277,9 +1277,9 @@ Micro-steps **4a–4c**. (HCL authored here — the original plan-file pointer w
 
 **Progress:**
 
-- [ ] 4a. Module skeleton + JWT secret (plan: +1)
-- [ ] 4b. The 7 SSM parameters (plan: +7)
-- [ ] 4c. Converge check (plan: ±0)
+- [x] 4a. Module skeleton + JWT secret (plan: +1)
+- [x] 4b. The 7 SSM parameters (plan: +7)
+- [x] 4c. Converge check (plan: ±0)
 
 ### 4a. Module Skeleton + JWT Secret
 
@@ -2601,7 +2601,7 @@ psql "postgresql://tournament_user:<password>@localhost:15432/tournament_app"
 - [x] Step 2: Networking created & validated
 - [x] Step 3: Database created & validated
 - [x] Step 3.5: Cache (ElastiCache Redis) created & validated
-- [ ] Step 4: Secrets created & validated
+- [x] Step 4: Secrets created & validated
 - [ ] Step 5: API created & validated
 - [ ] Step 6: Frontend created & validated
 - [ ] Step 7: End-to-end validated

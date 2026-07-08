@@ -46,3 +46,14 @@ module "cache" {
   private_subnet_ids      = module.networking.private_subnet_ids
   redis_security_group_id = module.networking.redis_security_group_id
 }
+
+module "secrets" {
+  source = "./modules/secrets"
+
+  environment        = var.environment
+  database_url       = "postgresql://${module.database.username}:${module.database.password}@${module.database.address}:${module.database.port}/${module.database.db_name}"
+  redis_url          = module.cache.redis_url
+  email_service      = var.email_service
+  email_from_address = var.email_from_address
+  frontend_url       = "https://placeholder.invalid" # rewired in 6d
+}
