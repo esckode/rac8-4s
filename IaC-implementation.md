@@ -1272,6 +1272,8 @@ Micro-steps **4a–4c**. (HCL authored here — the original plan-file pointer w
 > Only `database_url` and `jwt_secret` are secrets (`SecureString`); the rest are plain `String` config. The original "all 5 are SecureString" validation was wrong on this point too.
 >
 > **Decision (2026-07-07): `node_env` = `"production"` in every deployed environment, UAT included.** `/test/player-token` (`app.ts:178`) mints a valid player session for any email and is gated only by `NODE_ENV !== 'production'`. The ALB has a public DNS name, so CloudFront routing can't hide it — the env var is the only effective gate. Consequence: e2e tests against deployed environments authenticate via real flows (signup/login, mock-email magic links), never the test-token fixture.
+>
+> **Fixed (2026-07-08, found during first real boot): `database_url` needs `?sslmode=no-verify`.** RDS Postgres rejects plain connections by default (`no pg_hba.conf entry for host "...", ... no encryption`); `packages/api/src/db-connections.ts` passes `DATABASE_URL` straight to `pg.Pool` with no separate `ssl` option, so `sslmode` has to come from the connection string itself. `sslmode=require` alone isn't enough: the installed `pg`/`pg-connection-string` currently treats `require`/`prefer`/`verify-ca` as aliases for full certificate verification (a temporary, soon-reverting behavior per its own deprecation warning), and Node doesn't trust AWS's RDS CA out of the box — `self-signed certificate in certificate chain`. `no-verify` unambiguously means encrypt-without-verifying, which is what's wanted here since RDS already sits in a private subnet, not internet-reachable.
 
 (This module adds no root outputs.)
 
@@ -1334,7 +1336,7 @@ module "secrets" {
   source = "./modules/secrets"
 
   environment        = var.environment
-  database_url       = "postgresql://${module.database.username}:${module.database.password}@${module.database.address}:${module.database.port}/${module.database.db_name}"
+  database_url       = "postgresql://${module.database.username}:${module.database.password}@${module.database.address}:${module.database.port}/${module.database.db_name}?sslmode=no-verify"
   redis_url          = module.cache.redis_url
   email_service      = var.email_service
   email_from_address = var.email_from_address
@@ -1460,11 +1462,12 @@ Micro-steps **5a–5e**. (HCL authored here — the original plan-file pointer w
 > - **Code delivery (until Step 10): HTTPS clone with a fine-grained PAT read from SSM.** The repo is private (anonymous clone 404s). A read-only, single-repo token (Contents: read) is placed in SSM **by hand** (`aws ssm put-parameter --name /uat/api/github_token --type SecureString ...`) — deliberately not a tofu resource, so it never enters tofu state or any committed file; `user_data` fetches it via the instance role and falls back to an anonymous clone if the parameter is absent. Fine-grained PATs expire (≤ 1 year); expiry breaks the *next instance replacement*, and its planned demolition is Step 10 (CI/CD swaps clone for an S3 artifact and the parameter is deleted).
 > - **Redeploy story: instance replacement is the deploy.** `tofu apply -replace=module.api.aws_instance.main` re-runs the bootstrap — fresh clone of current `main`, `npm ci`, re-seed check. Immutable, no drift, and it exercises the bootstrap path on every deploy. (Auth state now survives replacement — tokens live in Redis, Step 3.5.)
 > - **App-side follow-up (not infra):** the BullMQ adapter (`packages/worker/src/bullmq-queue.ts`) sets no `removeOnComplete`/`removeOnFail`, so completed-job records accumulate in Redis indefinitely. One-line adapter fix; tracked here so it isn't lost.
+> - **Fixed (2026-07-08, found during first real boot): first-activation chicken-and-egg on `EnvironmentFile=`.** systemd validates every `EnvironmentFile=` path for a unit before running *any* `Exec*` directive, including `ExecStartPre` — so on a unit's very first start, `tournament-refresh-env` never gets to run, because systemd refuses to start the unit at all when `/etc/tournament-app/env` doesn't exist yet (`Result: resources`, both services loop in `activating (auto-restart)`). Fixed by calling `tournament-refresh-env` once directly in `user_data`, before `systemctl enable --now` — every restart after that is still covered by each unit's own `ExecStartPre`.
 
 **Progress:**
 
-- [ ] 5a. Module skeleton + IAM (role, policies, instance profile) + `seed_on_boot` root var (plan: +4)
-- [ ] 5b. `user_data.sh.tpl` authored (plan: ±0 — file only)
+- [x] 5a. Module skeleton + IAM (role, policies, instance profile) + `seed_on_boot` root var (plan: +4)
+- [x] 5b. `user_data.sh.tpl` authored (plan: ±0 — file only)
 - [ ] 5c. GitHub PAT parameter (manual) + EC2 instance (plan: +1)
 - [ ] 5d. ALB + target group + listener + attachment (plan: +4) 💰
 - [ ] 5e. Converge check (plan: ±0)
@@ -1791,6 +1794,11 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 UNIT
+
+# --- seed the env file before first activation: EnvironmentFile= is validated
+# --- for ALL Exec* directives (including ExecStartPre) before a unit's first
+# --- start, so the file must already exist here, not just via ExecStartPre. ---
+/usr/local/bin/tournament-refresh-env
 
 systemctl daemon-reload
 systemctl enable --now tournament-api tournament-worker

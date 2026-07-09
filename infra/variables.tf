@@ -125,3 +125,13 @@ variable "log_retention_days" {
   type        = number
   default     = 90
 }
+
+variable "seed_on_boot" {
+  description = "Install a boot-time seed unit (known-password test accounts). UAT convenience only."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !(var.seed_on_boot && var.environment == "production")
+    error_message = "seed_on_boot must never be true in production — the seeds create known-password test accounts (see Step 8)."
+  }
+}

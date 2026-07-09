@@ -24,3 +24,5 @@ enable_cloudtrail      = true
 enable_cloudwatch_logs = false
 enable_mfa_delete      = false
 log_retention_days     = 30
+
+seed_on_boot = true
