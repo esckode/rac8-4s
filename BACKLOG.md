@@ -24,6 +24,7 @@ here.
 | [PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) | Durable groups, group chat, availability polls, casual-mode group-launched tournaments | 📐 **Design (fully grilled, §11–§12)** → plan ✅ **Built & merged** ([PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md)) |
 | [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) | PWA-first now; Capacitor (native wrapper) deferred | 🧭 **Decision** — PWA work pending; Capacitor ⏸️ **Deferred** (trigger documented) |
 | [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (primary) + organizer SaaS (secondary); ads rejected | 📐 **Design (draft)** — **not yet grilled**, needs detail |
+| [LLM_ASSISTANT_DESIGN.md](assets/planning/LLM_ASSISTANT_DESIGN.md) | @coach LLM assistant in group chat — Tier 1 read-only Q&A (MVP), Tier 2 confirmed write actions, Tier 3 proactive nudges | 📐 **Design (fully grilled 2026-07-10, §10)** — **needs conversion to an implementation plan** |
 | [DESIGN_SYSTEM.md](assets/planning/DESIGN_SYSTEM.md) | "C U At Court" token-driven design system (tokens + Tailwind v4 + shared component lib) — as-built + gaps (no doc/Storybook/a11y/theming/governance) | 📐 **Design (as-built)** — **governance gap grilled 2026-06-29, now ✅ built** ([DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md)); remaining gaps (doc/Storybook/a11y/theming) **not yet grilled** |
 
 ## Implementation plans
@@ -82,6 +83,11 @@ here.
   NOT PWA-specific** — applies to any web frontend. → its own spec / general frontend hardening.
 - **Monetization** (MONETIZATION_STRATEGY.md) → **grill first** to pick the wedge (transaction fee vs.
   organizer SaaS), then create `MONETIZATION_IMPLEMENTATION.md` (payments integration first).
+- **LLM assistant (@coach)** (LLM_ASSISTANT_DESIGN.md, fully grilled 2026-07-10) → create
+  `LLM_ASSISTANT_IMPLEMENTATION.md`. Phase A MVP: T1.1–T1.3 read-only Q&A in group chat, reserved
+  `@coach` trigger, `type='assistant'` migration, worker-tier job on the Redis queue, Haiku 4.5,
+  per-group toggle. Prereqs folded in: privacy-policy AI clause before un-flagging;
+  `docs/assistant-help.md` corpus + same-change update rule.
 
 ### 📋 Plan ready → available to tackle
 - **FRONTEND_IMPLEMENTATION.md** — frontend-quality tasks (TDD). First task: **FE-RENDER-1** memoize the
