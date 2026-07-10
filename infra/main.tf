@@ -55,7 +55,7 @@ module "secrets" {
   redis_url          = module.cache.redis_url
   email_service      = var.email_service
   email_from_address = var.email_from_address
-  frontend_url       = "https://placeholder.invalid" # rewired in 6d
+  frontend_url       = "https://${module.frontend.distribution_domain_name}"
 }
 
 module "api" {
@@ -75,6 +75,16 @@ module "api" {
   health_check_healthy_threshold   = var.health_check_healthy_threshold
   health_check_unhealthy_threshold = var.health_check_unhealthy_threshold
 
-  # The instance reads /${environment}/api/* at first boot — they must exist first.
-  depends_on = [module.secrets, module.cache]
+  # The instance reads /${environment}/api/* at first boot. module.secrets must
+  # NOT be in depends_on — secrets.frontend_url consumes the CloudFront domain,
+  # which consumes this module's ALB DNS (6d cycle). The boot script's get_param
+  # retry loop covers the params-not-yet-created race instead.
+  depends_on = [module.cache]
+}
+
+module "frontend" {
+  source = "./modules/frontend"
+
+  environment  = var.environment
+  alb_dns_name = module.api.alb_dns_name
 }

@@ -37,3 +37,18 @@ output "alb_target_group_arn" {
   value       = module.api.target_group_arn
   description = "ALB target group ARN"
 }
+
+output "frontend_bucket_name" {
+  value       = module.frontend.bucket_name
+  description = "S3 bucket name for frontend"
+}
+
+output "cloudfront_distribution_id" {
+  value       = module.frontend.distribution_id
+  description = "CloudFront distribution ID"
+}
+
+output "cloudfront_url" {
+  value       = module.frontend.distribution_domain_name
+  description = "CloudFront distribution domain"
+}
