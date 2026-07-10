@@ -49,3 +49,23 @@ async function seedTestAccounts(pool: Pool): Promise<void> {
 }
 
 export { seedTestAccounts, TEST_ACCOUNTS }
+
+// Run directly if called as main module
+if (require.main === module) {
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL || 'postgresql://localhost/tournament_app',
+  })
+
+  seedTestAccounts(pool)
+    .then(() => {
+      log.info('seed.complete')
+      process.exit(0)
+    })
+    .catch((err) => {
+      log.error('seed.error', { error: err instanceof Error ? err.message : String(err) })
+      process.exit(1)
+    })
+    .finally(() => {
+      pool.end()
+    })
+}
