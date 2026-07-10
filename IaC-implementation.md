@@ -1468,9 +1468,9 @@ Micro-steps **5a–5e**. (HCL authored here — the original plan-file pointer w
 
 - [x] 5a. Module skeleton + IAM (role, policies, instance profile) + `seed_on_boot` root var (plan: +4)
 - [x] 5b. `user_data.sh.tpl` authored (plan: ±0 — file only)
-- [ ] 5c. GitHub PAT parameter (manual) + EC2 instance (plan: +1)
-- [ ] 5d. ALB + target group + listener + attachment (plan: +4) 💰
-- [ ] 5e. Converge check (plan: ±0)
+- [x] 5c. GitHub PAT parameter (manual) + EC2 instance (plan: +1)
+- [x] 5d. ALB + target group + listener + attachment (plan: +4) 💰
+- [x] 5e. Converge check (plan: ±0)
 
 ### 5a. Module Skeleton + IAM
 
@@ -2077,11 +2077,11 @@ Micro-steps **6a–6e**. (HCL authored here — the original plan-file pointer w
 
 **Progress:**
 
-- [ ] 6a. Module skeleton — bucket, public-access block, OAC (plan: +3)
-- [ ] 6b. SPA-rewrite function + CloudFront distribution (plan: +2, ~5–15 min apply)
-- [ ] 6c. Bucket policy + root outputs (plan: +1)
-- [ ] 6d. Rewire `frontend_url` + restart services (plan: ~1 in-place change)
-- [ ] 6e. Converge check (plan: ±0)
+- [x] 6a. Module skeleton — bucket, public-access block, OAC (plan: +3)
+- [x] 6b. SPA-rewrite function + CloudFront distribution (plan: +2, ~5–15 min apply)
+- [x] 6c. Bucket policy + root outputs (plan: +1)
+- [x] 6d. Rewire `frontend_url` + restart services (plan: ~1 in-place change)
+- [x] 6e. Converge check (plan: ±0)
 
 ### 6a. Module Skeleton: Bucket + Public-Access Block + OAC
 
@@ -2367,6 +2367,8 @@ aws s3api get-bucket-policy --bucket $(tofu output -raw frontend_bucket_name) \
 
 ### 6d. Rewire `frontend_url` + Restart Services
 
+> **Defect found & fixed (2026-07-09):** this rewire creates a module-level dependency cycle — `module.api` had `depends_on = [module.secrets, …]` (5a), secrets now consumes the CloudFront domain, and CloudFront consumes the ALB DNS from `module.api`. Fix: drop `module.secrets` from api's `depends_on`; the boot script's `get_param` retry loop (5×5s per parameter) already covers the params-not-yet-created race, and `github_token` is manually managed so it always exists. Residual edge: on a from-scratch apply of the *final* config, the instance may boot before the distribution exists, leaving `FRONTEND_URL` empty until the next service restart or instance replacement — acceptable in UAT; the restart below covers the first build.
+
 The Step 4a placeholder can now become the real CloudFront domain. Edit root `main.tf` — in the `module "secrets"` block, replace:
 
 ```hcl
@@ -2423,9 +2425,9 @@ Micro-steps **7a–7c** — commands only, no new resources.
 
 **Progress:**
 
-- [ ] 7a. Build & deploy the frontend
-- [ ] 7b. Health + routing checks (ALB direct, API via CDN, SPA fallback)
-- [ ] 7c. Auth smoke test through CloudFront
+- [x] 7a. Build & deploy the frontend
+- [x] 7b. Health + routing checks (ALB direct, API via CDN, SPA fallback)
+- [x] 7c. Auth smoke test through CloudFront
 
 ### 7a. Build & Deploy Frontend
 
@@ -2498,6 +2500,8 @@ curl -s -X POST "http://$ALB_DNS/api/auth/login" \
   -d '{"email":"organizer@test.com","password":"testpass123"}'
 # Expected: 200 with a token in the response body
 ```
+
+> **App defect found & fixed (2026-07-09):** `npm run seed:accounts` was a silent no-op — `scripts/seed-test-accounts.ts` exported `seedTestAccounts()` but had no `require.main === module` entry block (unlike `seed-tournaments.ts`), so the test accounts never existed and this login check failed with UNAUTHORIZED. Fixed by adding the same entry block. Until the fix lands on the deployed branch (`main`), instances seeded at boot get tournaments but not accounts; a one-off `tsx` run of `seedTestAccounts()` on the instance backfills them (idempotent).
 
 ✅ **Validation passed if:** login as a seeded account succeeds
 
@@ -2610,11 +2614,11 @@ psql "postgresql://tournament_user:<password>@localhost:15432/tournament_app"
 - [x] Step 3: Database created & validated
 - [x] Step 3.5: Cache (ElastiCache Redis) created & validated
 - [x] Step 4: Secrets created & validated
-- [ ] Step 5: API created & validated
-- [ ] Step 6: Frontend created & validated
-- [ ] Step 7: End-to-end validated
-- [ ] Step 8: Database seeded (UAT)
-- [ ] Step 9: Teardown tested (UAT)
+- [x] Step 5: API created & validated
+- [x] Step 6: Frontend created & validated
+- [x] Step 7: End-to-end validated
+- [x] Step 8: Database seeded (UAT)
+- [x] Step 9: Teardown tested (UAT)
 - [ ] Step 10: CI/CD (GitHub Actions + OIDC + S3 artifact; retires the PAT bridge)
 - [ ] Ready for production deployment
 
