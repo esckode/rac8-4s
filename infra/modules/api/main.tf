@@ -91,3 +91,53 @@ resource "aws_instance" "api" {
     Environment = var.environment
   }
 }
+
+resource "aws_lb" "api" {
+  name               = "${var.environment}-api-alb"
+  load_balancer_type = "application"
+  security_groups    = [var.alb_security_group_id]
+  subnets            = var.public_subnet_ids
+
+  tags = {
+    Name        = "${var.environment}-api-alb"
+    Environment = var.environment
+  }
+}
+
+resource "aws_lb_target_group" "api" {
+  name     = "${var.environment}-api-tg"
+  port     = var.api_port
+  protocol = "HTTP"
+  vpc_id   = var.vpc_id
+
+  health_check {
+    path                = "/health/ready" # NOT /health — that is liveness, always 200
+    matcher             = "200"
+    interval            = var.health_check_interval
+    timeout             = var.health_check_timeout
+    healthy_threshold   = var.health_check_healthy_threshold
+    unhealthy_threshold = var.health_check_unhealthy_threshold
+  }
+
+  tags = {
+    Name        = "${var.environment}-api-tg"
+    Environment = var.environment
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.api.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+}
+
+resource "aws_lb_target_group_attachment" "api" {
+  target_group_arn = aws_lb_target_group.api.arn
+  target_id        = aws_instance.api.id
+  port             = var.api_port
+}
