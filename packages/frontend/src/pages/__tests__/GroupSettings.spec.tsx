@@ -601,3 +601,64 @@ describe('GroupSettings — P1.6 group config', () => {
     })
   })
 })
+
+// ── A7.5: Assistant toggle ──────────────────────────────────────────────────
+
+function makeGroupsResponseWithAssistant(role: 'owner' | 'member', assistantEnabled: boolean) {
+  return {
+    ok: true,
+    json: async () => ({
+      groups: [
+        { id: 'grp_1', name: 'Pickleball Crew', role, memberCount: 4, assistantEnabled },
+      ],
+    }),
+  }
+}
+
+describe('GroupSettings — A7.5 assistant toggle', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('owner sees the assistant toggle reflecting the current state', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponseWithAssistant('owner', true))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [] }) })
+
+    renderGroupSettings('grp_1', 'owner')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('assistant-toggle')).toBeChecked()
+    })
+  })
+
+  it('toggling off calls PATCH assistantEnabled:false', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponseWithAssistant('owner', true))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'grp_1', assistantEnabled: false }) })
+
+    renderGroupSettings('grp_1', 'owner')
+    await waitFor(() => expect(screen.getByTestId('assistant-toggle')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('assistant-toggle'))
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(
+        ([url]: [string]) => typeof url === 'string' && url.includes('/player/groups/grp_1') && !url.includes('/members')
+      )
+      expect(call).toBeDefined()
+      expect(call[1]).toMatchObject({ method: 'PATCH' })
+      expect(JSON.parse(call[1].body)).toEqual({ assistantEnabled: false })
+    })
+  })
+
+  it('member section does not show the assistant toggle', async () => {
+    mockFetch.mockResolvedValue(makeGroupsResponseWithAssistant('member', true))
+    renderGroupSettings('grp_1', 'member')
+    await waitFor(() => {
+      expect(screen.getByTestId('group-settings-page')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('assistant-toggle')).not.toBeInTheDocument()
+  })
+})
