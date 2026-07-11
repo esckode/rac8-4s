@@ -2,6 +2,8 @@
 node_modules/
 pnpm-lock.yaml
 yarn.lock
+# Root package-lock.json is the workspace source of truth; ignore stray nested ones
+packages/frontend/package-lock.json
 
 # Build outputs
 dist/
