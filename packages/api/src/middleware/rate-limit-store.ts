@@ -34,6 +34,14 @@ export interface RateLimitCounterStore {
   increment(key: string, windowSeconds: number): Promise<number>
 
   /**
+   * Atomically increment the counter for `key` by an arbitrary integer amount
+   * (amount 0 reads the current value, creating the key at 0 if absent).
+   * TTL semantics match increment(). Used by accumulating counters such as
+   * the assistant's daily-spend budget (Q10).
+   */
+  incrementBy(key: string, amount: number, windowSeconds: number): Promise<number>
+
+  /**
    * Delete the counter for `key` (e.g. after a successful auth resets the window).
    * No-op when key does not exist.
    */
@@ -57,18 +65,22 @@ export class InMemoryCounterStore implements RateLimitCounterStore {
   private store = new Map<string, CounterEntry>()
 
   async increment(key: string, windowSeconds: number): Promise<number> {
+    return this.incrementBy(key, 1, windowSeconds)
+  }
+
+  async incrementBy(key: string, amount: number, windowSeconds: number): Promise<number> {
     const now = Date.now()
     const existing = this.store.get(key)
 
     if (existing && now < existing.expiresAt) {
-      existing.value += 1
+      existing.value += amount
       return existing.value
     }
 
     // Key absent or expired — start a new window
-    const entry: CounterEntry = { value: 1, expiresAt: now + windowSeconds * 1000 }
+    const entry: CounterEntry = { value: amount, expiresAt: now + windowSeconds * 1000 }
     this.store.set(key, entry)
-    return 1
+    return entry.value
   }
 
   async reset(key: string): Promise<void> {
@@ -109,6 +121,15 @@ end
 return v
 `
 
+// INCRBY variant: sets the TTL only when the key is created by this call
+const INCRBY_LUA = `
+local v = redis.call('INCRBY', KEYS[1], ARGV[2])
+if redis.call('TTL', KEYS[1]) == -1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return v
+`
+
 export class RedisCounterStore implements RateLimitCounterStore {
   private client: Redis
 
@@ -124,6 +145,11 @@ export class RedisCounterStore implements RateLimitCounterStore {
 
   async increment(key: string, windowSeconds: number): Promise<number> {
     const result = await this.client.eval(INCR_LUA, 1, key, String(windowSeconds))
+    return result as number
+  }
+
+  async incrementBy(key: string, amount: number, windowSeconds: number): Promise<number> {
+    const result = await this.client.eval(INCRBY_LUA, 1, key, String(windowSeconds), String(amount))
     return result as number
   }
 
