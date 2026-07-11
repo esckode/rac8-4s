@@ -4,7 +4,8 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-07-10 (drafted + **fully grilled to resolution the same day** — see §10)
-**Status:** 📐 DESIGN (fully grilled) — **needs conversion to an implementation plan.** Builds on the
+**Status:** 📐 DESIGN (fully grilled) — implementation plan written:
+[LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md). Builds on the
 community layer ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)) and the messaging platform
 ([MESSAGING_DESIGN.md](./MESSAGING_DESIGN.md) §16–§17).
 
@@ -160,10 +161,19 @@ The shared scheduler (P3.1) fires; the assistant composes a message; it posts as
 Most deferrable: nudge *logic* is deterministic; the LLM only adds prose. Can ship as templates
 first and gain LLM composition later.
 
-## 6. Model & API (grilled Q8: Haiku 4.5 only)
+## 6. Model & API (grilled Q8: Haiku 4.5 only; Q17: Claude Platform on AWS)
 
-Backend is TypeScript/Express → official **`@anthropic-ai/sdk`**, tool-use loop via the SDK tool
-runner (`client.beta.messages.toolRunner` + `betaZodTool`).
+**Vendor & channel (grilled Q17, 2026-07-11): Anthropic Claude via Claude Platform on AWS.**
+Anthropic-operated with same-day API parity and **price-identical to the first-party API**
+(full analysis: [cost-breakdown.md](./cost-breakdown.md)). Chosen because the prod stack is
+already Terraform'd on AWS: auth is **SigV4 from the worker's EC2 instance IAM role** (no
+`ANTHROPIC_API_KEY` secret to provision/rotate) and billing lands in arrears on the existing AWS
+bill ($0.01 CCUs, no prepay). Client: `AnthropicAws` from **`@anthropic-ai/aws-sdk`** (requires
+`AWS_REGION` + `ANTHROPIC_AWS_WORKSPACE_ID`, both mandatory); after construction the surface is
+identical, so the tool-use loop is unchanged: SDK tool runner
+(`client.beta.messages.toolRunner` + `betaZodTool`). One-time setup: AWS Console enrollment +
+Marketplace offer + workspace creation. P-AWS lacks fast mode and cache diagnostics — neither is
+used here.
 
 **Model: `claude-haiku-4-5` for all tiers** ($1/$5 per MTok — ~$0.004–0.008 per Tier-1 turn).
 Decision grilled with the quality trade-off explicit; accepted because:
@@ -292,6 +302,7 @@ these without new evidence.
 | Q14 Topic scope | **App + tournaments + racket-sport knowledge**; one-line decline elsewhere. Prompt-enforced (soft); capability containment is structural — no write tools in MVP, asker-identity auth in every tool, human-confirmed writes in Tier 2 |
 | Q15 Discoverability | **One-time intro message on enable + Coach pinned first in the existing mention picker** (`MentionAutocomplete` in `GroupChatPanel`) |
 | Q16 Verbosity | **Terse, tiered: ≤20 words for data answers, ≤50 for explanations/how-to**; prompt-enforced with examples; `max_tokens`≈150 safety ceiling; expand on follow-up |
+| Q17 Vendor/channel | **Anthropic Claude via Claude Platform on AWS** — price-identical to first-party; SigV4/IAM auth (no API-key secret); billing on the existing AWS bill; see [cost-breakdown.md](./cost-breakdown.md) |
 
 ### Decision context & rejected alternatives
 
@@ -434,3 +445,20 @@ brief"), with `max_tokens`≈150 only as the safety ceiling (a token cap truncat
 rather than shortens, so the prompt does the shaping). Follow-up questions get more detail.
 Rejected: *hard 10–20 everywhere* (cryptic explanations, and each clarifying follow-up is a new
 billed invocation); *concise-but-uncapped* (small models drift without concrete numbers).
+
+**Q17 — Vendor & access channel (asked 2026-07-11; Q8 had chosen the model but not who serves
+it).** Full pricing analysis in [cost-breakdown.md](./cost-breakdown.md). Key facts: the three
+Claude channels (first-party API, Claude Platform on AWS, Bedrock global endpoint) are
+**price-identical** for Haiku 4.5 ($1/$5 per MTok; Bedrock *regional* endpoint is +10%);
+cross-vendor cost differences in the comparable model class are single-digit-to-tens of
+dollars/month even at 10× MVP volume — so cost could not decide this. Decided by ops fit: the prod
+stack is already on AWS (IaC build), so **Claude Platform on AWS** removes the API-key secret from
+the Terraform surface (SigV4 via the worker's instance role) and puts billing on the existing AWS
+bill, at zero price or code-surface penalty (Anthropic-operated, same-day parity, same SDK shape
+via `@anthropic-ai/aws-sdk`). Rejected: *first-party API* (simplest generic default, but adds a
+secret-management story AWS makes unnecessary here — kept as the documented fallback if P-AWS
+enrollment stalls); *Bedrock* (same price on global endpoint but AWS-operated feature subset +
+release lag — dominated by P-AWS); *switching vendor for cost* (GPT-mini/Gemini-Flash tiers save
+~$1–4/month at MVP volume in exchange for re-speccing the SDK layer, losing the
+Haiku→Sonnet→Opus upgrade path, and re-tuning prompts; the genuinely-cheaper nano/Flash-Lite
+tiers are a capability class below Haiku and re-open the Q8 quality concerns).
