@@ -68,6 +68,11 @@ const testConfig: AppConfig = {
     tokenStore: 'memory',
     rateLimitStore: 'memory',
   },
+  assistant: {
+    adapter: 'mock',
+    model: 'claude-haiku-4-5',
+    dailyBudgetUsd: 5,
+  },
 }
 
 describe('Task #8: Queue Monitoring', () => {

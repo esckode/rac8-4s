@@ -67,6 +67,11 @@ const testConfig: AppConfig = {
     tokenStore: 'memory',
     rateLimitStore: 'memory',
   },
+  assistant: {
+    adapter: 'mock',
+    model: 'claude-haiku-4-5',
+    dailyBudgetUsd: 5,
+  },
 }
 
 const MAX_EMAIL_RECIPIENTS_PER_JOB = testConfig.limits.emailRecipientsPerJob
