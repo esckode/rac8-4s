@@ -41,7 +41,7 @@ inserted as a `group_messages` row with `type='assistant'`, `player_id=NULL`,
 | Migrations dir (next number: **049**) | `db/migrations/` — copy the CHECK-widening pattern from `046_personal_conversation.sql` |
 | Chat UI | `packages/frontend/src/components/GroupChatPanel.tsx` (composer placeholder ~line 310; renders `type` variants for poll/system) |
 | Mention picker | `packages/frontend/src/components/MentionAutocomplete.tsx` (`MentionMember`, `MentionAutocompleteProps`) |
-| Group settings page | `packages/frontend/src/pages/GroupSettings.tsx` (tests: `pages/__tests__/GroupSettings.spec.tsx`) |
+| Group settings page | `GroupSettings` component in `packages/frontend/src/pages/MyGroups.tsx` (tests: `pages/__tests__/GroupSettings.spec.tsx`) |
 | E2E fixtures / config / scenario docs | `packages/frontend/e2e/fixtures.ts`, `e2e/config.ts`, repo-root `e2e-scenarios.md` |
 | Integration-test DB harness (NEVER bypass) | `packages/api/src/__tests__/helpers/db.ts` (`getTestPool()` — transactional rollback; see CLAUDE.md §7) |
 
@@ -55,7 +55,9 @@ inserted as a `group_messages` row with `type='assistant'`, `player_id=NULL`,
 - `public.player_groups`: `id UUID`, `name`, `created_by`, `default_match_format`, `created_at`.
   **No settings columns yet for the assistant** → 049 adds `assistant_enabled BOOLEAN NOT NULL
   DEFAULT true`.
-- `tournaments.group_id` (nullable UUID-as-TEXT) links casual tournaments to a group.
+- `tournaments.group_id` (nullable **UUID**, FK to `public.player_groups(id)`, migration 044) links
+  casual tournaments to a group. (The TEXT-typed `group_id` is on `messaging.conversations` — don't
+  confuse them when writing the A3.4 scoping joins.)
 - All timestamps TIMESTAMPTZ (CLAUDE.md §7).
 
 ### 0.4 Anthropic SDK usage (packages/api, TypeScript)
@@ -162,11 +164,13 @@ never silent.
 
 ### A0 — Scaffolding (no product code yet)
 
-- **A0.1 Dependency + config.** `npm i @anthropic-ai/aws-sdk zod` in `packages/api` (check whether
-  `zod` already exists first; `@anthropic-ai/sdk` comes in as a dependency of the AWS package —
-  the `betaZodTool` helper imports from it). Add the §0.5 env vars to `packages/api/src/config.ts`
+- **A0.1 Dependency + config.** `npm i @anthropic-ai/aws-sdk @anthropic-ai/sdk zod` in
+  `packages/api` (check whether `zod` already exists first — as of 2026-07-11 it does not.
+  `@anthropic-ai/sdk` must be a **direct** dependency, not just transitive via the AWS package,
+  because our code imports `betaZodTool` from it). Add the §0.5 env vars to `packages/api/src/config.ts`
   (follow the existing config shape) and to `.env.example`. Verify: `npm run build` passes.
-- **A0.1b Channel enrollment + parity smoke (one-time, manual).** Enroll via the AWS Console
+- **A0.1b Channel enrollment + parity smoke (one-time, manual — HUMAN ONLY; an executing agent
+  must skip this step and proceed on `ASSISTANT_ADAPTER=mock`, flagging it as pending).** Enroll via the AWS Console
   Claude Platform on AWS page (accept the Marketplace offer), create a workspace, note the
   workspace ID. Then run a throwaway script: `new AnthropicAws()` →
   `client.beta.messages.toolRunner` with one trivial `betaZodTool` against
@@ -247,7 +251,7 @@ never silent.
   Integration tests: signup with name "Coach" → 400 `VALIDATION_ERROR`; group invite-accept with
   name "coach" → 400. (Find the name-validation sites: signup handler in
   `packages/api/src/routes/auth.ts` and the invite-accept handler in `player-groups.ts` —
-  grep `min 2 characters` to locate the existing name checks.)
+  grep `2 characters` to locate the existing name checks, e.g. `auth.ts` ~line 76.)
 - **A2.4 [GREEN]** Implement validator in `packages/api/src/assistant/trigger.ts` (single source
   for the reserved list) and wire into both name paths.
 - **A2.5 [RED]** Integration test on `POST /player/groups/:groupId/messages`:
