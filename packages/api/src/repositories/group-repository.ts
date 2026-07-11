@@ -9,6 +9,7 @@ export interface GroupRow {
   createdBy: string
   defaultMatchFormat: 'singles' | 'doubles'
   createdAt: Date
+  assistantEnabled: boolean
 }
 
 export interface MemberRow {
@@ -48,7 +49,7 @@ export class GroupRepository {
       const groupResult = await client.query(
         `INSERT INTO public.player_groups (name, created_by${defaultMatchFormat ? ', default_match_format' : ''})
          VALUES ($1, $2${defaultMatchFormat ? ', $3' : ''})
-         RETURNING id, name, created_by, default_match_format, created_at`,
+         RETURNING id, name, created_by, default_match_format, created_at, assistant_enabled`,
         defaultMatchFormat ? [name, createdBy, defaultMatchFormat] : [name, createdBy]
       )
       const row = groupResult.rows[0]
@@ -291,9 +292,9 @@ export class GroupRepository {
    */
   async getGroupsForPlayer(
     playerId: string
-  ): Promise<Array<{ id: string; name: string; role: 'owner' | 'member'; memberCount: number }>> {
+  ): Promise<Array<{ id: string; name: string; role: 'owner' | 'member'; memberCount: number; assistantEnabled: boolean }>> {
     const result = await this.pool.query(
-      `SELECT g.id, g.name, m.role,
+      `SELECT g.id, g.name, m.role, g.assistant_enabled,
               (SELECT COUNT(*) FROM public.player_group_members WHERE group_id = g.id)::int AS member_count
        FROM public.player_groups g
        JOIN public.player_group_members m ON m.group_id = g.id AND m.player_id = $1
@@ -305,6 +306,7 @@ export class GroupRepository {
       name: row.name as string,
       role: row.role as 'owner' | 'member',
       memberCount: row.member_count as number,
+      assistantEnabled: row.assistant_enabled as boolean,
     }))
   }
 
@@ -380,12 +382,20 @@ export class GroupRepository {
   async updateGroup(
     groupId: string,
     actorPlayerId: string,
-    updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles' }
-  ): Promise<GroupRow> {
+    updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles'; assistantEnabled?: boolean }
+  ): Promise<GroupRow & { assistantEnabledTransitionedOn: boolean }> {
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
       await this.assertOwner(client, groupId, actorPlayerId)
+
+      // Capture the pre-update value to detect an off→on transition (A6.2:
+      // the intro message re-posts on every off→on flip, including rollout).
+      const before = await client.query(
+        `SELECT assistant_enabled FROM public.player_groups WHERE id = $1`,
+        [groupId]
+      )
+      const wasEnabled = before.rows[0]?.assistant_enabled === true
 
       const setClauses: string[] = []
       const params: unknown[] = [groupId]
@@ -398,25 +408,33 @@ export class GroupRepository {
         params.push(updates.defaultMatchFormat)
         setClauses.push(`default_match_format = $${params.length}`)
       }
+      if (updates.assistantEnabled !== undefined) {
+        params.push(updates.assistantEnabled)
+        setClauses.push(`assistant_enabled = $${params.length}`)
+      }
 
       if (setClauses.length === 0) {
         // Nothing to update — return current row
         const current = await client.query(
-          `SELECT id, name, created_by, default_match_format, created_at FROM public.player_groups WHERE id = $1`,
+          `SELECT id, name, created_by, default_match_format, created_at, assistant_enabled
+           FROM public.player_groups WHERE id = $1`,
           [groupId]
         )
         await client.query('COMMIT')
-        return rowToGroup(current.rows[0])
+        return { ...rowToGroup(current.rows[0]), assistantEnabledTransitionedOn: false }
       }
 
       const result = await client.query(
         `UPDATE public.player_groups SET ${setClauses.join(', ')} WHERE id = $1
-         RETURNING id, name, created_by, default_match_format, created_at`,
+         RETURNING id, name, created_by, default_match_format, created_at, assistant_enabled`,
         params
       )
 
       await client.query('COMMIT')
-      return rowToGroup(result.rows[0])
+      const group = rowToGroup(result.rows[0])
+      const assistantEnabledTransitionedOn =
+        updates.assistantEnabled === true && !wasEnabled
+      return { ...group, assistantEnabledTransitionedOn }
     } catch (err) {
       await client.query('ROLLBACK')
       throw err
@@ -500,5 +518,6 @@ function rowToGroup(row: any): GroupRow {
     createdBy: row.created_by as string,
     defaultMatchFormat: row.default_match_format as 'singles' | 'doubles',
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+    assistantEnabled: row.assistant_enabled as boolean,
   }
 }

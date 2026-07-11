@@ -123,12 +123,13 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     try {
       const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
       const groupId = req.params.groupId as string
-      const { name, defaultMatchFormat } = req.body as {
+      const { name, defaultMatchFormat, assistantEnabled } = req.body as {
         name?: unknown
         defaultMatchFormat?: unknown
+        assistantEnabled?: unknown
       }
 
-      const updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles' } = {}
+      const updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles'; assistantEnabled?: boolean } = {}
 
       if (name !== undefined) {
         if (typeof name !== 'string' || !name.trim()) {
@@ -147,14 +148,47 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         updates.defaultMatchFormat = defaultMatchFormat
       }
 
+      if (assistantEnabled !== undefined) {
+        if (typeof assistantEnabled !== 'boolean') {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'assistantEnabled must be a boolean' })
+        }
+        updates.assistantEnabled = assistantEnabled
+      }
+
       const group = await groupRepo.updateGroup(groupId, session.playerId, updates)
 
       log.info('group.updated', { groupId, actorPlayerId: session.playerId, updates })
+
+      // A6.2: off→on transition posts a one-time intro (re-posts on every
+      // transition — "rollout flip or owner re-enable", chosen for simplicity)
+      if (group.assistantEnabledTransitionedOn) {
+        const { message, conversationId } = await groupMsgRepo.sendAssistantMessage({
+          groupId,
+          body: "Hi, I'm Coach 👋 — mention @coach to ask about your matches, standings, or how the app works.",
+          metadata: { intro: true },
+        })
+        if (deps.broadcastBus) {
+          deps.broadcastBus.emit(conversationId, 'message.created', {
+            id: message.id,
+            conversationId,
+            groupId,
+            playerId: null,
+            senderName: message.senderName,
+            body: message.body,
+            type: message.type,
+            createdAt: message.createdAt,
+          })
+        }
+        log.info('assistant.toggled', { groupId, actorPlayerId: session.playerId, enabled: true })
+      } else if (updates.assistantEnabled !== undefined) {
+        log.info('assistant.toggled', { groupId, actorPlayerId: session.playerId, enabled: updates.assistantEnabled })
+      }
 
       return res.status(200).json({
         id: group.id,
         name: group.name,
         defaultMatchFormat: group.defaultMatchFormat,
+        assistantEnabled: group.assistantEnabled,
       })
     } catch (err) {
       next(handleGroupError(err))
