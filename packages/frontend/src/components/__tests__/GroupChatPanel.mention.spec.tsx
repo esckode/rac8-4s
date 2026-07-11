@@ -50,7 +50,7 @@ jest.mock('../../hooks/useAuth', () => ({
 
 global.fetch = jest.fn().mockResolvedValue({
   ok: true,
-  json: async () => mockMembers,
+  json: async () => ({ members: mockMembers }),
 } as unknown as Response)
 
 describe('GroupChatPanel mention rendering (P1.9)', () => {

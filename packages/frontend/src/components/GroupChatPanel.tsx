@@ -75,8 +75,8 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
     fetch(`/player/groups/${groupId}/members`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
-      .then(r => r.ok ? r.json() : [])
-      .then((data: MemberSummary[]) => setMembers(data))
+      .then(r => r.ok ? r.json() : { members: [] })
+      .then((data: { members: MemberSummary[] }) => setMembers(data.members ?? []))
       .catch(() => {})
   }, [groupId])
 
