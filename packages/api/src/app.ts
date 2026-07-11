@@ -25,7 +25,7 @@ import type { AppConfig } from './config'
 import type { EmailAdapter } from './email-adapter'
 import { QueueMonitor } from './queue-monitor'
 import { generatePlayerSession } from './auth/magic-link'
-import { PlayerRepository } from './db'
+import { PlayerRepository, TournamentRepository, GroupRepository as TournamentGroupRepository } from './db'
 import type { Redis } from 'ioredis'
 import { RedisHealthState, probeRedisHealth, isRedisSelected } from './redis-health'
 import type { PartitionManager } from './services/partition-manager'
@@ -207,6 +207,47 @@ export function createApp(deps: AppDependencies): Express {
           appDeps.tokenStore
         )
         return res.json({ playerToken: session.token, playerId: player.id })
+      } catch (err) {
+        return res.status(500).json({ error: String(err) })
+      }
+    })
+
+    // Test-only endpoint — seeds a group-linked casual round-robin session
+    // with an explicit roster (rather than driving the full poll→launch UI
+    // flow, which is unrelated to the assistant feature under test).
+    // Disabled in production to prevent auth bypass.
+    app.post('/test/casual-session', async (req: Request, res: Response) => {
+      try {
+        const { groupId, playerIds, matchFormat } = req.body as {
+          groupId: string
+          playerIds: string[]
+          matchFormat?: 'singles' | 'doubles'
+        }
+        if (!groupId || !Array.isArray(playerIds) || playerIds.length < 2) {
+          return res.status(400).json({ error: 'groupId and at least 2 playerIds are required' })
+        }
+        const tournamentRepo = new TournamentRepository(appDeps.db as any)
+        const playerRepo = new PlayerRepository(appDeps.db as any)
+        const groupRepo = new TournamentGroupRepository(appDeps.db as any)
+
+        const tournament = await tournamentRepo.create({
+          name: `Test Casual Session ${Date.now()}`,
+          sport: 'tennis',
+          matchFormat: matchFormat ?? 'singles',
+          maxPlayers: playerIds.length,
+          creatorId: playerIds[0],
+          mode: 'casual',
+          visibility: 'unlisted',
+          groupId,
+        })
+        for (const playerId of playerIds) {
+          await playerRepo.createRegistration(playerId, tournament.id)
+        }
+        await tournamentRepo.updateStatus(tournament.id, 'registration_closed')
+        await groupRepo.createGroups(tournament.id, 1, 1, playerIds)
+        await tournamentRepo.updateStatus(tournament.id, 'group_stage_active')
+
+        return res.json({ tournamentId: tournament.id })
       } catch (err) {
         return res.status(500).json({ error: String(err) })
       }
