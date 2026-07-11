@@ -21,7 +21,7 @@ export interface GroupMessageRow {
   playerId: string | null
   senderName: string | null
   body: string
-  type: 'text' | 'poll' | 'system' | 'announcement'
+  type: 'text' | 'poll' | 'system' | 'announcement' | 'assistant'
   createdAt: Date
   removedAt: Date | null
   removedBy: string | null
@@ -39,6 +39,12 @@ export interface SendGroupMessageInput {
   playerId: string
   body: string
   type?: 'text' | 'poll' | 'system' | 'announcement'
+}
+
+export interface SendAssistantMessageInput {
+  groupId: string
+  body: string
+  metadata?: Record<string, unknown>
 }
 
 export interface GetGroupHistoryInput {
@@ -162,6 +168,72 @@ export class GroupMessageRepository {
     } finally {
       client.release()
     }
+  }
+
+  /**
+   * Post an assistant (@coach) reply into a group conversation.
+   * Bot rows: type='assistant', player_id=NULL, sender_name_snapshot='Coach' — the
+   * explicit type keeps them unambiguous against DSR tombstones (also player_id=NULL).
+   * Optional metadata carries provenance markers ({replyTo: <messageId>} for
+   * idempotency, {intro: true} for the one-time enable intro).
+   */
+  async sendAssistantMessage(
+    input: SendAssistantMessageInput
+  ): Promise<{ message: GroupMessageRow; conversationId: string }> {
+    const { groupId, body, metadata } = input
+
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      const conversationId = await this.resolveConversationId(client, groupId)
+
+      const result = await client.query(
+        `INSERT INTO messaging.group_messages
+           (conversation_id, player_id, sender_name_snapshot, body, type, metadata)
+         VALUES ($1, NULL, 'Coach', $2, 'assistant', $3)
+         RETURNING id, conversation_id, player_id, sender_name_snapshot, body, type,
+                   created_at, metadata`,
+        [conversationId, body, metadata ?? null]
+      )
+
+      await client.query('COMMIT')
+
+      const message = rowToGroupMessage(result.rows[0])
+
+      log.info('assistant.message.sent', {
+        groupId,
+        conversationId,
+        messageId: message.id,
+      })
+
+      return { message, conversationId }
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Get the newest N messages of a conversation in chronological order — the
+   * assistant's bounded context window (design Q13, ~20 messages).
+   */
+  async getRecentMessages(input: GetGroupHistoryInput): Promise<GroupMessageRow[]> {
+    const { conversationId, limit = 20 } = input
+
+    const result = await this.pool.query(
+      `SELECT id, conversation_id, player_id, sender_name_snapshot, body,
+              type, created_at, removed_at, removed_by, metadata
+       FROM messaging.group_messages
+       WHERE conversation_id = $1
+       ORDER BY created_at DESC, id DESC
+       LIMIT $2`,
+      [conversationId, Math.min(limit, 100)]
+    )
+
+    return result.rows.map(rowToGroupMessage).reverse()
   }
 
   /**

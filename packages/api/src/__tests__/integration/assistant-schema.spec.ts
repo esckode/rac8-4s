@@ -147,6 +147,17 @@ describe('assistant schema + repository (migration 049)', () => {
       body: 'coach chimes in',
     })
 
+    // now() is frozen inside the suite transaction, so all rows tie on created_at;
+    // spread them to match production (one transaction per insert → distinct now()).
+    await pool.query(
+      `UPDATE messaging.group_messages
+       SET created_at = created_at + (
+         CASE WHEN body = 'coach chimes in' THEN 100
+              ELSE split_part(body, ' ', 2)::int END * interval '1 second')
+       WHERE conversation_id = $1`,
+      [conversationId]
+    )
+
     const recent = await repo.getRecentMessages({ conversationId, limit: 20 })
 
     expect(recent).toHaveLength(20)

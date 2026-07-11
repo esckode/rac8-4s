@@ -26,7 +26,7 @@
  */
 
 export type NotifyLevel = 'all' | 'mentions_polls' | 'muted'
-export type GroupMessageType = 'text' | 'poll' | 'system' | 'announcement'
+export type GroupMessageType = 'text' | 'poll' | 'system' | 'announcement' | 'assistant'
 
 export interface GroupMemberForNotify {
   playerId: string
@@ -80,8 +80,8 @@ export function parseMentions(body: string): string[] {
 export function selectNotifyRecipients(input: SelectNotifyRecipientsInput): string[] {
   const { members, messageType, body, senderPlayerId } = input
 
-  // System events never trigger push notifications
-  if (messageType === 'system') {
+  // System events and assistant replies never trigger push notifications
+  if (messageType === 'system' || messageType === 'assistant') {
     return []
   }
 
