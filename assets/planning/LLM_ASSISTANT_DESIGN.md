@@ -198,6 +198,41 @@ internally with `finalMessage()` (the reply posts whole — no token streaming i
 ≥4096 tokens (Haiku 4.5's cacheable minimum) with a `cache_control` breakpoint — up to 90% off the
 input side on cache hits.
 
+### 6.1 Caching reference — what is cached where
+
+Three different things in this feature could be called a "cache"; they live in different places
+with different lifetimes and none of them requires management code:
+
+| What | Where | Lifetime / invalidation |
+|---|---|---|
+| Prompt prefix (tools + system prompt + help corpus) | **Anthropic's serving infrastructure** (server-side prompt cache; same mechanism on Claude Platform on AWS as first-party) | 5-minute sliding TTL, refreshed on every read; auto-managed |
+| Help-corpus string (`docs/assistant-help.md` contents) | Worker **process memory** (sync file read at module init) | Until the next worker restart/redeploy — this is how corpus edits ship |
+| Rate-limit counters (player/group/daily-budget) | **Our Redis** (`rate-limit-store.ts`) | Hourly / daily windows (Q10) |
+
+**Prompt-cache mechanics (the first row):**
+- The `cache_control: {type: 'ephemeral'}` breakpoint on the system block makes Anthropic store
+  the model's computed state for the prefix, keyed by the **exact bytes** of the rendered prefix
+  (render order: tools → system) plus the model ID, scoped to our organization. Nothing is cached
+  client-side and there is nothing to expire on our side.
+- Economics: a cache **write** bills ~1.25× input price (first request, or first after the TTL
+  lapses / prefix changes); a cache **read** bills ~0.1×. During active chat hours the sliding
+  5-minute TTL keeps the entry warm continuously.
+- **Byte-stability is load-bearing, not stylistic:** one interpolated byte (timestamp, request id,
+  user name) anywhere in the system prompt changes the cache key and every request pays full
+  price. All volatile per-turn context (asker name, ~20-message window, the mention) therefore
+  goes in the **user message**, after the cached prefix, where it invalidates nothing.
+- **Deploys invalidate by design:** any edit to the prompt skeleton or the help corpus changes the
+  prefix bytes, so the first request after a worker deploy pays one cache write and re-caches —
+  negligible, no action needed. Model upgrades (Q8 env change) likewise start a fresh cache
+  (caches are model-scoped).
+- **Haiku minimum:** the smallest cacheable prefix on Haiku 4.5 is **4096 tokens**. Below that,
+  caching silently no-ops — no error, just `usage.cache_read_input_tokens: 0`. Accepted at MVP
+  scale; **do not pad the prompt to reach it.**
+- **Verification:** per-turn usage logging (`assistant.replied`, §9) includes
+  `cacheReadInputTokens`. Persistently zero across warm-window requests means a silent
+  invalidator (non-deterministic serialization, dynamic content in the prefix) — diff the
+  rendered prompt bytes between two requests to find it.
+
 ## 7. Authorization & security
 
 **How tool use works — why the registry is a hard wall, not a convention.** The model never touches
