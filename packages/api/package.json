@@ -33,10 +33,13 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
+    "@anthropic-ai/aws-sdk": "^0.6.0",
+    "@anthropic-ai/sdk": "^0.111.0",
     "bcryptjs": "^3.0.3",
     "express": "^5.2.1",
     "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "zod": "^4.4.3"
   }
 }

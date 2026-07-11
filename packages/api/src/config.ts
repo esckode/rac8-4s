@@ -340,6 +340,40 @@ export interface EmailConfig {
 }
 
 /**
+ * LLM assistant (@coach) configuration.
+ */
+export interface AssistantConfig {
+  /**
+   * Assistant client adapter.
+   * Default: "mock" (deterministic keyword router — no network, used in dev/tests/e2e)
+   *
+   * Usage: Choose which AssistantClient implementation runs LLM turns.
+   * - "mock": deterministic keyword router; fakes only the NL→intent hop, tools are real
+   * - "anthropic-aws": Claude Platform on AWS via @anthropic-ai/aws-sdk (primary channel);
+   *   requires AWS_REGION and ANTHROPIC_AWS_WORKSPACE_ID env vars (SigV4 via AWS cred chain)
+   * - "anthropic": first-party Claude API fallback; requires ANTHROPIC_API_KEY env var
+   * - Override via ASSISTANT_ADAPTER env var
+   */
+  adapter: 'mock' | 'anthropic-aws' | 'anthropic'
+
+  /**
+   * Model ID for assistant turns.
+   * Default: "claude-haiku-4-5"
+   * Override via ASSISTANT_MODEL env var (model upgrade = config change, no code change).
+   */
+  model: string
+
+  /**
+   * Global daily spend kill-switch in USD.
+   * Default: 5
+   * When estimated cumulative spend for the current UTC day exceeds this, the assistant
+   * stops answering until the window resets.
+   * Override via ASSISTANT_DAILY_BUDGET_USD env var.
+   */
+  dailyBudgetUsd: number
+}
+
+/**
  * Redis and distributed-backend configuration.
  */
 export interface RedisConfig {
@@ -396,6 +430,7 @@ export interface AppConfig {
   email: EmailConfig
   messaging: MessagingConfig
   redis: RedisConfig
+  assistant: AssistantConfig
 }
 
 /**
@@ -463,6 +498,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     sseBus: 'memory',          // Use in-process bus by default (no Redis needed)
     tokenStore: 'memory',      // Use in-memory token store by default (no Redis needed)
     rateLimitStore: 'memory',  // Use in-memory counter by default (no Redis needed)
+  },
+  assistant: {
+    adapter: 'mock',           // No network by default; real channel is opt-in via env
+    model: 'claude-haiku-4-5', // Cheapest capable model (design Q8)
+    dailyBudgetUsd: 5,         // Global daily spend kill-switch (design Q10)
   },
 }
 
@@ -630,6 +670,16 @@ export function getAppConfig(): AppConfig {
       sseBus: (process.env.SSE_BUS ?? DEFAULT_APP_CONFIG.redis.sseBus) as 'memory' | 'redis',
       tokenStore: (process.env.TOKEN_STORE ?? DEFAULT_APP_CONFIG.redis.tokenStore) as 'memory' | 'redis',
       rateLimitStore: (process.env.RATE_LIMIT_STORE ?? DEFAULT_APP_CONFIG.redis.rateLimitStore) as 'memory' | 'redis',
+    },
+    assistant: {
+      adapter: (process.env.ASSISTANT_ADAPTER ?? DEFAULT_APP_CONFIG.assistant.adapter) as
+        | 'mock'
+        | 'anthropic-aws'
+        | 'anthropic',
+      model: process.env.ASSISTANT_MODEL ?? DEFAULT_APP_CONFIG.assistant.model,
+      dailyBudgetUsd: parseFloat(
+        process.env.ASSISTANT_DAILY_BUDGET_USD ?? String(DEFAULT_APP_CONFIG.assistant.dailyBudgetUsd)
+      ),
     },
   }
 }
