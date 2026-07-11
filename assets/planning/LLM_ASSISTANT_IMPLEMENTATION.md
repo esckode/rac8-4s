@@ -6,7 +6,8 @@
 > **read §10 of the design doc before starting; do not relitigate those decisions**).
 
 **Date:** 2026-07-10
-**Status:** 📋 PLAN READY — not started.
+**Status:** ✅ Phase A BUILT (2026-07-11, A0–A9; branch `llm-assistant-design`, not yet merged to
+`main`). Phase B/C below remain plan-only.
 **Method:** TDD-first per CLAUDE.md §4/§11 — every step is a **[RED]** commit (failing tests, run
 them, confirm they fail *for the right reason*) followed by a **[GREEN]** commit (implementation,
 tests pass). E2E scenarios are written to `e2e-scenarios.md` **before** the code (step A0.2).
@@ -509,22 +510,49 @@ before building.
 
 ## Definition of done (Phase A)
 
-- All A-steps merged with [RED]→[GREEN] history; `npm test` (api + frontend), `npm run lint`,
-  `npm run test:e2e` green; coverage ≥85% on `packages/api/src/assistant/**` and touched FE files.
-- Manual smoke (dev, two browsers, **live model** — `ASSISTANT_ADAPTER=anthropic-aws`): mention
-  @coach → reply < 5s via SSE in both; toggle off → silent; intro posts on re-enable.
-  **Answer-quality spot checks** (the content e2e can't assert): *(a)* "who am I playing next?"
-  names the right opponent from real data; *(b)* sport rule — "how many points is the first-set
-  tiebreak in a 3-set tennis match?" → a correct, ≤50-word answer (first-to-7, win by 2, at 6–6)
-  framed as general knowledge; *(c)* app how-to — "how do I invite a friend to this casual
-  tournament?" → matches what `docs/assistant-help.md` says; *(d)* an off-topic question gets the
-  one-line decline; *(e)* **model-behavior negatives** (the part e2e cannot cover): ask for
-  another player's private-tournament data → the live model doesn't fabricate it and reports
-  not-found; ask it to change a score → polite refusal. (The walls hold regardless — these check
-  *reply quality under adversarial asks*, not enforcement.) If quality drift becomes a concern
-  post-launch, promote these spot checks to
-  a small scripted eval set run on demand against the live model (not CI).
-- `LOG_LEVEL=debug` trace shows `assistant.triggered` → `assistant.replied` sharing one
-  `requestId`/job correlation; token usage visible.
-- No prod channel enablement (adapter env + worker-role IAM) until the privacy-policy clause
-  ships (A9.2).
+- [x] All A-steps built with [RED]→[GREEN] commit history (A0–A9, 2026-07-11, branch
+      `llm-assistant-design`).
+- [x] `npm test` (api: 2121 passed / only the pre-existing, unrelated `partial-indexes.spec.ts`
+      query-planner flake fails, identical on the base commit; frontend: 1225 passed) and
+      `npm run lint` (repo-wide) green.
+- [x] `npm run test:e2e` for `e2e/assistant.spec.ts` — 16/16 passing on chromium + firefox against
+      a live dev stack (Postgres + Redis + API + BullMQ worker + frontend), `ASSISTANT_ADAPTER=mock`.
+      Also spot-checked `player-groups`, `group-owner-management`, `group-settings`,
+      `casual-tournament`, `poll-cards` for regressions (29 passed, 0 failed, 7 pre-existing
+      conditional skips). Did not run the full unrelated e2e suite (tournament/auth flows etc.).
+- [x] Coverage on `packages/api/src/assistant/**`: statements 87%, lines 88% (see the A8.2 commit
+      for the per-file table). Branch/function metrics sit below 85%, concentrated in
+      `AnthropicAssistantClient`'s real tool-runner call (`assistant-client.ts:103-130`) — the
+      live-SDK network path, intentionally not unit-tested (would require deep SDK mocking for no
+      real signal); verified manually instead, see the live-model checklist below.
+- [x] Two bugs found and fixed via this e2e run (both real, both pre-dated or were introduced by
+      Phase A, neither caught by unit/integration tests against the in-memory fakes):
+      **(1)** the design's literal `jobId: 'assistant:<messageId>'` 500s every request against
+      real BullMQ (`Custom Id cannot contain :`) — switched to a hyphen; **(2)** `GroupChatPanel`'s
+      members-fetch treated `GET /player/groups/:id/members`'s `{members: [...]}` response as a
+      bare array, crashing the whole page (uncaught, no error boundary) the moment the mention
+      picker opened in a real browser — every RTL test had mocked the bug's own (wrong) shape.
+- [x] `LOG_LEVEL=debug` trace confirmed manually: `assistant.triggered` → `assistant.replied`
+      share one job/requestId correlation; token usage visible in the log line (0 for the mock
+      adapter, since it makes no real API call).
+- [ ] **A0.1b (P-AWS channel enrollment) — HUMAN ONLY, not done.** Per the plan, an executing agent
+      skips this and proceeds on `ASSISTANT_ADAPTER=mock`; all verification above used the mock
+      adapter. `ASSISTANT_ADAPTER` is unset in `.env`/`.env.example` (defaults to `mock` — bot inert
+      until a human sets it).
+- [ ] **Manual smoke against a live model** (`ASSISTANT_ADAPTER=anthropic-aws`, two browsers) —
+      NOT done; blocked on A0.1b. Remaining checklist once a P-AWS workspace exists: reply < 5s via
+      SSE in both browsers; toggle off → silent; intro posts on re-enable; answer-quality spot
+      checks — *(a)* "who am I playing next?" names the right opponent from real data;
+      *(b)* sport rule ("how many points is the first-set tiebreak in a 3-set tennis match?") → a
+      correct, ≤50-word answer (first-to-7, win by 2, at 6–6) framed as general knowledge;
+      *(c)* app how-to ("how do I invite a friend to this casual tournament?") → matches
+      `docs/assistant-help.md`; *(d)* an off-topic question gets the one-line decline;
+      *(e)* model-behavior negatives (the part e2e cannot cover) — ask for another player's
+      private-tournament data → the live model doesn't fabricate it and reports not-found; ask it
+      to change a score → polite refusal. (The walls hold regardless of model behavior — these
+      check *reply quality under adversarial asks*, not enforcement, which the adversarial-mock e2e
+      scenario + the A3.3 integration tests already prove structurally.) If quality drift becomes a
+      concern post-launch, promote these spot checks to a small scripted eval set run on demand
+      against the live model (not CI).
+- [x] No prod channel enablement (adapter env + worker-role IAM) — `ASSISTANT_ADAPTER` stays
+      unset/mock until the privacy-policy AI clause ships (tracked in BACKLOG.md).

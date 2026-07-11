@@ -4,9 +4,11 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-07-10 (drafted + **fully grilled to resolution the same day** — see §10)
-**Status:** 📐 DESIGN (fully grilled) — implementation plan written:
-[LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md). Builds on the
-community layer ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)) and the messaging platform
+**Status:** ✅ **Built for Phase A** (2026-07-11, A0–A9 — see
+[LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md); branch `llm-assistant-design`,
+not yet merged to `main`). Phase B (confirm-card writes) and Phase C (proactive) remain design-only,
+not yet planned. Builds on the community layer
+([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)) and the messaging platform
 ([MESSAGING_DESIGN.md](./MESSAGING_DESIGN.md) §16–§17).
 
 ---
