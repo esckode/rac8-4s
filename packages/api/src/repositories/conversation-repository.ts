@@ -124,4 +124,25 @@ export class ConversationRepository {
     )
     log.info('group.messages.anonymized', { playerId })
   }
+
+  /**
+   * DSR best-effort scrub (A9.3): assistant (@coach) rows are never
+   * authored by the erased player (player_id is always NULL, sender is
+   * always 'Coach'), so anonymizeGroupMessagesFor never touches them — but
+   * Coach may have mentioned the player's name in a reply body. Rewrites
+   * every EXACT occurrence of the player's pre-erasure display name with
+   * "Former player" inside type='assistant' bodies. Paraphrases (nicknames,
+   * partial names) are out of scope — exact-substring only.
+   */
+  async scrubAssistantMentionsOf(displayName: string): Promise<void> {
+    if (!displayName) return
+    const result = await this.pool.query(
+      `UPDATE messaging.group_messages
+       SET body = REPLACE(body, $1, 'Former player')
+       WHERE type = 'assistant' AND position($1 in body) > 0`,
+      [displayName]
+    )
+    // Never log the display name itself (PII) — row count only.
+    log.info('assistant.mentions.scrubbed', { rowCount: result.rowCount })
+  }
 }
