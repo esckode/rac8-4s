@@ -302,6 +302,12 @@ export const SELECTORS = {
   INVITE_SUCCESS: '[data-testid="invite-success"]',
   INVITE_ERROR: '[data-testid="invite-error"]',
 
+  // LLM Assistant (@coach) — Phase A
+  ASSISTANT_MESSAGE: '[data-testid="assistant-message"]',
+  ASSISTANT_TOGGLE: '[data-testid="assistant-toggle"]',
+  MENTION_AUTOCOMPLETE: '[data-testid="mention-autocomplete"]',
+  MENTION_OPTION_ASSISTANT: '[data-testid="mention-option-assistant"]',
+
   // Group Settings — P1.4
   GROUP_DETAIL_HEADER: '[data-testid="group-detail-header"]',
   GROUP_SETTINGS_GEAR: '[data-testid="group-settings-gear"]',
