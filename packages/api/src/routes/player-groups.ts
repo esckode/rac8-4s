@@ -36,7 +36,7 @@ import { GroupMessageRepository } from '../repositories/group-message-repository
 import { ConversationRepository } from '../repositories/conversation-repository'
 import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-notify-selector'
 import { PollRepository, type PollChoice } from '../repositories/poll-repository'
-import { isReservedDisplayName } from '../assistant/trigger'
+import { isReservedDisplayName, detectAssistantTrigger } from '../assistant/trigger'
 import { LeaderboardRepository } from '../repositories/leaderboard-repository'
 import { TournamentRepository } from '../db'
 
@@ -521,6 +521,33 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
               { conversationId, groupId },
               { jobId: `notify:${conversationId}:${recipientId}` }
             )
+          }
+        }
+
+        // @coach trigger → enqueue one assistant.reply job (worker tier runs the
+        // LLM turn). jobId is keyed on the triggering message id (Q12 idempotency).
+        if (deps.jobQueue && detectAssistantTrigger(message.body)) {
+          const toggleRes = await (deps.db as any).query(
+            `SELECT assistant_enabled FROM public.player_groups WHERE id = $1`,
+            [groupId]
+          )
+          if (toggleRes.rows[0]?.assistant_enabled === true) {
+            await deps.jobQueue.add(
+              'assistant.reply',
+              {
+                messageId: message.id,
+                conversationId,
+                groupId,
+                playerId: session.playerId,
+                body: message.body,
+              },
+              { jobId: `assistant:${message.id}` }
+            )
+            log.info('assistant.triggered', {
+              groupId,
+              playerId: session.playerId,
+              messageId: message.id,
+            })
           }
         }
 
