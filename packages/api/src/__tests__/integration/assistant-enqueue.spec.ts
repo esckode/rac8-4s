@@ -5,7 +5,8 @@
  * Covers:
  *  - body containing @coach + assistant_enabled=true → 201 AND one
  *    'assistant.reply' job with payload {messageId, conversationId, groupId,
- *    playerId, body} and jobId 'assistant:<messageId>' (Q12 idempotency key)
+ *    playerId, body} and jobId 'assistant-<messageId>' (Q12 idempotency key;
+ *    hyphen not colon — BullMQ rejects ':' in custom job IDs)
  *  - assistant_enabled=false → 201, no assistant.reply job
  *  - no trigger → no assistant.reply job
  */
@@ -98,7 +99,7 @@ describe('A2.5 — @coach mention enqueues assistant.reply', () => {
     expect(res.status).toBe(201)
     const jobs = newAssistantJobs(before)
     expect(jobs).toHaveLength(1)
-    expect(jobs[0].id).toBe(`assistant:${res.body.id}`)
+    expect(jobs[0].id).toBe(`assistant-${res.body.id}`)
     expect(jobs[0].data).toEqual({
       messageId: res.body.id,
       conversationId: res.body.conversationId,

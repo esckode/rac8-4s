@@ -573,8 +573,10 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
               playerId: session.playerId,
               body: message.body,
             }
+            // Hyphen, not colon (Q12 idempotency key) — BullMQ rejects custom
+            // job IDs containing ':' ("Custom Id cannot contain :").
             await deps.jobQueue.add('assistant.reply', assistantPayload, {
-              jobId: `assistant:${message.id}`,
+              jobId: `assistant-${message.id}`,
             })
             log.info('assistant.triggered', {
               groupId,
