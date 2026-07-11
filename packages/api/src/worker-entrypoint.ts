@@ -20,10 +20,16 @@ import { registerPartitionJobs } from '@worker/partition-scheduler'
 import { processReadReceiptFlush } from './workers/read-receipt-processor'
 import { processPartitionEnsure, processPartitionPurge } from './workers/partition-processor'
 import { processMessagingNotify } from './workers/notify-processor'
+import { processAssistantReply } from './workers/assistant-processor'
 import { PartitionManager } from './services/partition-manager'
 import { ServiceEmailAdapter } from './email-service-adapter'
 import { createEmailService } from './services/email-service'
-import { DEFAULT_APP_CONFIG } from './config'
+import { DEFAULT_APP_CONFIG, getAppConfig } from './config'
+import { GroupMessageRepository } from './repositories/group-message-repository'
+import { selectAssistantClient } from './assistant/assistant-client-factory'
+import { AssistantRateLimiter, ASSISTANT_HOURLY_LIMITS } from './assistant/rate-limiter'
+import { selectRateLimitStore } from './middleware/rate-limit-store'
+import { selectBroadcastBus } from './broadcast-bus'
 import { getLogger } from './logger'
 
 const log = getLogger('worker-entrypoint')
@@ -83,6 +89,22 @@ async function main() {
     })
   }
 
+  // ── Assistant (@coach) processor deps ──────────────────────────────────────
+  // Adapter defaults to mock (no network) until ASSISTANT_ADAPTER is set (A9.2).
+  // The bus must be Redis-backed (SSE_BUS=redis) for replies to reach API
+  // instances' SSE connections from the worker tier.
+  const appConfig = getAppConfig()
+  const assistantDeps = {
+    pool,
+    groupMessageRepo: new GroupMessageRepository(pool),
+    client: selectAssistantClient(appConfig),
+    rateLimiter: new AssistantRateLimiter(selectRateLimitStore(), {
+      ...ASSISTANT_HOURLY_LIMITS,
+      dailyBudgetUsd: appConfig.assistant.dailyBudgetUsd,
+    }),
+    broadcastBus: selectBroadcastBus(),
+  }
+
   const workers = [
     createWorker({
       queueName: 'messaging.read_receipt.flush',
@@ -119,6 +141,14 @@ async function main() {
           }),
         ]
       : []),
+
+    createWorker({
+      queueName: 'assistant.reply',
+      redisUrl: REDIS_URL!,
+      processor: async (job) => {
+        await processAssistantReply(job.data, assistantDeps)
+      },
+    }),
   ]
 
   log.info('worker.started', { queues: workers.map((_, i) => i) })

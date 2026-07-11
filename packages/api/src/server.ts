@@ -18,6 +18,12 @@ import { ServiceEmailAdapter } from './email-service-adapter'
 import { getLogger } from './logger'
 import { seedTestAccounts } from '../scripts/seed-test-accounts'
 import { InMemoryStandingsCache, subscribeToStandingsInvalidations } from './standings-cache'
+import { GroupMessageRepository } from './repositories/group-message-repository'
+import { selectAssistantClient } from './assistant/assistant-client-factory'
+import { AssistantRateLimiter, ASSISTANT_HOURLY_LIMITS } from './assistant/rate-limiter'
+import { selectRateLimitStore } from './middleware/rate-limit-store'
+import { processAssistantReply } from './workers/assistant-processor'
+import type { AssistantJobPayload } from './assistant/assistant-service'
 
 const log = getLogger('server')
 
@@ -79,6 +85,24 @@ async function main() {
       // In production, consider fallback or different initialization strategy
     }
 
+    // Assistant (@coach): in BullMQ mode the worker tier consumes
+    // assistant.reply; the in-memory queue has no consumer, so wire the
+    // inline processor for single-process dev/e2e.
+    let processAssistantJob: ((payload: AssistantJobPayload) => Promise<void>) | undefined
+    if (config.redis.jobQueue !== 'bullmq') {
+      const assistantDeps = {
+        pool,
+        groupMessageRepo: new GroupMessageRepository(pool),
+        client: selectAssistantClient(config),
+        rateLimiter: new AssistantRateLimiter(selectRateLimitStore(), {
+          ...ASSISTANT_HOURLY_LIMITS,
+          dailyBudgetUsd: config.assistant.dailyBudgetUsd,
+        }),
+        broadcastBus,
+      }
+      processAssistantJob = payload => processAssistantReply(payload, assistantDeps)
+    }
+
     // Create Express app (health route is inside createApp)
     const app = createApp({
       config,
@@ -90,6 +114,7 @@ async function main() {
       emailAdapter,
       redis: redisClient,
       standingsCache,
+      processAssistantJob,
     })
 
     // Create HTTP server

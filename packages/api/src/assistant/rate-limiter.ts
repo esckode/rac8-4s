@@ -23,6 +23,9 @@ export function estimateTurnUsd(usage: { inputTokens: number; outputTokens: numb
 /** Conservative pre-turn estimate (system prompt + context + capped output). */
 export const DEFAULT_TURN_ESTIMATE_USD = 0.005
 
+/** Q10 fixed limits: 10/player/hr, 30/group/hr. */
+export const ASSISTANT_HOURLY_LIMITS = { playerPerHour: 10, groupPerHour: 30 }
+
 export interface AssistantLimitCheck {
   allowed: boolean
   reason?: 'player' | 'group' | 'budget'

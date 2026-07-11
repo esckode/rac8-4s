@@ -31,6 +31,8 @@ export interface AssistantServiceDeps {
   groupMessageRepo: GroupMessageRepository
   client: AssistantClient
   broadcastBus?: IBroadcastBus
+  /** Called with real usage after a successful turn (spend recording). */
+  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => Promise<void>
 }
 
 export const ASSISTANT_FALLBACK_REPLY = "I couldn't answer that right now — try again in a bit."
@@ -49,7 +51,7 @@ export async function handleAssistantJob(
   deps: AssistantServiceDeps
 ): Promise<void> {
   const { messageId, conversationId, groupId, playerId, body } = payload
-  const { pool, groupMessageRepo, client, broadcastBus } = deps
+  const { pool, groupMessageRepo, client, broadcastBus, onUsage } = deps
   const startedAt = Date.now()
 
   // Idempotency (Q12): a redelivered job must not double-reply
@@ -99,6 +101,7 @@ The asking player is ${askerName}. Their message: ${body}`
     replyBody = result.text || ASSISTANT_FALLBACK_REPLY
     usage = result.usage
     toolRounds = result.toolRounds
+    if (onUsage) await onUsage(result.usage)
   } catch (err) {
     log.error('assistant.turn.failed', {
       groupId,

@@ -112,6 +112,19 @@ export interface AppDependencies {
    * Optional: if absent, field is omitted or set to 'disabled'.
    */
   partitionManager?: PartitionManager
+  /**
+   * In-memory-queue consumer for assistant.reply jobs (the InMemoryJobQueue has
+   * no consumer — mirrors the inline processStandingsRecalculate pattern).
+   * Wired by server.ts only when JOB_QUEUE=memory; in BullMQ mode the worker
+   * tier consumes the queue and this stays undefined.
+   */
+  processAssistantJob?: (payload: {
+    messageId: string
+    conversationId: string
+    groupId: string
+    playerId: string
+    body: string
+  }) => Promise<void>
 }
 
 export function createApp(deps: AppDependencies): Express {

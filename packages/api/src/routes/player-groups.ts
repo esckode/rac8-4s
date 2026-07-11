@@ -532,22 +532,31 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             [groupId]
           )
           if (toggleRes.rows[0]?.assistant_enabled === true) {
-            await deps.jobQueue.add(
-              'assistant.reply',
-              {
-                messageId: message.id,
-                conversationId,
-                groupId,
-                playerId: session.playerId,
-                body: message.body,
-              },
-              { jobId: `assistant:${message.id}` }
-            )
+            const assistantPayload = {
+              messageId: message.id,
+              conversationId,
+              groupId,
+              playerId: session.playerId,
+              body: message.body,
+            }
+            await deps.jobQueue.add('assistant.reply', assistantPayload, {
+              jobId: `assistant:${message.id}`,
+            })
             log.info('assistant.triggered', {
               groupId,
               playerId: session.playerId,
               messageId: message.id,
             })
+            // In-memory queue has no consumer — process inline, off the
+            // request path (fire-and-forget; undefined in BullMQ mode)
+            if (deps.processAssistantJob) {
+              const processJob = deps.processAssistantJob
+              setImmediate(() => {
+                processJob(assistantPayload).catch((e: Error) => {
+                  log.error('assistant.inline.failed', { groupId, error: e.message })
+                })
+              })
+            }
           }
         }
 
