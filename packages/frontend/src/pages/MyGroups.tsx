@@ -167,7 +167,14 @@ export const GroupDetail: React.FC = () => {
 
       {/* Tab content */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'chat' && <GroupChatPanel groupId={groupId} active isOwner={isOwner} />}
+        {activeTab === 'chat' && (
+          <GroupChatPanel
+            groupId={groupId}
+            active
+            isOwner={isOwner}
+            assistantEnabled={group?.assistantEnabled ?? true}
+          />
+        )}
         {activeTab === 'members' && <MembersPanel groupId={groupId} />}
         {activeTab === 'leaderboard' && (
           <div className="p-4 overflow-y-auto h-full">
@@ -400,11 +407,18 @@ interface GroupConfigProps {
   groupId: string
   initialName: string
   initialFormat: 'singles' | 'doubles'
+  initialAssistantEnabled: boolean
 }
 
-const GroupConfig: React.FC<GroupConfigProps> = ({ groupId, initialName, initialFormat }) => {
+const GroupConfig: React.FC<GroupConfigProps> = ({
+  groupId,
+  initialName,
+  initialFormat,
+  initialAssistantEnabled,
+}) => {
   const [name, setName] = useState(initialName)
   const [saving, setSaving] = useState(false)
+  const [assistantEnabled, setAssistantEnabled] = useState(initialAssistantEnabled)
 
   async function handleSaveName(e: React.FormEvent) {
     e.preventDefault()
@@ -436,6 +450,20 @@ const GroupConfig: React.FC<GroupConfigProps> = ({ groupId, initialName, initial
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ defaultMatchFormat }),
+    })
+  }
+
+  async function handleAssistantToggle(e: React.ChangeEvent<HTMLInputElement>) {
+    const next = e.target.checked
+    setAssistantEnabled(next)
+    const token = localStorage.getItem('auth_token')
+    await fetch(`/player/groups/${groupId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ assistantEnabled: next }),
     })
   }
 
@@ -480,6 +508,23 @@ const GroupConfig: React.FC<GroupConfigProps> = ({ groupId, initialName, initial
           <option value="singles">Singles</option>
           <option value="doubles">Doubles</option>
         </select>
+      </div>
+
+      {/* Assistant toggle */}
+      <div className="flex items-center gap-3">
+        <label htmlFor="assistant-toggle" className="text-sm text-[--ink-700]">
+          Coach assistant
+        </label>
+        <input
+          id="assistant-toggle"
+          data-testid="assistant-toggle"
+          type="checkbox"
+          role="switch"
+          checked={assistantEnabled}
+          onChange={handleAssistantToggle}
+          className="h-5 w-5 accent-[--court-600]"
+          aria-label="Enable Coach assistant"
+        />
       </div>
     </div>
   )
@@ -568,6 +613,7 @@ export const GroupSettings: React.FC = () => {
             groupId={groupId}
             initialName={groupName}
             initialFormat="singles"
+            initialAssistantEnabled={group?.assistantEnabled ?? true}
           />
         </section>
       )}

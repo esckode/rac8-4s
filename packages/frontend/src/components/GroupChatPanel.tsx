@@ -33,9 +33,19 @@ interface GroupChatPanelProps {
   active?: boolean
   /** When true, the current user is an owner of this group. */
   isOwner?: boolean
+  /** Whether the group's @coach assistant is enabled (from useGroupList). */
+  assistantEnabled?: boolean
 }
 
-export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active = false, isOwner = false }) => {
+// Mirrors packages/api/src/assistant/trigger.ts ASSISTANT_DISPLAY_NAME
+const ASSISTANT_DISPLAY_NAME = 'Coach'
+
+export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
+  groupId,
+  active = false,
+  isOwner = false,
+  assistantEnabled = true,
+}) => {
   const { messages, send, reconnecting } = useGroupMessages(groupId, active)
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -190,6 +200,21 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
             )
           }
 
+          if (m.type === 'assistant') {
+            return (
+              <div
+                key={m.id}
+                data-testid="assistant-message"
+                className="rounded-lg p-3 text-sm bg-[--court-50] border border-[--court-200]"
+              >
+                <p className="text-[--ink-900]">{m.body}</p>
+                <p className="text-xs text-[--court-700] font-medium mt-1">
+                  Coach · {new Date(m.createdAt).toLocaleTimeString()}
+                </p>
+              </div>
+            )
+          }
+
           if (m.type === 'poll' && m.pollId) {
             const isCreator = m.playerId != null && m.playerId === user?.playerId
             return (
@@ -279,10 +304,16 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({ groupId, active 
           <MentionAutocomplete
             members={members}
             query={mentionQuery}
+            assistantEnabled={assistantEnabled}
             onSelect={name => {
               const before = body.slice(0, mentionStart ?? body.length)
               const after = body.slice((mentionStart ?? 0) + 1 + mentionQuery.length)
-              setBody(`${before}@"${name}" ${after}`)
+              // Coach must be inserted as the unquoted trigger literal
+              // (@coach) — the quoted @"Name" form used for members would
+              // not match the backend's trigger regex.
+              const mention =
+                name === ASSISTANT_DISPLAY_NAME ? '@coach' : `@"${name}"`
+              setBody(`${before}${mention} ${after}`)
               setMentionQuery(null)
               setMentionStart(null)
             }}

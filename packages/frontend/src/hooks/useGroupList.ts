@@ -11,6 +11,7 @@ export interface GroupSummary {
   name: string
   role: 'owner' | 'member'
   memberCount: number
+  assistantEnabled: boolean
 }
 
 export interface UseGroupListResult {

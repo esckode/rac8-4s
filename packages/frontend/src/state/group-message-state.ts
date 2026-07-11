@@ -18,7 +18,7 @@ export interface GroupMessageRecord {
   playerId: string | null
   senderName: string | null
   body: string
-  type: 'text' | 'system' | 'poll' | 'announcement'
+  type: 'text' | 'system' | 'poll' | 'announcement' | 'assistant'
   createdAt: string
   removedAt: string | null
   metadata?: Record<string, unknown> | null
