@@ -12,6 +12,7 @@ import { createRateLimitMiddleware } from '../middleware/rate-limit'
 import { getLogger } from '../logger'
 import { TokenInvalidError } from '../auth/errors'
 import { sendPasswordResetEmail } from '../email-adapter'
+import { isReservedDisplayName } from '../assistant/trigger'
 
 const log = getLogger('auth')
 
@@ -76,6 +77,11 @@ export default function authRouter(deps: AppDependencies) {
       // Validate name length (minimum 2 characters)
       if (name && name.length < 2) {
         validationErrors.push('name must be at least 2 characters')
+      }
+
+      // Reserved display names (the @coach assistant) cannot be taken by players
+      if (name && isReservedDisplayName(name)) {
+        validationErrors.push('name is reserved')
       }
 
       // Validate password length (minimum 6 characters)

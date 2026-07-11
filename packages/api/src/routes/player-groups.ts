@@ -36,6 +36,7 @@ import { GroupMessageRepository } from '../repositories/group-message-repository
 import { ConversationRepository } from '../repositories/conversation-repository'
 import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-notify-selector'
 import { PollRepository, type PollChoice } from '../repositories/poll-repository'
+import { isReservedDisplayName } from '../assistant/trigger'
 import { LeaderboardRepository } from '../repositories/leaderboard-repository'
 import { TournamentRepository } from '../db'
 
@@ -178,6 +179,11 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         }
         if (typeof email !== 'string' || !email.trim()) {
           return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'email must be a non-empty string' })
+        }
+
+        // Reserved display names (the @coach assistant) cannot be taken by players
+        if (typeof name === 'string' && isReservedDisplayName(name)) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'name is reserved' })
         }
 
         // Verify token is valid, email-bound, and single-use
