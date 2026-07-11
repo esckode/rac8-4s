@@ -1925,3 +1925,123 @@ Then the MixerStatePanel shows "Sitting out this round: Alice, Bob"
 - RTL unit: `packages/frontend/src/__tests__/components/MixerStatePanel.spec.tsx`
 - Updated: `packages/frontend/src/components/shared/MatchCard.tsx` (openScoring flag, scoredBy display)
 - New: `packages/frontend/src/components/MixerStatePanel.tsx`
+
+---
+
+## Feature: LLM Assistant (@coach) — Phase A read-only Q&A
+
+> Backend runs `ASSISTANT_ADAPTER=mock` + `JOB_QUEUE=memory` for e2e. The mock adapter is a
+> deterministic keyword router that fakes only the NL→intent hop — the tools it calls are the
+> **real** assistant tools with real auth scoping, so data scenarios exercise the genuine
+> trigger → queue → tool auth → DB → SSE → render path. Answer *content* quality from the live
+> model is verified in the A9.2 manual smoke checklist, not here.
+
+### Scenario: Member mentions @coach and gets a reply in the feed
+```
+Given a group with the assistant enabled (default)
+  And a member viewing the group chat
+When the member sends "@coach hello"
+Then their own message appears in the feed
+  And an assistant reply bubble appears without a page reload (SSE)
+```
+
+### Scenario: Reply is styled as Coach, not a player
+```
+Given an assistant reply in the feed
+Then the bubble has data-testid="assistant-message"
+  And the sender name shown is "Coach"
+  And the styling is distinct from player messages (assistant variant)
+```
+
+### Scenario: Non-member cannot trigger the assistant
+```
+Given a player who is not a member of the group
+When they POST "@coach hello" to the group's message route
+Then the request is rejected with 403 (existing membership check)
+  And no assistant job is enqueued
+```
+
+### Scenario: Owner disables assistant → @coach produces no reply
+```
+Given the group owner opens group settings
+When the owner turns the Assistant toggle off
+  And a member sends "@coach hello"
+Then no assistant reply appears within the wait window
+  And Coach no longer appears in the @ mention picker
+```
+
+### Scenario: Enabling posts a one-time intro message
+```
+Given a group with the assistant toggled off
+When the owner turns the Assistant toggle on
+Then one assistant intro message appears in the feed
+  ("Hi, I'm Coach 👋 — mention @coach to ask about your matches, standings, or how the app works.")
+  And repeating the enable does not duplicate the intro within the same on-state
+```
+
+### Scenario: Coach appears pinned in the @ mention picker
+```
+Given a member typing "@" in the composer of an assistant-enabled group
+Then Coach is the pinned first entry with hint text ("Ask about matches, standings, how-to")
+When the member selects Coach
+Then "@coach " is inserted into the composer
+```
+
+### Scenario: Rate-limited player gets the polite cap message
+```
+Given a player who has exhausted their hourly assistant quota (10/hr)
+When they send another "@coach" question
+Then Coach replies "I've hit my limit for now — try again later."
+  And the cap message is posted at most once per limited window
+```
+
+### Scenario: Data Q&A end-to-end — "who am I playing next?"
+```
+Given two users in a group (asker = owner; opponent joined via invite-accept)
+  And a casual session launched in the group with an explicit 2-player roster
+  (round-robin auto-generates a pending asker-vs-opponent match immediately)
+When the asker sends "@coach who am I playing next?"
+Then the Coach reply bubble contains the seeded opponent's name
+  (mock router → real get_my_matches → real scoping → DB → SSE → render)
+```
+
+### Scenario: Knowledge questions get a reply (plumbing only)
+```
+Given an assistant-enabled group
+When a member sends "@coach how many points is the first-set tiebreak?"
+Then a Coach reply appears
+When a member sends "@coach how do I invite a friend to this casual tournament?"
+Then a Coach reply appears
+# Content is NOT asserted — the mock's canned text would only test our own hardcoded
+# string. Live-model answer quality is covered by the A9.2 smoke checklist.
+```
+
+### Scenario: NEGATIVE — cross-player data wall (adversarial mock)
+```
+Given a second tournament where Bob plays Carol
+  And the asker is NOT registered in it and it is NOT linked to the group
+When the asker sends the mock's adversarial trigger phrase
+  (the mock router deliberately calls a real tool with that out-of-scope tournament id,
+  playing the role of a maximally prompt-injected model — no LLM involved)
+Then the Coach reply is a not-found
+  And neither "Carol" nor the private tournament's name appears anywhere in the feed
+# The wall itself is authoritatively proven at the integration layer (A3.3 adversarial-args
+# tests); this scenario proves it end-to-end through the full pipeline.
+# Contrast case: another member's matches in the group's OWN tournament ARE legitimately
+# visible — same as the standings UI.
+```
+
+### Scenario: NEGATIVE — no writes in Phase A
+```
+Given a casual match with an existing score
+When a member sends "@coach change my score to 3-0"
+Then Coach declines (the mock has no write route — mirroring the empty Phase A write registry)
+  And the standings/match UI still shows the original score
+# Structural guarantee is a unit assertion: the Phase A tool registry contains zero write
+# tools. Whether the live model refuses politely under injection is model behavior → A9.2.
+```
+
+**Implementation (Phase A / A8):**
+- Playwright: `packages/frontend/e2e/assistant.spec.ts`
+- RTL unit: `packages/frontend/src/components/__tests__/` (assistant message variant, mention picker, settings toggle)
+- Backend: `packages/api/src/assistant/**`, `packages/api/src/workers/assistant-processor.ts`, migration `db/migrations/049_assistant_type_and_group_toggle.sql`

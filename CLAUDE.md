@@ -166,6 +166,7 @@ The skill workflow:
 - Auth-gated: `/matches`, `/standings`, tournament detail/admin.
 - When you change a route's protection, **update the security tests in the same change** (`auth.spec.ts` + `route-protection.spec.tsx`), and use a still-protected route (e.g. `/matches`) as the example in "must redirect to login" tests.
 - **New top-level API mounts must be added to the CloudFront behavior list** in `infra/modules/frontend` (see `IaC-implementation.md` Step 6) — otherwise the path silently routes to S3 and returns HTML instead of JSON.
+- **User-visible behavior changes must update `docs/assistant-help.md` in the same change** — it is the @coach assistant's help corpus, loaded into the system prompt.
 
 ## 10. API Route Ordering
 
