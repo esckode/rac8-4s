@@ -1390,6 +1390,74 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     }
   )
 
+  // POST /player/groups/:groupId/assistant-cards/:cardId/complete — proposer marks a
+  // propose_casual_launch card confirmed after launching through the REAL launch route
+  // directly (B5.1). This route never launches anything itself — it only verifies the
+  // resulting tournament exists and is linked to this group, then flips the card.
+  router.post(
+    '/:groupId/assistant-cards/:cardId/complete',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+        const cardId = req.params.cardId as string
+
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can act on this card' })
+        }
+
+        const card = await cardRepo.getCard(cardId)
+        if (!card || card.groupId !== groupId) {
+          return res.status(404).json({ code: 'NOT_FOUND', message: 'Card not found' })
+        }
+        if (card.action !== 'propose_casual_launch') {
+          return res.status(400).json({ code: 'UNSUPPORTED_ACTION', message: `Unsupported card action: ${card.action}` })
+        }
+        if (card.proposerPlayerId !== session.playerId) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the proposer can complete this card' })
+        }
+        if (card.status !== 'pending') {
+          return res.status(409).json({ code: 'ALREADY_RESOLVED', message: `This card is already ${card.status}` })
+        }
+        if (Date.now() > card.expiresAt.getTime()) {
+          return res.status(409).json({ code: 'EXPIRED', message: 'This card has expired' })
+        }
+
+        const tournamentId = req.body?.tournamentId
+        if (!tournamentId || typeof tournamentId !== 'string') {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'tournamentId is required' })
+        }
+        const tournament = await tournamentRepo.findById(tournamentId)
+        if (!tournament || tournament.group_id !== groupId) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'tournamentId must be a tournament linked to this group' })
+        }
+
+        const claimed = await cardRepo.claimCard(cardId, 'confirmed', { tournamentId })
+        if (!claimed) {
+          const reread = await cardRepo.getCard(cardId)
+          return res.status(409).json({ code: 'ALREADY_RESOLVED', message: `This card is already ${reread?.status}` })
+        }
+
+        if (deps.broadcastBus) {
+          const conversationId = await conversationRepo.resolveGroupConversation(groupId)
+          deps.broadcastBus.emit(conversationId, 'card.updated', {
+            messageId: claimed.messageId,
+            cardId: claimed.id,
+            status: claimed.status,
+            result: claimed.result,
+          })
+        }
+
+        log.info('assistant.card.confirmed', { groupId, cardId, playerId: session.playerId, action: card.action })
+
+        return res.status(200).json({ card: { id: claimed.id, status: claimed.status, result: claimed.result } })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
   return router
 }
 

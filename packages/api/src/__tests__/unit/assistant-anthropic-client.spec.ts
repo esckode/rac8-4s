@@ -11,6 +11,7 @@ import * as tools from '../../assistant/tools'
 import * as proposeScoreModule from '../../assistant/propose-score'
 import * as proposePollModule from '../../assistant/propose-poll'
 import * as proposePollVoteModule from '../../assistant/propose-poll-vote'
+import * as proposeCasualLaunchModule from '../../assistant/propose-casual-launch'
 
 jest.mock('../../assistant/tools', () => ({
   getMyMatches: jest.fn(),
@@ -29,6 +30,10 @@ jest.mock('../../assistant/propose-poll', () => ({
 
 jest.mock('../../assistant/propose-poll-vote', () => ({
   proposePollVote: jest.fn(),
+}))
+
+jest.mock('../../assistant/propose-casual-launch', () => ({
+  proposeCasualLaunch: jest.fn(),
 }))
 
 const mockToolRunner = jest.fn()
@@ -142,6 +147,7 @@ describe('AnthropicAssistantClient', () => {
         'propose_score',
         'propose_poll',
         'propose_poll_vote',
+        'propose_casual_launch',
       ])
     })
 
@@ -242,6 +248,26 @@ describe('AnthropicAssistantClient', () => {
       const result = await client.runTurn(turnInput())
 
       expect(proposePollVoteModule.proposePollVote).toHaveBeenCalledWith(ctx, { pollQuestion: 'Saturday', choice: 'in' })
+      expect(result.toolRounds).toBe(1)
+    })
+
+    it('the propose_casual_launch tool run() closure delegates to the real propose-casual-launch module', async () => {
+      (proposeCasualLaunchModule.proposeCasualLaunch as jest.Mock).mockResolvedValue({
+        status: 'card_posted',
+        cardId: 'card-4',
+        messageId: 'msg-4',
+      })
+      mockToolRunner.mockImplementation(async (opts: { tools: Array<{ name: string; run: (i: any) => Promise<string> }> }) => {
+        const proposeCasualLaunchTool = opts.tools.find(t => t.name === 'propose_casual_launch')!
+        const r = await proposeCasualLaunchTool.run({ pollQuestion: 'Saturday' })
+        expect(JSON.parse(r)).toEqual({ status: 'card_posted', cardId: 'card-4', messageId: 'msg-4' })
+        return { content: [{ type: 'text', text: 'done' }], usage: {} }
+      })
+
+      const client = new AnthropicAssistantClient({ adapter: 'anthropic', model: 'claude-haiku-4-5' })
+      const result = await client.runTurn(turnInput())
+
+      expect(proposeCasualLaunchModule.proposeCasualLaunch).toHaveBeenCalledWith(ctx, { pollQuestion: 'Saturday' })
       expect(result.toolRounds).toBe(1)
     })
   })

@@ -21,6 +21,7 @@ import {
 import { proposeScore } from './propose-score'
 import { proposePoll } from './propose-poll'
 import { proposePollVote } from './propose-poll-vote'
+import { proposeCasualLaunch } from './propose-casual-launch'
 
 export interface AssistantTurnInput {
   systemPrompt: string
@@ -144,6 +145,19 @@ function buildTools(ctx: AssistantToolContext, onToolRun: () => void) {
       run: async (input: { pollQuestion: string; choice: 'in' | 'out' | 'maybe' }) => {
         onToolRun()
         return JSON.stringify(await proposePollVote(ctx, input))
+      },
+    }),
+    betaZodTool({
+      name: 'propose_casual_launch',
+      description:
+        'Draft a tournament-launch card from a poll the player created. Call this when the poll creator asks to start/launch a tournament from a poll (e.g. "launch it", "start the tournament from Saturday\'s poll"). Only the poll\'s creator can launch it — anyone else asking should be politely declined. Identify the poll by a fragment of its question text. Never claim the tournament was launched: only a card was drafted, which the player must confirm themselves.',
+      inputSchema: z.object({
+        pollQuestion: z.string(),
+        defaultFormat: z.enum(['singles', 'doubles']).optional(),
+      }),
+      run: async (input: { pollQuestion: string; defaultFormat?: 'singles' | 'doubles' }) => {
+        onToolRun()
+        return JSON.stringify(await proposeCasualLaunch(ctx, input))
       },
     }),
   ]

@@ -434,4 +434,146 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
       expect(votes.tally.in).toBe(0)
     })
   })
+
+  // ── B5.1 — propose_casual_launch /complete route ──────────────────────────────
+  //
+  // Unlike propose_score/propose_poll/propose_poll_vote, launch does NOT go
+  // through /confirm: the FE calls the real launch route directly (its own
+  // authority + mutation), then calls /complete only to flip the card once
+  // the tournament already exists. /complete never launches anything itself.
+
+  describe('propose_casual_launch /complete', () => {
+    async function createLaunchCard(groupId: string, proposerId: string, pollId: string, messageId: string) {
+      const { card } = await cardRepo.createCard({
+        groupId,
+        proposerPlayerId: proposerId,
+        action: 'propose_casual_launch',
+        args: { pollId, messageId, inVoterNames: ['Alice'], defaultFormat: 'singles' },
+        body: 'Coach drafted a tournament launch.',
+      })
+      return card
+    }
+
+    it('happy path: proposer completes with a real group-linked tournament id → confirmed, card.updated emitted', async () => {
+      const alice = await createPlayer('Alice')
+      const groupId = await createGroupWithMembers(alice.id, [])
+      const poll = await pollRepo.createPoll({ groupId, creatorPlayerId: alice.id, question: 'Saturday?' })
+      const card = await createLaunchCard(groupId, alice.id, poll.pollId, poll.messageId)
+
+      const t = await TournamentFactory.create(pool, `organizer_${uid()}`)
+      await pool.query(`UPDATE public.tournaments SET group_id = $1 WHERE id = $2`, [groupId, t.id])
+
+      const conversationId = await conversationRepo.resolveGroupConversation(groupId)
+      const received: Array<{ event: string; data: unknown }> = []
+      bus.subscribe(conversationId, (event, data) => received.push({ event, data }))
+
+      const aliceToken = await token(alice.id, alice.email)
+      const res = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/complete`)
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({ tournamentId: t.id })
+
+      expect(res.status).toBe(200)
+      expect(res.body.card.status).toBe('confirmed')
+      expect(res.body.card.result).toMatchObject({ tournamentId: t.id })
+
+      const reread = await cardRepo.getCard(card.id)
+      expect(reread?.status).toBe('confirmed')
+
+      const updateEvents = received.filter(e => e.event === 'card.updated')
+      expect(updateEvents).toHaveLength(1)
+      expect(updateEvents[0].data).toMatchObject({ cardId: card.id, status: 'confirmed' })
+    })
+
+    it('rejects a tournamentId that does not exist', async () => {
+      const alice = await createPlayer('Alice')
+      const groupId = await createGroupWithMembers(alice.id, [])
+      const poll = await pollRepo.createPoll({ groupId, creatorPlayerId: alice.id, question: 'Sunday?' })
+      const card = await createLaunchCard(groupId, alice.id, poll.pollId, poll.messageId)
+
+      const aliceToken = await token(alice.id, alice.email)
+      const res = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/complete`)
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({ tournamentId: crypto.randomUUID() })
+
+      expect(res.status).toBe(400)
+      expect((await cardRepo.getCard(card.id))?.status).toBe('pending')
+    })
+
+    it('rejects a tournamentId that exists but is not linked to this group', async () => {
+      const alice = await createPlayer('Alice')
+      const groupId = await createGroupWithMembers(alice.id, [])
+      const poll = await pollRepo.createPoll({ groupId, creatorPlayerId: alice.id, question: 'Not linked?' })
+      const card = await createLaunchCard(groupId, alice.id, poll.pollId, poll.messageId)
+
+      const t = await TournamentFactory.create(pool, `organizer_${uid()}`) // no group_id set
+
+      const aliceToken = await token(alice.id, alice.email)
+      const res = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/complete`)
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({ tournamentId: t.id })
+
+      expect(res.status).toBe(400)
+      expect((await cardRepo.getCard(card.id))?.status).toBe('pending')
+    })
+
+    it('non-proposer cannot complete → 403', async () => {
+      const alice = await createPlayer('Alice')
+      const sunil = await createPlayer('Sunil')
+      const groupId = await createGroupWithMembers(alice.id, [sunil.id])
+      const poll = await pollRepo.createPoll({ groupId, creatorPlayerId: alice.id, question: 'Not you?' })
+      const card = await createLaunchCard(groupId, alice.id, poll.pollId, poll.messageId)
+      const t = await TournamentFactory.create(pool, `organizer_${uid()}`)
+      await pool.query(`UPDATE public.tournaments SET group_id = $1 WHERE id = $2`, [groupId, t.id])
+
+      const sunilToken = await token(sunil.id, sunil.email)
+      const res = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/complete`)
+        .set('Authorization', `Bearer ${sunilToken}`)
+        .send({ tournamentId: t.id })
+
+      expect(res.status).toBe(403)
+    })
+
+    it('a second complete on an already-confirmed card → 409', async () => {
+      const alice = await createPlayer('Alice')
+      const groupId = await createGroupWithMembers(alice.id, [])
+      const poll = await pollRepo.createPoll({ groupId, creatorPlayerId: alice.id, question: 'Twice?' })
+      const card = await createLaunchCard(groupId, alice.id, poll.pollId, poll.messageId)
+      const t = await TournamentFactory.create(pool, `organizer_${uid()}`)
+      await pool.query(`UPDATE public.tournaments SET group_id = $1 WHERE id = $2`, [groupId, t.id])
+      const aliceToken = await token(alice.id, alice.email)
+
+      const first = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/complete`)
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({ tournamentId: t.id })
+      expect(first.status).toBe(200)
+
+      const second = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/complete`)
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({ tournamentId: t.id })
+      expect(second.status).toBe(409)
+    })
+
+    it('using /complete on a propose_score card is rejected (wrong action)', async () => {
+      const alice = await createPlayer('Alice')
+      const sunil = await createPlayer('Sunil')
+      const groupId = await createGroupWithMembers(alice.id, [sunil.id])
+      const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, sunil.id)
+      const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, '6-4, 6-3')
+
+      const aliceToken = await token(alice.id, alice.email)
+      const res = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/complete`)
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({ tournamentId })
+
+      expect(res.status).toBe(400)
+      expect((await cardRepo.getCard(card.id))?.status).toBe('pending')
+    })
+  })
 })
