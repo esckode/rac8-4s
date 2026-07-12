@@ -6,9 +6,9 @@
 > **read §10 of the design doc before starting; do not relitigate those decisions**).
 
 **Date:** 2026-07-10
-**Status:** ✅ Phase A BUILT (2026-07-11, A0–A9) and Phase B BUILT (2026-07-12, B0–B7; branch
-`llm-assistant-design`, not yet merged to `main`). **Both independently re-verified 2026-07-12 —
-see "Independent verification" below the Phase B DoD.** Phase C below remains plan-only.
+**Status:** ✅ Phase A BUILT (2026-07-11, A0–A9) and Phase B BUILT (2026-07-12, B0–B7).
+**Both independently re-verified and fast-forward-merged to `main` 2026-07-12** —
+see "Independent verification" below the Phase B DoD. Phase C below remains plan-only.
 **Method:** TDD-first per CLAUDE.md §4/§11 — every step is a **[RED]** commit (failing tests, run
 them, confirm they fail *for the right reason*) followed by a **[GREEN]** commit (implementation,
 tests pass). E2E scenarios are written to `e2e-scenarios.md` **before** the code (step A0.2).
