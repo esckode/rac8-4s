@@ -2061,8 +2061,8 @@ Then Coach declines (the mock has no write route — mirroring the empty Phase A
 ### Scenario: Score via Coach — card appears, proposer confirms, standings update live
 ```
 Given a member has a pending casual match against a named opponent
-When they send "@coach beat Sunil 2-1"
-Then an ActionCard appears in the feed with the parsed score (asker-relative: "You 2 – 1 Sunil")
+When they send "@coach beat Sunil 6-4, 6-3"
+Then an ActionCard appears in the feed with the parsed score (asker-relative: "You 6-4, 6-3 Sunil")
   And only the proposer sees an active Confirm button
 When the proposer taps Confirm
 Then the existing score-submission service runs as the confirming player
@@ -2115,7 +2115,7 @@ Then the card flips to "cancelled" and renders inert
 ### Scenario: NEGATIVE — ambiguous score match yields a clarifying question, never a guess
 ```
 Given the asker has two pending matches against players named "Sunil"
-When they send "@coach beat Sunil 2-1"
+When they send "@coach beat Sunil 6-4, 6-3"
 Then Coach asks a clarifying question naming both candidates
   And no ActionCard is posted
 ```

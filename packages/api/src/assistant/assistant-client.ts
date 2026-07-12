@@ -22,6 +22,7 @@ import { proposeScore } from './propose-score'
 import { proposePoll } from './propose-poll'
 import { proposePollVote } from './propose-poll-vote'
 import { proposeCasualLaunch } from './propose-casual-launch'
+import { PollRepository } from '../repositories/poll-repository'
 
 export interface AssistantTurnInput {
   systemPrompt: string
@@ -225,6 +226,10 @@ export class AnthropicAssistantClient implements AssistantClient {
  *
  * Routes:
  * - "change/submit/set ... score" → decline (mirrors the empty Phase A write registry)
+ * - "beat <name> <score>" → real propose_score (B7 — the highest-repetition write flow)
+ * - "launch ... session" → real propose_casual_launch, resolved against the group's most
+ *   recently created poll (B7 — the second highest-repetition write flow; a real model would
+ *   pick the poll from conversation context, which this deterministic router doesn't have)
  * - "show me tournament <id>" → ADVERSARIAL: really calls get_standings with
  *   that id, playing a maximally prompt-injected model (A0.2 scenario 10)
  * - "who am i playing" / "next match" → real get_my_matches
@@ -254,6 +259,39 @@ export class MockAssistantClient implements AssistantClient {
         text: "I can't change scores — I'm read-only. Submit scores from the match screen.",
         toolRounds: 0,
       }
+    }
+
+    // eslint-disable-next-line security/detect-unsafe-regex -- bounded repetition, mirrors score-parser.ts's FORMAT_REGEX
+    const scoreMatch = q.match(/\bbeat\s+([A-Za-z][\w'-]*)\s+(\d+-\d+(?:,\s*\d+-\d+)*)/i)
+    if (scoreMatch) {
+      const [, opponentName, score] = scoreMatch
+      const result = await proposeScore(ctx, { opponentName, score })
+      if (result.status === 'card_posted') {
+        return { text: "I've drafted that for you to confirm.", toolRounds: 1 }
+      }
+      if (result.status === 'ambiguous') {
+        const names = result.candidates.map(c => c.opponentName).join(' or ')
+        return { text: `I found more than one match — did you mean ${names}?`, toolRounds: 1 }
+      }
+      return { text: result.message, toolRounds: 1 }
+    }
+
+    if (/\blaunch\b.*\bsession\b/i.test(q)) {
+      const pollRepo = new PollRepository(ctx.db)
+      const polls = await pollRepo.findPollsByGroup(ctx.groupId)
+      if (polls.length === 0) {
+        return { text: "I couldn't find a poll to launch from.", toolRounds: 0 }
+      }
+      const mostRecent = polls[0]
+      const result = await proposeCasualLaunch(ctx, { pollQuestion: mostRecent.question })
+      if (result.status === 'card_posted') {
+        return { text: "I've drafted a tournament launch for you to confirm.", toolRounds: 1 }
+      }
+      if (result.status === 'ambiguous') {
+        const questions = result.candidates.map(c => c.question).join(' or ')
+        return { text: `I found more than one poll — did you mean ${questions}?`, toolRounds: 1 }
+      }
+      return { text: result.message, toolRounds: 1 }
     }
 
     const adversarial = q.match(/show me tournament ([\w-]+)/i)
