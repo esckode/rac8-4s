@@ -162,6 +162,34 @@ describe('selectNotifyRecipients — system message', () => {
   })
 })
 
+describe('selectNotifyRecipients — assistant message (design §11 B-Q11)', () => {
+  const members = [
+    member('A', 'all', 'Alice'),
+    member('B', 'mentions_polls', 'Bob'),
+    member('C', 'muted', 'Charlie'),
+  ]
+
+  it('notifies NO ONE for a Coach reply or ActionCard, even with an "all"-level member', () => {
+    const result = selectNotifyRecipients({
+      members,
+      messageType: 'assistant',
+      body: 'Coach drafted a score.',
+      senderPlayerId: '',
+    })
+    expect(result).toHaveLength(0)
+  })
+
+  it('an @mention inside a Coach reply still does not notify (structural, not content-based)', () => {
+    const result = selectNotifyRecipients({
+      members,
+      messageType: 'assistant',
+      body: '@Alice, your next match is Saturday.',
+      senderPlayerId: '',
+    })
+    expect(result).toHaveLength(0)
+  })
+})
+
 // ── 5. @mentions cross-cutting ────────────────────────────────────────────────
 
 describe('selectNotifyRecipients — @mentions', () => {
