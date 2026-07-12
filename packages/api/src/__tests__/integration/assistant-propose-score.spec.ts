@@ -19,6 +19,8 @@ import { defaultAdultAttestation } from '../factories/player.factory'
 import { buildAssistantToolContext } from '../../assistant/tools'
 import { proposeScore } from '../../assistant/propose-score'
 import { AssistantCardRepository } from '../../repositories/assistant-card-repository'
+import { BroadcastBus } from '../../broadcast-bus'
+import { ConversationRepository } from '../../repositories/conversation-repository'
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -105,6 +107,34 @@ describe('propose_score (B2.1)', () => {
     const msgRow = await pool.query(`SELECT body FROM messaging.group_messages WHERE id = $1`, [card?.messageId])
     expect(msgRow.rows[0].body).toContain(asker.name)
     expect(msgRow.rows[0].body).toContain(bob.name)
+  })
+
+  it('emits a message.created SSE event for the card so it appears live (not just on next fetch)', async () => {
+    const heidi = await createPlayer('Heidi')
+    await createTournamentWithRoster([asker.id, heidi.id])
+    const bus = new BroadcastBus()
+    const ctx = await buildAssistantToolContext(pool, { playerId: asker.id, groupId: playerGroupId, broadcastBus: bus })
+
+    const conversationRepo = new ConversationRepository(pool)
+    const conversationId = await conversationRepo.resolveGroupConversation(playerGroupId)
+    const received: Array<{ event: string; data: any }> = []
+    bus.subscribe(conversationId, (event, data) => received.push({ event, data }))
+
+    const result = await proposeScore(ctx, { opponentName: heidi.name, score: '6-4, 6-3' })
+    expect(result.status).toBe('card_posted')
+    if (result.status !== 'card_posted') return
+
+    const createdEvents = received.filter(e => e.event === 'message.created')
+    expect(createdEvents).toHaveLength(1)
+    expect(createdEvents[0].data).toMatchObject({
+      id: result.messageId,
+      type: 'assistant',
+      cardId: result.cardId,
+      cardAction: 'propose_score',
+      cardStatus: 'pending',
+      cardProposerPlayerId: asker.id,
+    })
+    expect(createdEvents[0].data.cardExpiresAt).toBeTruthy()
   })
 
   it('normalizes correctly regardless of which side the asker sits on', async () => {

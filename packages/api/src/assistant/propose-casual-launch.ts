@@ -18,6 +18,7 @@
 import { PollRepository } from '../repositories/poll-repository'
 import { AssistantCardRepository } from '../repositories/assistant-card-repository'
 import type { AssistantToolContext } from './tools'
+import { emitCardCreated } from './emit-card'
 
 export interface ProposeCasualLaunchInput {
   pollQuestion: string
@@ -63,7 +64,8 @@ export async function proposeCasualLaunch(
   const askerName: string = askerRes.rows[0]?.name ?? 'A member'
 
   const cardRepo = new AssistantCardRepository(ctx.db as any)
-  const { card } = await cardRepo.createCard({
+  const body = `Coach drafted a tournament launch from "${chosen.question}" — ${inVoterNames.length} player${inVoterNames.length === 1 ? '' : 's'} in. Only ${askerName} can confirm, within 15 minutes.`
+  const { card, conversationId } = await cardRepo.createCard({
     groupId: ctx.groupId,
     proposerPlayerId: ctx.playerId,
     action: 'propose_casual_launch',
@@ -73,8 +75,9 @@ export async function proposeCasualLaunch(
       inVoterNames,
       defaultFormat: input.defaultFormat ?? 'singles',
     },
-    body: `Coach drafted a tournament launch from "${chosen.question}" — ${inVoterNames.length} player${inVoterNames.length === 1 ? '' : 's'} in. Only ${askerName} can confirm, within 15 minutes.`,
+    body,
   })
+  emitCardCreated(ctx.broadcastBus, conversationId, ctx.groupId, card, body)
 
   return { status: 'card_posted', cardId: card.id, messageId: card.messageId }
 }

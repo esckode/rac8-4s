@@ -17,6 +17,7 @@ import { AssistantCardRepository } from '../repositories/assistant-card-reposito
 import { parseScore, type SportFormat } from '@core/score-parser'
 import type { AssistantToolContext } from './tools'
 import { getMyMatches } from './tools'
+import { emitCardCreated } from './emit-card'
 
 export interface ProposeScoreInput {
   opponentName: string
@@ -110,13 +111,15 @@ export async function proposeScore(
   const routeReadyScore = askerIsPlayer1 ? input.score : flipScoreOrientation(input.score)
 
   const cardRepo = new AssistantCardRepository(ctx.db as any)
-  const { card } = await cardRepo.createCard({
+  const body = `Coach drafted a score — ${askerName} ${input.score} ${chosen.opponentName} (${chosen.tournamentName}). Only ${askerName} can confirm, within 15 minutes.`
+  const { card, conversationId } = await cardRepo.createCard({
     groupId: ctx.groupId,
     proposerPlayerId: ctx.playerId,
     action: 'propose_score',
     args: { tournamentId: chosen.tournamentId, matchId: chosen.matchId, score: routeReadyScore },
-    body: `Coach drafted a score — ${askerName} ${input.score} ${chosen.opponentName} (${chosen.tournamentName}). Only ${askerName} can confirm, within 15 minutes.`,
+    body,
   })
+  emitCardCreated(ctx.broadcastBus, conversationId, ctx.groupId, card, body)
 
   return { status: 'card_posted', cardId: card.id, messageId: card.messageId }
 }

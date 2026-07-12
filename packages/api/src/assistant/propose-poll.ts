@@ -10,6 +10,7 @@
  */
 import { AssistantCardRepository } from '../repositories/assistant-card-repository'
 import type { AssistantToolContext } from './tools'
+import { emitCardCreated } from './emit-card'
 
 export interface ProposePollInput {
   question: string
@@ -49,7 +50,8 @@ export async function proposePoll(
   const askerName: string = askerRes.rows[0]?.name ?? 'A member'
 
   const cardRepo = new AssistantCardRepository(ctx.db as any)
-  const { card } = await cardRepo.createCard({
+  const body = `Coach drafted a poll — "${question}" (by ${askerName}). Only ${askerName} can confirm, within 15 minutes.`
+  const { card, conversationId } = await cardRepo.createCard({
     groupId: ctx.groupId,
     proposerPlayerId: ctx.playerId,
     action: 'propose_poll',
@@ -61,8 +63,9 @@ export async function proposePoll(
       minPlayers: input.minPlayers ?? null,
       launchMatchFormat: input.launchMatchFormat ?? null,
     },
-    body: `Coach drafted a poll — "${question}" (by ${askerName}). Only ${askerName} can confirm, within 15 minutes.`,
+    body,
   })
+  emitCardCreated(ctx.broadcastBus, conversationId, ctx.groupId, card, body)
 
   return { status: 'card_posted', cardId: card.id, messageId: card.messageId }
 }

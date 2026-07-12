@@ -85,7 +85,7 @@ export async function handleAssistantJob(
   try {
     const askerName = (await groupMessageRepo.getPlayerName(playerId)) ?? 'A member'
     const recent = await groupMessageRepo.getRecentMessages({ conversationId, limit: 20 })
-    const toolContext = await buildAssistantToolContext(pool, { playerId, groupId })
+    const toolContext = await buildAssistantToolContext(pool, { playerId, groupId, broadcastBus })
 
     const historyLines = recent
       .map(m => `${m.senderName ?? 'Someone'}: ${m.body}`)

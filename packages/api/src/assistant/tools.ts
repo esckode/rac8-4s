@@ -23,12 +23,20 @@ import {
   TournamentRow,
 } from '../db'
 import { buildRankReason, type RankReasonRow } from './rank-reason'
+import type { IBroadcastBus } from '../broadcast-bus'
 
 export interface AssistantToolContext {
   db: Pool
   playerId: string
   groupId: string
   groupLinkedTournamentIds: string[]
+  /**
+   * Present when the tool runs from a live turn (handleAssistantJob) so
+   * propose_* tools can emit message.created for the card they draft — a
+   * card's INSERT has no other route/service to do this for it (B7 fix:
+   * without this, cards only ever appeared on the next full history fetch).
+   */
+  broadcastBus?: IBroadcastBus
 }
 
 /** Phase A registry: read-only, no write tools (structural guarantee). */
@@ -50,7 +58,7 @@ function notFound(): ToolNotFound {
 
 export async function buildAssistantToolContext(
   db: Pool,
-  input: { playerId: string; groupId: string }
+  input: { playerId: string; groupId: string; broadcastBus?: IBroadcastBus }
 ): Promise<AssistantToolContext> {
   const res = await db.query(
     `SELECT id FROM public.tournaments WHERE group_id = $1 AND deleted_at IS NULL`,
@@ -61,6 +69,7 @@ export async function buildAssistantToolContext(
     playerId: input.playerId,
     groupId: input.groupId,
     groupLinkedTournamentIds: res.rows.map((r: { id: string }) => r.id),
+    broadcastBus: input.broadcastBus,
   }
 }
 

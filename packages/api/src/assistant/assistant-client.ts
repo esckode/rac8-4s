@@ -261,8 +261,10 @@ export class MockAssistantClient implements AssistantClient {
       }
     }
 
+    // Name capture is lazy so multi-word names (e.g. "Test User") work — it
+    // backtracks to the shortest prefix that leaves a valid score at the end.
     // eslint-disable-next-line security/detect-unsafe-regex -- bounded repetition, mirrors score-parser.ts's FORMAT_REGEX
-    const scoreMatch = q.match(/\bbeat\s+([A-Za-z][\w'-]*)\s+(\d+-\d+(?:,\s*\d+-\d+)*)/i)
+    const scoreMatch = q.match(/\bbeat\s+(.+?)\s+(\d+-\d+(?:,\s*\d+-\d+)*)\s*$/i)
     if (scoreMatch) {
       const [, opponentName, score] = scoreMatch
       const result = await proposeScore(ctx, { opponentName, score })
