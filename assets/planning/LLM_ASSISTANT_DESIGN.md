@@ -3,11 +3,12 @@
 
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
-**Date:** 2026-07-10 (drafted + **fully grilled to resolution the same day** — see §10)
+**Date:** 2026-07-10 (drafted + **fully grilled to resolution the same day** — see §10;
+Phase B/C mechanics grilled 2026-07-11 — see §11)
 **Status:** ✅ **Built for Phase A** (2026-07-11, A0–A9 — see
 [LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md); branch `llm-assistant-design`,
-not yet merged to `main`). Phase B (confirm-card writes) and Phase C (proactive) remain design-only,
-not yet planned. Builds on the community layer
+not yet merged to `main`). Phase B (confirm-card writes) and Phase C (proactive) are grilled (§11)
+and expanded in the implementation plan; not yet built. Builds on the community layer
 ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)) and the messaging platform
 ([MESSAGING_DESIGN.md](./MESSAGING_DESIGN.md) §16–§17).
 
@@ -138,17 +139,32 @@ Judgment call baked in: poll *votes* also go through a card for v1 — one consi
 model never mutates") beats saving one tap. If the confirm tap proves annoying for a re-votable,
 low-stakes action, relaxing votes to direct-write is a contained follow-up.
 
-**Confirm-card mechanics (grilled Q7): proposer-only, 15-minute expiry.**
-- The card is Coach's reply message: `type='assistant'` with `group_messages.metadata.card =
-  { action, args, proposer_player_id, expires_at, schema_version, status }` (same metadata
-  vehicle as poll cards).
-- **Only the proposer** sees an active Confirm button; expired or consumed cards render inert
-  (`status` flipped on confirm so a card can't be replayed).
+**Confirm-card mechanics (grilled Q7; storage/lifecycle refined in §11): proposer-only,
+15-minute expiry.**
+- The card is Coach's reply message: a `type='assistant'` row whose `metadata` carries only
+  `{cardId}`, pointing at a row in the dedicated **`messaging.assistant_cards`** table (action,
+  ids-only args, proposer, `expires_at`, `schema_version`, `status ∈
+  pending|confirmed|failed|cancelled` — "expired" is computed from `expires_at`, never stored).
+  The message `body` is a human-readable summary of the proposal (the durable/export/fallback
+  record). §11 B-Q2 superseded the original metadata-borne sketch — polls set the precedent
+  (042): widget state lives in its own table, the message row is the feed vehicle.
+- **Only the proposer** sees active Confirm/Dismiss buttons; expired, cancelled, failed, or
+  consumed cards render inert. The status flip is atomic (`… WHERE status='pending'`) so a card
+  can't be replayed; state changes reach all clients via a `card.updated` bus event mirroring
+  `poll.tally.updated`.
 - The card is a **shortcut, never an authority**: at confirm time the server re-validates
   everything through the normal route (auth, match still pending, deadline, group membership) —
-  draft-time validation is UX, confirm-time validation is the authority.
+  draft-time validation is UX, confirm-time validation is the authority. Ordering is
+  **mutate-first**: the existing service runs, then the card flips to `confirmed` (or `failed`
+  with the rejection reason) — see §11 B-Q3.
 - Casual-mode open scoring is unaffected — anyone authorized can still score via the normal UI;
   the card just isn't their vehicle.
+
+Grilled refinements to the tool table (2026-07-11, §11): `propose_score`'s `score` is
+**asker-relative** and normalized to the route's player1-relative form at draft time (args store
+route-ready, ids-only values — `opponent_name` is resolved and discarded); ambiguous resolution
+(two pending matches, two members with the name) yields a clarifying reply, never a card; NL
+times ("Sat 9am") resolve via the asker's browser timezone captured at message POST.
 
 ## 5. Tier 3 — Proactive (Phase C, scheduler-triggered, LLM-composed)
 
@@ -329,7 +345,7 @@ these without new evidence.
 | Q4 Help corpus | **Curated repo file** `docs/assistant-help.md` (app mechanics only) + same-change update rule; per-tournament facts always via data tools |
 | Q5 Data scope | **Group-linked + asker's own tournaments** (= asker's own UI visibility); minimal detail for non-group tournaments in public replies |
 | Q6 Catch-up privacy | Deferred with T1.4 |
-| Q7 Confirm card | **Proposer-only, 15-min expiry**, metadata-borne, server re-validates at confirm; card is never an authority. Write tools are non-mutating `propose_*` generators — registry specified in §4 |
+| Q7 Confirm card | **Proposer-only, 15-min expiry**, server re-validates at confirm; card is never an authority. Write tools are non-mutating `propose_*` generators — registry specified in §4. (Storage/lifecycle refined 2026-07-11: dedicated table, 4-state lifecycle — §11 B-Q1/B-Q2) |
 | Q8 Model | **Haiku 4.5 only**, all tiers; `rank_reason` precomputed to de-risk T1.2; token logging day one; upgrade = env change on evidence |
 | Q9 Compliance | **Policy clause pre-launch + names-only context + best-effort DSR scrub** of assistant messages; legal hold parallel, not blocking |
 | Q10 Budget | **10/player/hr + 30/group/hr + global daily ceiling**; polite cap message; 5-tool-round loop guard |
@@ -499,3 +515,36 @@ release lag — dominated by P-AWS); *switching vendor for cost* (GPT-mini/Gemin
 ~$1–4/month at MVP volume in exchange for re-speccing the SDK layer, losing the
 Haiku→Sonnet→Opus upgrade path, and re-tuning prompts; the genuinely-cheaper nano/Flash-Lite
 tiers are a capability class below Haiku and re-open the Q8 quality concerns).
+
+## 11. Phase B/C mechanics grill (2026-07-11)
+
+Grilled with the product owner before Phase B planning, to the same standard as §10 — settled;
+do not relitigate without new evidence. Expanded implementation detail lives in
+[LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md) §B0.
+
+| Q | Decision |
+|---|----------|
+| B-Q1 Card lifecycle | `pending\|confirmed\|failed\|cancelled`; **"expired" computed** read-side from `expires_at` — never stored, so no sweeper job (avoids another MESSAGING §16-class scheduled-job gap). `failed` = confirm-time revalidation rejected (reason kept); `cancelled` = proposer dismissed a bad parse |
+| B-Q2 Card storage | **Dedicated `messaging.assistant_cards` table**, message `metadata` carries `{cardId}` — the poll precedent (042); supersedes §4's original metadata-borne sketch. Chosen for a real status column, FK integrity, and queryability |
+| B-Q3 Confirm ordering | **Mutate first** through the existing route/service (the Q7 authority), then atomically flip `pending→confirmed` / `→failed`+reason. A flip failure after mutation is self-healing: re-confirm re-runs the service, whose own revalidation rejects the duplicate. Concurrent confirms: one mutation wins, loser gets the service rejection |
+| B-Q4 Status propagation | New **`card.updated` bus event** mirroring `poll.tally.updated`; clients patch the message in place. Countdown-to-expiry is pure client-side rendering from `expires_at` |
+| B-Q5 Score frame | Model emits **asker-relative** score; `propose_score` normalizes to the route's player1-relative form **at draft** (where the match row is already loaded); args store route-ready values; card displays asker-relative ("You 2 – 1 Sunil"). Keeps the correctness-critical transform out of the LLM (rank_reason precedent) |
+| B-Q6 NL times | **Browser IANA timezone sent with the message POST** → job payload → user context block, together with current datetime (volatile → user message, cache-safe). No stored group timezone — known gap, revisit on demand |
+| B-Q7 Ambiguity | Structured candidates/none result → **Coach asks a clarifying question; card only on unambiguous resolution.** Rejected: best-guess card (mis-parse litter in a shared feed), one-card-per-candidate (spray) |
+| B-Q8 Launch deep-link | Card carries the launch config; FE CTA opens the **existing P3 launch sheet initialized from the card payload** — no new URL/route surface; the sheet's own submit is the mutation |
+| B-Q9 Card body | **Human-readable prose summary** of the proposal — the durable record for notify-fallback, DSR export, moderation view, and non-widget renders |
+| B-Q10 Cards & DSR | **Ids-only args** (names resolved at draft and discarded → nothing to scrub in args); erasure cascade tombstones `proposer_player_id`; message body inherits the A9.3 exact-name scrub; cards included in the proposer's DSR export |
+| B-Q11 Notify | **Coach never notifies** — assistant rows (replies and cards) are excluded from the notify pipeline (`selectNotifyRecipients` maps `type='assistant'` → ∅, tested). Applies retroactively to Phase A (structurally already true — worker-side inserts skip the route's notify block) |
+| B-Q12 Phase B go-signal | **Owner judgment call** on observed Tier-1 usage (`assistant.replied` logs are the evidence base) — no numeric gate |
+| C-Q1 Gating | `assistant_enabled` is the master switch for **all** Coach output, proactive included; T3.2 digest is additionally per-group opt-in (`digest_enabled`, default OFF) beneath it |
+| C-Q2 Nudge dedupe | At most one nudge per (subject, milestone), deduped by querying for an existing assistant row with `metadata {nudge: '<type>:<subjectId>'}` (same mechanism as the A4 `replyTo` idempotency guard — no new state table) + a per-group proactive cap (≤2 posts/day) |
+| C-Q3 Digest schedule | **Fixed weekly UTC slot**; the settings field is `digest_enabled` only. "Group-local morning" needs the group timezone the app deliberately lacks (B-Q6) — documented gap |
+| C-Q4 Proactive budget | Proactive LLM turns draw from the **same global `ASSISTANT_DAILY_BUDGET_USD`** (one kill-switch stays one kill-switch); per-player/group hourly caps don't apply (no asker). Budget-exhausted proactive turns are **skipped silently** (nobody is waiting) and logged at `warn` |
+
+Notable rejections: a stored `expired` status (needs the sweeper job §16 warns about);
+claim-card-before-mutate (strands a `confirmed` card when the mutation fails, needs compensating
+un-flip); wrapping card flip + mutation in one DB transaction (invasive to services that enqueue
+jobs/emit events mid-flow); a group-timezone setting (drags a migration + settings UI into Phase B
+for something the client already knows); notify-like-normal-messages (Coach chatter emailing
+mention-level members would drive owners to the off-toggle); a numeric Phase B usage gate (false
+precision for a solo-operator project — the owner reads the logs and decides).
