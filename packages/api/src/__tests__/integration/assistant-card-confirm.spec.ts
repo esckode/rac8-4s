@@ -80,6 +80,10 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
       [`Confirm Group ${uid()}`, ownerId]
     )
     const groupId = g.rows[0].id as string
+    await pool.query(
+      `INSERT INTO public.player_group_members (group_id, player_id, role) VALUES ($1, $2, 'owner')`,
+      [groupId, ownerId]
+    )
     for (const memberId of memberIds) {
       await pool.query(
         `INSERT INTO public.player_group_members (group_id, player_id, role) VALUES ($1, $2, 'member')`,

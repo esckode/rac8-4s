@@ -8,12 +8,17 @@
  * ./tools is mocked so those closures never touch a DB.
  */
 import * as tools from '../../assistant/tools'
+import * as proposeScoreModule from '../../assistant/propose-score'
 
 jest.mock('../../assistant/tools', () => ({
   getMyMatches: jest.fn(),
   getStandings: jest.fn(),
   getBracket: jest.fn(),
   getTournament: jest.fn(),
+}))
+
+jest.mock('../../assistant/propose-score', () => ({
+  proposeScore: jest.fn(),
 }))
 
 const mockToolRunner = jest.fn()
@@ -113,7 +118,7 @@ describe('AnthropicAssistantClient', () => {
       expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0 })
     })
 
-    it('registers exactly the four Phase A read-only tools', async () => {
+    it('registers the four Phase A read-only tools plus the Phase B propose_score tool', async () => {
       mockToolRunner.mockReturnValue(Promise.resolve({ content: [], usage: {} }))
       const client = new AnthropicAssistantClient({ adapter: 'anthropic', model: 'claude-haiku-4-5' })
       await client.runTurn(turnInput())
@@ -124,6 +129,7 @@ describe('AnthropicAssistantClient', () => {
         'get_standings',
         'get_bracket',
         'get_tournament',
+        'propose_score',
       ])
     })
 
@@ -165,6 +171,26 @@ describe('AnthropicAssistantClient', () => {
       expect(tools.getBracket).toHaveBeenCalledWith(ctx, { tournamentId: 'tourn-1' })
       expect(tools.getTournament).toHaveBeenCalledWith(ctx, { tournamentId: 'tourn-1' })
       expect(result.toolRounds).toBe(2)
+    })
+
+    it('the propose_score tool run() closure delegates to the real propose-score module', async () => {
+      (proposeScoreModule.proposeScore as jest.Mock).mockResolvedValue({
+        status: 'card_posted',
+        cardId: 'card-1',
+        messageId: 'msg-1',
+      })
+      mockToolRunner.mockImplementation(async (opts: { tools: Array<{ name: string; run: (i: any) => Promise<string> }> }) => {
+        const proposeScoreTool = opts.tools.find(t => t.name === 'propose_score')!
+        const r = await proposeScoreTool.run({ opponentName: 'Bob', score: '6-4, 6-3' })
+        expect(JSON.parse(r)).toEqual({ status: 'card_posted', cardId: 'card-1', messageId: 'msg-1' })
+        return { content: [{ type: 'text', text: 'done' }], usage: {} }
+      })
+
+      const client = new AnthropicAssistantClient({ adapter: 'anthropic', model: 'claude-haiku-4-5' })
+      const result = await client.runTurn(turnInput())
+
+      expect(proposeScoreModule.proposeScore).toHaveBeenCalledWith(ctx, { opponentName: 'Bob', score: '6-4, 6-3' })
+      expect(result.toolRounds).toBe(1)
     })
   })
 })

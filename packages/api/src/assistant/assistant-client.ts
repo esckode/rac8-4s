@@ -18,6 +18,7 @@ import {
   getBracket,
   getTournament,
 } from './tools'
+import { proposeScore } from './propose-score'
 
 export interface AssistantTurnInput {
   systemPrompt: string
@@ -39,7 +40,13 @@ export interface AssistantClient {
   runTurn(input: AssistantTurnInput): Promise<AssistantTurnResult>
 }
 
-/** Build the read-only Phase A tool registry bound to one turn's context. */
+/**
+ * Build the tool registry bound to one turn's context. Phase A's read tools
+ * (get_*) plus Phase B's propose_* tools — the registry wall still holds:
+ * propose_score never mutates a match, it only drafts a card (B0/B-Q7).
+ * Real mutation happens exclusively via the confirm route calling the same
+ * service the HTTP route uses (score-service.ts).
+ */
 function buildTools(ctx: AssistantToolContext, onToolRun: () => void) {
   return [
     betaZodTool({
@@ -79,6 +86,20 @@ function buildTools(ctx: AssistantToolContext, onToolRun: () => void) {
       run: async (input: { tournamentId: string }) => {
         onToolRun()
         return JSON.stringify(await getTournament(ctx, input))
+      },
+    }),
+    betaZodTool({
+      name: 'propose_score',
+      description:
+        "Draft a score confirmation card for one of the asking player's own pending matches. Call this when the player reports a result in chat (e.g. \"I beat Bob 6-4, 6-3\"). Give the score asker-relative (the asker's numbers first in every set) — this tool normalizes it. Never claim the score was recorded: only a card was drafted, which the player must confirm themselves.",
+      inputSchema: z.object({
+        opponentName: z.string(),
+        score: z.string(),
+        tournamentId: z.string().optional(),
+      }),
+      run: async (input: { opponentName: string; score: string; tournamentId?: string }) => {
+        onToolRun()
+        return JSON.stringify(await proposeScore(ctx, input))
       },
     }),
   ]

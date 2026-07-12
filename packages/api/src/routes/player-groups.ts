@@ -38,7 +38,9 @@ import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-noti
 import { PollRepository, type PollChoice } from '../repositories/poll-repository'
 import { isReservedDisplayName, detectAssistantTrigger } from '../assistant/trigger'
 import { LeaderboardRepository } from '../repositories/leaderboard-repository'
-import { TournamentRepository } from '../db'
+import { TournamentRepository, GroupRepository as TournamentGroupRepository } from '../db'
+import { AssistantCardRepository } from '../repositories/assistant-card-repository'
+import { submitScore } from '../services/score-service'
 
 const INVITE_TTL_SECONDS = 7 * 24 * 3600 // 7 days
 
@@ -65,6 +67,8 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   const pollRepo = new PollRepository(deps.db as any)
   const leaderboardRepo = new LeaderboardRepository(deps.db as any)
   const tournamentRepo = new TournamentRepository(deps.db as any)
+  const cardRepo = new AssistantCardRepository(deps.db as any)
+  const tournamentGroupRepo = new TournamentGroupRepository(deps.db as any)
 
   // GET /player/groups — list the caller's groups (G2.5)
   // §10: static GET registered before POST and /:groupId param routes
@@ -1262,6 +1266,143 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         })
 
         return res.status(200).json({ ok: true })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // ─── Phase B: assistant-card confirm/cancel (design §11 B-Q3: mutate-first, then flip) ───
+
+  // POST /player/groups/:groupId/assistant-cards/:cardId/confirm — proposer confirms a
+  // pending @coach write-action card. Mutates through the SAME existing service the normal
+  // route uses (submitScore), then atomically flips the card — the card is a shortcut, never
+  // an authority; this route re-validates everything server-side regardless of draft-time checks.
+  router.post(
+    '/:groupId/assistant-cards/:cardId/confirm',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+        const cardId = req.params.cardId as string
+
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can act on this card' })
+        }
+
+        const card = await cardRepo.getCard(cardId)
+        if (!card || card.groupId !== groupId) {
+          return res.status(404).json({ code: 'NOT_FOUND', message: 'Card not found' })
+        }
+        if (card.proposerPlayerId !== session.playerId) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the proposer can confirm this card' })
+        }
+        if (card.status !== 'pending') {
+          return res.status(409).json({ code: 'ALREADY_RESOLVED', message: `This card is already ${card.status}` })
+        }
+        if (Date.now() > card.expiresAt.getTime()) {
+          return res.status(409).json({ code: 'EXPIRED', message: 'This card has expired' })
+        }
+        const requestedSchemaVersion = req.body?.schemaVersion
+        if (requestedSchemaVersion !== undefined && requestedSchemaVersion !== card.schemaVersion) {
+          return res.status(409).json({
+            code: 'SCHEMA_VERSION_MISMATCH',
+            message: 'This card is from an older version — ask Coach again',
+          })
+        }
+
+        let claimed
+        if (card.action === 'propose_score') {
+          const args = card.args as { tournamentId: string; matchId: string; score: string }
+          const result = await submitScore(
+            {
+              db: deps.db,
+              repo: tournamentRepo,
+              groupRepo: tournamentGroupRepo,
+              conversationRepo,
+              leaderboardRepo,
+              jobQueue: deps.jobQueue,
+              broadcastBus: deps.broadcastBus,
+              config: deps.config,
+            },
+            { tournamentId: args.tournamentId, matchId: args.matchId, playerId: session.playerId, score: args.score }
+          )
+          claimed = result.ok
+            ? await cardRepo.claimCard(cardId, 'confirmed', { match: result.match })
+            : await cardRepo.claimCard(cardId, 'failed', { reason: result.message })
+        } else {
+          return res.status(400).json({ code: 'UNSUPPORTED_ACTION', message: `Unsupported card action: ${card.action}` })
+        }
+
+        if (!claimed) {
+          // Lost the race to a concurrent confirm/cancel — report the actual current state.
+          const reread = await cardRepo.getCard(cardId)
+          return res.status(409).json({ code: 'ALREADY_RESOLVED', message: `This card is already ${reread?.status}` })
+        }
+
+        if (deps.broadcastBus) {
+          const conversationId = await conversationRepo.resolveGroupConversation(groupId)
+          deps.broadcastBus.emit(conversationId, 'card.updated', {
+            messageId: claimed.messageId,
+            cardId: claimed.id,
+            status: claimed.status,
+            result: claimed.result,
+          })
+        }
+
+        log.info('assistant.card.' + claimed.status, {
+          groupId, cardId, playerId: session.playerId, action: card.action,
+        })
+
+        return res.status(200).json({ card: { id: claimed.id, status: claimed.status, result: claimed.result } })
+      } catch (err) {
+        next(handleGroupError(err))
+      }
+    }
+  )
+
+  // POST /player/groups/:groupId/assistant-cards/:cardId/cancel — proposer dismisses a
+  // pending card. Never touches the underlying action — nothing to revalidate.
+  router.post(
+    '/:groupId/assistant-cards/:cardId/cancel',
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const groupId = req.params.groupId as string
+        const cardId = req.params.cardId as string
+
+        const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+        if (memberRole === null) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only group members can act on this card' })
+        }
+
+        const card = await cardRepo.getCard(cardId)
+        if (!card || card.groupId !== groupId) {
+          return res.status(404).json({ code: 'NOT_FOUND', message: 'Card not found' })
+        }
+        if (card.proposerPlayerId !== session.playerId) {
+          return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the proposer can cancel this card' })
+        }
+
+        const claimed = await cardRepo.claimCard(cardId, 'cancelled')
+        if (!claimed) {
+          const reread = await cardRepo.getCard(cardId)
+          return res.status(409).json({ code: 'ALREADY_RESOLVED', message: `This card is already ${reread?.status}` })
+        }
+
+        if (deps.broadcastBus) {
+          const conversationId = await conversationRepo.resolveGroupConversation(groupId)
+          deps.broadcastBus.emit(conversationId, 'card.updated', {
+            messageId: claimed.messageId,
+            cardId: claimed.id,
+            status: claimed.status,
+          })
+        }
+
+        log.info('assistant.card.cancelled', { groupId, cardId, playerId: session.playerId })
+
+        return res.status(200).json({ card: { id: claimed.id, status: claimed.status } })
       } catch (err) {
         next(handleGroupError(err))
       }
