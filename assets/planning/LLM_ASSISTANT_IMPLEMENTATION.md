@@ -7,7 +7,8 @@
 
 **Date:** 2026-07-10
 **Status:** ✅ Phase A BUILT (2026-07-11, A0–A9) and Phase B BUILT (2026-07-12, B0–B7; branch
-`llm-assistant-design`, not yet merged to `main`). Phase C below remains plan-only.
+`llm-assistant-design`, not yet merged to `main`). **Both independently re-verified 2026-07-12 —
+see "Independent verification" below the Phase B DoD.** Phase C below remains plan-only.
 **Method:** TDD-first per CLAUDE.md §4/§11 — every step is a **[RED]** commit (failing tests, run
 them, confirm they fail *for the right reason*) followed by a **[GREEN]** commit (implementation,
 tests pass). E2E scenarios are written to `e2e-scenarios.md` **before** the code (step A0.2).
@@ -767,3 +768,28 @@ when C starts, don't relitigate):
       context, and asks a clarifying question rather than guessing on genuine ambiguity — the
       mock-router e2e above proves the tool→card→confirm mechanics end to end, not model behavior.
 - [x] No prod channel enablement — unchanged from Phase A (`ASSISTANT_ADAPTER` stays unset/mock).
+
+### Independent verification (2026-07-12, separate session)
+
+Re-verified before starting Phase C planning:
+
+- **Commit history:** 68 commits on `main..llm-assistant-design`, [RED]→[GREEN] pairs intact
+  through A0–A9 and B0–B7 (B2.0/B4.0 refactor commits present and separate).
+- **Artifacts audit:** migration `050_assistant_cards.sql`; `services/score-service.ts` +
+  `poll-service.ts` (B2.0/B4.0 extractions); all four `propose_*` tools + `emit-card.ts`;
+  `ActionCard.tsx`; notify exclusion live in `group-notify-selector.ts` (`type='assistant'` →
+  no push, B-Q11); `docs/assistant-help.md` covers Coach's Phase B actions (CLAUDE.md §9
+  same-change rule held).
+- **Test ladder re-run:** api 2211 passed / frontend 1257 passed (100%) / repo lint clean.
+  The two failing api suites are **not Phase A/B regressions**:
+  `partial-indexes.spec.ts` (4 planner-choice tests) — file byte-identical on `main`, the
+  branch's migrations don't touch `group_matches`/`knockout_matches`; it asserts EXPLAIN picks
+  partial indexes with no `ANALYZE`/`enable_seqscan` control, so tiny-table seq scans fail it
+  (pre-existing fragility, fix separately). `deeplink-metadata.spec.ts` — passes 5/5 in
+  isolation; fails only under the full parallel run ("Connection terminated" pool contention,
+  pre-existing flake).
+- **Coverage spot-check** on `src/assistant/**`: statements 93.4%, functions 91.6%, lines
+  94.7% — consistent with the DoD numbers above.
+- **Not re-run here:** the Playwright e2e ladder (attested 16/16 + 14/14 in the DoDs above,
+  two live-run bug fixes committed) and anything requiring the live model (still blocked on
+  A0.1b).
