@@ -66,6 +66,14 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
   const [mentionStart, setMentionStart] = useState<number | null>(null)
   // Launch confirmation sheet state
   const [launchSheet, setLaunchSheet] = useState<{ messageId: string; voters: VoterSummary[] } | null>(null)
+  // propose_casual_launch card sheet state (B5.1 — separate from the poll-card
+  // launch flow above: args already carry inVoterNames, no votes fetch needed)
+  const [cardLaunchSheet, setCardLaunchSheet] = useState<{
+    cardId: string
+    messageId: string
+    inVoterNames: string[]
+    defaultFormat: 'singles' | 'doubles'
+  } | null>(null)
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -197,6 +205,28 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
     }
   }, [groupId, launchSheet, navigate])
 
+  const handleConfirmCardLaunch = useCallback(async (opts: { matchFormat: string }) => {
+    if (!cardLaunchSheet) return
+    const token = localStorage.getItem('auth_token')
+    const authHeader: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+    const res = await fetch(`/player/groups/${groupId}/polls/${cardLaunchSheet.messageId}/launch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader },
+      body: JSON.stringify({ matchFormat: opts.matchFormat }),
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    // Flip the card to confirmed now that the tournament exists (B5.1) — the
+    // card was a shortcut into this flow, never its own authority.
+    await fetch(`/player/groups/${groupId}/assistant-cards/${cardLaunchSheet.cardId}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader },
+      body: JSON.stringify({ tournamentId: data.tournamentId }),
+    })
+    setCardLaunchSheet(null)
+    navigate(`/tournament/${data.tournamentId}`)
+  }, [groupId, cardLaunchSheet, navigate])
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
     const trimmed = body.trim()
@@ -263,6 +293,15 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
                     onDismiss={() => handleDismissCard(m.cardId!)}
                     action={m.cardAction ?? undefined}
                     args={m.cardArgs ?? undefined}
+                    onLaunch={() => {
+                      const args = m.cardArgs as { messageId: string; inVoterNames: string[]; defaultFormat?: 'singles' | 'doubles' }
+                      setCardLaunchSheet({
+                        cardId: m.cardId!,
+                        messageId: args.messageId,
+                        inVoterNames: args.inVoterNames ?? [],
+                        defaultFormat: args.defaultFormat ?? 'singles',
+                      })
+                    }}
                   />
                 ) : (
                   <p className="text-[--ink-900]">{m.body}</p>
@@ -346,6 +385,16 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
           inVoterNames={launchSheet.voters.map(v => v.voterName)}
           onConfirm={handleConfirmLaunch}
           onCancel={() => setLaunchSheet(null)}
+        />
+      )}
+
+      {/* Launch confirmation sheet opened from a propose_casual_launch card (B5.1) */}
+      {cardLaunchSheet && (
+        <LaunchConfirmSheet
+          inVoterNames={cardLaunchSheet.inVoterNames}
+          defaultFormat={cardLaunchSheet.defaultFormat}
+          onConfirm={handleConfirmCardLaunch}
+          onCancel={() => setCardLaunchSheet(null)}
         />
       )}
 

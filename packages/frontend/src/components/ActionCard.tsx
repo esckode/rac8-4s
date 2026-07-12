@@ -28,6 +28,12 @@ export interface ActionCardProps {
   action?: string
   /** The card's draft args — e.g. propose_poll's targetTime, rendered viewer-local. */
   args?: Record<string, unknown>
+  /**
+   * propose_casual_launch only: opens the launch sheet instead of calling
+   * the generic /confirm route (B5.1 — launch mutates through its own
+   * existing route, not the shared confirm dispatch).
+   */
+  onLaunch?: () => void
 }
 
 function formatCountdown(msRemaining: number): string {
@@ -47,6 +53,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({
   onDismiss,
   action,
   args,
+  onLaunch,
 }) => {
   const [now, setNow] = useState(() => Date.now())
 
@@ -99,13 +106,23 @@ export const ActionCard: React.FC<ActionCardProps> = ({
 
       {isActionable && (
         <div className="flex gap-2">
-          <button
-            data-testid="action-card-confirm-button"
-            onClick={onConfirm}
-            className="flex-1 py-1.5 text-xs rounded bg-[--court-500] text-white font-medium hover:bg-[--court-600]"
-          >
-            Confirm
-          </button>
+          {action === 'propose_casual_launch' ? (
+            <button
+              data-testid="action-card-launch-button"
+              onClick={onLaunch}
+              className="flex-1 py-1.5 text-xs rounded bg-[--court-500] text-white font-medium hover:bg-[--court-600]"
+            >
+              Launch
+            </button>
+          ) : (
+            <button
+              data-testid="action-card-confirm-button"
+              onClick={onConfirm}
+              className="flex-1 py-1.5 text-xs rounded bg-[--court-500] text-white font-medium hover:bg-[--court-600]"
+            >
+              Confirm
+            </button>
+          )}
           <button
             data-testid="action-card-dismiss-button"
             onClick={onDismiss}

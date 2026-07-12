@@ -24,6 +24,7 @@ function makeCard(overrides: Partial<ActionCardProps> = {}): ActionCardProps {
     onDismiss: jest.fn(),
     action: 'propose_score',
     args: {},
+    onLaunch: jest.fn(),
     ...overrides,
   }
 }
@@ -160,6 +161,45 @@ describe('ActionCard', () => {
     it('does not render a target time for non-poll actions', () => {
       render(<ActionCard {...makeCard({ action: 'propose_score', args: { targetTime: '2026-08-01T18:00:00.000Z' } })} />)
       expect(screen.queryByTestId('action-card-target-time')).toBeNull()
+    })
+  })
+
+  // ── B5.1 — propose_casual_launch CTA opens the launch sheet, not /confirm ────
+
+  describe('propose_casual_launch CTA', () => {
+    it('shows a Launch button (not Confirm) to the proposer while pending', () => {
+      const onLaunch = jest.fn()
+      render(<ActionCard {...makeCard({ action: 'propose_casual_launch', onLaunch })} />)
+      expect(screen.getByTestId('action-card-launch-button')).toBeInTheDocument()
+      expect(screen.queryByTestId('action-card-confirm-button')).toBeNull()
+      // Dismiss still available — the card stays pending until launched or dismissed
+      expect(screen.getByTestId('action-card-dismiss-button')).toBeInTheDocument()
+    })
+
+    it('calls onLaunch (not onConfirm) when the Launch button is clicked', async () => {
+      const onLaunch = jest.fn()
+      const onConfirm = jest.fn()
+      render(<ActionCard {...makeCard({ action: 'propose_casual_launch', onLaunch, onConfirm })} />)
+      await userEvent.click(screen.getByTestId('action-card-launch-button'))
+      expect(onLaunch).toHaveBeenCalled()
+      expect(onConfirm).not.toHaveBeenCalled()
+    })
+
+    it('hides the Launch button from a non-proposer', () => {
+      render(<ActionCard {...makeCard({ action: 'propose_casual_launch', isProposer: false })} />)
+      expect(screen.queryByTestId('action-card-launch-button')).toBeNull()
+    })
+
+    it('hides the Launch button once the card is confirmed', () => {
+      render(<ActionCard {...makeCard({ action: 'propose_casual_launch', status: 'confirmed' })} />)
+      expect(screen.queryByTestId('action-card-launch-button')).toBeNull()
+      expect(screen.getByTestId('action-card-status')).toHaveTextContent(/confirmed/i)
+    })
+
+    it('other actions still show the generic Confirm button, not Launch', () => {
+      render(<ActionCard {...makeCard({ action: 'propose_score' })} />)
+      expect(screen.getByTestId('action-card-confirm-button')).toBeInTheDocument()
+      expect(screen.queryByTestId('action-card-launch-button')).toBeNull()
     })
   })
 })
