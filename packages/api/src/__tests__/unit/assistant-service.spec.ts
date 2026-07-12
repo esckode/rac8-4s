@@ -223,4 +223,54 @@ describe('handleAssistantJob', () => {
     expect(loggedText).not.toContain('Saturday 9am vs Bob.')
     expect(loggedText).not.toContain('who am I playing next')
   })
+
+  // ── B4.1 — timezone plumbing ────────────────────────────────────────────────
+
+  it('threads the asker timezone and current time into the volatile context block, not the cached system prompt', async () => {
+    const w = world()
+    const { repo } = makeRepo(w)
+    const { client, calls } = makeClient(okTurn)
+
+    await handleAssistantJob(
+      { ...payload, timezone: 'America/New_York' },
+      { pool: makePool(w), groupMessageRepo: repo, client }
+    )
+
+    expect(calls[0].contextBlock).toContain('America/New_York')
+    expect(calls[0].askerTimezone).toBe('America/New_York')
+    expect(calls[0].currentDateTime).toEqual(expect.any(String))
+    expect(new Date(calls[0].currentDateTime).toString()).not.toBe('Invalid Date')
+    // Volatile per-turn data never leaks into the cached, byte-stable prompt
+    expect(calls[0].systemPrompt).not.toContain('America/New_York')
+  })
+
+  it('defaults the asker timezone to UTC when the client did not send one', async () => {
+    const w = world()
+    const { repo } = makeRepo(w)
+    const { client, calls } = makeClient(okTurn)
+
+    await handleAssistantJob(payload, { pool: makePool(w), groupMessageRepo: repo, client })
+
+    expect(calls[0].askerTimezone).toBe('UTC')
+    expect(calls[0].contextBlock).toContain('UTC')
+  })
+
+  it('system prompt is byte-identical across turns with different timezones (cache-safety)', async () => {
+    const w = world()
+    const { repo: repo1 } = makeRepo(w)
+    const { repo: repo2 } = makeRepo(w)
+    const { client: client1, calls: calls1 } = makeClient(okTurn)
+    const { client: client2, calls: calls2 } = makeClient(okTurn)
+
+    await handleAssistantJob(
+      { ...payload, timezone: 'America/New_York' },
+      { pool: makePool(w), groupMessageRepo: repo1, client: client1 }
+    )
+    await handleAssistantJob(
+      { ...payload, timezone: 'Asia/Tokyo' },
+      { pool: makePool(w), groupMessageRepo: repo2, client: client2 }
+    )
+
+    expect(calls1[0].systemPrompt).toBe(calls2[0].systemPrompt)
+  })
 })

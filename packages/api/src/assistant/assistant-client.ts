@@ -28,6 +28,11 @@ export interface AssistantTurnInput {
   question: string
   /** Tools execute as the asking player through this context. */
   toolContext: AssistantToolContext
+  /** Browser IANA timezone (B-Q6) — already folded into contextBlock; kept
+   *  structural here so tools/tests can rely on it without re-parsing text. */
+  askerTimezone?: string
+  /** ISO-UTC turn timestamp — same rationale as askerTimezone. */
+  currentDateTime?: string
 }
 
 export interface AssistantTurnResult {

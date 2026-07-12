@@ -64,6 +64,22 @@ function validateGroupMessageBody(body: unknown): string | null {
   return null
 }
 
+const MAX_TIMEZONE_LENGTH = 64
+
+/**
+ * Browser IANA timezone (B-Q6), optional. Never trusted for auth — only used
+ * to help @coach resolve natural-language times. Length-capped, not
+ * validated against the IANA database (an unrecognized value just falls
+ * back to UTC downstream).
+ */
+function validateGroupMessageTimezone(timezone: unknown): string | null {
+  if (timezone === undefined) return null
+  if (typeof timezone !== 'string' || timezone.length > MAX_TIMEZONE_LENGTH) {
+    return `timezone must be a string of at most ${MAX_TIMEZONE_LENGTH} characters`
+  }
+  return null
+}
+
 export default function playerGroupsRouter(deps: AppDependencies): Router {
   const router = Router({ mergeParams: true })
   const groupRepo = new GroupRepository(deps.db as any)
@@ -521,6 +537,10 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         if (bodyErr) {
           return res.status(400).json({ code: 'VALIDATION_ERROR', message: bodyErr })
         }
+        const timezoneErr = validateGroupMessageTimezone(req.body.timezone)
+        if (timezoneErr) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: timezoneErr })
+        }
 
         const { message, conversationId } = await groupMsgRepo.sendGroupMessage({
           groupId,
@@ -582,6 +602,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
               groupId,
               playerId: session.playerId,
               body: message.body,
+              ...(typeof req.body.timezone === 'string' && { timezone: req.body.timezone }),
             }
             // Hyphen, not colon (Q12 idempotency key) — BullMQ rejects custom
             // job IDs containing ':' ("Custom Id cannot contain :").

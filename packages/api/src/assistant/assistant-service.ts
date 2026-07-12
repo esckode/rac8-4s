@@ -24,6 +24,8 @@ export interface AssistantJobPayload {
   groupId: string
   playerId: string
   body: string
+  /** Browser IANA timezone (B-Q6), optional and never trusted for auth. */
+  timezone?: string
 }
 
 export interface AssistantServiceDeps {
@@ -50,7 +52,8 @@ export async function handleAssistantJob(
   payload: AssistantJobPayload,
   deps: AssistantServiceDeps
 ): Promise<void> {
-  const { messageId, conversationId, groupId, playerId, body } = payload
+  const { messageId, conversationId, groupId, playerId, body, timezone } = payload
+  const askerTimezone = timezone ?? 'UTC'
   const { pool, groupMessageRepo, client, broadcastBus, onUsage } = deps
   const startedAt = Date.now()
 
@@ -87,16 +90,19 @@ export async function handleAssistantJob(
     const historyLines = recent
       .map(m => `${m.senderName ?? 'Someone'}: ${m.body}`)
       .join('\n')
+    const currentDateTime = new Date().toISOString()
     const contextBlock = `Recent group chat (oldest first):
 ${historyLines}
 
-The asking player is ${askerName}. Their message: ${body}`
+The asking player is ${askerName} (timezone: ${askerTimezone}). Current time: ${currentDateTime}. Their message: ${body}`
 
     const result = await client.runTurn({
       systemPrompt: systemPrompt(),
       contextBlock,
       question: body,
       toolContext,
+      askerTimezone,
+      currentDateTime,
     })
     replyBody = result.text || ASSISTANT_FALLBACK_REPLY
     usage = result.usage

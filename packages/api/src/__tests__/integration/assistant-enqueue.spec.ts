@@ -109,6 +109,36 @@ describe('A2.5 — @coach mention enqueues assistant.reply', () => {
     })
   })
 
+  it('threads an optional timezone through to the job payload (B4.1)', async () => {
+    const owner = await createPlayer(pool)
+    const token = await playerToken(owner, tokenStore)
+    const group = await createGroup(token)
+
+    const before = (jobQueue as any).jobs.size
+    const res = await request(app)
+      .post(`/player/groups/${group.id}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ body: '@coach when is my next match?', timezone: 'America/New_York' })
+
+    expect(res.status).toBe(201)
+    const jobs = newAssistantJobs(before)
+    expect(jobs).toHaveLength(1)
+    expect(jobs[0].data.timezone).toBe('America/New_York')
+  })
+
+  it('rejects a timezone longer than 64 characters', async () => {
+    const owner = await createPlayer(pool)
+    const token = await playerToken(owner, tokenStore)
+    const group = await createGroup(token)
+
+    const res = await request(app)
+      .post(`/player/groups/${group.id}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ body: 'hello', timezone: 'X'.repeat(65) })
+
+    expect(res.status).toBe(400)
+  })
+
   it('is case-insensitive (@Coach)', async () => {
     const owner = await createPlayer(pool)
     const token = await playerToken(owner, tokenStore)
