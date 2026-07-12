@@ -395,6 +395,32 @@ export class PollRepository {
   }
 
   /**
+   * Find ALL polls (open or closed) in a group — used by propose_casual_launch
+   * (B5) to resolve a natural-language poll reference. Unlike voting, launch
+   * is not gated on the poll still being open (the real launch route has no
+   * such check — a poll is very often launched only after it closes).
+   */
+  async findPollsByGroup(
+    groupId: string
+  ): Promise<Array<{ pollId: string; messageId: string; question: string; creatorPlayerId: string | null }>> {
+    const res = await this.pool.query(
+      `SELECT p.id, p.message_id, p.question, p.creator_player_id
+       FROM messaging.polls p
+       JOIN messaging.group_messages gm ON gm.id = p.message_id
+       JOIN messaging.conversations c ON c.id = gm.conversation_id
+       WHERE c.group_id = $1
+       ORDER BY gm.created_at DESC`,
+      [groupId]
+    )
+    return res.rows.map(r => ({
+      pollId: r.id as string,
+      messageId: r.message_id as string,
+      question: r.question as string,
+      creatorPlayerId: r.creator_player_id ?? null,
+    }))
+  }
+
+  /**
    * §0.5 — DSR erasure primitive (legal-critical).
    *
    * Deletes all poll_votes rows where player_id = $1 across all polls.
