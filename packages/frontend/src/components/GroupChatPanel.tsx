@@ -261,6 +261,8 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
                     isProposer={m.cardProposerPlayerId === user?.playerId}
                     onConfirm={() => handleConfirmCard(m.cardId!)}
                     onDismiss={() => handleDismissCard(m.cardId!)}
+                    action={m.cardAction ?? undefined}
+                    args={m.cardArgs ?? undefined}
                   />
                 ) : (
                   <p className="text-[--ink-900]">{m.body}</p>

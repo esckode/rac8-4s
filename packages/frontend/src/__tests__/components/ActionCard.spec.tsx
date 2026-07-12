@@ -22,6 +22,8 @@ function makeCard(overrides: Partial<ActionCardProps> = {}): ActionCardProps {
     isProposer: true,
     onConfirm: jest.fn(),
     onDismiss: jest.fn(),
+    action: 'propose_score',
+    args: {},
     ...overrides,
   }
 }
@@ -132,5 +134,32 @@ describe('ActionCard', () => {
     expect(screen.getByTestId('action-card-status')).toHaveTextContent(/expired/i)
     expect(screen.queryByTestId('action-card-confirm-button')).toBeNull()
     expect(screen.queryByTestId('action-card-dismiss-button')).toBeNull()
+  })
+
+  // ── B4.1 — poll cards render times viewer-local ─────────────────────────────
+
+  describe('propose_poll target time (viewer-local)', () => {
+    it('renders the poll targetTime formatted in the viewer local timezone', () => {
+      const targetTime = '2026-08-01T18:00:00.000Z'
+      render(
+        <ActionCard
+          {...makeCard({ action: 'propose_poll', args: { question: 'In tonight?', targetTime } })}
+        />
+      )
+      const timeEl = screen.getByTestId('action-card-target-time')
+      expect(timeEl).toBeInTheDocument()
+      expect(timeEl.textContent).not.toContain('2026-08-01T18:00:00.000Z')
+      expect(timeEl.textContent).toBe(new Date(targetTime).toLocaleString())
+    })
+
+    it('does not render a target time when the poll is open-ended', () => {
+      render(<ActionCard {...makeCard({ action: 'propose_poll', args: { question: 'Anyone free?' } })} />)
+      expect(screen.queryByTestId('action-card-target-time')).toBeNull()
+    })
+
+    it('does not render a target time for non-poll actions', () => {
+      render(<ActionCard {...makeCard({ action: 'propose_score', args: { targetTime: '2026-08-01T18:00:00.000Z' } })} />)
+      expect(screen.queryByTestId('action-card-target-time')).toBeNull()
+    })
   })
 })

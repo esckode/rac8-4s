@@ -24,6 +24,10 @@ export interface ActionCardProps {
   isProposer: boolean
   onConfirm: () => void
   onDismiss: () => void
+  /** The card's action (e.g. 'propose_poll') — drives action-specific rendering. */
+  action?: string
+  /** The card's draft args — e.g. propose_poll's targetTime, rendered viewer-local. */
+  args?: Record<string, unknown>
 }
 
 function formatCountdown(msRemaining: number): string {
@@ -41,6 +45,8 @@ export const ActionCard: React.FC<ActionCardProps> = ({
   isProposer,
   onConfirm,
   onDismiss,
+  action,
+  args,
 }) => {
   const [now, setNow] = useState(() => Date.now())
 
@@ -72,6 +78,12 @@ export const ActionCard: React.FC<ActionCardProps> = ({
       <p data-testid="action-card-body" className="text-sm text-[--ink-900]">
         {body}
       </p>
+
+      {action === 'propose_poll' && typeof args?.targetTime === 'string' && (
+        <p data-testid="action-card-target-time" className="text-xs text-[--ink-500]">
+          {new Date(args.targetTime).toLocaleString()}
+        </p>
+      )}
 
       {status === 'pending' && !isExpired && (
         <p data-testid="action-card-countdown" className="text-xs text-[--ink-500]">
