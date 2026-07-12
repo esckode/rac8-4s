@@ -519,6 +519,19 @@ Phase A. Execution order: B0 follow-up → B6 scenario docs → B1 → B2 → B3
   version — ask Coach again" (never migrate args in flight). Cancel is proposer-only,
   `pending→cancelled`. Owner message-delete (moderation) tombstones the message; the card row
   keeps FK integrity but renders nowhere (test this).
+- **⚠️ No score/poll services exist yet** (verified 2026-07-12): the mutation logic is inline in
+  the route handlers — score `routes/tournaments.ts:466` (~70 lines: participant/casual check,
+  deadline, `ALREADY_SCORED`, `parseScore` from `@core/score-parser`, winner derivation,
+  `updateMatch`, bus emit + notify enqueue), poll create `player-groups.ts:701`, vote
+  `player-groups.ts:988`. B2.0/B4.0 extract them **behavior-preserving** before the confirm
+  routes are built, so route and confirm path share one code path. Do not duplicate the logic
+  and do not self-call HTTP.
+- **⚠️ Launch authority correction (2026-07-12):** the design's "group owner" draft check for
+  `propose_casual_launch` assumed an owner-only launch route; the shipped G4.5 route
+  (`player-groups.ts:799`) authorizes the **poll creator** only. Draft-time validation mirrors
+  the real confirm-time authority (poll creator), and v1 is **poll-based only** — the design's
+  "explicit roster config" variant has no poll-less launch route to confirm through. Design doc
+  §4/§11 carry the correction.
 
 ### B1 — Migration + card repository
 
@@ -533,6 +546,17 @@ Phase A. Execution order: B0 follow-up → B6 scenario docs → B1 → B2 → B3
 
 ### B2 — `propose_score` + confirm/cancel routes
 
+- **B2.0 [REFACTOR]** Extract the group-stage score-submission logic from the
+  `POST /tournaments/:id/matches/:matchId/score` handler (`routes/tournaments.ts:466`) into
+  `packages/api/src/services/score-service.ts` — `submitScore({tournamentId, matchId, playerId,
+  score})` encapsulating the full behavior (participant/casual-registration check, deadline,
+  `ALREADY_SCORED`, `parseScore`, winner derivation, `updateMatch`, conversation resolve, bus
+  emit, notify enqueue) and returning status/error discriminants the route maps to HTTP codes.
+  The route becomes a thin mapper. **No behavior change — the existing route integration tests
+  must pass unmodified** (they are the gate; no new [RED]). Own commit. Knockout scoring keeps
+  its inline handler: `propose_score` v1 targets group-stage/casual matches only (where the B7
+  flows live); extend the same extraction to the knockout handler only if knockout support is
+  later wanted.
 - **B2.1 [RED]** Tool tests: draft-time validation as asker (participant / casual-registered,
   match pending, score format via the existing `parseScore`, deadline open);
   asker-relative → player1-relative normalization **both orientations** (asker is player1; asker
@@ -542,7 +566,7 @@ Phase A. Execution order: B0 follow-up → B6 scenario docs → B1 → B2 → B3
   the B0 wall).
 - **B2.3 [RED]** Route tests `POST /player/groups/:groupId/assistant-cards/:cardId/confirm`
   (+ `/cancel`): non-proposer member → 403; expired → 409; already confirmed/cancelled → 409;
-  `schema_version` mismatch → 409; happy path calls the **existing** score service as the
+  `schema_version` mismatch → 409; happy path calls `submitScore` (B2.0) as the
   confirming player, flips to `confirmed`, emits `card.updated`; service rejection (match already
   scored elsewhere) → flips to `failed` + reason + `card.updated`; cancel flips
   `pending→cancelled` + `card.updated`.
@@ -561,20 +585,36 @@ Phase A. Execution order: B0 follow-up → B6 scenario docs → B1 → B2 → B3
 
 ### B4 — `propose_poll` + `propose_poll_vote`
 
-- **B4.1 [RED→GREEN]** FE sends the IANA timezone with the message POST; job payload + user
-  context block gain `{askerTimezone, currentDateTime}` (unit test: system prompt still
-  byte-identical across turns). Tool tests: future-time validation, ISO-UTC `target_time` in
-  args, member check; vote: poll open + member. Confirm reuses the **existing** G3 poll-create /
-  vote routes (B0 ordering rules apply). Cards render times viewer-local.
+- **B4.0 [REFACTOR]** Same treatment as B2.0 for polls: extract the poll-create
+  (`player-groups.ts:701`, `POST /:groupId/polls`) and vote (`player-groups.ts:988`,
+  `POST /:groupId/polls/:pollId/votes`) handler logic into service functions the routes and the
+  confirm route share. Behavior-preserving, existing tests pass unmodified, own commit.
+- **B4.1 [RED→GREEN]** Timezone plumbing, end to end: FE sends the browser IANA timezone
+  (`Intl.DateTimeFormat().resolvedOptions().timeZone`) as an optional `timezone` field on the
+  message POST (extend the body validation near `validateGroupMessageBody`,
+  `player-groups.ts:49`; validate as a length-capped string, never trusted for auth); thread it
+  through the A2.5 job payload (`{messageId, conversationId, groupId, playerId, body}` gains
+  `timezone`); extend `AssistantTurnInput` (`assistant/assistant-client.ts:22`) and the context
+  block built in `assistant-service.ts` (~line 90) with `{askerTimezone, currentDateTime}`
+  (unit test: system prompt still byte-identical across turns — volatile data stays in the user
+  message). Tool tests: future-time validation, ISO-UTC `target_time` in args, member check;
+  vote: poll open + member. Confirm calls the B4.0 services (B0 ordering rules apply). Cards
+  render times viewer-local.
 
-### B5 — `propose_casual_launch`
+### B5 — `propose_casual_launch` (poll-based only; authority = poll creator, see B0 ⚠️)
 
-- **B5.1 [RED→GREEN]** Owner-only draft check (non-owner → polite decline, **no card**); card
-  carries the launch config; FE CTA opens the **existing P3 launch sheet** initialized from the
-  card payload (no new URL/route surface); on the sheet's successful launch the FE calls
+- **B5.1 [RED→GREEN]** Draft check mirrors the launch route's real authority: asker is the
+  referenced poll's **creator** and the poll meets the route's launch conditions (mirror
+  `player-groups.ts:799` checks); anyone else → polite decline, **no card**. Card args carry
+  `{pollId, messageId, inVoterNames, defaultFormat}`. FE: the card's CTA (proposer-only) opens
+  the existing `LaunchConfirmSheet` (`components/LaunchConfirmSheet.tsx` — props
+  `inVoterNames`, `defaultFormat`, `onConfirm({matchFormat})`, `onCancel`); the **card's parent
+  wiring** supplies those props from the card args, and on `onConfirm` calls the existing
+  `POST /player/groups/:groupId/polls/:messageId/launch`, then on success calls
   `POST …/assistant-cards/:cardId/complete` (proposer-only, `pending→confirmed`,
   `result: {tournamentId}`; server verifies the tournament exists and is group-linked).
-  Abandoned sheet → card stays pending until expiry/dismiss.
+  Abandoned sheet → card stays pending until expiry/dismiss. No new URL/route surface beyond
+  `/complete`.
 
 ### B6 — Prompt + scenario docs (**before B2 code**)
 
@@ -601,11 +641,12 @@ Phase A. Execution order: B0 follow-up → B6 scenario docs → B1 → B2 → B3
     *(f)* proposer taps **Dismiss** on a card → it renders `cancelled` for every member's view
     live; *(g)* **ambiguity:** "@coach beat Sunil 2-1" with two seeded pending matches vs Sunil →
     a clarifying question naming both candidates, **no card posted**.
-  - **Casual launch via Coach:** *(a)* group **owner** sends "@coach launch a session for
-    everyone who voted in" with a closed poll seeded → card deep-links into the existing P3
-    launch confirmation sheet pre-filled from the poll → completing the sheet creates the casual
-    tournament (assert via the group's tournament list); *(b)* a non-owner asking the same gets a
-    polite decline (draft-time owner check), no card.
+  - **Casual launch via Coach:** *(a)* the **poll's creator** sends "@coach launch a session for
+    everyone who voted in" with a closed poll seeded → card opens the existing
+    `LaunchConfirmSheet` pre-filled from the poll → completing the sheet creates the casual
+    tournament (assert via the group's tournament list) and the card renders `confirmed`;
+    *(b)* a member who did **not** create the poll asking the same gets a polite decline
+    (draft-time creator check, matching the G4.5 route authority), no card.
 
 ## Phase C — Proactive (outline; full plan when triggered — lightly grilled 2026-07-11, design §11)
 

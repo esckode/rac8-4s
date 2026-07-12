@@ -120,7 +120,7 @@ existing route/service with normal auth. The model never submits directly.
 |---|---------|------|
 | T2.1 | Score submission by NL — "beat Sunil 2-1" | Parse → match to the asker's pending match → confirm card → on tap, existing score service runs as the asker |
 | T2.2 | Poll create/vote — "set up a poll for Sat 9am", "I'm in" | Drafts a G3 poll / records a vote after confirm |
-| T2.3 | Casual session launch helper | Walks a group owner through the P3 launch config; final launch behind the existing owner-only check + confirmation sheet |
+| T2.3 | Casual session launch helper | Walks the poll creator through the launch config; final launch behind the existing G4.5 launch-route authorization (poll creator) + confirmation sheet. *(Corrected 2026-07-12: the drafted "owner-only" premise didn't match the shipped route — see §11 B-Q8)* |
 
 **Write-tool registry (`propose_*`).** Even in Tier 2, **no tool in the registry mutates** — the
 registry wall from §7 survives. Each write tool is a proposal generator: it runs as the asker,
@@ -133,7 +133,7 @@ normal API route. Tool schemas use `strict: true` so argument shapes are guarant
 | `propose_score` | `tournament_id`, `match_id` *or* `opponent_name`, `score` ("X-Y") | asker is participant (scheduled) / registered (casual open scoring); match pending; score format valid; deadline not passed | `POST /tournaments/:id/matches/:matchId/score` |
 | `propose_poll` | `question`, `target_time`, `auto_close_at?` | asker is group member; time in future | existing G3 poll-create route |
 | `propose_poll_vote` | `poll_id`, `response` ∈ {in, out, maybe} | poll open; asker is member | existing vote route |
-| `propose_casual_launch` | `poll_id` (or explicit roster config) | asker is a group **owner**; poll/roster meets minimum count | deep-links into the existing P3 launch **confirmation sheet** (card is a shortcut into that flow, not a parallel one) |
+| `propose_casual_launch` | `poll_id` (poll-based only — no poll-less launch route exists, so the roster-config variant is deferred) | asker is the **poll creator** (mirrors the shipped G4.5 launch-route authority; corrected 2026-07-12, §11 B-Q8); poll meets the route's launch conditions | opens the existing P3 launch **confirmation sheet** (card is a shortcut into that flow, not a parallel one) → existing launch route |
 
 Judgment call baked in: poll *votes* also go through a card for v1 — one consistent rule ("the
 model never mutates") beats saving one tap. If the confirm tap proves annoying for a re-votable,
@@ -531,7 +531,7 @@ do not relitigate without new evidence. Expanded implementation detail lives in
 | B-Q5 Score frame | Model emits **asker-relative** score; `propose_score` normalizes to the route's player1-relative form **at draft** (where the match row is already loaded); args store route-ready values; card displays asker-relative ("You 2 – 1 Sunil"). Keeps the correctness-critical transform out of the LLM (rank_reason precedent) |
 | B-Q6 NL times | **Browser IANA timezone sent with the message POST** → job payload → user context block, together with current datetime (volatile → user message, cache-safe). No stored group timezone — known gap, revisit on demand |
 | B-Q7 Ambiguity | Structured candidates/none result → **Coach asks a clarifying question; card only on unambiguous resolution.** Rejected: best-guess card (mis-parse litter in a shared feed), one-card-per-candidate (spray) |
-| B-Q8 Launch deep-link | Card carries the launch config; FE CTA opens the **existing P3 launch sheet initialized from the card payload** — no new URL/route surface; the sheet's own submit is the mutation |
+| B-Q8 Launch deep-link | Card carries the launch config; FE CTA opens the **existing P3 launch sheet initialized from the card payload** — no new URL/route surface; the sheet's own submit is the mutation. **Correction 2026-07-12:** draft-time authority is the **poll creator**, not "group owner" — the shipped G4.5 launch route (`player-groups.ts:799`) authorizes only the poll creator, and the card must never post a flow that dead-ends at confirm. v1 is poll-based only (no poll-less launch route exists for the roster-config variant) |
 | B-Q9 Card body | **Human-readable prose summary** of the proposal — the durable record for notify-fallback, DSR export, moderation view, and non-widget renders |
 | B-Q10 Cards & DSR | **Ids-only args** (names resolved at draft and discarded → nothing to scrub in args); erasure cascade tombstones `proposer_player_id`; message body inherits the A9.3 exact-name scrub; cards included in the proposer's DSR export |
 | B-Q11 Notify | **Coach never notifies** — assistant rows (replies and cards) are excluded from the notify pipeline (`selectNotifyRecipients` maps `type='assistant'` → ∅, tested). Applies retroactively to Phase A (structurally already true — worker-side inserts skip the route's notify block) |
