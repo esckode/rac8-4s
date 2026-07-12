@@ -29,6 +29,15 @@ export interface GroupMessageRecord {
   autoCloseAt?: string | null
   autoLaunch?: boolean
   tally?: PollTally | null
+  // Present only when type === 'assistant' and the message carries a card
+  cardId?: string | null
+  cardAction?: string | null
+  cardArgs?: Record<string, unknown> | null
+  cardStatus?: 'pending' | 'confirmed' | 'failed' | 'cancelled' | null
+  cardExpiresAt?: string | null
+  cardSchemaVersion?: number | null
+  cardResult?: Record<string, unknown> | null
+  cardProposerPlayerId?: string | null
 }
 
 type Subscriber = (messages: GroupMessageRecord[]) => void
@@ -90,6 +99,19 @@ export class GroupMessageStore {
     this.messages = [
       ...this.messages.slice(0, idx),
       { ...msg, tally, closedAt },
+      ...this.messages.slice(idx + 1),
+    ]
+    this.notifySubscribers()
+  }
+
+  /** Patch a card message's status/result in place (SSE card.updated). */
+  updateCard(cardId: string, patch: { status: GroupMessageRecord['cardStatus']; result?: Record<string, unknown> | null }): void {
+    const idx = this.messages.findIndex(m => m.cardId === cardId)
+    if (idx === -1) return
+    const msg = this.messages[idx]
+    this.messages = [
+      ...this.messages.slice(0, idx),
+      { ...msg, cardStatus: patch.status, ...(patch.result !== undefined && { cardResult: patch.result }) },
       ...this.messages.slice(idx + 1),
     ]
     this.notifySubscribers()

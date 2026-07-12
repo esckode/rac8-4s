@@ -156,6 +156,21 @@ export function useGroupMessages(groupId: string, active = false): UseGroupMessa
         }
       })
 
+      es.addEventListener('card.updated', (event: Event) => {
+        if (event instanceof MessageEvent) {
+          try {
+            const { cardId, status, result } = JSON.parse(event.data) as {
+              cardId: string
+              status: 'pending' | 'confirmed' | 'failed' | 'cancelled'
+              result?: Record<string, unknown> | null
+            }
+            store.updateCard(cardId, { status, result })
+          } catch {
+            // malformed — ignore
+          }
+        }
+      })
+
       return () => {
         es.close()
         eventSourceRef.current = null

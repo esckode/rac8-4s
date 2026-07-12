@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom'
 import { useGroupMessages, GroupMessageRecord } from '../hooks/useGroupMessages'
 import { useAuth } from '../hooks/useAuth'
 import { PollCard, type PollChoice } from './PollCard'
+import { ActionCard } from './ActionCard'
 import { LaunchConfirmSheet } from './LaunchConfirmSheet'
 import { MentionAutocomplete } from './MentionAutocomplete'
 import { parseMentions } from '../utils/parseMentions'
@@ -57,6 +58,8 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
   const [pollVotes, setPollVotes] = useState<Record<string, PollChoice>>({})
   // Track in-progress poll actions to avoid double submissions
   const pollActingRef = useRef<Set<string>>(new Set())
+  // Track in-progress card confirm/cancel actions to avoid double submissions
+  const cardActingRef = useRef<Set<string>>(new Set())
   // @mention autocomplete state
   const [members, setMembers] = useState<MemberSummary[]>([])
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
@@ -135,6 +138,47 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
     setLaunchSheet({ messageId, voters: inVoters })
   }, [groupId])
 
+  const handleConfirmCard = useCallback(async (cardId: string) => {
+    if (cardActingRef.current.has(cardId)) return
+    cardActingRef.current.add(cardId)
+    try {
+      const token = localStorage.getItem('auth_token')
+      await fetch(`/player/groups/${groupId}/assistant-cards/${cardId}/confirm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({}),
+      })
+      // The SSE card.updated event will update the store — no local state update needed
+    } catch {
+      // Silent fail — SSE will sync
+    } finally {
+      cardActingRef.current.delete(cardId)
+    }
+  }, [groupId])
+
+  const handleDismissCard = useCallback(async (cardId: string) => {
+    if (cardActingRef.current.has(cardId)) return
+    cardActingRef.current.add(cardId)
+    try {
+      const token = localStorage.getItem('auth_token')
+      await fetch(`/player/groups/${groupId}/assistant-cards/${cardId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({}),
+      })
+    } catch {
+      // Silent fail — SSE will sync
+    } finally {
+      cardActingRef.current.delete(cardId)
+    }
+  }, [groupId])
+
   const handleConfirmLaunch = useCallback(async (opts: { matchFormat: string }) => {
     if (!launchSheet) return
     const token = localStorage.getItem('auth_token')
@@ -201,14 +245,27 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
           }
 
           if (m.type === 'assistant') {
+            const hasCard = m.cardId && m.cardStatus && m.cardExpiresAt
             return (
               <div
                 key={m.id}
                 data-testid="assistant-message"
-                className="rounded-lg p-3 text-sm bg-[--court-50] border border-[--court-200]"
+                className="rounded-lg p-3 text-sm bg-[--court-50] border border-[--court-200] space-y-2"
               >
-                <p className="text-[--ink-900]">{m.body}</p>
-                <p className="text-xs text-[--court-700] font-medium mt-1">
+                {hasCard ? (
+                  <ActionCard
+                    body={m.body}
+                    status={m.cardStatus!}
+                    expiresAt={m.cardExpiresAt!}
+                    result={m.cardResult ?? null}
+                    isProposer={m.cardProposerPlayerId === user?.playerId}
+                    onConfirm={() => handleConfirmCard(m.cardId!)}
+                    onDismiss={() => handleDismissCard(m.cardId!)}
+                  />
+                ) : (
+                  <p className="text-[--ink-900]">{m.body}</p>
+                )}
+                <p className="text-xs text-[--court-700] font-medium">
                   Coach · {new Date(m.createdAt).toLocaleTimeString()}
                 </p>
               </div>
