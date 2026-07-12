@@ -661,6 +661,16 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
               autoCloseAt: m.autoCloseAt ?? null,
               autoLaunch: m.autoLaunch ?? false,
             }),
+            ...(m.type === 'assistant' && m.cardId != null && {
+              cardId: m.cardId,
+              cardAction: m.cardAction,
+              cardArgs: m.cardArgs,
+              cardStatus: m.cardStatus,
+              cardExpiresAt: m.cardExpiresAt,
+              cardSchemaVersion: m.cardSchemaVersion,
+              cardResult: m.cardResult ?? null,
+              cardProposerPlayerId: m.cardProposerPlayerId,
+            }),
           })),
         })
       } catch (err) {

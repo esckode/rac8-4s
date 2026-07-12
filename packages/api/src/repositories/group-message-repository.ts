@@ -32,6 +32,16 @@ export interface GroupMessageRow {
   closedAt?: Date | null
   autoCloseAt?: Date | null
   autoLaunch?: boolean
+  // Present (nullable) only on getGroupHistory rows; populated when type === 'assistant'
+  // AND a messaging.assistant_cards row exists for the message (B3.0 — the poll precedent).
+  cardId?: string | null
+  cardAction?: string | null
+  cardArgs?: Record<string, unknown> | null
+  cardStatus?: 'pending' | 'confirmed' | 'failed' | 'cancelled' | null
+  cardExpiresAt?: Date | null
+  cardSchemaVersion?: number | null
+  cardResult?: Record<string, unknown> | null
+  cardProposerPlayerId?: string | null
 }
 
 export interface SendGroupMessageInput {
@@ -71,6 +81,18 @@ function rowToGroupMessage(row: any): GroupMessageRow {
     base.closedAt = row.closed_at ? (row.closed_at instanceof Date ? row.closed_at : new Date(row.closed_at)) : null
     base.autoCloseAt = row.poll_auto_close_at ? (row.poll_auto_close_at instanceof Date ? row.poll_auto_close_at : new Date(row.poll_auto_close_at)) : null
     base.autoLaunch = row.poll_auto_launch ?? false
+  }
+  if (row.card_id !== undefined) {
+    base.cardId = row.card_id ?? null
+    base.cardAction = row.card_action ?? null
+    base.cardArgs = row.card_args ?? null
+    base.cardStatus = row.card_status ?? null
+    base.cardExpiresAt = row.card_expires_at
+      ? (row.card_expires_at instanceof Date ? row.card_expires_at : new Date(row.card_expires_at))
+      : null
+    base.cardSchemaVersion = row.card_schema_version ?? null
+    base.cardResult = row.card_result ?? null
+    base.cardProposerPlayerId = row.card_proposer_player_id ?? null
   }
   return base
 }
@@ -382,9 +404,14 @@ export class GroupMessageRepository {
       `SELECT gm.id, gm.conversation_id, gm.player_id, gm.sender_name_snapshot, gm.body,
               gm.type, gm.created_at, gm.removed_at, gm.removed_by, gm.metadata,
               p.id AS poll_id, p.target_time, p.closed_at,
-              p.auto_close_at AS poll_auto_close_at, p.auto_launch AS poll_auto_launch
+              p.auto_close_at AS poll_auto_close_at, p.auto_launch AS poll_auto_launch,
+              ac.id AS card_id, ac.action AS card_action, ac.args AS card_args,
+              ac.status AS card_status, ac.expires_at AS card_expires_at,
+              ac.schema_version AS card_schema_version, ac.result AS card_result,
+              ac.proposer_player_id AS card_proposer_player_id
        FROM messaging.group_messages gm
        LEFT JOIN messaging.polls p ON p.message_id = gm.id
+       LEFT JOIN messaging.assistant_cards ac ON ac.message_id = gm.id
        WHERE gm.conversation_id = $1
        ORDER BY gm.created_at ASC, gm.id ASC
        LIMIT $2`,
