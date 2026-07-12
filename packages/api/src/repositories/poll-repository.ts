@@ -371,6 +371,30 @@ export class PollRepository {
   }
 
   /**
+   * Find open (not yet closed) polls in a group — used by propose_poll_vote
+   * (B4.1) to disambiguate which poll a natural-language vote refers to,
+   * the same candidate-matching pattern propose_score uses for opponents.
+   */
+  async findOpenPollsByGroup(
+    groupId: string
+  ): Promise<Array<{ pollId: string; messageId: string; question: string }>> {
+    const res = await this.pool.query(
+      `SELECT p.id, p.message_id, p.question
+       FROM messaging.polls p
+       JOIN messaging.group_messages gm ON gm.id = p.message_id
+       JOIN messaging.conversations c ON c.id = gm.conversation_id
+       WHERE c.group_id = $1 AND p.closed_at IS NULL
+       ORDER BY gm.created_at DESC`,
+      [groupId]
+    )
+    return res.rows.map(r => ({
+      pollId: r.id as string,
+      messageId: r.message_id as string,
+      question: r.question as string,
+    }))
+  }
+
+  /**
    * §0.5 — DSR erasure primitive (legal-critical).
    *
    * Deletes all poll_votes rows where player_id = $1 across all polls.
