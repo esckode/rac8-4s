@@ -86,7 +86,8 @@ describe('propose_score (B2.1)', () => {
     const match = matches[0]
     const askerIsPlayer1 = match.player1_id === asker.id
 
-    const result = await proposeScore(ctx, { opponentName: bob.name, score: '2-1' })
+    // Valid best-of-3 tennis score (parseScore requires a completed match: 2 set-wins)
+    const result = await proposeScore(ctx, { opponentName: bob.name, score: '6-4, 6-3' })
     expect(result.status).toBe('card_posted')
     if (result.status !== 'card_posted') return
 
@@ -94,7 +95,8 @@ describe('propose_score (B2.1)', () => {
     expect(card?.action).toBe('propose_score')
     expect(card?.proposerPlayerId).toBe(asker.id)
     expect(card?.args).toMatchObject({ tournamentId, matchId: match.id })
-    expect(card?.args.score).toBe(askerIsPlayer1 ? '2-1' : '1-2') // normalized to player1-relative
+    // normalized to player1-relative: each set's numbers swap if the asker is player2
+    expect(card?.args.score).toBe(askerIsPlayer1 ? '6-4, 6-3' : '4-6, 3-6')
 
     // ids-only: opponent's name never appears in the stored args
     expect(JSON.stringify(card?.args)).not.toContain(bob.name)
@@ -114,11 +116,11 @@ describe('propose_score (B2.1)', () => {
     const match = matches[0]
     const askerIsPlayer2 = match.player2_id === asker.id
 
-    const result = await proposeScore(ctx, { opponentName: carol.name, score: '3-0' })
+    const result = await proposeScore(ctx, { opponentName: carol.name, score: '6-2, 6-1' })
     expect(result.status).toBe('card_posted')
     if (result.status !== 'card_posted') return
     const card = await cardRepo.getCard(result.cardId)
-    expect(card?.args.score).toBe(askerIsPlayer2 ? '0-3' : '3-0')
+    expect(card?.args.score).toBe(askerIsPlayer2 ? '2-6, 1-6' : '6-2, 6-1')
   })
 
   it('ambiguous: two pending matches whose opponent name matches the query → no card, candidates returned', async () => {
