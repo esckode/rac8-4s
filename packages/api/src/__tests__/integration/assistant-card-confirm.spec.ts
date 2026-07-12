@@ -24,6 +24,7 @@ import { TournamentFactory } from '../factories'
 import { defaultAdultAttestation } from '../factories/player.factory'
 import { AssistantCardRepository } from '../../repositories/assistant-card-repository'
 import { ConversationRepository } from '../../repositories/conversation-repository'
+import { PollRepository } from '../../repositories/poll-repository'
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -39,6 +40,7 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
   let tournamentRepo: TournamentRepository
   let cardRepo: AssistantCardRepository
   let conversationRepo: ConversationRepository
+  let pollRepo: PollRepository
 
   beforeAll(async () => {
     pool = await getTestPool()
@@ -52,6 +54,7 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
     tournamentRepo = new TournamentRepository(pool)
     cardRepo = new AssistantCardRepository(pool)
     conversationRepo = new ConversationRepository(pool as any)
+    pollRepo = new PollRepository(pool)
   })
 
   afterAll(async () => {
@@ -327,6 +330,108 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
       expect(res.status).toBe(403)
       expect((await cardRepo.getCard(card.id))?.status).toBe('pending')
+    })
+  })
+
+  // ── B4.1 — propose_poll / propose_poll_vote confirm dispatch ─────────────────
+
+  describe('propose_poll confirm', () => {
+    it('confirms via the real poll-service, creates the poll, card confirmed', async () => {
+      const alice = await createPlayer('Alice')
+      const groupId = await createGroupWithMembers(alice.id, [])
+      const { card } = await cardRepo.createCard({
+        groupId,
+        proposerPlayerId: alice.id,
+        action: 'propose_poll',
+        args: { question: 'In for tonight?', targetTime: null, autoCloseAt: null, autoLaunch: false, minPlayers: null, launchMatchFormat: null },
+        body: 'Coach drafted a poll.',
+      })
+
+      const aliceToken = await token(alice.id, alice.email)
+      const res = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/confirm`)
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({})
+
+      expect(res.status).toBe(200)
+      expect(res.body.card.status).toBe('confirmed')
+
+      const history = await pollRepo.findOpenPollsByGroup(groupId)
+      expect(history.some(p => p.question === 'In for tonight?')).toBe(true)
+    })
+
+    it('declined question (business-rule rejection at confirm time) → card flips to failed', async () => {
+      const alice = await createPlayer('Alice')
+      const groupId = await createGroupWithMembers(alice.id, [])
+      const { card } = await cardRepo.createCard({
+        groupId,
+        proposerPlayerId: alice.id,
+        action: 'propose_poll',
+        args: { question: '   ', targetTime: null, autoCloseAt: null, autoLaunch: false, minPlayers: null, launchMatchFormat: null },
+        body: 'Coach drafted a poll.',
+      })
+
+      const aliceToken = await token(alice.id, alice.email)
+      const res = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/confirm`)
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({})
+
+      expect(res.status).toBe(200)
+      expect(res.body.card.status).toBe('failed')
+    })
+  })
+
+  describe('propose_poll_vote confirm', () => {
+    it('confirms via the real poll-service, casts the vote, card confirmed', async () => {
+      const alice = await createPlayer('Alice')
+      const groupId = await createGroupWithMembers(alice.id, [])
+      const poll = await pollRepo.createPoll({ groupId, creatorPlayerId: alice.id, question: 'Saturday?' })
+      const { card } = await cardRepo.createCard({
+        groupId,
+        proposerPlayerId: alice.id,
+        action: 'propose_poll_vote',
+        args: { pollId: poll.pollId, choice: 'in' },
+        body: 'Coach drafted a vote.',
+      })
+
+      const aliceToken = await token(alice.id, alice.email)
+      const res = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/confirm`)
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({})
+
+      expect(res.status).toBe(200)
+      expect(res.body.card.status).toBe('confirmed')
+
+      const votes = await pollRepo.getVotes(poll.pollId)
+      expect(votes.tally.in).toBe(1)
+    })
+
+    it('confirm on a poll closed after drafting → card flips to failed, no vote cast', async () => {
+      const alice = await createPlayer('Alice')
+      const groupId = await createGroupWithMembers(alice.id, [])
+      const poll = await pollRepo.createPoll({ groupId, creatorPlayerId: alice.id, question: 'Sunday?' })
+      const { card } = await cardRepo.createCard({
+        groupId,
+        proposerPlayerId: alice.id,
+        action: 'propose_poll_vote',
+        args: { pollId: poll.pollId, choice: 'in' },
+        body: 'Coach drafted a vote.',
+      })
+      await pollRepo.closePoll(poll.messageId, groupId, alice.id)
+
+      const aliceToken = await token(alice.id, alice.email)
+      const res = await request(app)
+        .post(`/player/groups/${groupId}/assistant-cards/${card.id}/confirm`)
+        .set('Authorization', `Bearer ${aliceToken}`)
+        .send({})
+
+      expect(res.status).toBe(200)
+      expect(res.body.card.status).toBe('failed')
+
+      const votes = await pollRepo.getVotes(poll.pollId)
+      expect(votes.tally.in).toBe(0)
     })
   })
 })

@@ -19,6 +19,8 @@ import {
   getTournament,
 } from './tools'
 import { proposeScore } from './propose-score'
+import { proposePoll } from './propose-poll'
+import { proposePollVote } from './propose-poll-vote'
 
 export interface AssistantTurnInput {
   systemPrompt: string
@@ -105,6 +107,43 @@ function buildTools(ctx: AssistantToolContext, onToolRun: () => void) {
       run: async (input: { opponentName: string; score: string; tournamentId?: string }) => {
         onToolRun()
         return JSON.stringify(await proposeScore(ctx, input))
+      },
+    }),
+    betaZodTool({
+      name: 'propose_poll',
+      description:
+        'Draft a poll confirmation card. Call this when the player asks to start a poll or gauge interest (e.g. "poll the group for Saturday"). If a time is mentioned, resolve it to an ISO-8601 UTC instant yourself using the asker\'s timezone and the current time given in your context — targetTime must already be in the future. Omit targetTime for an open-ended poll. Never claim the poll was created: only a card was drafted, which the player must confirm themselves.',
+      inputSchema: z.object({
+        question: z.string(),
+        targetTime: z.string().optional(),
+        autoCloseAt: z.string().optional(),
+        autoLaunch: z.boolean().optional(),
+        minPlayers: z.number().optional(),
+        launchMatchFormat: z.string().optional(),
+      }),
+      run: async (input: {
+        question: string
+        targetTime?: string
+        autoCloseAt?: string
+        autoLaunch?: boolean
+        minPlayers?: number
+        launchMatchFormat?: string
+      }) => {
+        onToolRun()
+        return JSON.stringify(await proposePoll(ctx, input))
+      },
+    }),
+    betaZodTool({
+      name: 'propose_poll_vote',
+      description:
+        'Draft a vote confirmation card for an open poll in this group. Call this when the player tells you their vote in chat (e.g. "I\'m in for Saturday", "put me down as maybe"). Identify the poll by a fragment of its question text. Never claim the vote was recorded: only a card was drafted, which the player must confirm themselves.',
+      inputSchema: z.object({
+        pollQuestion: z.string(),
+        choice: z.enum(['in', 'out', 'maybe']),
+      }),
+      run: async (input: { pollQuestion: string; choice: 'in' | 'out' | 'maybe' }) => {
+        onToolRun()
+        return JSON.stringify(await proposePollVote(ctx, input))
       },
     }),
   ]

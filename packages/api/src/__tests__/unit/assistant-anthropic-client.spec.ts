@@ -9,6 +9,8 @@
  */
 import * as tools from '../../assistant/tools'
 import * as proposeScoreModule from '../../assistant/propose-score'
+import * as proposePollModule from '../../assistant/propose-poll'
+import * as proposePollVoteModule from '../../assistant/propose-poll-vote'
 
 jest.mock('../../assistant/tools', () => ({
   getMyMatches: jest.fn(),
@@ -19,6 +21,14 @@ jest.mock('../../assistant/tools', () => ({
 
 jest.mock('../../assistant/propose-score', () => ({
   proposeScore: jest.fn(),
+}))
+
+jest.mock('../../assistant/propose-poll', () => ({
+  proposePoll: jest.fn(),
+}))
+
+jest.mock('../../assistant/propose-poll-vote', () => ({
+  proposePollVote: jest.fn(),
 }))
 
 const mockToolRunner = jest.fn()
@@ -118,7 +128,7 @@ describe('AnthropicAssistantClient', () => {
       expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0 })
     })
 
-    it('registers the four Phase A read-only tools plus the Phase B propose_score tool', async () => {
+    it('registers the four Phase A read-only tools plus the Phase B propose_* tools', async () => {
       mockToolRunner.mockReturnValue(Promise.resolve({ content: [], usage: {} }))
       const client = new AnthropicAssistantClient({ adapter: 'anthropic', model: 'claude-haiku-4-5' })
       await client.runTurn(turnInput())
@@ -130,6 +140,8 @@ describe('AnthropicAssistantClient', () => {
         'get_bracket',
         'get_tournament',
         'propose_score',
+        'propose_poll',
+        'propose_poll_vote',
       ])
     })
 
@@ -190,6 +202,46 @@ describe('AnthropicAssistantClient', () => {
       const result = await client.runTurn(turnInput())
 
       expect(proposeScoreModule.proposeScore).toHaveBeenCalledWith(ctx, { opponentName: 'Bob', score: '6-4, 6-3' })
+      expect(result.toolRounds).toBe(1)
+    })
+
+    it('the propose_poll tool run() closure delegates to the real propose-poll module', async () => {
+      (proposePollModule.proposePoll as jest.Mock).mockResolvedValue({
+        status: 'card_posted',
+        cardId: 'card-2',
+        messageId: 'msg-2',
+      })
+      mockToolRunner.mockImplementation(async (opts: { tools: Array<{ name: string; run: (i: any) => Promise<string> }> }) => {
+        const proposePollTool = opts.tools.find(t => t.name === 'propose_poll')!
+        const r = await proposePollTool.run({ question: 'In tonight?' })
+        expect(JSON.parse(r)).toEqual({ status: 'card_posted', cardId: 'card-2', messageId: 'msg-2' })
+        return { content: [{ type: 'text', text: 'done' }], usage: {} }
+      })
+
+      const client = new AnthropicAssistantClient({ adapter: 'anthropic', model: 'claude-haiku-4-5' })
+      const result = await client.runTurn(turnInput())
+
+      expect(proposePollModule.proposePoll).toHaveBeenCalledWith(ctx, { question: 'In tonight?' })
+      expect(result.toolRounds).toBe(1)
+    })
+
+    it('the propose_poll_vote tool run() closure delegates to the real propose-poll-vote module', async () => {
+      (proposePollVoteModule.proposePollVote as jest.Mock).mockResolvedValue({
+        status: 'card_posted',
+        cardId: 'card-3',
+        messageId: 'msg-3',
+      })
+      mockToolRunner.mockImplementation(async (opts: { tools: Array<{ name: string; run: (i: any) => Promise<string> }> }) => {
+        const proposePollVoteTool = opts.tools.find(t => t.name === 'propose_poll_vote')!
+        const r = await proposePollVoteTool.run({ pollQuestion: 'Saturday', choice: 'in' })
+        expect(JSON.parse(r)).toEqual({ status: 'card_posted', cardId: 'card-3', messageId: 'msg-3' })
+        return { content: [{ type: 'text', text: 'done' }], usage: {} }
+      })
+
+      const client = new AnthropicAssistantClient({ adapter: 'anthropic', model: 'claude-haiku-4-5' })
+      const result = await client.runTurn(turnInput())
+
+      expect(proposePollVoteModule.proposePollVote).toHaveBeenCalledWith(ctx, { pollQuestion: 'Saturday', choice: 'in' })
       expect(result.toolRounds).toBe(1)
     })
   })

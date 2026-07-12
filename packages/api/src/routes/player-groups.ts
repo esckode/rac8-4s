@@ -1278,6 +1278,40 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           claimed = result.ok
             ? await cardRepo.claimCard(cardId, 'confirmed', { match: result.match })
             : await cardRepo.claimCard(cardId, 'failed', { reason: result.message })
+        } else if (card.action === 'propose_poll') {
+          const args = card.args as {
+            question: string
+            targetTime: string | null
+            autoCloseAt: string | null
+            autoLaunch: boolean
+            minPlayers: number | null
+            launchMatchFormat: string | null
+          }
+          const result = await createPoll(
+            { pollRepo, groupRepo, conversationRepo, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
+            {
+              groupId,
+              playerId: session.playerId,
+              question: args.question,
+              targetTime: args.targetTime ?? undefined,
+              autoCloseAt: args.autoCloseAt ?? undefined,
+              autoLaunch: args.autoLaunch,
+              minPlayers: args.minPlayers ?? undefined,
+              launchMatchFormat: args.launchMatchFormat ?? undefined,
+            }
+          )
+          claimed = result.ok
+            ? await cardRepo.claimCard(cardId, 'confirmed', { poll: result.poll })
+            : await cardRepo.claimCard(cardId, 'failed', { reason: result.message })
+        } else if (card.action === 'propose_poll_vote') {
+          const args = card.args as { pollId: string; choice: 'in' | 'out' | 'maybe' }
+          const result = await castVote(
+            { pollRepo, groupRepo, conversationRepo, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
+            { groupId, pollId: args.pollId, playerId: session.playerId, choice: args.choice }
+          )
+          claimed = result.ok
+            ? await cardRepo.claimCard(cardId, 'confirmed', { vote: result.vote })
+            : await cardRepo.claimCard(cardId, 'failed', { reason: result.message })
         } else {
           return res.status(400).json({ code: 'UNSUPPORTED_ACTION', message: `Unsupported card action: ${card.action}` })
         }
