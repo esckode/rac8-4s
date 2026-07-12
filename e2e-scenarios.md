@@ -2045,3 +2045,111 @@ Then Coach declines (the mock has no write route — mirroring the empty Phase A
 - Playwright: `packages/frontend/e2e/assistant.spec.ts`
 - RTL unit: `packages/frontend/src/components/__tests__/` (assistant message variant, mention picker, settings toggle)
 - Backend: `packages/api/src/assistant/**`, `packages/api/src/workers/assistant-processor.ts`, migration `db/migrations/049_assistant_type_and_group_toggle.sql`
+
+---
+
+## Feature: LLM Assistant (@coach) — Phase B confirmed write actions
+
+> Backend runs `ASSISTANT_ADAPTER=mock` + `JOB_QUEUE=memory` for e2e. `MockAssistantClient` gains
+> a deterministic keyword router for write intents: `beat <name> <x>-<y>` calls the **real**
+> `propose_score` tool; `launch ... session` calls the **real** `propose_casual_launch` tool — so
+> these scenarios exercise the genuine tool validation → card → confirm → route-revalidation path
+> with no model involved (only the NL→intent hop is faked). The model never mutates directly —
+> every write goes through the existing, unmodified route/service at confirm time (design §11
+> B-Q3: mutate-first, then flip).
+
+### Scenario: Score via Coach — card appears, proposer confirms, standings update live
+```
+Given a member has a pending casual match against a named opponent
+When they send "@coach beat Sunil 2-1"
+Then an ActionCard appears in the feed with the parsed score (asker-relative: "You 2 – 1 Sunil")
+  And only the proposer sees an active Confirm button
+When the proposer taps Confirm
+Then the existing score-submission service runs as the confirming player
+  And the card renders "confirmed" (via a card.updated SSE event)
+  And the new score is visible in standings without a page refresh
+```
+
+### Scenario: A second score on another match works identically (repeat-use loop)
+```
+Given the proposer has already confirmed one score via Coach in this session
+When they send "@coach beat <other opponent> <score>" for a different pending match
+Then a new ActionCard appears and confirms exactly as before
+  # proves this is a repeatable loop, not a one-shot demo path
+```
+
+### Scenario: A different member sees the card but cannot confirm it
+```
+Given an ActionCard proposed by member A is visible in the group feed
+When member B (not the proposer) views the same card
+Then member B sees no Confirm button (proposer-only)
+```
+
+### Scenario: Expired card renders inert and Confirm 409s server-side
+```
+Given an ActionCard whose expires_at has passed (aged via a test fixture)
+When the proposer's client renders the card
+Then it renders as expired (computed client-side from expires_at, never a stored status)
+When the proposer nonetheless calls the confirm route directly
+Then the server returns 409 and the card is not mutated
+```
+
+### Scenario: Confirm after the match was already scored elsewhere → failed state
+```
+Given an ActionCard proposing a score for a match
+  And the match gets scored through the normal UI by someone else before the card is confirmed
+When the proposer taps Confirm
+Then the existing score service's own revalidation rejects the duplicate
+  And the card flips to "failed" with the rejection reason (via card.updated)
+  And no second score is recorded
+```
+
+### Scenario: Proposer dismisses a card
+```
+Given an ActionCard proposed by a member
+When the proposer taps Dismiss
+Then the card flips to "cancelled" and renders inert
+  And every group member's view updates live (card.updated)
+```
+
+### Scenario: NEGATIVE — ambiguous score match yields a clarifying question, never a guess
+```
+Given the asker has two pending matches against players named "Sunil"
+When they send "@coach beat Sunil 2-1"
+Then Coach asks a clarifying question naming both candidates
+  And no ActionCard is posted
+```
+
+### Scenario: Casual launch via Coach — poll creator only
+```
+Given a closed availability poll exists in the group, created by member A
+When member A (the poll's creator) sends "@coach launch a session for everyone who voted in"
+Then an ActionCard appears whose CTA opens the existing casual-launch confirmation sheet,
+  pre-filled from the poll's In-voters and the group's default match format
+When member A completes the confirmation sheet
+Then the casual tournament is created (visible in the group's tournament list)
+  And the card renders "confirmed"
+
+Given the same closed poll
+When a different member (NOT the poll's creator) sends the same request
+Then Coach declines politely (draft-time check mirrors the real launch route's poll-creator-only
+  authority) and no card is posted
+```
+
+### Scenario: NEGATIVE — Coach never triggers a push notification
+```
+Given a group with a member whose notify_level is "all"
+When Coach posts a reply, an intro message, or an ActionCard
+Then no messaging.notify job is enqueued for any recipient
+  # assistant rows (type='assistant') are structurally excluded from the notify pipeline
+  # (design §11 B-Q11) — applies retroactively to every Phase A assistant row too
+```
+
+**Implementation (Phase B / B0–B7):**
+- Playwright: `packages/frontend/e2e/assistant-actions.spec.ts`
+- RTL unit: `packages/frontend/src/components/__tests__/ActionCard.spec.tsx`
+- New component: `packages/frontend/src/components/ActionCard.tsx`
+- Backend: `packages/api/src/repositories/assistant-card-repository.ts`,
+  `packages/api/src/services/score-service.ts`, poll create/vote services (extracted from
+  `player-groups.ts`), confirm/cancel/complete routes under `/player/groups`, migration adding
+  `messaging.assistant_cards`
