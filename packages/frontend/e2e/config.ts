@@ -308,6 +308,13 @@ export const SELECTORS = {
   MENTION_AUTOCOMPLETE: '[data-testid="mention-autocomplete"]',
   MENTION_OPTION_ASSISTANT: '[data-testid="mention-option-assistant"]',
 
+  // LLM Assistant (@coach) — Phase B confirmed write actions
+  ACTION_CARD: '[data-testid="action-card"]',
+  ACTION_CARD_STATUS: '[data-testid="action-card-status"]',
+  ACTION_CARD_CONFIRM_BUTTON: '[data-testid="action-card-confirm-button"]',
+  ACTION_CARD_DISMISS_BUTTON: '[data-testid="action-card-dismiss-button"]',
+  ACTION_CARD_LAUNCH_BUTTON: '[data-testid="action-card-launch-button"]',
+
   // Group Settings — P1.4
   GROUP_DETAIL_HEADER: '[data-testid="group-detail-header"]',
   GROUP_SETTINGS_GEAR: '[data-testid="group-settings-gear"]',
