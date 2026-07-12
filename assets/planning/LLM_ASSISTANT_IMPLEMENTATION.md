@@ -6,8 +6,8 @@
 > **read §10 of the design doc before starting; do not relitigate those decisions**).
 
 **Date:** 2026-07-10
-**Status:** ✅ Phase A BUILT (2026-07-11, A0–A9; branch `llm-assistant-design`, not yet merged to
-`main`). Phase B/C below remain plan-only.
+**Status:** ✅ Phase A BUILT (2026-07-11, A0–A9) and Phase B BUILT (2026-07-12, B0–B7; branch
+`llm-assistant-design`, not yet merged to `main`). Phase C below remains plan-only.
 **Method:** TDD-first per CLAUDE.md §4/§11 — every step is a **[RED]** commit (failing tests, run
 them, confirm they fail *for the right reason*) followed by a **[GREEN]** commit (implementation,
 tests pass). E2E scenarios are written to `e2e-scenarios.md` **before** the code (step A0.2).
@@ -725,3 +725,45 @@ when C starts, don't relitigate):
       against the live model (not CI).
 - [x] No prod channel enablement (adapter env + worker-role IAM) — `ASSISTANT_ADAPTER` stays
       unset/mock until the privacy-policy AI clause ships (tracked in BACKLOG.md).
+
+## Definition of done (Phase B)
+
+- [x] All B-steps built with [RED]→[GREEN] commit history (B0–B7, 2026-07-12, branch
+      `llm-assistant-design`).
+- [x] `npm test` (api: 2222 passed / only the pre-existing, unrelated `partial-indexes.spec.ts`
+      query-planner flake fails; frontend: 1257 passed) and `npm run lint` (repo-wide) green.
+- [x] `npm run test:e2e` for `e2e/assistant-actions.spec.ts` — 7/7 passing on chromium + firefox
+      (14/14) against a live dev stack (Postgres + Redis + API, `JOB_QUEUE=memory`,
+      `ASSISTANT_ADAPTER=mock`): score-via-Coach (happy path, repeat-use, proposer-only Confirm,
+      dismiss, ambiguity→clarify) and casual-launch-via-Coach (poll-creator-only draft → sheet →
+      real launch route → tournament created; non-creator polite decline). Re-ran
+      `e2e/assistant.spec.ts` (Phase A) — 16/16 still passing, no regression.
+- [x] Coverage on `packages/api/src/assistant/**` + `services/{poll,score}-service.ts` +
+      `repositories/assistant-card-repository.ts`: statements 94.2%, functions 92.6%, lines
+      94.9% — all ≥85%. Branches 77.3% — short of 85% but a smaller gap than Phase A's 66%, not
+      pursued further for the same reason (scattered edge-case/fallback branches, diminishing
+      returns on a live-model-adjacent feature).
+- [x] Two bugs found and fixed via the live e2e run, neither caught by the mocked unit/integration
+      suites: **(1)** `AssistantCardRepository.createCard()` never emitted an SSE
+      `message.created` event — the established pattern is routes/services emit, not repositories,
+      but no route/service sat between a `propose_*` tool and the card INSERT to do it, so every
+      ActionCard was invisible until the client's next full history re-fetch (which never happens
+      in a normal session). Fixed with a shared `emitCardCreated()` helper all four `propose_*`
+      tools call after `createCard()`; `AssistantToolContext` gained an optional `broadcastBus`.
+      **(2)** `MockAssistantClient`'s `"beat <name> <score>"` router regex only captured a
+      single-word name, so e2e's `createTestUser()` (name "Test User") never matched — made the
+      name capture lazy so it backtracks to the shortest prefix leaving a valid score at the end.
+- [x] Registry wall holds into Phase B: `propose_score`/`propose_poll`/`propose_poll_vote`/
+      `propose_casual_launch` are registered in `AnthropicAssistantClient`'s real tool list but
+      none of them mutate — each only drafts a card via `AssistantCardRepository`; the only
+      mutation paths are the existing, unmodified `submitScore`/`createPoll`/`castVote` services
+      (called from the confirm route) and the existing launch route (called directly by the FE,
+      B5's design). The Phase A `assistant-tools.spec.ts` registry-wall test stayed untouched and
+      valid — it only ever asserted the read-tools module (`tools.ts`) stays `get_`-only, which is
+      still true; `propose_*` tools are registered separately in `assistant-client.ts`.
+- [ ] **Manual smoke against a live model** — NOT done; same A0.1b blocker (no P-AWS workspace) as
+      Phase A. Once available: confirm the model correctly parses NL score reports/poll
+      votes/launch requests into the right tool call, resolves relative times via the timezone
+      context, and asks a clarifying question rather than guessing on genuine ambiguity — the
+      mock-router e2e above proves the tool→card→confirm mechanics end to end, not model behavior.
+- [x] No prod channel enablement — unchanged from Phase A (`ASSISTANT_ADAPTER` stays unset/mock).

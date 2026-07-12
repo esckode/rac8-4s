@@ -77,7 +77,7 @@ describe('buildSystemPrompt', () => {
 describe('loadHelpCorpus', () => {
   it('loads docs/assistant-help.md from the repo', () => {
     const corpus = loadHelpCorpus()
-    expect(corpus).toContain('X-Y')
+    expect(corpus).toContain('per-set game scores')
     expect(corpus.length).toBeGreaterThan(500)
   })
 })

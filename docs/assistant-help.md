@@ -44,8 +44,10 @@ group's live rankings. The **Bracket** tab shows the knockout draw once publishe
 
 ## Submitting scores
 
-- Scores use the format **"X-Y" in sets**, e.g. `2-1` means you won 2 sets and your opponent won
-  1. Each side's number is between 0 and 3, and the score can't be a tie.
+- Scores use **per-set game scores**, comma-separated: e.g. `6-4, 6-3` means you won the first
+  set 6 games to 4 and the second 6 games to 3. Enter every set played — best-of-3, so the match
+  ends once one side has won 2 sets. A set can't be a tie, and the max games per set depends on
+  the sport (7 for tennis; higher for pickleball, badminton, table tennis).
 - In scheduled tournaments, only the **players in the match** can submit its score, and only
   before the group-stage deadline. You can resubmit to correct a mistake while the deadline is
   open.
@@ -137,9 +139,14 @@ scores, standings) always appear in the app in real time regardless of notificat
 
 - Mention **@coach** in a group chat to ask about your matches, standings, deadlines, venues,
   how the app works, or general racket-sport questions.
-- Coach can **only read** — it never changes scores or settings. It sees only what you could
-  see yourself in the app: this group's tournaments plus tournaments you're registered in.
-- Everyone in the group sees Coach's replies, so ask accordingly.
+- Coach can also **draft actions** for you: report a score ("I beat Bob 6-4, 6-3"), start a poll,
+  cast your vote on an open poll, or launch a casual tournament from a poll you created. Coach
+  never does these itself — it drafts a card in the chat that only you can confirm, and nothing
+  happens until you tap Confirm. If your request is ambiguous (e.g. two pending matches against
+  players with similar names), Coach asks which one you mean instead of guessing.
+- Coach sees only what you could see yourself in the app: this group's tournaments plus
+  tournaments you're registered in, and it only ever acts as you — never as anyone else.
+- Everyone in the group sees Coach's replies and any cards it drafts, so ask accordingly.
 - Group owners can turn Coach off (and back on) in group settings.
 - Coach has hourly usage limits per player and per group; if you hit one, it says so and you
   can try again later.

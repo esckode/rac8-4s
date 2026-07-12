@@ -5,10 +5,10 @@
 
 **Date:** 2026-07-10 (drafted + **fully grilled to resolution the same day** — see §10;
 Phase B/C mechanics grilled 2026-07-11 — see §11)
-**Status:** ✅ **Built for Phase A** (2026-07-11, A0–A9 — see
+**Status:** ✅ **Built for Phase A** (2026-07-11, A0–A9) **and Phase B** (2026-07-12, B0–B7 — see
 [LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md); branch `llm-assistant-design`,
-not yet merged to `main`). Phase B (confirm-card writes) and Phase C (proactive) are grilled (§11)
-and expanded in the implementation plan; not yet built. Builds on the community layer
+not yet merged to `main`). Phase C (proactive) is lightly grilled (§11) but not yet planned or
+built. Builds on the community layer
 ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)) and the messaging platform
 ([MESSAGING_DESIGN.md](./MESSAGING_DESIGN.md) §16–§17).
 
