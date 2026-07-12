@@ -199,7 +199,7 @@ export function useGroupMessages(groupId: string, active = false): UseGroupMessa
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ body, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: 'Send failed' }))
