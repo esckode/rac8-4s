@@ -35,12 +35,18 @@ import { getLogger } from '../logger'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
 import { ConversationRepository } from '../repositories/conversation-repository'
 import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-notify-selector'
-import { PollRepository, type PollChoice } from '../repositories/poll-repository'
+import { PollRepository } from '../repositories/poll-repository'
 import { isReservedDisplayName, detectAssistantTrigger } from '../assistant/trigger'
 import { LeaderboardRepository } from '../repositories/leaderboard-repository'
 import { TournamentRepository, GroupRepository as TournamentGroupRepository } from '../db'
 import { AssistantCardRepository } from '../repositories/assistant-card-repository'
 import { submitScore } from '../services/score-service'
+import {
+  createPoll,
+  castVote,
+  CREATE_POLL_ERROR_HTTP_STATUS,
+  CAST_VOTE_ERROR_HTTP_STATUS,
+} from '../services/poll-service'
 
 const INVITE_TTL_SECONDS = 7 * 24 * 3600 // 7 days
 
@@ -726,81 +732,22 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         }
 
         const { question, targetTime, autoCloseAt, autoLaunch, minPlayers, launchMatchFormat } = req.body
-        if (!question || typeof question !== 'string' || !question.trim()) {
-          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'question is required' })
+        const result = await createPoll(
+          { pollRepo, groupRepo, conversationRepo, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
+          { groupId, playerId: session.playerId, question, targetTime, autoCloseAt, autoLaunch, minPlayers, launchMatchFormat }
+        )
+        if (!result.ok) {
+          return res.status(CREATE_POLL_ERROR_HTTP_STATUS[result.code]).json({ code: result.code, message: result.message })
         }
-
-        const parsedTargetTime = targetTime ? new Date(targetTime) : null
-        const parsedAutoCloseAt = autoCloseAt ? new Date(autoCloseAt) : null
-
-        const poll = await pollRepo.createPoll({
-          groupId,
-          creatorPlayerId: session.playerId,
-          question: question.trim(),
-          targetTime: parsedTargetTime,
-          autoCloseAt: parsedAutoCloseAt,
-          autoLaunch: typeof autoLaunch === 'boolean' ? autoLaunch : undefined,
-          minPlayers: typeof minPlayers === 'number' ? minPlayers : undefined,
-          launchMatchFormat: typeof launchMatchFormat === 'string' ? launchMatchFormat : undefined,
-        })
-
-        // Resolve conversation_id for bus emit and notify
-        const conversationId = await conversationRepo.resolveGroupConversation(groupId)
-
-        // Bus emit (SSE) — reuse existing broadcast path
-        if (deps.broadcastBus) {
-          deps.broadcastBus.emit(conversationId, 'message.created', {
-            id: poll.messageId,
-            conversationId,
-            groupId,
-            playerId: session.playerId,
-            type: 'poll',
-            pollId: poll.pollId,
-            question: poll.question,
-            targetTime: parsedTargetTime ?? null,
-            closedAt: null,
-            createdAt: new Date().toISOString(),
-          })
-        }
-
-        // G2.4 notify-on-create: poll type → notify 'all' + 'mentions_polls'
-        if (deps.jobQueue) {
-          const rawMembers = await groupRepo.getGroupMembersForNotify(groupId)
-          const membersForNotify: GroupMemberForNotify[] = rawMembers.map(m => ({
-            playerId: m.playerId,
-            notifyLevel: m.notifyLevel as 'all' | 'mentions_polls' | 'muted',
-            name: m.name,
-          }))
-          const recipientIds = selectNotifyRecipients({
-            members: membersForNotify,
-            messageType: 'poll',
-            body: question.trim(),
-            senderPlayerId: session.playerId,
-          })
-          for (const recipientId of recipientIds) {
-            await deps.jobQueue.add(
-              'messaging.notify',
-              { conversationId, groupId },
-              { jobId: `notify:${conversationId}:${recipientId}` }
-            )
-          }
-        }
-
-        log.info('poll.created', {
-          groupId,
-          pollId: poll.pollId,
-          messageId: poll.messageId,
-          playerId: session.playerId,
-        })
 
         return res.status(201).json({
-          pollId: poll.pollId,
-          messageId: poll.messageId,
-          question: poll.question,
-          autoCloseAt: poll.autoCloseAt ?? null,
-          autoLaunch: poll.autoLaunch,
-          minPlayers: poll.minPlayers ?? null,
-          launchMatchFormat: poll.launchMatchFormat ?? null,
+          pollId: result.poll.pollId,
+          messageId: result.poll.messageId,
+          question: result.poll.question,
+          autoCloseAt: result.poll.autoCloseAt,
+          autoLaunch: result.poll.autoLaunch,
+          minPlayers: result.poll.minPlayers,
+          launchMatchFormat: result.poll.launchMatchFormat,
         })
       } catch (err) {
         next(handleGroupError(err))
@@ -1014,51 +961,20 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         }
 
         const { choice } = req.body
-        const validChoices: PollChoice[] = ['in', 'out', 'maybe']
-        if (!choice || !validChoices.includes(choice as PollChoice)) {
-          return res.status(400).json({
-            code: 'VALIDATION_ERROR',
-            message: `choice must be one of: ${validChoices.join(', ')}`,
-          })
-        }
-
-        const result = await pollRepo.castVote({
-          pollId,
-          playerId: session.playerId,
-          choice: choice as PollChoice,
-        })
-
-        log.info('poll.vote.cast', {
-          groupId,
-          pollId,
-          playerId: session.playerId,
-          choice,
-        })
-
-        // Emit tally update over SSE so all connected members see live tally
-        if (deps.broadcastBus) {
-          try {
-            const votes = await pollRepo.getVotes(pollId)
-            const conversationId = await conversationRepo.resolveGroupConversation(groupId)
-            deps.broadcastBus.emit(conversationId, 'poll.tally.updated', {
-              pollId,
-              tally: votes.tally,
-            })
-          } catch {
-            // Non-fatal — vote was recorded; tally SSE is best-effort
-          }
+        const result = await castVote(
+          { pollRepo, groupRepo, conversationRepo, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
+          { groupId, pollId, playerId: session.playerId, choice }
+        )
+        if (!result.ok) {
+          return res.status(CAST_VOTE_ERROR_HTTP_STATUS[result.code]).json({ code: result.code, message: result.message })
         }
 
         return res.status(201).json({
-          pollId,
-          choice: result.choice,
-          votedAt: result.votedAt,
+          pollId: result.vote.pollId,
+          choice: result.vote.choice,
+          votedAt: result.vote.votedAt,
         })
       } catch (err) {
-        const code = (err as any)?.code
-        if (code === 'POLL_CLOSED') {
-          return res.status(409).json({ code: 'POLL_CLOSED', message: 'Poll is closed' })
-        }
         next(handleGroupError(err))
       }
     }
