@@ -520,11 +520,16 @@ before building.
       Also spot-checked `player-groups`, `group-owner-management`, `group-settings`,
       `casual-tournament`, `poll-cards` for regressions (29 passed, 0 failed, 7 pre-existing
       conditional skips). Did not run the full unrelated e2e suite (tournament/auth flows etc.).
-- [x] Coverage on `packages/api/src/assistant/**`: statements 87%, lines 88% (see the A8.2 commit
-      for the per-file table). Branch/function metrics sit below 85%, concentrated in
-      `AnthropicAssistantClient`'s real tool-runner call (`assistant-client.ts:103-130`) — the
-      live-SDK network path, intentionally not unit-tested (would require deep SDK mocking for no
-      real signal); verified manually instead, see the live-model checklist below.
+- [x] Coverage on `packages/api/src/assistant/**` + `assistant-processor.ts`: statements 93.2%,
+      functions 90.3%, lines 95.0% — all ≥85%. Branches 66% — short of 85%, but no longer
+      concentrated in the SDK network path: `AnthropicAssistantClient.runTurn()` itself is now
+      covered by mocking the `@anthropic-ai/sdk` / `@anthropic-ai/aws-sdk` client constructors
+      (no network) while using the real `betaZodTool` wrapper, so every tool's `run()` closure is
+      exercised exactly as the real tool runner calls it — `assistant-client.ts` alone went from
+      68.75%→98.43% statements, 56%→88% branches. The remaining branch gap is scattered edge-case
+      paths (error branches, `??`/`?.` fallbacks) across `rank-reason.ts`, `tools.ts`,
+      `assistant-service.ts`, and `assistant-processor.ts` — not pursued further as diminishing
+      returns on a live-model-adjacent feature.
 - [x] Two bugs found and fixed via this e2e run (both real, both pre-dated or were introduced by
       Phase A, neither caught by unit/integration tests against the in-memory fakes):
       **(1)** the design's literal `jobId: 'assistant:<messageId>'` 500s every request against
