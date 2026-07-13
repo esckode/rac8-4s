@@ -27,6 +27,7 @@ export async function registerAssistantSweepJobs(options: AssistantSweepSchedule
 
   const nudgeQueue = new Queue('assistant.nudge.sweep', { connection, prefix })
   const recapQueue = new Queue('assistant.recap.sweep', { connection, prefix })
+  const digestQueue = new Queue('assistant.digest', { connection, prefix })
 
   try {
     // Hourly, on the hour, UTC.
@@ -48,8 +49,19 @@ export async function registerAssistantSweepJobs(options: AssistantSweepSchedule
         jobId: 'assistant.recap.sweep.hourly',
       }
     )
+
+    // Weekly: Sunday 18:00 UTC (C-Q11).
+    await digestQueue.add(
+      'assistant.digest',
+      {},
+      {
+        repeat: { pattern: '0 18 * * 0', utc: true },
+        jobId: 'assistant.digest.weekly',
+      }
+    )
   } finally {
     await nudgeQueue.close()
     await recapQueue.close()
+    await digestQueue.close()
   }
 }
