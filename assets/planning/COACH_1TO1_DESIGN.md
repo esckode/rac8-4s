@@ -110,6 +110,41 @@ stale-memory embarrassment in front of the group); in a 1:1 it becomes tractable
   remember (preferences yes; inferences about skill/behavior no — boundary needs writing
   down); staleness (memories rot — surface age? prompt to re-confirm?).
 
+### 5.1 State architecture — does 1:1 need long-term state, and how?
+
+Strictly no for v1 — but 1:1 coaching is the first surface where cross-session state has real
+product value, so the approach is chosen deliberately here rather than inherited from Q13 by
+default. "State" is four layers with different answers:
+
+1. **Conversation continuity — free.** The 1:1 thread is durable message rows; replaying the
+   last N into each turn (the Q13 mechanism) covers within-session and cross-day continuity
+   with zero stored state. It works *better* than in group chat: no interleaved chatter, so
+   the same window covers far more coaching ground.
+2. **Performance trajectory — not LLM state at all.** "Has my tiebreak record improved?" is
+   answered by querying match data at turn time via the tools (better still once P11
+   trends/snapshots exist) — the rank_reason philosophy: **derive, don't remember**. Most of
+   what users would perceive as "Coach remembers my progress" needs zero stored state.
+3. **Personal facts — the §5 memory store.** Stable, player-consented facts. Already designed.
+4. **Conversational arc across weeks** ("last month we worked on your net game — how's it
+   going?") — the only layer with a genuinely open choice once the thread outgrows the window:
+
+| Option | Mechanism | Verdict |
+|---|---|---|
+| **A. Bigger window (v1 choice)** | Raise the 1:1 replay window (~40–60 messages; single-topic threads make this go far). Input-token cost only; zero new data class; fully Q13-consistent | **Ship v1 with this** |
+| **B. Goal objects (first upgrade)** | Remember *commitments*, not conversation: Coach proposes "Set a goal: …?" → confirm card → typed `player_goals` row (goal, status, created_at), injected each turn. Same consent/inspect/erase properties as §5 memory — a second memory category with a lifecycle. Captures most cross-week value ("how's the thing we were working on?") | **Adopt when usage shows cross-week re-engagement** |
+| **C. Rolling LLM-written summary** | Model updates a compact thread summary every K turns, injected in place of scrolled-out history. The industry pattern for long-running assistants — but it is **auto-extraction by another name**: silently-written LLM prose about a person (conflicts with the consent posture), a new DSR row nobody reviewed, and a Haiku-quality drift risk where a wrong summary poisons every later turn. If ever adopted: player-visible, clearable, regenerable, its own data class | **Deferred behind evidence that A+B are exhausted** |
+| **D. RAG / embeddings over history** | Vector retrieval over the full thread. Wrong tool at this scale — threads are hundreds of messages at most; a vector store is a new infra class dominated by A–C | **Rejected** |
+
+Non-option, named to kill a false assumption: **the vendor provides no state.** The Anthropic
+API is stateless per request; the prompt cache is a 5-minute, exact-bytes cost optimization —
+it is not memory and cannot be bent into it. All state is ours to store, consent, inject, and
+erase.
+
+**V1 stance: layers 1+2+3 (bigger window + data-derived trends + consented memory) — no new
+state mechanism beyond §5. First upgrade: B. C held behind evidence. D dropped.**
+**Grill:** window size N (token cost vs continuity); whether B ships in v1 or waits for the
+re-engagement signal; the K/visibility rules for C *if* it is ever revisited.
+
 ## 6. Non-goals (v1)
 
 - No proactive 1:1 messages (Coach never initiates the private conversation — Phase C's
