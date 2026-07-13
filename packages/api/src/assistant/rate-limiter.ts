@@ -89,4 +89,14 @@ export class AssistantRateLimiter {
   async recordSpend(usd: number): Promise<void> {
     await this.store.incrementBy(this.budgetKey(), Math.round(usd * MICRO), BUDGET_TTL_SECONDS)
   }
+
+  /**
+   * Budget-only check for proactive sweeps (recap polish, T3.3): no asker, so
+   * the per-player/group hourly counters this.check() bumps don't apply —
+   * just the global daily kill-switch.
+   */
+  async hasBudgetRemaining(estimatedTurnUsd: number = DEFAULT_TURN_ESTIMATE_USD): Promise<boolean> {
+    const spentMicro = await this.store.incrementBy(this.budgetKey(), 0, BUDGET_TTL_SECONDS)
+    return spentMicro / MICRO + estimatedTurnUsd <= this.opts.dailyBudgetUsd
+  }
 }

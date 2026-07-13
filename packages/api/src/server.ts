@@ -23,6 +23,7 @@ import { selectAssistantClient } from './assistant/assistant-client-factory'
 import { AssistantRateLimiter, ASSISTANT_HOURLY_LIMITS } from './assistant/rate-limiter'
 import { selectRateLimitStore } from './middleware/rate-limit-store'
 import { processAssistantReply } from './workers/assistant-processor'
+import { processRecapSweep as runRecapSweep } from './workers/recap-processor'
 import type { AssistantJobPayload } from './assistant/assistant-service'
 
 const log = getLogger('server')
@@ -89,6 +90,7 @@ async function main() {
     // assistant.reply; the in-memory queue has no consumer, so wire the
     // inline processor for single-process dev/e2e.
     let processAssistantJob: ((payload: AssistantJobPayload) => Promise<void>) | undefined
+    let processRecapSweep: (() => Promise<void>) | undefined
     if (config.redis.jobQueue !== 'bullmq') {
       const assistantDeps = {
         pool,
@@ -101,6 +103,13 @@ async function main() {
         broadcastBus,
       }
       processAssistantJob = payload => processAssistantReply(payload, assistantDeps)
+      processRecapSweep = () =>
+        runRecapSweep({
+          pool,
+          client: assistantDeps.client,
+          rateLimiter: assistantDeps.rateLimiter,
+          broadcastBus: assistantDeps.broadcastBus,
+        })
     }
 
     // Create Express app (health route is inside createApp)
@@ -115,6 +124,7 @@ async function main() {
       redis: redisClient,
       standingsCache,
       processAssistantJob,
+      processRecapSweep,
     })
 
     // Create HTTP server

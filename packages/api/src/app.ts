@@ -126,6 +126,13 @@ export interface AppDependencies {
     playerId: string
     body: string
   }) => Promise<void>
+  /**
+   * In-memory-queue trigger for the Phase C recap sweep, wired the same way
+   * as processAssistantJob (needs an AssistantClient + rate limiter, neither
+   * of which otherwise lives on AppDependencies). Only used by the
+   * NODE_ENV!=production /test/recap-sweep e2e trigger.
+   */
+  processRecapSweep?: () => Promise<void>
 }
 
 export function createApp(deps: AppDependencies): Express {
@@ -309,6 +316,21 @@ export function createApp(deps: AppDependencies): Express {
           jobQueue: appDeps.jobQueue,
           broadcastBus: appDeps.broadcastBus,
         })
+        return res.json({ ok: true })
+      } catch (err) {
+        return res.status(500).json({ error: String(err) })
+      }
+    })
+
+    // Test-only endpoint — runs the Phase C recap sweep synchronously so e2e
+    // can drive it without waiting on a real hourly BullMQ cron tick.
+    // Disabled in production to prevent auth bypass.
+    app.post('/test/recap-sweep', async (_req: Request, res: Response) => {
+      try {
+        if (!appDeps.processRecapSweep) {
+          return res.status(500).json({ error: 'processRecapSweep not wired (JOB_QUEUE=bullmq mode?)' })
+        }
+        await appDeps.processRecapSweep()
         return res.json({ ok: true })
       } catch (err) {
         return res.status(500).json({ error: String(err) })

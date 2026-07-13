@@ -18,7 +18,7 @@ export interface AssistantSweepSchedulerOptions {
 }
 
 /**
- * Register the hourly nudge-sweep repeatable job.
+ * Register the hourly nudge-sweep and recap-sweep repeatable jobs.
  * Idempotent: safe to call multiple times (e.g. from N workers at boot).
  */
 export async function registerAssistantSweepJobs(options: AssistantSweepSchedulerOptions): Promise<void> {
@@ -26,6 +26,7 @@ export async function registerAssistantSweepJobs(options: AssistantSweepSchedule
   const connection = { url: redisUrl } as any
 
   const nudgeQueue = new Queue('assistant.nudge.sweep', { connection, prefix })
+  const recapQueue = new Queue('assistant.recap.sweep', { connection, prefix })
 
   try {
     // Hourly, on the hour, UTC.
@@ -37,7 +38,18 @@ export async function registerAssistantSweepJobs(options: AssistantSweepSchedule
         jobId: 'assistant.nudge.sweep.hourly',
       }
     )
+
+    // Same hourly tick as the nudge sweep (design §11 C0).
+    await recapQueue.add(
+      'assistant.recap.sweep',
+      {},
+      {
+        repeat: { pattern: '0 * * * *', utc: true },
+        jobId: 'assistant.recap.sweep.hourly',
+      }
+    )
   } finally {
     await nudgeQueue.close()
+    await recapQueue.close()
   }
 }

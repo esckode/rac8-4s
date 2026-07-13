@@ -22,6 +22,7 @@ import { processPartitionEnsure, processPartitionPurge } from './workers/partiti
 import { processMessagingNotify } from './workers/notify-processor'
 import { processAssistantReply } from './workers/assistant-processor'
 import { processNudgeSweep } from './workers/nudge-processor'
+import { processRecapSweep } from './workers/recap-processor'
 import { registerAssistantSweepJobs } from './assistant/sweep-scheduler'
 import { BullMQJobQueue } from '@worker/bullmq-queue'
 import { PartitionManager } from './services/partition-manager'
@@ -176,6 +177,19 @@ async function main() {
         await processNudgeSweep({
           pool,
           jobQueue: assistantJobQueue,
+          broadcastBus: assistantDeps.broadcastBus,
+        })
+      },
+    }),
+
+    createWorker({
+      queueName: 'assistant.recap.sweep',
+      redisUrl: REDIS_URL!,
+      processor: async () => {
+        await processRecapSweep({
+          pool,
+          client: assistantDeps.client,
+          rateLimiter: assistantDeps.rateLimiter,
           broadcastBus: assistantDeps.broadcastBus,
         })
       },

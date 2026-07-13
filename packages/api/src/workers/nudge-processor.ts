@@ -22,11 +22,11 @@ import type { IBroadcastBus } from '../broadcast-bus'
 import { GroupRepository as StageGroupRepository, GroupMatchRow } from '../db'
 import { GroupRepository as PlayerGroupRepository } from '../repositories/group-repository'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
+import { MAX_PROACTIVE_POSTS_PER_DAY, proactiveMarkerExists, proactivePostsToday } from '../assistant/proactive-marker'
 import { getLogger } from '../logger'
 
 const log = getLogger('nudge-processor')
 
-const MAX_PROACTIVE_POSTS_PER_DAY = 2
 const TERMINAL_STATUSES = ['completed', 'tournament_complete', 'abandoned']
 
 interface Milestone {
@@ -110,29 +110,6 @@ async function findUnscoredMatchNames(
   return results
 }
 
-async function proactivePostsToday(pool: Pool, groupId: string, todayStartUtc: Date): Promise<number> {
-  const res = await pool.query(
-    `SELECT COUNT(*) AS count
-     FROM messaging.group_messages gm
-     JOIN messaging.conversations c ON c.id = gm.conversation_id
-     WHERE c.group_id = $1 AND gm.type = 'assistant' AND gm.metadata->>'nudge' IS NOT NULL
-       AND gm.created_at >= $2`,
-    [groupId, todayStartUtc]
-  )
-  return Number(res.rows[0].count)
-}
-
-async function nudgeMarkerExists(pool: Pool, groupId: string, marker: string): Promise<boolean> {
-  const res = await pool.query(
-    `SELECT 1 FROM messaging.group_messages gm
-     JOIN messaging.conversations c ON c.id = gm.conversation_id
-     WHERE c.group_id = $1 AND gm.type = 'assistant' AND gm.metadata->>'nudge' = $2
-     LIMIT 1`,
-    [groupId, marker]
-  )
-  return res.rows.length > 0
-}
-
 export async function processNudgeSweep(deps: NudgeSweepDeps): Promise<void> {
   const { pool, jobQueue, broadcastBus, now = new Date() } = deps
   const stageGroupRepo = new StageGroupRepository(pool as any)
@@ -166,7 +143,7 @@ export async function processNudgeSweep(deps: NudgeSweepDeps): Promise<void> {
       if (hoursRemaining > milestone.hours) continue
 
       const marker = `${milestone.markerPrefix}:${tournamentId}`
-      if (await nudgeMarkerExists(pool, groupId, marker)) continue
+      if (await proactiveMarkerExists(pool, groupId, marker)) continue
 
       const pendingMatches = await findUnscoredMatchNames(stageGroupRepo, tournamentId, row.match_format)
       if (pendingMatches.length === 0) continue
