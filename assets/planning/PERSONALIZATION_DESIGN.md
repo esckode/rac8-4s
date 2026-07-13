@@ -23,12 +23,12 @@ creating personal-data surfaces we can't erase, export, or explain.
 Two layers, one list:
 
 - **App layer** — new per-player data and behavior (preferences, personal digests, trends,
-  availability, Coach memory, ratings).
+  availability, ratings).
 - **UI layer** — the same shared data, rendered self-centered (anchoring, badges, quick actions,
   themes).
 
 **Compliance rule inherited from the assistant work (non-negotiable):** every item that creates a
-new durable per-player data class (P0, P9, P11, P12, P13, P14) must settle its **DSR export +
+new durable per-player data class (P0, P9, P11, P12, P13) must settle its **DSR export +
 erasure story at grill time, not retrofit it** — the `assistant_cards` precedent (design §11
 B-Q10: ids-only where possible, cascade the rest).
 
@@ -53,8 +53,7 @@ parallel with anything.
 | P10 | Persisted display preferences (theme, density, text size, motion) | App+UI | M | P0 |
 | P11 | Standings snapshots → personal trends | App | M | — |
 | P12 | Availability preferences (Coach-aware) | App | M | P0 |
-| P13 | Opt-in Coach memory | App | L | P0 pattern; own grill |
-| P14 | Skill ratings | App | L | P11; own grill |
+| P13 | Skill ratings | App | L | P11; own grill |
 
 ### P0 — Player preferences store *(foundation, do first)*
 
@@ -164,17 +163,7 @@ Thursday"). New read-only tool input for Coach — the registry wall is unaffect
 **Grill:** granularity (day-part vs hour grid); visibility (do other members see your
 availability, or only aggregates?); staleness (availability rots — prompt to refresh?).
 
-### P13 — Opt-in Coach memory *(app, L — needs its own grill session)*
-
-The Q13 deferral, done properly: per-player opt-in memory ("prefers morning matches"),
-inspectable ("@coach what do you know about me?"), a forget command, DSR
-export/erasure wired in from day one. The biggest personalization jump available — Coach
-answers reflect *who's asking* — and the biggest new obligation.
-**Grill (own session):** consent UX; what Coach may write vs what the player dictates; memory
-size caps; group-visible replies leaking private preferences (the Q5/Q6 privacy class again);
-retention.
-
-### P14 — Skill ratings *(app, L — needs its own grill session)*
+### P13 — Skill ratings *(app, L — needs its own grill session)*
 
 ELO-style rating from match history → balanced round-robin seeding, "upset" callouts in
 recaps, fairer social-mixer pairings.
@@ -192,5 +181,19 @@ per-sport vs global; cold-start; whether this contradicts the community layer's 
    pages. The app has group settings but (verify at grill time) no player-settings surface.
 3. **Sequencing checkpoint.** Same C-Q5 lesson: P2/P3/P6 change how shared surfaces look for
    everyone. Ship the foundation tier (P0–P5), checkpoint on reception, then continue.
-4. **Scope discipline.** P13/P14 are flagged L and "own grill" — they should not ride along
-   with the S/M tiers; each is a design doc of its own if pursued.
+4. **Scope discipline.** P13 is flagged L and "own grill" — it should not ride along with the
+   S/M tiers. Coach memory was removed from this list entirely: it belongs to the 1:1 Coach
+   surface (§4), where its worst privacy problems don't exist.
+
+## 4. Later phase — 1:1 Coach
+
+A private per-player Coach conversation for performance improvement, tactics, and strategy —
+the use case the group feed structurally blocks (you can't ask how to beat Bob in a chat Bob
+reads) and the one the persona's name promises. Designed separately in
+[COACH_1TO1_DESIGN.md](./COACH_1TO1_DESIGN.md) (pre-grill draft): it extends the assistant's
+Q2 surface decision rather than this document's preference/UI scope, and it absorbs
+**opt-in Coach memory** (formerly P13 here) as a sub-decision — a 1:1 surface removes the
+public-reply leak class that made standalone memory a poor fit. Sequencing: after this
+document's foundation tier (P0–P5) and its reception checkpoint; it also benefits from P11
+(trends feed data-grounded coaching) and P12 (availability covers the structured half of what
+players would ask Coach to remember).
