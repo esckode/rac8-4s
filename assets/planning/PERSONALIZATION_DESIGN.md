@@ -4,8 +4,9 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-07-13
-**Status:** 📝 DRAFT — **not grilled.** Every item below carries open questions; none is
-build-ready. Builds on the community layer ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)),
+**Status:** 📐 **GRILLED to resolution 2026-07-13** (P0–P12 + §3; see §5 resolution table —
+do not relitigate without new evidence). P13 ratings still needs its own grill; the 1:1 Coach
+later phase (§4) has its own doc. Builds on the community layer ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)),
 the @coach assistant ([LLM_ASSISTANT_DESIGN.md](./LLM_ASSISTANT_DESIGN.md) — Phases A–C merged to
 `main` 2026-07-12/13), and the Task-19 mobile-first frontend architecture
 ([TASK19_DESIGN_SPEC.md](./TASK19_DESIGN_SPEC.md)).
@@ -40,8 +41,8 @@ parallel with anything.
 
 | # | Item | Layer | Effort | Depends on |
 |---|------|-------|--------|-----------|
-| P0 | Player preferences store | App | S | — (foundation) |
-| P1 | Stored player timezone | App | S | P0 |
+| P0 | Player preferences store (`player_settings` table + `/profile` page) | App | S | — (foundation) |
+| P1 | Timezone hierarchy: player (P1a) / group (P1b) / venue (P1c) | App | M | P0; P1b needs P1a |
 | P2 | "You" anchoring in standings & brackets | UI | S | — |
 | P3 | Identity colors/avatars | UI | S | — |
 | P4 | Local-time rendering everywhere | UI | S | P1 |
@@ -57,53 +58,87 @@ parallel with anything.
 
 ### P0 — Player preferences store *(foundation, do first)*
 
-A single per-player preferences surface (one new table or a `preferences JSONB` on the durable
-player record) + GET/PATCH on the player settings route. Everything marked "P0" below stores its
-setting here — one migration, one API shape, one DSR entry instead of five.
-**Grill:** table vs JSONB column; validation strategy per key; does the existing player settings
-surface exist to extend or is this the first one?; DSR export shape.
+A single per-player preferences surface. Everything marked "P0" below stores its setting here —
+one migration, one API shape, one DSR entry instead of five.
+**Decided (2026-07-13):** dedicated **`player_settings` table** — one row per player, **typed
+columns with CHECKs**, `FK → players ON DELETE CASCADE` (one-time DSR wiring: cascade + one
+export entry; every future column inherits it). Chosen over columns-on-players (settings churn
+would land on the hot identity table — ~12 columns by P12) and JSONB (validation drift, key
+rot). **API:** rides the existing `/api/auth` mount — `GET /me` payload gains a `settings`
+block + new `PATCH /api/auth/me/settings`; a `/player/settings` top-level mount would need a
+CloudFront behavior entry (CLAUDE.md §9) for zero benefit. Row is lazily upserted on first
+PATCH; defaults served when absent. **UI:** new **`/profile` page opened from a header
+avatar/gear** — not a bottom tab (tabs are for daily, badged surfaces); verified 2026-07-13
+that no player-settings page or PATCH route exists anywhere (auth has only `GET /me`), so P0
+builds the app's first one. `/profile` is the future home of P9/P10/P12 sections.
 
-### P1 — Stored player timezone *(app, S)*
+### P1 — Timezone hierarchy: player / group / venue *(app, M)*
 
-Phase B already captures the browser IANA timezone on every message POST and discards it after
-the turn (design §11 B-Q6). Persist it in P0 (browser value as default, user-overridable).
-Retires two documented gaps at once: the digest's fixed UTC slot (§11 C-Q3) and the
-relative-time-only workaround in nudges (§11 C-Q8).
-**Grill:** auto-update when the browser tz changes (travel) or sticky until edited?; per-player
-digest delivery vs the group's single slot (interaction with C-Q3's one-post-per-group model —
-a *group* digest can't honor every member's morning; see P10 in §3).
+**Decided (2026-07-13) — a three-level model (user-proposed, adopted). Supersedes assistant
+design §11 B-Q6 (group-tz rejection — predates stored player tz existing), C-Q3 (fixed UTC
+digest slot), and C-Q8's relative-only rule for composed times; dated notes added there.**
+
+- **P1a — Player timezone** (`player_settings.timezone`): Phase B already captures the browser
+  IANA tz on every message POST and discards it — persist it. **Freshness: auto-follow the
+  browser on every login/message until the player sets a tz manually in `/profile`; manual set
+  is sticky, with a "back to automatic" reset.** Personal uses: quiet hours (P9), future
+  personal digest, 1:1 Coach.
+- **P1b — Group timezone** *(dep: P1a)*: **derived as the majority of members' stored
+  timezones, until a group owner pins one** in group settings (the P1a pattern one level up).
+  Used for everything composed *for the group*: **digest timing** — the shipped weekly
+  `0 18 * * 0` cron becomes an **hourly sweep** ("is it Sunday ~09:00 in this group's tz +
+  no ISO-week marker?"; existing dedupe marker prevents doubles; fallback = current UTC slot
+  when no member has a tz; ties break to the earlier zone) — plus **Coach group replies and
+  nudges, which now compose absolute times in group tz** ("deadline Sunday 6pm" — one clock
+  per social space; asker-relative and per-viewer variants rejected since a shared body has
+  many readers).
+- **P1c — Venue timezone** (`locations.timezone`, IANA, set by the organizer with the venue):
+  match schedules and venue-anchored times render in it — everyone is at the courts.
+  Group-linked casual tournaments (no venue) inherit the group timezone. Verified 2026-07-13:
+  no timezone column exists anywhere yet; all three are new columns, pre-launch = no backfill.
+- **FE-rendered timestamps** (standings, deadlines shown in UI) always use the **viewer's
+  browser tz** — the client always knows it, so P4 needs no fallback logic; stored tz is
+  server-side only.
 
 ### P2 — "You" anchoring in standings & brackets *(UI, S, no deps)*
 
 Auto-scroll to and visually pin the viewer's row in standings; center the bracket on the
 viewer's next match (Task-19 is already match-focused); a "you" marker wherever the viewer's
 name appears in shared tables. FE-only; the viewer's identity is already in every page's session.
-**Grill:** pin-row vs highlight-in-place for standings on small screens; design-token treatment.
+**Decided (2026-07-13): highlight + auto-scroll** — on open, the table scrolls the viewer's
+highlighted row into view (~2nd from top so context shows); scrolling away is free. No sticky
+pinned row (duplicated-row confusion + sticky-inside-scroll fiddliness on mobile).
 
 ### P3 — Identity colors/avatars *(UI, S, no deps)*
 
 Deterministic per-player color (hash of player id → token palette) used consistently across chat
 bubbles, standings rows, brackets. Zero configuration, makes every shared surface scannable for
 "where am I / where's Bob".
-**Grill:** color-only vs initials-avatar; collision handling in small groups; accessibility
-(contrast + color-blind-safe palette — must come from design-system tokens, lint gate is total).
+**Decided (2026-07-13): initials avatar + color** — a small circle with deterministic
+background (player-id hash → curated color-blind-safe token palette) + 1–2 initials; initials
+disambiguate the inevitable color collisions in 8+ member groups and carry identity for
+color-blind users. No photo uploads (a storage/moderation/DSR surface explicitly out of scope;
+not pre-built for).
 
 ### P4 — Local-time rendering everywhere *(UI, S, dep: P1)*
 
 Deadlines, poll target times, match schedules rendered in the viewer's stored tz, relative
 phrasing ("in 2 days") demoted to the secondary line. Frontend formatting layer only once P1
 exists.
-**Grill:** fallback when no stored tz (browser tz? UTC with suffix?); does Coach's *reply text*
-also switch to absolute local times (it composes server-side per-asker — feasible since the tz
-now rides the job payload) or stay relative?
+**Decided (2026-07-13):** resolved by the P1 hierarchy — FE-rendered timestamps always use the
+viewer's **browser** tz (no fallback logic needed; stored tz is server-side only); Coach's
+composed prose uses **group tz** in group chat (absolute times — supersedes C-Q8) and player
+tz in the future 1:1 surface. Relative phrasing ("in 2 days") demotes to the secondary line.
 
 ### P5 — "My pending actions" endpoint + tab badges *(app+UI, M, no deps)*
 
 One read-only endpoint aggregating per player: unscored matches they're in, open polls they
 haven't voted in, pending confirm cards only they can act on, nearest deadline. Feeds tab badges
 (counts) and P6/P7. All four facts already exist in the DB; this is aggregation, not new state.
-**Grill:** endpoint shape (one call per app-open vs per-tab); staleness tolerance / SSE refresh;
-badge semantics (count vs dot).
+**Decided (2026-07-13):** one aggregate endpoint fetched on app open + tab re-focus, with
+refetch triggered by the SSE events the client already receives (score submitted, poll
+created/closed, card updated) — no polling loop. Badges are **numeric counts capped at "9+"**
+(counts communicate workload and reward action; dots hide magnitude).
 
 ### P6 — "Up next" strip on landing *(UI, M, dep: P5)*
 
@@ -111,7 +146,10 @@ One glanceable card at the top of the landing screen: next match (opponent, cour
 match awaiting you, nearest deadline, open poll — each deep-linking to its screen. Converts the
 app's most common lookups from three taps to zero; the static sibling of what @coach does
 conversationally.
-**Grill:** placement (landing page vs persistent header); dismissibility; empty-state content.
+**Decided (2026-07-13): top of the landing screen, rendered only when the P5 payload has
+items** — auto-hides when empty (no empty state, no dismissal: dismissing your unscored match
+doesn't unscore it, and the badge shows the count regardless). Not a persistent banner
+(competes with content on every screen it duplicates).
 
 ### P7 — State-aware composer quick chips *(UI, S, dep: P5)*
 
@@ -119,32 +157,50 @@ The mention picker already pins Coach; add suggestion chips above the composer p
 the player's P5 state: "Report score" when a pending match exists (pre-fills the Phase B propose
 flow), "Vote" when a poll is open, a generic "@coach when's my next match?" otherwise. Turns the
 Phase B machinery into one-tap flows with no new backend.
-**Grill:** chip inventory + rotation rules; suppression once used; interaction with the group's
-`assistant_enabled=false` (chips that invoke Coach must hide, mirroring the picker).
+**Decided (2026-07-13): ONE chip, highest applicable priority** — Report score > Vote >
+generic "@coach …" suggestion — disappearing when its state clears (state-driven, no manual
+suppression). Mis-taps are harmless by construction: **chips only pre-fill composer text or
+navigate — they never send and never mutate** (any accidental send at worst drafts a card,
+which is itself confirm-gated: two deliberate actions from any state change). Coach-invoking
+chips hide when the group's `assistant_enabled` is off, mirroring the mention picker.
 
 ### P8 — Small touches *(UI, S)*
 
 Your own vote state visually distinct on poll cards; personalized empty states ("Welcome back —
 2 matches to score" vs generic zero-states); a personal inbox view over the existing
 `NotificationCard`s filtered to "awaiting me" (dep: P5).
-**Grill:** none individually heavy — bundle-grill with P6/P7.
+**Decided (2026-07-13):** settled by extension of P5–P7 patterns — vote-state styling on the
+poll card, empty states fed by the P5 payload, inbox = filter over existing `NotificationCard`s.
 
 ### P9 — Per-event notification prefs + quiet hours *(app, M, deps: P0, P1)*
 
 Split the single notify dial (`all`/`mentions_polls`/`muted`) into per-event-type preferences —
 deadline nudges, digests, chat mentions, cards — plus local quiet hours (needs P1). Player-level
 control complements the owner-level toggles from Phase C (C-Q1's master switch still wins).
-**Grill:** matrix size (keep it small — 4 event types × on/off, not a grid of channels);
-migration path from the existing 3-value dial; where quiet-hours-deferred notifications go
-(drop vs delay — delay needs a scheduler consumer, see the C0 scheduling-reality pin).
+**Decided (2026-07-13):** player-global toggles for the three event classes that actually push
+(chat mentions, polls/announcements, deadline nudges — digests and Coach replies never push per
+B-Q11, so no toggle), **combined with the existing per-group dial by AND** — a push sends only
+if both allow. Purely additive; no dial migration. **Quiet hours drop the push outright** —
+the item stays in badges/strip/inbox (P5 makes every push redundant), and no deferred-delivery
+mechanism gets built (the C0 scheduling-reality lesson); a morning batch of stale pushes was
+rejected.
 
 ### P10 — Persisted display preferences *(app+UI, M, dep: P0)*
 
 Dark mode (token-based design system makes theming feasible), table density, text size, reduced
 motion — stored in P0, applied on login, cross-device.
-**Grill:** dark mode default (follow system?); scope of the first theme pass (chat + standings
-+ nav, not every screen); reduced-motion as an a11y commitment (ties to the TASK7_2 audit);
-whether text size defers to browser/OS settings instead of an in-app control.
+**Decided (2026-07-13) — scope cut (owner's call): the app keeps its single existing theme.**
+No dark mode, no system-following, no time-of-day switching, no theme toggle in v1; a global
+theme preference becomes a future item only when multiple validated themes exist (and is not
+pre-built). P10 v1 shrinks to the **table-density preference** plus code hygiene that isn't a
+setting (rem-based sizing deferring to OS text size; `prefers-reduced-motion` respected).
+**Verification finding (2026-07-13), recorded as known debt for whenever theming happens:** a
+full dark token set exists only in the design-spec sandbox (`src/design/index.html`
+`html[data-mode="dark"]`); the live `styles/tokens.css` has no dark overrides and nothing sets
+`data-mode`; and several shipped components use Tailwind `bg-white`/`bg-black` literals the
+color lint gate doesn't catch — a token remap alone would leave white islands. Any future
+second theme starts with: port sandbox overrides → sweep named-color literals to tokens +
+extend the lint rule → visual audit.
 
 ### P11 — Standings snapshots → personal trends *(app, M, no deps)*
 
@@ -152,16 +208,23 @@ The weekly snapshot store that §11 C-Q11 rejected for the v1 digest — built d
 time. Unlocks: "you're up 2 places" in digests, win/loss streaks, head-to-head records
 ("you're 3–1 vs Bob"), a personal stats view. Compounds with the community layer's durable
 cross-tournament leaderboards.
-**Grill:** snapshot cadence + retention; schema (per-player-per-tournament-per-week rows);
-DSR erasure of snapshot rows; which consumer ships first (digest movement is cheapest).
+**Decided (2026-07-13): weekly, digest-aligned** — the digest sweep itself snapshots each
+group-linked tournament's standings just before composing (one mechanism; "since last digest"
+is literally true). First consumer: **rank movement in the existing group digest**. Retention:
+rows kept while the tournament is live + 90 days after completion. Schema:
+per-player-per-tournament-per-week rows; erasure cascades with the player FK. Streaks/H2H are
+later consumers of the same store.
 
 ### P12 — Availability preferences *(app, M, dep: P0)*
 
 Weekly availability windows per player; Coach's `propose_poll` suggests times that work
 ("Tue evening — 5 of 6 available"), nudges become actionable ("you and Carol are both free
 Thursday"). New read-only tool input for Coach — the registry wall is unaffected (read tool).
-**Grill:** granularity (day-part vs hour grid); visibility (do other members see your
-availability, or only aggregates?); staleness (availability rots — prompt to refresh?).
+**Decided (2026-07-13): weekday × day-part grid** (morning/afternoon/evening — 21 cells,
+thumb-friendly, matches "Tue evenings" thinking) in `/profile`. **Visibility:
+aggregates only** — Coach and members see "5 of 6 free Tue evening", never an individual's
+grid (personal schedule patterns stay private). Staleness: show "last updated" + a gentle
+re-confirm prompt when >60 days old.
 
 ### P13 — Skill ratings *(app, L — needs its own grill session)*
 
@@ -170,17 +233,17 @@ recaps, fairer social-mixer pairings.
 **Grill (own session):** visible vs internal-only ratings (social dynamics of a casual app);
 per-sport vs global; cold-start; whether this contradicts the community layer's casual framing.
 
-## 3. Cross-cutting open questions (grill these before P0)
+## 3. Cross-cutting questions — resolved 2026-07-13
 
-1. **Group digest vs personal delivery.** P1 makes *personal* local-morning delivery possible,
-   but the Phase C digest is one post per group (C-Q3/C-Q11). Does the group digest stay UTC
-   while a P9/P10-era *personal* digest (via the personal notification thread — also the
-   deferred T1.4 catch-up trigger) handles the local-time experience? Recommendation to grill:
-   yes — don't retrofit per-member timing onto a group post.
-2. **Where preferences live in the UI.** A new "My settings" page vs sections inside existing
-   pages. The app has group settings but (verify at grill time) no player-settings surface.
-3. **Sequencing checkpoint.** Same C-Q5 lesson: P2/P3/P6 change how shared surfaces look for
-   everyone. Ship the foundation tier (P0–P5), checkpoint on reception, then continue.
+1. **Group digest timing — RESOLVED (owner's call, against the drafted recommendation):** the
+   group digest is **rescheduled to the group's timezone** (P1b: majority-derived,
+   owner-pinnable; Sunday ~09:00 local via hourly sweep), rather than staying UTC and waiting
+   for a personal digest. The personal digest (+ T1.4 catch-up) remains a 1:1-surface item (§4).
+2. **Preferences UI — RESOLVED by exploration:** no player-settings surface existed anywhere;
+   P0 builds `/profile` (header avatar entry). See P0.
+3. **Sequencing — RESOLVED (owner's call, against the drafted recommendation): no checkpoint —
+   P0–P12 run straight through.** The C-Q5-style reception pause was declined; shared-surface
+   changes (avatars, group-tz digest timing) ship in-line.
 4. **Scope discipline.** P13 is flagged L and "own grill" — it should not ride along with the
    S/M tiers. Coach memory was removed from this list entirely: it belongs to the 1:1 Coach
    surface (§4), where its worst privacy problems don't exist.
@@ -194,6 +257,31 @@ reads) and the one the persona's name promises. Designed separately in
 Q2 surface decision rather than this document's preference/UI scope, and it absorbs
 **opt-in Coach memory** (formerly P13 here) as a sub-decision — a 1:1 surface removes the
 public-reply leak class that made standalone memory a poor fit. Sequencing: after this
-document's foundation tier (P0–P5) and its reception checkpoint; it also benefits from P11
-(trends feed data-grounded coaching) and P12 (availability covers the structured half of what
-players would ask Coach to remember).
+document's foundation tier (P0–P5) — §3.3 declined a reception checkpoint, so 1:1 Coach queues
+behind the P-list rather than a pause; it also benefits from P11 (trends feed data-grounded
+coaching) and P12 (availability covers the structured half of what players would ask Coach to
+remember).
+
+## 5. Grill resolutions (2026-07-13)
+
+Grilled to resolution with the product owner; per-item detail lives inline above. Owner calls
+that went against the drafted recommendation are marked ⚖.
+
+| Q | Decision |
+|---|----------|
+| P0 storage | Dedicated `player_settings` table, typed columns + CHECKs, FK cascade (long-term churn isolated from the hot identity table; one-time DSR wiring) |
+| P0 API/UI | `PATCH /api/auth/me/settings` on the existing mount (no new CloudFront behavior); lazy upsert; new `/profile` page via header avatar — first player-settings surface in the app (verified none existed) |
+| §3.1 digest ⚖ | Group digest reschedules to **group tz** (not stay-UTC-until-personal-digest): hourly sweep, Sunday ~09:00 group-local, UTC fallback, existing ISO-week marker dedupes |
+| P1a player tz | Auto-follow browser until manually set; manual = sticky + reset-to-auto |
+| P1 hierarchy | Three-level model (user-proposed): player / group (majority-derived, owner-pinnable) / venue (`locations.timezone`; casual inherits group tz). Supersedes assistant §11 B-Q6, C-Q3, C-Q8 (dated notes there) |
+| P4 times | FE timestamps in viewer's browser tz; Coach group prose in group tz (absolute); relative phrasing demoted to secondary |
+| P2 anchoring | Highlight + auto-scroll; no sticky pinned row |
+| P3 identity | Initials avatar + deterministic color from color-blind-safe token palette; no photos |
+| P5 pending | One aggregate endpoint; fetch on open/refocus + SSE-triggered refetch; numeric badges capped 9+ |
+| P6 up-next | Top of landing; renders only when non-empty; not dismissible |
+| P7 chips | ONE chip, priority Report score > Vote > generic @coach; pre-fill/navigate only — never sends, never mutates; hidden with `assistant_enabled=false` |
+| P9 notify | Player-global per-event toggles (mentions / polls / nudges) AND per-group dial — both must allow; additive, no dial migration. Quiet hours **drop** the push (P5 is the backstop; no deferred delivery) |
+| P10 theme ⚖ | **Single existing theme only** — no dark mode, no system-follow, no toggle; future global theme pref only when multiple validated themes exist. v1 = table density + code hygiene. Known debt recorded: dark tokens exist only in the design sandbox; `bg-white/black` literals escape the lint gate |
+| P11 snapshots | Weekly, taken by the digest sweep pre-compose; first consumer = rank movement in the group digest; retention live + 90d post-completion |
+| P12 availability | Weekday × day-part grid in `/profile`; **aggregates-only** visibility; re-confirm prompt >60d |
+| §3.3 rollout ⚖ | **No checkpoint** — P0–P12 run straight through |
