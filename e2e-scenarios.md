@@ -2255,3 +2255,139 @@ Then neither produces any assistant message for that tournament
   repeatable job registration in `worker-entrypoint.ts` (`assistant.nudge.sweep`,
   `assistant.recap.sweep` hourly; `assistant.digest` weekly), migration
   `051_assistant_digest_settings.sql` (`player_groups.digest_enabled`)
+
+---
+
+## Feature: Player Personalization (P0–P12)
+
+> Per `assets/planning/PERSONALIZATION_IMPLEMENTATION.md` (S0–S8). Builds on the shipped @coach
+> A–C stack. Backend runs `ASSISTANT_ADAPTER=mock` for the availability-aggregate scenario (12) —
+> same mock-router convention as Phase A/B/C: the NL→intent hop is faked, the tool it calls
+> (`get_group_availability`) is real.
+
+### Scenario: Profile page is reachable from the header avatar and round-trips settings
+```
+Given an authenticated player
+When they click the header avatar/gear
+Then they land on /profile showing their current settings (timezone, density, notify prefs)
+When they change the table-density toggle
+Then PATCH /api/auth/me/settings persists it
+  And reloading /profile shows the new value
+```
+
+### Scenario: NEGATIVE — unauthenticated visitor is redirected away from /profile
+```
+Given no auth token
+When the visitor navigates to /profile
+Then they are redirected to /login (same protected-route behavior as /matches)
+```
+
+### Scenario: Standings auto-scrolls to and highlights the viewer's row
+```
+Given a tournament standings table with the viewer ranked below the fold
+When the viewer opens the Standings tab
+Then their row is highlighted and scrolled into view (~2nd from top)
+  And no row is sticky-pinned once they scroll away
+```
+
+### Scenario: Chat shows initials avatars with stable per-player colors
+```
+Given a group chat with multiple members posting messages
+Then each message row shows a small avatar: 1-2 initials over a deterministic background color
+  And the same player's avatar color is identical across every message and across reloads
+```
+
+### Scenario: Deadlines render in the viewer's browser timezone with relative time secondary
+```
+Given a tournament with a group-stage deadline
+When the viewer (browser tz America/New_York) views it
+Then the primary line shows an absolute time in their browser tz
+  And a relative phrase ("in 2 days") appears as the secondary line
+```
+
+### Scenario: Nav tab badge shows the player's pending count and decreases after acting
+```
+Given a player with 2 unscored matches
+Then the Matches tab shows a badge with count "2"
+When they submit a score for one match through the normal flow
+Then the badge decrements to "1" without a manual refresh (SSE-triggered refetch)
+```
+
+### Scenario: "Up next" strip lists the player's nearest pending item and deep-links to it
+```
+Given a player with an unscored match and no other pending items
+When they open the authenticated home (/browse)
+Then an up-next strip appears at the top naming the match
+  And tapping it deep-links to the match's tournament page
+Given a player with nothing pending
+Then no strip renders (no empty state, not dismissible)
+```
+
+### Scenario: Composer chip pre-fills a score report and disappears once scored
+```
+Given a player with a pending match against a named opponent
+When they open the group chat composer
+Then a single "Report score" chip is shown
+When they tap it
+Then the composer pre-fills "@coach beat <opponent> " without sending
+When that match is later scored
+Then the chip no longer appears
+Given the group's assistant is disabled
+Then no Coach-invoking chip appears at all
+```
+
+### Scenario: Nudge body contains an absolute group-local time
+```
+Given a group whose members' stored timezones derive an effective group timezone
+  And a tournament 47 hours from its deadline with an unscored match
+When the nudge sweep runs
+Then the nudge names the match and includes an absolute time in the group's local timezone
+  ("deadline Sun 6:00pm"), with relative phrasing only as a secondary detail
+```
+
+### Scenario: Weekly digest fires at the group's local Sunday morning and includes rank movement
+```
+Given a group whose effective timezone is seeded
+  And a prior week's standings snapshot exists showing a different rank for a player
+When the digest sweep runs at the group-local Sunday ~09:00 hour
+Then one digest posts
+  And it includes a rank-movement line ("Alice ↑2 to 1st") for the player whose rank changed
+When the sweep runs again the same iso-week
+Then no second digest posts
+```
+
+### Scenario: NEGATIVE — a player's pending-actions payload never contains another player's items
+```
+Given player A has an unscored match against player B
+When player A requests GET /api/auth/me/pending-actions
+Then the response includes A's own pending match
+  And it never includes any item scoped to player B alone
+```
+
+### Scenario: Availability aggregates never reveal who is free
+```
+Given two group members have set their weekly availability grid in /profile
+When a member asks "@coach when can we play?"
+Then Coach's reply cites only aggregate counts ("5 of 6 free Tue evening")
+  And neither player's name is tied to any specific slot
+```
+
+### Scenario: A quiet-hours player gets no push but the item still appears in their badge/strip
+```
+Given a player has quiet hours configured covering the current time
+  And a deadline nudge would otherwise notify them as an affected player
+When the nudge sweep runs
+Then no messaging.notify job is enqueued for that player
+  And the pending item still appears in their own tab badge and up-next strip
+```
+
+**Implementation (P0–P12 / S0–S8):**
+- Playwright: `packages/frontend/e2e/profile.spec.ts`, `packages/frontend/e2e/personalization-ui.spec.ts`
+- Backend: `packages/api/src/repositories/player-settings-repository.ts`, `packages/api/src/routes/auth.ts`
+  (`GET /me` settings block, `PATCH /me/settings`, `GET/PUT /me/availability`,
+  `GET /me/pending-actions`), `packages/api/src/services/pending-actions-service.ts`,
+  `packages/api/src/assistant/tools.ts` (`get_group_availability`), digest/nudge processor
+  reworks, migrations `052`–`056`
+- Frontend: `pages/Profile.tsx`, `shared/Avatar.tsx`, `shared/formatLocal.ts`,
+  `hooks/usePendingActions.ts`, `ResponsiveLayout.tsx` (badges, avatar entry),
+  `BrowseTournaments.tsx` (up-next strip), `GroupChatPanel.tsx` (composer chip)
