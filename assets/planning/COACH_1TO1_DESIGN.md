@@ -145,6 +145,66 @@ state mechanism beyond §5. First upgrade: B. C held behind evidence. D dropped.
 **Grill:** window size N (token cost vs continuity); whether B ships in v1 or waits for the
 re-engagement signal; the K/visibility rules for C *if* it is ever revisited.
 
+### 5.2 `propose_remember` on the Phase B card machinery — mapping, reuse, deviations
+
+The Phase B pattern (shipped, assistant design §4 + §11): `propose_*` tools never mutate —
+they validate as the asker and create a card (`assistant_cards` row + assistant message with
+human-readable `body`); the mutation runs only on the proposer's Confirm tap, **mutate-first**
+through the same service the normal UI uses, then an atomic `pending→confirmed` flip
+(`UPDATE … WHERE status='pending'` — no double-mutation on replay/race); `card.updated`
+live-patches all clients; dismiss → `cancelled`; expiry computed from `expires_at`, never
+stored; prompt rule *"never claim an action happened — the card does it."*
+
+**Why it fits memory:** the card pattern is a consent machine, and consent is memory's hard
+problem. Each memory is individually approved (no silent auto-extraction, structurally); the
+confirmed card is a **standing audit record of exactly what was consented and when**; the
+15-minute expiry kills stale proposals; the atomic flip prevents duplicate rows; the prompt
+rule stops Coach acting as if it remembered something unconfirmed. Flow: player (or Coach's
+offer) → `propose_remember({text})` → draft validation as asker (opt-in on, cap has room,
+length limit, near-duplicate check) → card *"Coach wants to remember: '…'. Only you can
+confirm."* → Confirm → memory service inserts the `player_memories` row → flip → confirmed
+card. Cap re-checked at confirm (revalidation is the authority) → `failed` + reason if it
+filled meanwhile. **Forget needs no card** — deleting your own memory is the low-stakes
+direction (the same logic as the design's poll-vote relaxation note); the settings-list
+delete button is the vehicle.
+
+**Reused unchanged:** `assistant_cards` table + repository (`createCard`/`claimCard`
+atomicity), lifecycle + computed expiry, `card.updated` event path, the `ActionCard` FE shell
+(new variant, same states), confirm/cancel route skeleton, `MockAssistantClient` router
+pattern for deterministic e2e, the prompt rule.
+
+**Deviations — the genuine new work (1 is decided; 2 remains a grill item):**
+1. **Scope generalization — decided (2026-07-13): key cards on `conversation_id NOT NULL`,
+   not a nullable `group_id`.** Everything Phase B built is group-scoped; the 1:1 thread is a
+   `personal` conversation with no group. A *nullable* `group_id` was considered and rejected:
+   erasure mechanics wouldn't break (the DSR cascade finds cards by `proposer_player_id`,
+   group-blind), but "NULL = personal scope" becomes load-bearing semantics — the same class
+   of NULL-marker the codebase already paid for once (`player_id=NULL` = DSR tombstone, the
+   reason Q3 bought an explicit `type='assistant'`) — and every future group-keyed
+   retention/moderation/purge query (`WHERE group_id = …`) would **silently exclude** personal
+   cards: a quiet compliance blind spot, doubly bad given #7 contemplates a distinct retention
+   window for coaching content. Instead: `assistant_cards.conversation_id NOT NULL`
+   (FK → `messaging.conversations`, which already models both scopes — `type='group'` and the
+   046 `type='personal'`); scope is derived from `conversations.type`, explicitly; retention
+   sweeps get a first-class handle; a denormalized `group_id` may be kept for the existing
+   group-route auth checks (denormalized-but-never-authoritative is fine; nullable-and-
+   load-bearing was the thing to avoid). **The system is not live, so this is a schema change
+   to the existing `assistant_cards` table, not a migration-with-backfill.** The confirm/cancel
+   routes still need a personal-scope sibling (Phase B plumbing is touched — regression
+   surface on shipped group cards). **Required test:** a [RED] erasure test seeded with a
+   personal-scope card, asserting the cascade tombstones/scrubs it — the blind-spot class is
+   guarded by a test, not convention (the A9.3 playbook applied to the new scope).
+2. **The ids-only args rule breaks, deliberately.** B-Q10's posture was "args carry ids, never
+   prose — nothing to scrub." `propose_remember`'s args *are* personal prose (the text is the
+   thing being consented). The DSR erasure cascade must therefore explicitly cover
+   `assistant_cards.args` for `action='remember'` rows, plus `player_memories` itself — the
+   one place the pattern's compliance story needs new work instead of inheritance.
+
+The content boundary ("preferences yes, inferences no") stays a prompt-level rule, but the
+card makes every violation **visible and refusable pre-write** — the player sees exactly what
+Coach wants to store before it exists. That's a structural backstop the group surface never
+had.
+
 ## 6. Non-goals (v1)
 
 - No proactive 1:1 messages (Coach never initiates the private conversation — Phase C's
