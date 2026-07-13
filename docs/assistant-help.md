@@ -19,6 +19,12 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   email.
 - Sessions last 24 hours; after that you log in again.
 
+## Your profile
+
+- Tap the **Profile** link in the header to open your personal settings.
+- **Table density** controls how compact standings and other tables render — "Comfortable" or
+  "Compact".
+
 ## Finding and joining tournaments
 
 - **Browse** is public — anyone can see open tournaments and their details without logging in.

@@ -230,7 +230,14 @@ const Header = () => {
     <header className="responsive-header">
       <h1>C.U.At.Court</h1>
       <div className="responsive-header-buttons">
-        <button className="responsive-header-button" aria-label="Open account menu">Account</button>
+        <a
+          href="/profile"
+          data-testid="nav-profile"
+          className="responsive-header-button"
+          aria-label="Open your profile"
+        >
+          Profile
+        </a>
       </div>
     </header>
   )

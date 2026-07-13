@@ -31,4 +31,5 @@ export const ROUTES = {
   TOURNAMENT_MANAGE: '/tournament/:tournamentId/manage',
   REGISTRATION_CONFIRM: '/registrations/:registrationId/confirm',
   NOTIFICATIONS: '/notifications',
+  PROFILE: '/profile',
 }

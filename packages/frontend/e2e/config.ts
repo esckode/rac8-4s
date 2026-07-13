@@ -60,6 +60,9 @@ export const ROUTES = {
   // Invite accept landing (P1.7)
   GROUP_INVITE: (groupId: string, token: string, email: string) =>
     `/groups/${groupId}/invite?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`,
+
+  // Player Personalization P0
+  PROFILE: '/profile',
 }
 
 // ============================================================================
@@ -395,6 +398,11 @@ export const SELECTORS = {
   MATCH_COMPOSE_CLOSE: '[data-testid="match-compose-close"]',
   MATCH_COMPOSE_INPUT: '[data-testid="match-compose-input"]',
   MATCH_COMPOSE_SEND: '[data-testid="match-compose-send"]',
+
+  // Player Personalization (P0)
+  NAV_PROFILE: '[data-testid="nav-profile"]',
+  PROFILE_PAGE: '[data-testid="profile-page"]',
+  DENSITY_SELECT: '[data-testid="density-select"]',
 }
 
 // ============================================================================

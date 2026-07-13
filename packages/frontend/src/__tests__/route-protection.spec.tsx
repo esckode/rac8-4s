@@ -189,6 +189,12 @@ describe('Route Constants', () => {
     expect(ROUTES.STANDINGS).toBe('/standings')
   })
 
+  it('should expose /profile as a protected route (Player Personalization P0)', () => {
+    const { ROUTES } = require('../constants/routes')
+
+    expect(ROUTES.PROFILE).toBe('/profile')
+  })
+
   it('should have home route path', () => {
     const { ROUTES } = require('../constants/routes')
 

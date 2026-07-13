@@ -78,13 +78,15 @@ describe('ResponsiveLayout', () => {
     expect(groupLinks.some(l => l.getAttribute('href') === '/groups')).toBe(true)
   })
 
-  it('has Account button in header', () => {
+  it('has a profile link in the header (Player Personalization P0)', () => {
     renderWithRouter(
       <ResponsiveLayout showHeader>
         <div>Content</div>
       </ResponsiveLayout>
     )
 
-    expect(screen.getByText('Account')).toBeInTheDocument()
+    const profileLink = screen.getByTestId('nav-profile')
+    expect(profileLink).toBeInTheDocument()
+    expect(profileLink.closest('a')).toHaveAttribute('href', '/profile')
   })
 })
