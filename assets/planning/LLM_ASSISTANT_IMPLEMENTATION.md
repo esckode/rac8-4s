@@ -649,27 +649,123 @@ Phase A. Execution order: B0 follow-up → B6 scenario docs → B1 → B2 → B3
     *(b)* a member who did **not** create the poll asking the same gets a polite decline
     (draft-time creator check, matching the G4.5 route authority), no card.
 
-## Phase C — Proactive (outline; full plan when triggered — lightly grilled 2026-07-11, design §11)
+## Phase C — Proactive (T3.1 deadline nudges → T3.3 recap → T3.2 digest)
 
-Templates-first: T3.1 nudges as a 5th scheduler consumer (`@worker/scheduler.ts` pattern —
-see `auto-close-processor.ts`) with deterministic template text; T3.3 recap on
-`tournament_complete` for group-linked tournaments; LLM composition swapped in behind the same
-`AssistantClient` later. Decisions already locked (design §11 C-Q1–C-Q4 — expand into TDD steps
-when C starts, don't relitigate):
+**Status: 📋 PLAN READY (grilled 2026-07-12 — design §11 C-Q1–C-Q12; do not relitigate).**
+Sequencing: C1→C3 ship T3.1, then an **owner-judgment checkpoint** (C-Q5 — Coach's first
+unprompted speech; gauge reception) before C4 (recap) and C5 (digest). Every step TDD
+([RED]→[GREEN]) like Phases A/B.
 
-- **Gating:** `assistant_enabled` is the master switch for **all** Coach output, proactive
-  included — every scheduler consumer checks it. T3.2 digest is additionally per-group opt-in
-  (`digest_enabled`, default OFF) beneath it.
-- **Nudge dedupe:** at most one nudge per (subject, milestone) — idempotency by querying for an
-  existing assistant row with `metadata {nudge: '<type>:<subjectId>'}` (same mechanism as the A4
-  `replyTo` guard; **no new state table**) — plus a per-group proactive cap (≤2 posts/day).
-- **Digest scheduling:** fixed weekly UTC slot; the settings field is `digest_enabled` only.
-  "Group-local morning" delivery needs the group timezone the app deliberately lacks (B0 NL-times
-  note) — documented gap, revisit on user demand.
-- **Budget:** proactive LLM turns draw from the same global `ASSISTANT_DAILY_BUDGET_USD` (one
-  kill-switch stays one kill-switch); per-player/group hourly caps don't apply (no asker) — the
-  daily proactive cap bounds volume. Budget-exhausted proactive turns are **skipped silently**
-  (nobody is waiting on them, unlike mentions) and logged at `warn`.
+### C0 — Context pack (decisions + verified grounding)
+
+- **⚠️ Scheduling reality (verified 2026-07-12):** the only *wired* recurring mechanism is
+  **BullMQ repeatable cron jobs** — `@worker/partition-scheduler` (`registerPartitionJobs`,
+  called from `worker-entrypoint.ts` ~line 64; cron dedupe by repeat key, idempotent
+  registration). `InMemoryScheduler` (`packages/worker/src/scheduler.ts`) exists for tests.
+  **`processAutoCloseSweep` has NO production caller** (only tests invoke it) — do not copy
+  auto-close's wiring; there is none. Copy partition-scheduler's. Flag the auto-close gap in
+  BACKLOG.md (pre-existing, out of assistant scope — C6).
+- **New repeatable jobs** (registered idempotently next to `registerPartitionJobs`):
+  `assistant.nudge.sweep` (hourly, `0 * * * *`), `assistant.recap.sweep` (same hourly tick),
+  `assistant.digest` (weekly, `0 18 * * 0` — Sunday 18:00 UTC, C-Q11). In-memory/dev mode: no
+  repeatable jobs; integration tests call the processors directly, e2e uses a test-only trigger
+  endpoint (the A8 `/test/casual-session` precedent).
+- **Gating (C-Q1):** every sweep checks `assistant_enabled` per group; digest additionally
+  requires `digest_enabled` (migration 051, `BOOLEAN NOT NULL DEFAULT false`).
+- **Nudges (C-Q6–C-Q8):** scheduled, group-linked tournaments with a `group_stage_deadline`
+  only — casual sessions exempt in v1. Milestones 48h + 24h, each once per (tournament,
+  milestone), skipped when nothing is unscored. Dedupe: existing assistant row with
+  `metadata {nudge: 'deadline48:<tournamentId>'}` / `'deadline24:…'` (the A4 replyTo-guard
+  mechanism — no new state table). Body **names the pending matches, neutral tone, relative
+  time only** ("Bob vs Carol — unscored, 2 days left"); never absolute clock times (B-Q6 tz gap).
+- **Targeted notify (C-Q6):** B-Q11 scoped, not repealed — `selectNotifyRecipients` stays
+  `type='assistant'` → ∅ (its regression test untouched); the nudge path **directly enqueues**
+  `messaging.notify` jobs for exactly the players in the named pending matches, respecting
+  `notify_level` (muted silent), reusing the G2.4 job shape + jobId dedupe pattern
+  (`player-groups.ts` ~line 554 shows the enqueue shape).
+- **Recap (C-Q9/C-Q10):** hourly sweep for group-linked tournaments in terminal status
+  (`completed`/`tournament_complete`) with no `{nudge:'recap:<tournamentId>'}` marker — no PATCH
+  hook (transitions happen only via the organizer's generic `PATCH /:id`, no event exists; sweep
+  self-heals and touches zero route code). Template first: winner, top-3 standings, one stat —
+  computed from existing standings repo data (rank_reason philosophy). **LLM polish** only when
+  the adapter is real (not mock) AND daily budget remains: polish input = template + rewrite
+  instruction via the same `AssistantClient`; **any failure → post the template unchanged**
+  (never silent, never double). Polish quality joins the A0.1b-blocked live-model smoke list.
+- **Digest (C-Q11):** weekly per opted-in group — three template sections (results this week,
+  matches pending, nearest upcoming deadline; existing repo queries), **all empty → skip**.
+  Template-only in v1 (no standings-movement diffs — needs a snapshot store, rejected).
+  Weekly dedupe marker `{nudge: 'digest:<groupId>:<isoWeek>'}`.
+- **Cap & budget (C-Q2/C-Q4/C-Q12):** the ≤2 proactive posts/group/day cap **suppresses nudges
+  only** (recap/digest are frequency-bounded by construction); suppressed nudges + budget-skipped
+  polish log at `warn`. Polish turns draw from `ASSISTANT_DAILY_BUDGET_USD`; templates cost $0.
+- **Proactive verbosity (Q16 addendum):** nudge ≤40 words + match list; recap ≤80; digest ≤120.
+  These live in the template code (and the polish instruction), not the reactive system prompt.
+- **Logging:** `assistant.nudged` / `assistant.recapped` / `assistant.digested` at info
+  (`groupId`, `tournamentId` where applicable, `polished: bool`, token usage when polished) —
+  CLAUDE.md §6, no message bodies.
+
+### C1 — Scenario docs FIRST (own commit)
+
+- Add "LLM Assistant — proactive (Phase C)" Gherkin to `e2e-scenarios.md`: *(1)* 48h nudge posts
+  once naming the unscored matches; affected players get a notification, a muted member does
+  not, an unaffected member does not; *(2)* 24h nudge fires independently of 48h (both dedupe);
+  *(3)* nothing unscored → no post; *(4)* `assistant_enabled=false` → no proactive output of any
+  kind; *(5)* sweep runs twice → one post (idempotency); *(6)* third nudge in a day is
+  cap-suppressed; *(7)* completed group-linked tournament → one recap with winner + top-3;
+  re-sweep → no duplicate; *(8)* digest posts for an opted-in group with activity, is skipped
+  for an empty week, never posts for a non-opted group; *(9)* NEGATIVE: a non-group-linked
+  tournament is never nudged or recapped.
+
+### C2 — Migration 051 + digest settings surface
+
+- **C2.1 [RED]** Integration: `player_groups.digest_enabled` exists, defaults `false`; settings
+  GET returns it; PATCH owner-only round-trip (copy the A6.1 `assistantEnabled` tests).
+- **C2.2 [GREEN]** Migration 051 + settings route extension + `GroupSettings.tsx` toggle
+  (`data-testid="digest-toggle"`, copy the A7.5 pattern; visible only when the assistant master
+  toggle is on).
+
+### C3 — Nudge sweep (T3.1)
+
+- **C3.1 [RED]** Unit + integration tests for `processNudgeSweep(deps)`
+  (`workers/nudge-processor.ts`): 47h-to-deadline seeded tournament → 48h nudge posts (fires
+  when `deadline - now ≤ 48h` and the 48h marker is absent — a late sweep still catches it);
+  23h → 24h nudge; both markers present → nothing; all matches scored → nothing; toggle off →
+  nothing; cap reached → skip + `warn`; casual (no deadline) and non-group-linked → never.
+  Template test: names + relative phrasing, no absolute times, ≤40 words + list.
+- **C3.2 [GREEN]** Processor + repeatable-job registration in `worker-entrypoint.ts` (idempotent,
+  partition-scheduler pattern) + test-only trigger endpoint for e2e.
+- **C3.3 [RED→GREEN]** Targeted notify: enqueue per affected player, `notify_level` respected;
+  assert the B-Q11 selector regression test still passes untouched.
+- **C3.4** E2E `e2e/assistant-proactive.spec.ts` scenarios (1)–(6) via the trigger endpoint.
+  **→ CHECKPOINT (C-Q5): ship T3.1; owner gauges reception before C4/C5.**
+
+### C4 — Recap (T3.3)
+
+- **C4.1 [RED]** Pure-function tests for `buildRecap(standings, matches)` (winner, top-3, one
+  stat; deterministic, ≤80 words). Sweep tests: terminal + group-linked + no marker → posts;
+  marker → skip; polish gate — adapter real + budget → polished body posted; adapter mock →
+  template; polish throws/times out/over budget → template posted, exactly one row either way.
+- **C4.2 [GREEN]** `assistant/recap.ts` + `workers/recap-processor.ts` + registration.
+- **C4.3** E2E scenario (7): organizer PATCHes the seeded tournament to `tournament_complete`,
+  trigger endpoint fires the sweep, recap bubble appears with the seeded winner's name.
+
+### C5 — Digest (T3.2)
+
+- **C5.1 [RED]** Composer tests (`buildDigest`: three sections from seeded week data; all-empty →
+  `null`); job tests: opted-in groups only, iso-week marker dedupe, master toggle respected.
+- **C5.2 [GREEN]** `assistant/digest.ts` + weekly repeatable job.
+- **C5.3** E2E scenario (8).
+
+### C6 — Wrap-up
+
+- BACKLOG.md: flag the pre-existing **auto-close sweep has no production caller** finding
+  (out of assistant scope); flip Phase C status entries.
+- `docs/assistant-help.md`: add that Coach may post deadline reminders, tournament recaps, and
+  weekly digests, and where the toggles live (CLAUDE.md §9 same-change rule).
+- Design doc status → Built for Phase C, same PR as the final merge.
+- DoD: suites + lint green, coverage ≥85% statements on new modules, `assistant.nudged`/
+  `recapped`/`digested` visible in a `LOG_LEVEL=debug` trace, recap-polish live-model check
+  recorded as blocked on A0.1b alongside the A/B smoke items.
 
 ---
 
