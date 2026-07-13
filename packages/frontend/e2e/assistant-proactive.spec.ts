@@ -77,6 +77,16 @@ async function runRecapSweep(): Promise<void> {
   if (!res.ok) throw new Error(`recap-sweep trigger failed: ${await res.text()}`)
 }
 
+async function setDigestEnabled(groupId: string, token: string, enabled: boolean): Promise<void> {
+  const res = await apiCall(`/player/groups/${groupId}`, 'PATCH', { digestEnabled: enabled }, token)
+  if (!res.ok) throw new Error(`digest toggle failed: ${await res.text()}`)
+}
+
+async function runDigestSweep(): Promise<void> {
+  const res = await apiCall('/test/digest-sweep', 'POST')
+  if (!res.ok) throw new Error(`digest-sweep trigger failed: ${await res.text()}`)
+}
+
 async function loginFrontend(page: any, token: string) {
   await page.goto('http://localhost:5173/')
   await page.evaluate((t: string) => localStorage.setItem('auth_token', t), token)
@@ -242,5 +252,65 @@ test.describe('LLM Assistant (@coach) — Phase C proactive recap', () => {
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE)).toHaveCount(1, { timeout: 8000 })
+  })
+})
+
+test.describe('LLM Assistant (@coach) — Phase C weekly digest', () => {
+  test.beforeEach(async () => {
+    if (!(await serversRunning())) {
+      test.skip()
+    }
+  })
+
+  test('opted-in group with activity gets a digest', async ({ page }) => {
+    const owner = createTestUser()
+    const opponent = createTestUser()
+    const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
+    const { playerId: opponentPlayerId } = await signupAndGetToken(opponent)
+    const groupId = await createGroup(ownerToken, `Digest Active Group ${Date.now()}`)
+    await setDigestEnabled(groupId, ownerToken, true)
+    const tournamentId = await seedScheduledSession(groupId, [ownerPlayerId, opponentPlayerId], 200)
+    await completeTournament(tournamentId)
+
+    await runDigestSweep()
+
+    await loginFrontend(page, ownerToken)
+    await page.goto(`http://localhost:5173/groups/${groupId}`)
+
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toBeVisible({ timeout: 8000 })
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toContainText(owner.name)
+  })
+
+  test('opted-in group with no activity is skipped (empty week)', async ({ page }) => {
+    const owner = createTestUser()
+    const { token: ownerToken } = await signupAndGetToken(owner)
+    const groupId = await createGroup(ownerToken, `Digest Empty Group ${Date.now()}`)
+    await setDigestEnabled(groupId, ownerToken, true)
+    // No tournaments seeded at all.
+
+    await runDigestSweep()
+
+    await loginFrontend(page, ownerToken)
+    await page.goto(`http://localhost:5173/groups/${groupId}`)
+
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE)).toHaveCount(0)
+  })
+
+  test('a group not opted into digest never gets one, even with activity', async ({ page }) => {
+    const owner = createTestUser()
+    const opponent = createTestUser()
+    const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
+    const { playerId: opponentPlayerId } = await signupAndGetToken(opponent)
+    const groupId = await createGroup(ownerToken, `Digest Not Opted Group ${Date.now()}`)
+    // digestEnabled left at its default (false) — never toggled on.
+    const tournamentId = await seedScheduledSession(groupId, [ownerPlayerId, opponentPlayerId], 200)
+    await completeTournament(tournamentId)
+
+    await runDigestSweep()
+
+    await loginFrontend(page, ownerToken)
+    await page.goto(`http://localhost:5173/groups/${groupId}`)
+
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE)).toHaveCount(0)
   })
 })
