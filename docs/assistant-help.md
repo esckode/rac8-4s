@@ -150,3 +150,9 @@ scores, standings) always appear in the app in real time regardless of notificat
 - Group owners can turn Coach off (and back on) in group settings.
 - Coach has hourly usage limits per player and per group; if you hit one, it says so and you
   can try again later.
+- Coach can also speak up on its own, without being asked: a **deadline reminder** when a
+  scheduled tournament's group-stage deadline is 2 days or 1 day away and matches are still
+  unscored (it names the pending matches); a **recap** naming the winner and standings once a
+  group-linked tournament finishes; and, for groups that opt in, a **weekly digest** summarizing
+  results, pending matches, and the nearest upcoming deadline. These only post while Coach is
+  enabled for the group. The weekly digest is off by default — turn it on in group settings.

@@ -915,3 +915,41 @@ Re-verified before starting Phase C planning:
 - **Not re-run here:** the Playwright e2e ladder (attested 16/16 + 14/14 in the DoDs above,
   two live-run bug fixes committed) and anything requiring the live model (still blocked on
   A0.1b).
+
+## Definition of done (Phase C)
+
+- [x] All C-steps built with [RED]→[GREEN] commit history (C1–C6, 2026-07-13, branch
+      `llm-assistant-phase-c`).
+- [x] `npm test` (api: 2265 passed / only the pre-existing, unrelated `partial-indexes.spec.ts`
+      query-planner flake fails, plus an intermittent `deeplink-metadata.spec.ts` full-parallel
+      flake — both predate this branch, see the Phase B independent-verification note above;
+      frontend: 1261 passed), `npx tsc --noEmit` (both packages), and `npm run lint` (repo-wide)
+      all clean.
+- [x] `npx playwright test assistant-proactive` — 11/11 passing against a live dev stack
+      (Postgres, `JOB_QUEUE=memory`, `ASSISTANT_ADAPTER=mock`): 48h/24h nudges (naming +
+      independence + idempotency + cap-suppression), recap (winner-naming + idempotency), digest
+      (opted-in-with-activity + skip-empty-week + not-opted-in). Re-ran the full assistant e2e
+      ladder — Phase A 8/8 + Phase B 7/7 still passing, no regression (26/26 total).
+- [x] Coverage on the new Phase C modules (`workers/{nudge,recap,digest}-processor.ts`,
+      `assistant/{recap,digest,proactive-marker}.ts`): statements 86.15%, functions 90.62%, lines
+      87.39% — all ≥85%. Branches 56.32% — short of 85%, same "scattered edge-case/fallback
+      branches, diminishing returns" pattern as Phase A (66%) and B (77.3%), not pursued further.
+      `sweep-scheduler.ts` (BullMQ repeatable-job registration) is 0%-covered by design — same
+      Redis-gated-test convention as `@worker/partition-scheduler`, exercised only with
+      `REDIS_URL` set, not part of the default CI run.
+- [x] `assistant.nudged` / `assistant.recapped` / `assistant.digested` visible in a
+      `LOG_LEVEL=debug` trace (confirmed via the integration test runs' stdout).
+- [x] Two grounding gaps found and flagged in BACKLOG.md (out of assistant scope, not fixed
+      here): **(1)** `processAutoCloseSweep` has no production caller (pre-existing, BE-GAP-1).
+      **(2)** no production route drives a SCHEDULED tournament to `tournament_complete` — the
+      recap sweep's terminal-status watch is correct, but nothing in this codebase currently
+      reaches that status outside of casual's `/end-session` (`completed`/`abandoned` only,
+      casual-only). E2E works around it with a `NODE_ENV!=production` test-only endpoint
+      (BE-GAP-2).
+- [x] `docs/assistant-help.md` updated in the same change (CLAUDE.md §9): Coach's proactive
+      behaviors (nudges, recap, digest) and the digest opt-in toggle location.
+- [ ] **Manual smoke against a live model** — NOT done; same A0.1b blocker (no P-AWS workspace)
+      as Phases A/B. Once available: confirm recap polish reads naturally, stays on-fact
+      (no invented names/scores), and reliably falls back to the template on any failure.
+- [x] No prod channel enablement — unchanged from Phase A/B (`ASSISTANT_ADAPTER` stays
+      unset/mock); the digest opt-in also stays off by default per group.

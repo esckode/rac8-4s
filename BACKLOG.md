@@ -24,7 +24,7 @@ here.
 | [PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) | Durable groups, group chat, availability polls, casual-mode group-launched tournaments | 📐 **Design (fully grilled, §11–§12)** → plan ✅ **Built & merged** ([PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md)) |
 | [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) | PWA-first now; Capacitor (native wrapper) deferred | 🧭 **Decision** — PWA work pending; Capacitor ⏸️ **Deferred** (trigger documented) |
 | [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (primary) + organizer SaaS (secondary); ads rejected | 📐 **Design (draft)** — **not yet grilled**, needs detail |
-| [LLM_ASSISTANT_DESIGN.md](assets/planning/LLM_ASSISTANT_DESIGN.md) | @coach LLM assistant in group chat — Tier 1 read-only Q&A (MVP), Tier 2 confirmed write actions, Tier 3 proactive nudges | 📐 **Design (fully grilled 2026-07-10 §10, Phase B/C mechanics grilled 2026-07-11 §11)** → Tier 1 ✅ **Built**, Tier 2 ✅ **Built** ([LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md)); Tier 3 (proactive) not started |
+| [LLM_ASSISTANT_DESIGN.md](assets/planning/LLM_ASSISTANT_DESIGN.md) | @coach LLM assistant in group chat — Tier 1 read-only Q&A (MVP), Tier 2 confirmed write actions, Tier 3 proactive nudges | 📐 **Design (fully grilled 2026-07-10 §10, Phase B/C mechanics grilled 2026-07-11/12 §11)** → Tier 1 ✅ **Built**, Tier 2 ✅ **Built**, Tier 3 ✅ **Built** (nudges/recap/digest) ([LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md)) |
 | [DESIGN_SYSTEM.md](assets/planning/DESIGN_SYSTEM.md) | "C U At Court" token-driven design system (tokens + Tailwind v4 + shared component lib) — as-built + gaps (no doc/Storybook/a11y/theming/governance) | 📐 **Design (as-built)** — **governance gap grilled 2026-06-29, now ✅ built** ([DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md)); remaining gaps (doc/Storybook/a11y/theming) **not yet grilled** |
 
 ## Implementation plans
@@ -35,7 +35,7 @@ here.
 | [FRONTEND_IMPLEMENTATION.md](assets/planning/FRONTEND_IMPLEMENTATION.md) | Frontend-quality / rendering tasks driving [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) — FE-RENDER-1 (memoize `AuthProvider` value) | 📋 **Plan ready** — not started |
 | [PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md) | Community layer — Phases G0–G5 (compliance/age-gate prereq, group entity+membership, durable chat+moderation, polls, casual tournament engine+launch, DSR erasure cascade). TDD-first, ≥85% coverage; carries R-A reconciliation (G4.7) | ✅ **Built & merged** (G0.1–G5.1, migrations 038–045) |
 | [PLAYER_GROUPS_V2_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_V2_IMPLEMENTATION.md) | Community-layer refinements (FrontEndPlan §A/§B, grilled Q1–Q16) in **3 phases** — P1 member layer (group settings, member mgmt, invite-accept, age-gate wiring, @mentions), P2 personal notification thread (conversation-backed, DM seed), P3 casual play (launch flow + poll auto-launch/min-count + **shared scheduler** + casual scoring/leaderboards). TDD-first, ≥85%; 3 new pages + 1 tab; carries backend deltas + the 🔴 shared scheduler | ✅ **Built & merged** (P1.1–P3.9, migrations 046–048) |
-| [LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md) | @coach assistant — Phase A MVP (A0–A9: migration 049, @coach trigger, read-only tool layer + rank_reason, Haiku 4.5 via adapter, worker processor + rate limits, toggle + intro, FE render/picker/settings, e2e), Phase B confirm-card writes (B0–B7: assistant_cards migration, propose_score/propose_poll/propose_poll_vote/propose_casual_launch, ActionCard UI, confirm/cancel/complete routes, timezone plumbing, Tier-2 prompt), Phase C proactive outline. TDD + e2e-scenario-first | ✅ **Built** (Phase A 2026-07-11, Phase B 2026-07-12; branch `llm-assistant-design`, not yet merged to `main`) — Phase A 16/16 e2e passing, Phase B 7/7 (14/14 chromium+firefox), no regressions; Phase C not started. Launch gate: prod channel stays off (`ASSISTANT_ADAPTER` unset/mock = bot inert) until the privacy-policy AI clause ships (A9.2) |
+| [LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md) | @coach assistant — Phase A MVP (A0–A9: migration 049, @coach trigger, read-only tool layer + rank_reason, Haiku 4.5 via adapter, worker processor + rate limits, toggle + intro, FE render/picker/settings, e2e), Phase B confirm-card writes (B0–B7: assistant_cards migration, propose_score/propose_poll/propose_poll_vote/propose_casual_launch, ActionCard UI, confirm/cancel/complete routes, timezone plumbing, Tier-2 prompt), Phase C proactive (C0–C6: migration 051, nudge/recap/digest sweeps + hourly/weekly BullMQ jobs). TDD + e2e-scenario-first | ✅ **Built** (Phase A/B merged to `main`; Phase C 2026-07-13, branch `llm-assistant-phase-c`, not yet merged) — Phase A 8/8 + Phase B 7/7 + Phase C 11/11 e2e passing (26/26 total), no regressions. Launch gate: prod channel stays off (`ASSISTANT_ADAPTER` unset/mock = bot inert) until the privacy-policy AI clause ships (A9.2); recap-polish live-model quality also blocked on the same A0.1b (P-AWS enrollment) smoke gate |
 | [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md) | Token-usage lint gate — Phases E0–E5: (b) repair broken ESLint config + clear 53 errors + gate lint in CI, (a) color-literal `no-restricted-syntax` rule on the unified gate w/ interim baseline + permanent allowlist, (c) husky/lint-staged pre-commit, **(E5 mandatory) full retrofit of all ~301 legacy color literals across 11 files + tear down the baseline** (gate becomes total). TDD-first via ESLint fixture harness | ✅ **Built & merged** to `main` |
 
 ## Test scenarios
@@ -84,9 +84,9 @@ here.
   NOT PWA-specific** — applies to any web frontend. → its own spec / general frontend hardening.
 - **Monetization** (MONETIZATION_STRATEGY.md) → **grill first** to pick the wedge (transaction fee vs.
   organizer SaaS), then create `MONETIZATION_IMPLEMENTATION.md` (payments integration first).
-- *(done)* ~~**LLM assistant (@coach)** → `LLM_ASSISTANT_IMPLEMENTATION.md`~~ — **Phase A (A0–A9)
-  built 2026-07-11, Phase B (B0–B7) built 2026-07-12** on branch `llm-assistant-design` (not yet
-  merged to `main`); Phase C (proactive) remains in the design doc, not yet planned.
+- *(done)* ~~**LLM assistant (@coach)** → `LLM_ASSISTANT_IMPLEMENTATION.md`~~ — **Phase A (A0–A9) +
+  Phase B (B0–B7)** merged to `main`; **Phase C (C0–C6) built 2026-07-13** on branch
+  `llm-assistant-phase-c` (not yet merged to `main`).
 
 ### 📋 Plan ready → available to tackle
 - **FRONTEND_IMPLEMENTATION.md** — frontend-quality tasks (TDD). First task: **FE-RENDER-1** memoize the
@@ -140,6 +140,27 @@ here.
   (refetch-on-reconnect), which is about history refresh, not the nav badge. The e2e test
   (`player-groups.spec.ts` — "Unread badge appears on My Groups nav tab") is written and self-skips until
   this is built.
+
+### 🔍 Backend gaps (surfaced by the Phase C proactive assistant build, 2026-07-13)
+> Grounding findings from `LLM_ASSISTANT_IMPLEMENTATION.md` §C0/C6 — pre-existing, out of assistant scope.
+> No design grilling needed; noted so the next person touching either area doesn't assume the wiring exists.
+
+- **BE-GAP-1 — `processAutoCloseSweep` has no production caller.** The poll auto-close sweep
+  (`auto-close-processor.ts`) is fully built and unit/integration-tested, but nothing registers it as a
+  BullMQ repeatable job or calls it from any route — only tests invoke it directly. The only *wired*
+  recurring mechanism in this codebase is the BullMQ repeatable-cron pattern in
+  `@worker/partition-scheduler` (`registerPartitionJobs`). Fix: register `auto-close.sweep` alongside the
+  Phase-C `registerAssistantSweepJobs` pattern (`assistant/sweep-scheduler.ts`) the next time someone
+  touches poll auto-close.
+- **BE-GAP-2 — no production route drives a SCHEDULED tournament to `tournament_complete`.**
+  `'tournament_complete'` is a reachable `TournamentRepository.updateStatus` value (in the valid-status
+  list, and the Phase-C recap sweep watches for it), but no route ever calls it — the only status-terminal
+  route is `POST /:id/end-session`, which is casual-only and only reaches `'completed'`/`'abandoned'`.
+  Scheduled (bracket) tournaments have no organizer action that marks them fully complete. E2E for the
+  Phase-C recap sweep works around this with a test-only endpoint
+  (`/test/complete-tournament`, `NODE_ENV!=production` only). Fix: add an organizer "mark tournament
+  complete" action (or auto-transition on final knockout match score) the next time someone touches the
+  scheduled-tournament lifecycle.
 
 ### 🚀 Production readiness (before multi-instance prod cutover)
 > Cross-cutting gaps surfaced during the messaging V2 build — **not** blocking the build (V1–V6 done), but

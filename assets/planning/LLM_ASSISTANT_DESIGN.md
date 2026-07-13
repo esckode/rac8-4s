@@ -5,10 +5,10 @@
 
 **Date:** 2026-07-10 (drafted + **fully grilled to resolution the same day** — see §10;
 Phase B/C mechanics grilled 2026-07-11 — see §11)
-**Status:** ✅ **Built for Phase A** (2026-07-11, A0–A9) **and Phase B** (2026-07-12, B0–B7 — see
-[LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md); **merged to `main`
-2026-07-12**). Phase C (proactive) fully grilled 2026-07-12 (§11 C-Q1–C-Q12) with the
-implementation plan expanded; not yet built. Builds on the community layer
+**Status:** ✅ **Built for Phase A** (2026-07-11, A0–A9), **Phase B** (2026-07-12, B0–B7 — merged
+to `main` 2026-07-12), **and Phase C** (2026-07-13, C0–C6, proactive nudges/recap/digest — see
+[LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md); branch
+`llm-assistant-phase-c`, not yet merged to `main`). Builds on the community layer
 ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)) and the messaging platform
 ([MESSAGING_DESIGN.md](./MESSAGING_DESIGN.md) §16–§17).
 
