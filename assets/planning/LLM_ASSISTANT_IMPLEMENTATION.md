@@ -651,10 +651,11 @@ Phase A. Execution order: B0 follow-up → B6 scenario docs → B1 → B2 → B3
 
 ## Phase C — Proactive (T3.1 deadline nudges → T3.3 recap → T3.2 digest)
 
-**Status: 📋 PLAN READY (grilled 2026-07-12 — design §11 C-Q1–C-Q12; do not relitigate).**
+**Status: T3.1 (C1–C3) BUILT 2026-07-13, branch `llm-assistant-phase-c`, unmerged.**
 Sequencing: C1→C3 ship T3.1, then an **owner-judgment checkpoint** (C-Q5 — Coach's first
 unprompted speech; gauge reception) before C4 (recap) and C5 (digest). Every step TDD
-([RED]→[GREEN]) like Phases A/B.
+([RED]→[GREEN]) like Phases A/B. **Currently paused at the C-Q5 checkpoint** — C4/C5 not
+started pending owner sign-off on T3.1's reception.
 
 ### C0 — Context pack (decisions + verified grounding)
 
