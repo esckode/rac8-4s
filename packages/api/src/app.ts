@@ -322,6 +322,41 @@ export function createApp(deps: AppDependencies): Express {
       }
     })
 
+    // Test-only endpoint — scores all remaining matches and marks a
+    // tournament terminal, so e2e can reach 'tournament_complete' for the
+    // recap sweep. Grounding note (verified 2026-07-13): NO production route
+    // actually drives a SCHEDULED tournament to 'tournament_complete' —
+    // casual's /:id/end-session only reaches 'completed'/'abandoned' and is
+    // casual-only; 'tournament_complete' is a reachable repo.updateStatus
+    // value with no caller (flagged in BACKLOG.md, same pattern as the
+    // pre-existing processAutoCloseSweep-has-no-caller gap).
+    // Disabled in production to prevent auth bypass.
+    app.post('/test/complete-tournament', async (req: Request, res: Response) => {
+      try {
+        const { tournamentId, status } = req.body as { tournamentId: string; status?: string }
+        if (!tournamentId) {
+          return res.status(400).json({ error: 'tournamentId is required' })
+        }
+        const tournamentRepo = new TournamentRepository(appDeps.db as any)
+        const groupRepo = new TournamentGroupRepository(appDeps.db as any)
+
+        const stageGroups = await groupRepo.findGroupsByTournament(tournamentId)
+        for (const stageGroup of stageGroups) {
+          const matches = await groupRepo.findMatchesByGroup(stageGroup.id)
+          for (const m of matches) {
+            if (m.status !== 'completed') {
+              await groupRepo.updateMatch(m.id, (m.player1_id ?? m.team1_id)!, '6-3 6-4')
+            }
+          }
+        }
+        await tournamentRepo.updateStatus(tournamentId, status ?? 'tournament_complete')
+
+        return res.json({ ok: true })
+      } catch (err) {
+        return res.status(500).json({ error: String(err) })
+      }
+    })
+
     // Test-only endpoint — runs the Phase C recap sweep synchronously so e2e
     // can drive it without waiting on a real hourly BullMQ cron tick.
     // Disabled in production to prevent auth bypass.

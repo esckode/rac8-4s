@@ -67,6 +67,16 @@ async function setAssistantEnabled(groupId: string, token: string, enabled: bool
   if (!res.ok) throw new Error(`assistant toggle failed: ${await res.text()}`)
 }
 
+async function completeTournament(tournamentId: string): Promise<void> {
+  const res = await apiCall('/test/complete-tournament', 'POST', { tournamentId })
+  if (!res.ok) throw new Error(`complete-tournament failed: ${await res.text()}`)
+}
+
+async function runRecapSweep(): Promise<void> {
+  const res = await apiCall('/test/recap-sweep', 'POST')
+  if (!res.ok) throw new Error(`recap-sweep trigger failed: ${await res.text()}`)
+}
+
 async function loginFrontend(page: any, token: string) {
   await page.goto('http://localhost:5173/')
   await page.evaluate((t: string) => localStorage.setItem('auth_token', t), token)
@@ -186,5 +196,51 @@ test.describe('LLM Assistant (@coach) — Phase C proactive nudges', () => {
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE)).toHaveCount(2, { timeout: 8000 })
+  })
+})
+
+test.describe('LLM Assistant (@coach) — Phase C proactive recap', () => {
+  test.beforeEach(async () => {
+    if (!(await serversRunning())) {
+      test.skip()
+    }
+  })
+
+  test('completed tournament gets a recap naming the winner', async ({ page }) => {
+    const owner = createTestUser()
+    const opponent = createTestUser()
+    const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
+    const { playerId: opponentPlayerId } = await signupAndGetToken(opponent)
+    const groupId = await createGroup(ownerToken, `Recap Group ${Date.now()}`)
+    // A far-off deadline keeps this tournament out of the nudge sweep's
+    // window — this scenario is only about the recap sweep.
+    const tournamentId = await seedScheduledSession(groupId, [ownerPlayerId, opponentPlayerId], 200)
+
+    await completeTournament(tournamentId)
+    await runRecapSweep()
+
+    await loginFrontend(page, ownerToken)
+    await page.goto(`http://localhost:5173/groups/${groupId}`)
+
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toBeVisible({ timeout: 8000 })
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toContainText(owner.name)
+  })
+
+  test('re-sweeping does not post a second recap', async ({ page }) => {
+    const owner = createTestUser()
+    const opponent = createTestUser()
+    const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
+    const { playerId: opponentPlayerId } = await signupAndGetToken(opponent)
+    const groupId = await createGroup(ownerToken, `Recap Idempotent Group ${Date.now()}`)
+    const tournamentId = await seedScheduledSession(groupId, [ownerPlayerId, opponentPlayerId], 200)
+
+    await completeTournament(tournamentId)
+    await runRecapSweep()
+    await runRecapSweep()
+
+    await loginFrontend(page, ownerToken)
+    await page.goto(`http://localhost:5173/groups/${groupId}`)
+
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE)).toHaveCount(1, { timeout: 8000 })
   })
 })
