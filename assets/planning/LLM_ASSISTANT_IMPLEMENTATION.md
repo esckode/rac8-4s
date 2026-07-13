@@ -703,6 +703,29 @@ unprompted speech; gauge reception) before C4 (recap) and C5 (digest). Every ste
 - **Logging:** `assistant.nudged` / `assistant.recapped` / `assistant.digested` at info
   (`groupId`, `tournamentId` where applicable, `polished: bool`, token usage when polished) —
   CLAUDE.md §6, no message bodies.
+- **⚠️ Data-access pins (verified 2026-07-12 — read before writing any sweep):**
+  - **Do NOT call the asker-scoped `assistant/tools.ts` functions from sweeps.** `getStandings`
+    et al. require an `AssistantToolContext` and apply Q5 asker-scoping via `resolveScope` — a
+    sweep has no asker, and faking a ctx is wrong. Compose directly instead:
+    `GroupRepository.findGroupsByTournament` → `findMatchesByGroup` →
+    `findMembersByGroup`/`findTeamsByGroup` → `calculateStandings` from `@core/index` (+
+    `buildRankReason` if wanted) — exactly the pattern inside `tools.ts` `getStandings`
+    (~lines 174–220) minus the ctx/scoping parts.
+  - **The deadline-window query does not exist** — no repo method touches
+    `group_stage_deadline` (verified). The nudge sweep adds one (new SQL is justified per the
+    A3.4 rule): `SELECT … FROM tournaments WHERE group_id IS NOT NULL AND group_stage_deadline
+    BETWEEN $now AND $now + interval '48 hours' AND status NOT IN (terminal statuses)`.
+  - **Unscored matches** for a tournament: `findGroupsByTournament` → `findMatchesByGroup`
+    filtered `status='pending'`; participant names via `findMembersByGroup`/`findTeamsByGroup`.
+  - **Digest "results this week"**: no `scored_at` column exists — use
+    `status IN ('completed','walkover') AND updated_at >= now() - interval '7 days'` as the
+    proxy (an edited score re-surfaces in the next digest; accepted, note in the test).
+  - **Test trigger endpoint** goes inside the existing `NODE_ENV !== 'production'` block in
+    `app.ts` (~line 191, next to `/test/player-token` and `/test/casual-session`).
+  - **Nudge notify jobIds**: G2.4 message notifies use `notify:<conversationId>:<recipientId>`
+    — nudge notifies use their own scheme `notify:<dedupe-marker>:<recipientId>` (e.g.
+    `notify:deadline48:<tournamentId>:<playerId>`) so they can't collide with message-notify
+    dedupe.
 
 ### C1 — Scenario docs FIRST (own commit)
 
@@ -746,6 +769,8 @@ unprompted speech; gauge reception) before C4 (recap) and C5 (digest). Every ste
   marker → skip; polish gate — adapter real + budget → polished body posted; adapter mock →
   template; polish throws/times out/over budget → template posted, exactly one row either way.
 - **C4.2 [GREEN]** `assistant/recap.ts` + `workers/recap-processor.ts` + registration.
+  Standings composition per the C0 data-access pin (repo methods + `calculateStandings`
+  directly — never the asker-scoped `tools.ts` functions).
 - **C4.3** E2E scenario (7): organizer PATCHes the seeded tournament to `tournament_complete`,
   trigger endpoint fires the sweep, recap bubble appears with the seeded winner's name.
 
