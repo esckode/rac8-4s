@@ -2153,3 +2153,105 @@ Then no messaging.notify job is enqueued for any recipient
   `packages/api/src/services/score-service.ts`, poll create/vote services (extracted from
   `player-groups.ts`), confirm/cancel/complete routes under `/player/groups`, migration adding
   `messaging.assistant_cards`
+
+---
+
+## Feature: LLM Assistant (@coach) — Phase C proactive (nudges, recap, digest)
+
+> Backend runs `ASSISTANT_ADAPTER=mock` + `JOB_QUEUE=memory` for e2e. Sweeps are driven by a
+> `NODE_ENV !== 'production'`-only test trigger endpoint (the A8 `/test/casual-session`
+> precedent) rather than waiting on real BullMQ cron — same pattern Phase A/B e2e already use to
+> avoid real time passing in a browser test. Recap's LLM-polish step is exercised only against
+> the mock adapter here (always falls back to template); live-model polish quality is a manual
+> smoke item, same status as A9.2.
+
+### Scenario: 48h deadline nudge names the unscored matches and notifies only affected players
+```
+Given a group-linked tournament with group_stage_deadline 47 hours away
+  And one pending (unscored) match between two members
+  And a third group member is not in that match
+  And a fourth group member has notify_level "muted"
+When the nudge sweep runs
+Then one assistant message posts naming the pending match and "2 days left" (relative, no clock time)
+  And the two players in the named match each receive a messaging.notify job
+  And the unaffected member receives no notify job
+  And the muted member receives no notify job
+```
+
+### Scenario: 24h nudge fires independently of the 48h nudge
+```
+Given the same tournament has already posted its 48h nudge
+When the deadline reaches 23 hours away and the sweep runs again
+Then a second, distinct nudge posts for the 24h milestone
+  And re-running the sweep at either milestone again posts nothing further (dedupe)
+```
+
+### Scenario: Nothing unscored → no nudge
+```
+Given a group-linked tournament 47 hours from its deadline with all matches already scored
+When the nudge sweep runs
+Then no assistant message posts and no notify job is enqueued
+```
+
+### Scenario: Assistant disabled → no proactive output of any kind
+```
+Given a group-linked tournament 47 hours from its deadline with pending matches
+  And the group's assistant is toggled off
+When the nudge sweep runs
+Then no assistant message posts
+```
+
+### Scenario: Sweep runs twice → exactly one post (idempotency)
+```
+Given a group-linked tournament that qualifies for the 48h nudge
+When the sweep runs twice in a row
+Then only one nudge message exists for that tournament and milestone
+```
+
+### Scenario: Third proactive post in a day is cap-suppressed
+```
+Given a group that has already received 2 proactive assistant posts today
+  And a third tournament in the same group now qualifies for a nudge
+When the nudge sweep runs
+Then no third message posts
+  And the suppression is logged at warn (assistant.nudged is not emitted for the suppressed one)
+```
+
+### Scenario: Completed group-linked tournament gets one recap
+```
+Given a group-linked tournament with standings seeded (a clear winner + at least 3 ranked players)
+  And the organizer PATCHes it to a terminal status ("tournament_complete")
+When the recap sweep runs
+Then one assistant message posts naming the winner and the top-3 standings
+When the recap sweep runs again
+Then no second recap posts for that tournament
+```
+
+### Scenario: Weekly digest — opted-in with activity, skipped when empty, never sent when not opted in
+```
+Given Group A has digest_enabled=true and at least one completed match this week
+  And Group B has digest_enabled=true with no activity and no pending matches this week
+  And Group C has the assistant enabled but digest_enabled=false, with activity this week
+When the digest job runs
+Then Group A receives one digest message with its results/pending/upcoming-deadline sections
+  And Group B receives no digest message (all sections empty)
+  And Group C receives no digest message (not opted in)
+When the digest job runs again the same week
+Then Group A does not receive a second digest (iso-week dedupe)
+```
+
+### Scenario: NEGATIVE — a non-group-linked tournament is never nudged or recapped
+```
+Given a tournament with no group_id, 47 hours from its deadline, with pending matches,
+  and separately one completed with clear standings
+When the nudge sweep and the recap sweep both run
+Then neither produces any assistant message for that tournament
+```
+
+**Implementation (Phase C / C0–C6):**
+- Playwright: `packages/frontend/e2e/assistant-proactive.spec.ts`
+- Backend: `packages/api/src/workers/nudge-processor.ts`, `packages/api/src/workers/recap-processor.ts`,
+  `packages/api/src/assistant/recap.ts`, `packages/api/src/assistant/digest.ts`,
+  repeatable job registration in `worker-entrypoint.ts` (`assistant.nudge.sweep`,
+  `assistant.recap.sweep` hourly; `assistant.digest` weekly), migration
+  `051_assistant_digest_settings.sql` (`player_groups.digest_enabled`)
