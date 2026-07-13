@@ -6,6 +6,7 @@ import { PollRepository } from './repositories/poll-repository'
 import { LeaderboardRepository } from './repositories/leaderboard-repository'
 import { GroupRepository } from './repositories/group-repository'
 import { GroupMessageRepository } from './repositories/group-message-repository'
+import { PlayerSettingsRepository, type PlayerSettings } from './repositories/player-settings-repository'
 
 const log = getLogger('dsr-service')
 
@@ -17,6 +18,7 @@ export interface PlayerExport {
   messageCount: number
   pollVoteCount: number
   matchCount: number
+  settings: PlayerSettings
 }
 
 export type EraseResult = { status: 'erased'; playerId: string } | { status: 'not_found' }
@@ -29,6 +31,7 @@ export class DataSubjectRequestService {
   private leaderboardRepo: LeaderboardRepository
   private groupRepo: GroupRepository
   private groupMsgRepo: GroupMessageRepository
+  private playerSettingsRepo: PlayerSettingsRepository
 
   constructor(private pool: Pool) {
     this.playerRepo = new PlayerRepository(pool as any)
@@ -37,6 +40,7 @@ export class DataSubjectRequestService {
     this.leaderboardRepo = new LeaderboardRepository(pool)
     this.groupRepo = new GroupRepository(pool as any)
     this.groupMsgRepo = new GroupMessageRepository(pool as any)
+    this.playerSettingsRepo = new PlayerSettingsRepository(pool as any)
   }
 
   /**
@@ -61,6 +65,7 @@ export class DataSubjectRequestService {
     await this.pollRepo.anonymizePollVotesFor(playerId)
     await this.leaderboardRepo.anonymizeMatchLogSlotsFor(playerId)
     await this.groupMsgRepo.deletePersonalThreadFor(playerId)
+    await this.playerSettingsRepo.deleteFor(playerId)
 
     // Hard-delete membership
     await this.groupRepo.removeFromAllGroups(playerId)
@@ -104,6 +109,8 @@ export class DataSubjectRequestService {
     )
     const matchCount = Number(matchResult.rows[0].c)
 
+    const settings = await this.playerSettingsRepo.getOrDefaults(playerId)
+
     const data: PlayerExport = {
       playerId,
       email: player.email,
@@ -112,6 +119,7 @@ export class DataSubjectRequestService {
       messageCount,
       pollVoteCount,
       matchCount,
+      settings,
     }
 
     log.info('dsr.exported', { playerId })

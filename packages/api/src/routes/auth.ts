@@ -13,6 +13,7 @@ import { getLogger } from '../logger'
 import { TokenInvalidError } from '../auth/errors'
 import { sendPasswordResetEmail } from '../email-adapter'
 import { isReservedDisplayName } from '../assistant/trigger'
+import { PlayerSettingsRepository, DEFAULT_PLAYER_SETTINGS } from '../repositories/player-settings-repository'
 
 const log = getLogger('auth')
 
@@ -50,6 +51,7 @@ export default function authRouter(deps: AppDependencies) {
   const accountRepo = new AccountRepository(deps.db)
   const resetCodeRepo = new PasswordResetCodeRepository(deps.db)
   const playerRepo = new PlayerRepository(deps.db)
+  const playerSettingsRepo = new PlayerSettingsRepository(deps.db as any)
 
   // POST /api/auth/signup - Create a new account
   router.post('/signup', async (req: Request, res: Response, next: NextFunction) => {
@@ -323,13 +325,70 @@ export default function authRouter(deps: AppDependencies) {
       // Log the request
       log.debug('auth.me', { accountId: payload.sub })
 
+      const settings = account.player_id
+        ? await playerSettingsRepo.getOrDefaults(account.player_id)
+        : { ...DEFAULT_PLAYER_SETTINGS }
+
       // Return user info (without password_hash or other sensitive data)
       return res.status(200).json({
         id: account.id,
         email: account.email,
         role: account.role,
         playerId: account.player_id ?? null,
+        settings,
       })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // PATCH /api/auth/me/settings - Player Personalization P0: update preferences (lazy upsert)
+  router.patch('/me/settings', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const account = await accountRepo.findById(payload.sub)
+      if (!account) {
+        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Account not found' })
+      }
+      if (!account.player_id) {
+        return res.status(400).json({ code: 'NO_LINKED_PLAYER', message: 'This account has no linked player' })
+      }
+
+      const { timezone, timezoneManual, tableDensity } = req.body as {
+        timezone?: unknown
+        timezoneManual?: unknown
+        tableDensity?: unknown
+      }
+
+      const updates: { timezone?: string | null; timezoneManual?: boolean; tableDensity?: 'comfortable' | 'compact' } = {}
+
+      if (timezone !== undefined) {
+        if (timezone !== null && typeof timezone !== 'string') {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'timezone must be a string or null' })
+        }
+        updates.timezone = timezone
+      }
+      if (timezoneManual !== undefined) {
+        if (typeof timezoneManual !== 'boolean') {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'timezoneManual must be a boolean' })
+        }
+        updates.timezoneManual = timezoneManual
+      }
+      if (tableDensity !== undefined) {
+        if (tableDensity !== 'comfortable' && tableDensity !== 'compact') {
+          return res.status(400).json({
+            code: 'VALIDATION_ERROR',
+            message: "tableDensity must be 'comfortable' or 'compact'",
+          })
+        }
+        updates.tableDensity = tableDensity
+      }
+
+      const settings = await playerSettingsRepo.upsert(account.player_id, updates)
+
+      log.info('settings.updated', { playerId: account.player_id, fields: Object.keys(updates) })
+
+      return res.status(200).json({ settings })
     } catch (err) {
       next(err)
     }
