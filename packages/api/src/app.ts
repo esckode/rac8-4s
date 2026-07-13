@@ -254,6 +254,51 @@ export function createApp(deps: AppDependencies): Express {
       }
     })
 
+    // Test-only endpoint — seeds a group-linked SCHEDULED round-robin session
+    // with an explicit roster and deadline (the /test/casual-session sibling
+    // for Phase C nudge/recap e2e, which need a real group_stage_deadline —
+    // casual sessions are deadline-exempt so that fixture can't be reused).
+    // Disabled in production to prevent auth bypass.
+    app.post('/test/scheduled-session', async (req: Request, res: Response) => {
+      try {
+        const { groupId, playerIds, matchFormat, hoursUntilDeadline } = req.body as {
+          groupId: string
+          playerIds: string[]
+          matchFormat?: 'singles' | 'doubles'
+          hoursUntilDeadline: number
+        }
+        if (!groupId || !Array.isArray(playerIds) || playerIds.length < 2 || typeof hoursUntilDeadline !== 'number') {
+          return res.status(400).json({
+            error: 'groupId, at least 2 playerIds, and hoursUntilDeadline are required',
+          })
+        }
+        const tournamentRepo = new TournamentRepository(appDeps.db as any)
+        const playerRepo = new PlayerRepository(appDeps.db as any)
+        const groupRepo = new TournamentGroupRepository(appDeps.db as any)
+
+        const tournament = await tournamentRepo.create({
+          name: `Test Scheduled Session ${Date.now()}`,
+          sport: 'tennis',
+          matchFormat: matchFormat ?? 'singles',
+          maxPlayers: playerIds.length,
+          creatorId: playerIds[0],
+          mode: 'scheduled',
+          visibility: 'unlisted',
+          groupId,
+          groupStageDeadline: new Date(Date.now() + hoursUntilDeadline * 3_600_000).toISOString(),
+        })
+        for (const playerId of playerIds) {
+          await playerRepo.createRegistration(playerId, tournament.id)
+        }
+        await tournamentRepo.updateStatus(tournament.id, 'registration_closed')
+        await groupRepo.createGroups(tournament.id, 1, 1, playerIds)
+
+        return res.json({ tournamentId: tournament.id })
+      } catch (err) {
+        return res.status(500).json({ error: String(err) })
+      }
+    })
+
     // Test-only endpoint — runs the Phase C nudge sweep synchronously so e2e
     // can drive it without waiting on a real hourly BullMQ cron tick.
     // Disabled in production to prevent auth bypass.
