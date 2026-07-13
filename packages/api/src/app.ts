@@ -24,6 +24,7 @@ import type { IBroadcastBus } from './broadcast-bus'
 import type { AppConfig } from './config'
 import type { EmailAdapter } from './email-adapter'
 import { QueueMonitor } from './queue-monitor'
+import { processNudgeSweep } from './workers/nudge-processor'
 import { generatePlayerSession } from './auth/magic-link'
 import { PlayerRepository, TournamentRepository, GroupRepository as TournamentGroupRepository } from './db'
 import type { Redis } from 'ioredis'
@@ -248,6 +249,22 @@ export function createApp(deps: AppDependencies): Express {
         await tournamentRepo.updateStatus(tournament.id, 'group_stage_active')
 
         return res.json({ tournamentId: tournament.id })
+      } catch (err) {
+        return res.status(500).json({ error: String(err) })
+      }
+    })
+
+    // Test-only endpoint — runs the Phase C nudge sweep synchronously so e2e
+    // can drive it without waiting on a real hourly BullMQ cron tick.
+    // Disabled in production to prevent auth bypass.
+    app.post('/test/nudge-sweep', async (_req: Request, res: Response) => {
+      try {
+        await processNudgeSweep({
+          pool: appDeps.db as any,
+          jobQueue: appDeps.jobQueue,
+          broadcastBus: appDeps.broadcastBus,
+        })
+        return res.json({ ok: true })
       } catch (err) {
         return res.status(500).json({ error: String(err) })
       }

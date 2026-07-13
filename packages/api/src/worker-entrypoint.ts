@@ -21,6 +21,9 @@ import { processReadReceiptFlush } from './workers/read-receipt-processor'
 import { processPartitionEnsure, processPartitionPurge } from './workers/partition-processor'
 import { processMessagingNotify } from './workers/notify-processor'
 import { processAssistantReply } from './workers/assistant-processor'
+import { processNudgeSweep } from './workers/nudge-processor'
+import { registerAssistantSweepJobs } from './assistant/sweep-scheduler'
+import { BullMQJobQueue } from '@worker/bullmq-queue'
 import { PartitionManager } from './services/partition-manager'
 import { ServiceEmailAdapter } from './email-service-adapter'
 import { createEmailService } from './services/email-service'
@@ -71,6 +74,16 @@ async function main() {
     })
   }
 
+  // ── Register hourly assistant proactive-sweep jobs (idempotent) ───────────
+  try {
+    await registerAssistantSweepJobs({ redisUrl: REDIS_URL! })
+    log.info('assistant.sweep.scheduler.registered', {})
+  } catch (err) {
+    log.error('assistant.sweep.scheduler.registration.failed', {
+      message: err instanceof Error ? err.message : String(err),
+    })
+  }
+
   // ── Email adapter for the notify worker ────────────────────────────────────
   let emailAdapter: ServiceEmailAdapter | undefined
   try {
@@ -104,6 +117,12 @@ async function main() {
     }),
     broadcastBus: selectBroadcastBus(),
   }
+
+  // Proactive sweeps enqueue their own downstream jobs (e.g. messaging.notify
+  // for nudge recipients) — a dedicated BullMQ-backed queue, not the request-
+  // path selectJobQueue() (that one is driven by the API's JOB_QUEUE env var,
+  // whereas this worker process always speaks BullMQ directly).
+  const assistantJobQueue = new BullMQJobQueue({ url: REDIS_URL! })
 
   const workers = [
     createWorker({
@@ -149,6 +168,18 @@ async function main() {
         await processAssistantReply(job.data, assistantDeps)
       },
     }),
+
+    createWorker({
+      queueName: 'assistant.nudge.sweep',
+      redisUrl: REDIS_URL!,
+      processor: async () => {
+        await processNudgeSweep({
+          pool,
+          jobQueue: assistantJobQueue,
+          broadcastBus: assistantDeps.broadcastBus,
+        })
+      },
+    }),
   ]
 
   log.info('worker.started', { queues: workers.map((_, i) => i) })
@@ -156,6 +187,7 @@ async function main() {
   const shutdown = async () => {
     log.info('worker.shutting_down', {})
     await Promise.all(workers.map((w) => w.close()))
+    await assistantJobQueue.close()
     await closeDb()
     process.exit(0)
   }
