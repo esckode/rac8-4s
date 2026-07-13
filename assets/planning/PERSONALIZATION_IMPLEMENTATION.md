@@ -135,9 +135,13 @@ the item still shows in badge/strip.
   route.
 - **S2.3 [RED]** Group tz: pure `majorityTimezone(tzs: string[]): string|null` (majority; tie →
   lexically-earlier zone; empty → null); `PATCH /:groupId {groupTimezone}` owner-only (member →
-  403; null clears the pin); effective tz = pin ?? majority ?? null. Venue: `locations.timezone`
-  writable via the existing location create/update path (grep the locations route; organizer
-  auth as-is), surfaced by `get_tournament`.
+  403; null clears the pin); effective tz = pin ?? majority ?? null. Venue: **⚠️ verified
+  2026-07-13 — no locations route exists anywhere** (`LocationRepository` in `db.ts` ~1307 has
+  `create`/`update` but nothing mounts it; rows come from seed/test paths only). Do NOT invent
+  an admin surface (CLAUDE.md §2): 053 adds the `locations.timezone` column +
+  `LocationRepository` support only; it is settable via the repository/seed path, surfaced by
+  `get_tournament`, and **venue-time rendering falls back to group tz when NULL**. An organizer
+  venue-management UI is explicitly out of scope.
 - **S2.4 [GREEN]** Migration 053 (`player_groups.group_timezone TEXT NULL`,
   `locations.timezone TEXT NULL`) + code. Log `group.timezone.pinned`.
 - **S2.5 [RED]** Digest rework (unit on `digest-processor` + `sweep-scheduler` registration):
@@ -161,8 +165,10 @@ the item still shows in badge/strip.
 
 - **S3.1 [RED]** `shared/StandingsTable.tsx` (**the live one — not the stale duplicate**):
   viewer's row gets `data-testid="standings-row-you"`, highlight tokens, and auto-scroll
-  (~2nd from top; mock `scrollIntoView`); "you" marker. Bracket: viewer's next match centered
-  (via `bracketToFlow.ts` initial viewport) — test the transform, not the canvas.
+  (~2nd from top; mock `scrollIntoView`); "you" marker. Bracket: the player-facing
+  `pages/TournamentDetail/Bracket.tsx` is `MatchCard`-list based (verified — `OrganizerBracket`
+  is the flow-canvas variant) — **auto-scroll to the viewer's next `MatchCard`**, same
+  mechanism as standings; do not touch the xyflow viewport.
 - **S3.2 [GREEN]** Implement (design tokens only — the color lint gate is total).
 - **S3.3 [RED]** `shared/Avatar.tsx`: initials (1–2 chars from name) + deterministic bg from
   player-id hash over a **curated color-blind-safe token palette** (same id → same color;
@@ -182,7 +188,9 @@ the item still shows in badge/strip.
 - **S4.2 [GREEN]** Route + `pending-actions-service.ts` (read-only — no logging needed).
 - **S4.3 [RED]** FE badges: `ResponsiveLayout` tabs show per-tab counts capped "9+"
   (`data-testid="nav-badge-matches"` etc.); `usePendingActions` hook fetches on mount + window
-  focus + on the four existing SSE events (0.2 table).
+  focus (**the primary mechanism** — SSE connections are per-conversation via `useSSE.ts`, so
+  the 0.2-table events only arrive while a group chat is open; subscribe to them
+  opportunistically for instant updates in-chat, never as the sole refresh path).
 - **S4.4 [GREEN]** Implement.
 - **S4.5 [RED→GREEN]** Up-next strip at top of `BrowseTournaments`: renders **only when**
   payload non-empty (`data-testid="up-next-strip"`); items deep-link (match → its tournament
