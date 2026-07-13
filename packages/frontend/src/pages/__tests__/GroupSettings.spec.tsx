@@ -662,3 +662,81 @@ describe('GroupSettings — A7.5 assistant toggle', () => {
     expect(screen.queryByTestId('assistant-toggle')).not.toBeInTheDocument()
   })
 })
+
+// ── C2.2: Digest toggle ──────────────────────────────────────────────────────
+
+function makeGroupsResponseWithDigest(
+  role: 'owner' | 'member',
+  assistantEnabled: boolean,
+  digestEnabled: boolean
+) {
+  return {
+    ok: true,
+    json: async () => ({
+      groups: [
+        { id: 'grp_1', name: 'Pickleball Crew', role, memberCount: 4, assistantEnabled, digestEnabled },
+      ],
+    }),
+  }
+}
+
+describe('GroupSettings — C2.2 digest toggle', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('owner sees the digest toggle reflecting the current state when assistant is on', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponseWithDigest('owner', true, true))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [] }) })
+
+    renderGroupSettings('grp_1', 'owner')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('digest-toggle')).toBeChecked()
+    })
+  })
+
+  it('toggling calls PATCH digestEnabled:false', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponseWithDigest('owner', true, true))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'grp_1', digestEnabled: false }) })
+
+    renderGroupSettings('grp_1', 'owner')
+    await waitFor(() => expect(screen.getByTestId('digest-toggle')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('digest-toggle'))
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(
+        ([url]: [string]) => typeof url === 'string' && url.includes('/player/groups/grp_1') && !url.includes('/members')
+      )
+      expect(call).toBeDefined()
+      expect(call[1]).toMatchObject({ method: 'PATCH' })
+      expect(JSON.parse(call[1].body)).toEqual({ digestEnabled: false })
+    })
+  })
+
+  it('is hidden when the assistant master toggle is off', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeGroupsResponseWithDigest('owner', false, true))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ members: [] }) })
+
+    renderGroupSettings('grp_1', 'owner')
+
+    await waitFor(() => {
+      expect(screen.getByTestId('assistant-toggle')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('digest-toggle')).not.toBeInTheDocument()
+  })
+
+  it('member section does not show the digest toggle', async () => {
+    mockFetch.mockResolvedValue(makeGroupsResponseWithDigest('member', true, true))
+    renderGroupSettings('grp_1', 'member')
+    await waitFor(() => {
+      expect(screen.getByTestId('group-settings-page')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('digest-toggle')).not.toBeInTheDocument()
+  })
+})

@@ -408,6 +408,7 @@ interface GroupConfigProps {
   initialName: string
   initialFormat: 'singles' | 'doubles'
   initialAssistantEnabled: boolean
+  initialDigestEnabled: boolean
 }
 
 const GroupConfig: React.FC<GroupConfigProps> = ({
@@ -415,10 +416,12 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
   initialName,
   initialFormat,
   initialAssistantEnabled,
+  initialDigestEnabled,
 }) => {
   const [name, setName] = useState(initialName)
   const [saving, setSaving] = useState(false)
   const [assistantEnabled, setAssistantEnabled] = useState(initialAssistantEnabled)
+  const [digestEnabled, setDigestEnabled] = useState(initialDigestEnabled)
 
   async function handleSaveName(e: React.FormEvent) {
     e.preventDefault()
@@ -464,6 +467,20 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ assistantEnabled: next }),
+    })
+  }
+
+  async function handleDigestToggle(e: React.ChangeEvent<HTMLInputElement>) {
+    const next = e.target.checked
+    setDigestEnabled(next)
+    const token = localStorage.getItem('auth_token')
+    await fetch(`/player/groups/${groupId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ digestEnabled: next }),
     })
   }
 
@@ -526,6 +543,25 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
           aria-label="Enable Coach assistant"
         />
       </div>
+
+      {/* Digest toggle — only meaningful while the assistant is enabled */}
+      {assistantEnabled && (
+        <div className="flex items-center gap-3">
+          <label htmlFor="digest-toggle" className="text-sm text-[--ink-700]">
+            Weekly digest
+          </label>
+          <input
+            id="digest-toggle"
+            data-testid="digest-toggle"
+            type="checkbox"
+            role="switch"
+            checked={digestEnabled}
+            onChange={handleDigestToggle}
+            className="h-5 w-5 accent-[--court-600]"
+            aria-label="Enable weekly digest"
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -614,6 +650,7 @@ export const GroupSettings: React.FC = () => {
             initialName={groupName}
             initialFormat="singles"
             initialAssistantEnabled={group?.assistantEnabled ?? true}
+            initialDigestEnabled={group?.digestEnabled ?? false}
           />
         </section>
       )}

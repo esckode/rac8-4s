@@ -12,6 +12,7 @@ export interface GroupSummary {
   role: 'owner' | 'member'
   memberCount: number
   assistantEnabled: boolean
+  digestEnabled: boolean
 }
 
 export interface UseGroupListResult {

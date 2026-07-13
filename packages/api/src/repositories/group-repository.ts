@@ -10,6 +10,7 @@ export interface GroupRow {
   defaultMatchFormat: 'singles' | 'doubles'
   createdAt: Date
   assistantEnabled: boolean
+  digestEnabled: boolean
 }
 
 export interface MemberRow {
@@ -49,7 +50,7 @@ export class GroupRepository {
       const groupResult = await client.query(
         `INSERT INTO public.player_groups (name, created_by${defaultMatchFormat ? ', default_match_format' : ''})
          VALUES ($1, $2${defaultMatchFormat ? ', $3' : ''})
-         RETURNING id, name, created_by, default_match_format, created_at, assistant_enabled`,
+         RETURNING id, name, created_by, default_match_format, created_at, assistant_enabled, digest_enabled`,
         defaultMatchFormat ? [name, createdBy, defaultMatchFormat] : [name, createdBy]
       )
       const row = groupResult.rows[0]
@@ -292,9 +293,9 @@ export class GroupRepository {
    */
   async getGroupsForPlayer(
     playerId: string
-  ): Promise<Array<{ id: string; name: string; role: 'owner' | 'member'; memberCount: number; assistantEnabled: boolean }>> {
+  ): Promise<Array<{ id: string; name: string; role: 'owner' | 'member'; memberCount: number; assistantEnabled: boolean; digestEnabled: boolean }>> {
     const result = await this.pool.query(
-      `SELECT g.id, g.name, m.role, g.assistant_enabled,
+      `SELECT g.id, g.name, m.role, g.assistant_enabled, g.digest_enabled,
               (SELECT COUNT(*) FROM public.player_group_members WHERE group_id = g.id)::int AS member_count
        FROM public.player_groups g
        JOIN public.player_group_members m ON m.group_id = g.id AND m.player_id = $1
@@ -307,6 +308,7 @@ export class GroupRepository {
       role: row.role as 'owner' | 'member',
       memberCount: row.member_count as number,
       assistantEnabled: row.assistant_enabled as boolean,
+      digestEnabled: row.digest_enabled as boolean,
     }))
   }
 
@@ -382,7 +384,7 @@ export class GroupRepository {
   async updateGroup(
     groupId: string,
     actorPlayerId: string,
-    updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles'; assistantEnabled?: boolean }
+    updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles'; assistantEnabled?: boolean; digestEnabled?: boolean }
   ): Promise<GroupRow & { assistantEnabledTransitionedOn: boolean }> {
     const client = await this.pool.connect()
     try {
@@ -412,11 +414,15 @@ export class GroupRepository {
         params.push(updates.assistantEnabled)
         setClauses.push(`assistant_enabled = $${params.length}`)
       }
+      if (updates.digestEnabled !== undefined) {
+        params.push(updates.digestEnabled)
+        setClauses.push(`digest_enabled = $${params.length}`)
+      }
 
       if (setClauses.length === 0) {
         // Nothing to update — return current row
         const current = await client.query(
-          `SELECT id, name, created_by, default_match_format, created_at, assistant_enabled
+          `SELECT id, name, created_by, default_match_format, created_at, assistant_enabled, digest_enabled
            FROM public.player_groups WHERE id = $1`,
           [groupId]
         )
@@ -426,7 +432,7 @@ export class GroupRepository {
 
       const result = await client.query(
         `UPDATE public.player_groups SET ${setClauses.join(', ')} WHERE id = $1
-         RETURNING id, name, created_by, default_match_format, created_at, assistant_enabled`,
+         RETURNING id, name, created_by, default_match_format, created_at, assistant_enabled, digest_enabled`,
         params
       )
 
@@ -519,5 +525,6 @@ function rowToGroup(row: any): GroupRow {
     defaultMatchFormat: row.default_match_format as 'singles' | 'doubles',
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
     assistantEnabled: row.assistant_enabled as boolean,
+    digestEnabled: row.digest_enabled as boolean,
   }
 }

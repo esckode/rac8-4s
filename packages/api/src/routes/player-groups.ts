@@ -149,13 +149,14 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     try {
       const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
       const groupId = req.params.groupId as string
-      const { name, defaultMatchFormat, assistantEnabled } = req.body as {
+      const { name, defaultMatchFormat, assistantEnabled, digestEnabled } = req.body as {
         name?: unknown
         defaultMatchFormat?: unknown
         assistantEnabled?: unknown
+        digestEnabled?: unknown
       }
 
-      const updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles'; assistantEnabled?: boolean } = {}
+      const updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles'; assistantEnabled?: boolean; digestEnabled?: boolean } = {}
 
       if (name !== undefined) {
         if (typeof name !== 'string' || !name.trim()) {
@@ -179,6 +180,13 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'assistantEnabled must be a boolean' })
         }
         updates.assistantEnabled = assistantEnabled
+      }
+
+      if (digestEnabled !== undefined) {
+        if (typeof digestEnabled !== 'boolean') {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'digestEnabled must be a boolean' })
+        }
+        updates.digestEnabled = digestEnabled
       }
 
       const group = await groupRepo.updateGroup(groupId, session.playerId, updates)
@@ -215,6 +223,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         name: group.name,
         defaultMatchFormat: group.defaultMatchFormat,
         assistantEnabled: group.assistantEnabled,
+        digestEnabled: group.digestEnabled,
       })
     } catch (err) {
       next(handleGroupError(err))
