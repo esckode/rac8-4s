@@ -13,6 +13,7 @@ import { playerCache } from '../../state'
 import { Button } from './Button'
 import { ErrorBanner } from './ErrorBanner'
 import { SkeletonLoader } from './SkeletonLoader'
+import { Avatar } from './Avatar'
 import '../../styles/globals.css'
 
 export interface StandingsTableProps {
@@ -167,7 +168,8 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
         <div className="w-16 text-center font-semibold text-[--ink-900]">{standing.rank}</div>
 
         {/* Team Name */}
-        <div className="flex-1 font-medium text-[--ink-900]">
+        <div className="flex-1 flex items-center gap-2 font-medium text-[--ink-900]">
+          <Avatar playerId={standing.participantId} name={player?.name || standing.participantId} />
           {player?.name || standing.participantId}
           {isYou && <span className="ml-[--s-2] text-xs font-semibold text-[--court-600]">(You)</span>}
         </div>

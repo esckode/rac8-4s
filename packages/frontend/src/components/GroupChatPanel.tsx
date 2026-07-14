@@ -20,6 +20,7 @@ import { LaunchConfirmSheet } from './LaunchConfirmSheet'
 import { MentionAutocomplete } from './MentionAutocomplete'
 import { parseMentions } from '../utils/parseMentions'
 import { ReconnectingIndicator } from './shared'
+import { Avatar } from './shared/Avatar'
 
 interface VoterSummary {
   voterName: string
@@ -334,9 +335,12 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
                   onClose={() => handleClosePoll(m.id, m.pollId!)}
                   onLaunch={() => handleLaunch(m.id)}
                 />
-                <p className="text-xs text-[--ink-500] mt-1 px-1">
+                <p className="text-xs text-[--ink-500] mt-1 px-1 flex items-center gap-1.5">
                   {m.senderName != null ? (
-                    <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
+                    <>
+                      {m.playerId && <Avatar playerId={m.playerId} name={m.senderName} />}
+                      <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
+                    </>
                   ) : (
                     new Date(m.createdAt).toLocaleTimeString()
                   )}
@@ -366,9 +370,12 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
                   )
                 })}
               </p>
-              <p className="text-xs text-[--ink-500] mt-1">
+              <p className="text-xs text-[--ink-500] mt-1 flex items-center gap-1.5">
                 {m.senderName != null ? (
-                  <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
+                  <>
+                    {m.playerId && <Avatar playerId={m.playerId} name={m.senderName} />}
+                    <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
+                  </>
                 ) : (
                   new Date(m.createdAt).toLocaleTimeString()
                 )}
