@@ -2,6 +2,7 @@ import React from 'react'
 import { useParams } from 'react-router-dom'
 import { useTournament } from '../../hooks/useTournament'
 import { PartnerFinder } from '../../components/PartnerFinder'
+import { formatLocal } from '../../components/shared/formatLocal'
 import '../../styles/globals.css'
 
 export const Details: React.FC = () => {
@@ -35,10 +36,20 @@ export const Details: React.FC = () => {
     )
   }
 
-  const formatDate = (date: string | Date | undefined) => {
-    if (!date) return 'Not set'
-    const d = new Date(date)
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  // P4 — absolute time in the viewer's browser tz (primary), relative
+  // phrasing demoted to secondary.
+  const renderDeadline = (date: string | Date | undefined) => {
+    if (!date) return <p className="text-lg text-[--ink-900]">Not set</p>
+    const iso = typeof date === 'string' ? date : date.toISOString()
+    const { absolute, relative } = formatLocal(iso)
+    return (
+      <p className="text-lg text-[--ink-900]" data-testid="deadline-value">
+        {absolute}
+        <span className="block text-sm font-normal text-[--ink-500]" data-testid="deadline-relative">
+          {relative}
+        </span>
+      </p>
+    )
   }
 
   const getStatusLabel = (status: string) => {
@@ -127,15 +138,15 @@ export const Details: React.FC = () => {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Registration Deadline</h3>
-            <p className="text-lg text-[--ink-900]">{formatDate(tournament.registrationDeadline)}</p>
+            {renderDeadline(tournament.registrationDeadline)}
           </div>
           <div>
             <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Group Stage Deadline</h3>
-            <p className="text-lg text-[--ink-900]">{formatDate(tournament.groupStageDeadline)}</p>
+            {renderDeadline(tournament.groupStageDeadline)}
           </div>
           <div>
             <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Knockout Stage Deadline</h3>
-            <p className="text-lg text-[--ink-900]">{formatDate(tournament.knockoutStageDeadline)}</p>
+            {renderDeadline(tournament.knockoutStageDeadline)}
           </div>
         </div>
       </div>

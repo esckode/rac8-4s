@@ -14,6 +14,7 @@
 
 import React from 'react'
 import type { PollTally } from '../state/group-message-state'
+import { formatLocal } from './shared/formatLocal'
 
 export type PollChoice = 'in' | 'out' | 'maybe'
 
@@ -84,10 +85,11 @@ export const PollCard: React.FC<PollCardProps> = ({
         {question}
       </p>
 
-      {/* Target time */}
+      {/* Target time — absolute primary (browser tz), relative secondary (P4) */}
       {targetTime && (
         <p data-testid="poll-target-time" className="text-xs text-[--ink-500]">
           {formatTargetTime(targetTime)}
+          <span data-testid="poll-target-time-relative"> · {formatLocal(targetTime).relative}</span>
         </p>
       )}
 
