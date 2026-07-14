@@ -409,6 +409,13 @@ export const SELECTORS = {
   DEADLINE_VALUE: '[data-testid="deadline-value"]',
   DEADLINE_RELATIVE: '[data-testid="deadline-relative"]',
   DENSITY_SELECT: '[data-testid="density-select"]',
+
+  // Player Personalization (P5/P6/P7)
+  NAV_BADGE_MATCHES: '[data-testid="nav-badge-matches"]',
+  NAV_BADGE_GROUPS: '[data-testid="nav-badge-groups"]',
+  UP_NEXT_STRIP: '[data-testid="up-next-strip"]',
+  UP_NEXT_MATCH: '[data-testid="up-next-match"]',
+  COMPOSER_CHIP: '[data-testid="composer-chip"]',
 }
 
 // ============================================================================
