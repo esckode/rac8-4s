@@ -171,6 +171,14 @@ here.
   authored. Deferred rather than half-built. Own-vote styling on `PollCard` (the other P8 touch) was
   already present from Phase B and needed no work; the personalized `/browse` empty state (P8's third
   touch) **was built** (S4.6, `BrowseTournaments.tsx`).
+- **BE-GAP-4 — standings snapshots (P11) are singles-only.** `standings_snapshots` (migration 055,
+  S6.1/S6.2, 2026-07-14) FKs `player_id` directly to `public.players`, so a doubles team id — which has
+  no row of its own in `players` — can't be written there without breaking the FK (and the DSR-erasure
+  cascade it exists for). The weekly digest's rank-movement line (P11) is silently skipped for doubles
+  tournaments (`digest-processor.ts`'s `writeSnapshotAndComputeMovements` early-returns on
+  `match_format === 'doubles'`). Fix, if doubles movement becomes a request: either a separate
+  `team_id`-keyed snapshot table, or resolve each team to its two underlying player rows and store two
+  per-player snapshot rows with a shared team-rank value.
 
 ### 🚀 Production readiness (before multi-instance prod cutover)
 > Cross-cutting gaps surfaced during the messaging V2 build — **not** blocking the build (V1–V6 done), but
