@@ -20,18 +20,43 @@ interface ProfileSettings {
 
 type NotifyToggleField = 'notifyMentions' | 'notifyPolls' | 'notifyNudges'
 
+type DayPart = 'morning' | 'afternoon' | 'evening'
+interface AvailabilitySlot {
+  weekday: number
+  dayPart: DayPart
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const DAY_PARTS: DayPart[] = ['morning', 'afternoon', 'evening']
+const RECONFIRM_AFTER_DAYS = 60
+
+function slotKey(weekday: number, dayPart: DayPart): string {
+  return `${weekday}-${dayPart}`
+}
+
 export const Profile: React.FC = () => {
   const [settings, setSettings] = useState<ProfileSettings | null>(null)
   const [loading, setLoading] = useState(true)
+  const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([])
+  const [availabilityUpdatedAt, setAvailabilityUpdatedAt] = useState<string | null>(null)
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token')
-    fetch('/api/auth/me', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
+    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+
+    fetch('/api/auth/me', { headers })
       .then(res => res.json())
       .then(data => setSettings(data.settings))
       .finally(() => setLoading(false))
+
+    fetch('/api/auth/me/availability', { headers })
+      .then(res => (res.ok ? res.json() : null))
+      .then((data: { slots: AvailabilitySlot[]; updatedAt: string | null } | null) => {
+        if (!data) return
+        setAvailabilitySlots(data.slots)
+        setAvailabilityUpdatedAt(data.updatedAt)
+      })
+      .catch(() => {})
   }, [])
 
   async function patchSettings(body: Record<string, unknown>) {
@@ -62,6 +87,32 @@ export const Profile: React.FC = () => {
     setSettings(prev => (prev ? { ...prev, [field]: value } : prev))
     await patchSettings({ [field]: value })
   }
+
+  async function handleAvailabilityToggle(weekday: number, dayPart: DayPart, checked: boolean) {
+    const next = checked
+      ? [...availabilitySlots, { weekday, dayPart }]
+      : availabilitySlots.filter(s => !(s.weekday === weekday && s.dayPart === dayPart))
+    setAvailabilitySlots(next)
+
+    const token = localStorage.getItem('auth_token')
+    await fetch('/api/auth/me/availability', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ slots: next }),
+    })
+    setAvailabilityUpdatedAt(new Date().toISOString())
+  }
+
+  const isAvailable = (weekday: number, dayPart: DayPart) =>
+    availabilitySlots.some(s => s.weekday === weekday && s.dayPart === dayPart)
+
+  const daysSinceAvailabilityUpdate = availabilityUpdatedAt
+    ? (Date.now() - new Date(availabilityUpdatedAt).getTime()) / (24 * 3_600_000)
+    : null
+  const needsReconfirm = daysSinceAvailabilityUpdate !== null && daysSinceAvailabilityUpdate > RECONFIRM_AFTER_DAYS
 
   if (loading) {
     return <div data-testid="profile-page" className="p-4">Loading…</div>
@@ -149,6 +200,52 @@ export const Profile: React.FC = () => {
             className="w-16 text-sm border border-[--border] rounded-lg px-2 py-1 text-[--ink-900] bg-[--surface]"
           />
         </div>
+      </section>
+
+      <section className="rounded-xl border border-[--border] p-4 bg-[--surface] space-y-3">
+        <h2 className="text-base font-semibold text-[--ink-800]">Availability</h2>
+        <p className="text-xs text-[--ink-500]">
+          Used only to suggest times where most of a group is free — never shown per-person.
+        </p>
+
+        <table className="text-sm w-full">
+          <thead>
+            <tr>
+              <th />
+              {WEEKDAYS.map(day => (
+                <th key={day} className="text-center font-medium text-[--ink-700] px-1">{day}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {DAY_PARTS.map(dayPart => (
+              <tr key={dayPart}>
+                <td className="text-[--ink-700] capitalize pr-2">{dayPart}</td>
+                {WEEKDAYS.map((_, weekday) => (
+                  <td key={slotKey(weekday, dayPart)} className="text-center">
+                    <input
+                      type="checkbox"
+                      data-testid={`avail-${weekday}-${dayPart}`}
+                      checked={isAvailable(weekday, dayPart)}
+                      onChange={e => handleAvailabilityToggle(weekday, dayPart, e.target.checked)}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {availabilityUpdatedAt && (
+          <p data-testid="availability-last-updated" className="text-xs text-[--ink-500]">
+            Last updated {new Date(availabilityUpdatedAt).toLocaleDateString()}
+          </p>
+        )}
+        {needsReconfirm && (
+          <p data-testid="availability-reconfirm-prompt" className="text-xs text-[--gold-700] font-medium">
+            It's been a while — please confirm your availability is still accurate.
+          </p>
+        )}
       </section>
     </div>
   )
