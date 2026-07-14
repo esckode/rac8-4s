@@ -7,6 +7,7 @@ import { LeaderboardRepository } from './repositories/leaderboard-repository'
 import { GroupRepository } from './repositories/group-repository'
 import { GroupMessageRepository } from './repositories/group-message-repository'
 import { PlayerSettingsRepository, type PlayerSettings } from './repositories/player-settings-repository'
+import { StandingsSnapshotRepository } from './repositories/standings-snapshot-repository'
 
 const log = getLogger('dsr-service')
 
@@ -32,6 +33,7 @@ export class DataSubjectRequestService {
   private groupRepo: GroupRepository
   private groupMsgRepo: GroupMessageRepository
   private playerSettingsRepo: PlayerSettingsRepository
+  private standingsSnapshotRepo: StandingsSnapshotRepository
 
   constructor(private pool: Pool) {
     this.playerRepo = new PlayerRepository(pool as any)
@@ -41,6 +43,7 @@ export class DataSubjectRequestService {
     this.groupRepo = new GroupRepository(pool as any)
     this.groupMsgRepo = new GroupMessageRepository(pool as any)
     this.playerSettingsRepo = new PlayerSettingsRepository(pool as any)
+    this.standingsSnapshotRepo = new StandingsSnapshotRepository(pool as any)
   }
 
   /**
@@ -66,6 +69,7 @@ export class DataSubjectRequestService {
     await this.leaderboardRepo.anonymizeMatchLogSlotsFor(playerId)
     await this.groupMsgRepo.deletePersonalThreadFor(playerId)
     await this.playerSettingsRepo.deleteFor(playerId)
+    await this.standingsSnapshotRepo.deleteFor(playerId)
 
     // Hard-delete membership
     await this.groupRepo.removeFromAllGroups(playerId)
