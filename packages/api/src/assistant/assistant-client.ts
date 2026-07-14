@@ -17,6 +17,7 @@ import {
   getStandings,
   getBracket,
   getTournament,
+  getGroupAvailability,
 } from './tools'
 import { proposeScore } from './propose-score'
 import { proposePoll } from './propose-poll'
@@ -98,6 +99,16 @@ function buildTools(ctx: AssistantToolContext, onToolRun: () => void) {
       },
     }),
     betaZodTool({
+      name: 'get_group_availability',
+      description:
+        "Get how many of this group's members are free per weekday/day-part (morning/afternoon/evening). Call this when asked things like \"when can we play\" or \"what's a good time for everyone\". Returns COUNTS ONLY — never repeat or imply which specific member is free at a slot, even if asked; suggest times by citing counts (e.g. \"4 of 6 free Saturday evening\").",
+      inputSchema: z.object({}),
+      run: async () => {
+        onToolRun()
+        return JSON.stringify(await getGroupAvailability(ctx))
+      },
+    }),
+    betaZodTool({
       name: 'propose_score',
       description:
         "Draft a score confirmation card for one of the asking player's own pending matches. Call this when the player reports a result in chat (e.g. \"I beat Bob 6-4, 6-3\"). Give the score asker-relative (the asker's numbers first in every set) — this tool normalizes it. Never claim the score was recorded: only a card was drafted, which the player must confirm themselves.",
@@ -114,7 +125,7 @@ function buildTools(ctx: AssistantToolContext, onToolRun: () => void) {
     betaZodTool({
       name: 'propose_poll',
       description:
-        'Draft a poll confirmation card. Call this when the player asks to start a poll or gauge interest (e.g. "poll the group for Saturday"). If a time is mentioned, resolve it to an ISO-8601 UTC instant yourself using the asker\'s timezone and the current time given in your context — targetTime must already be in the future. Omit targetTime for an open-ended poll. Never claim the poll was created: only a card was drafted, which the player must confirm themselves.',
+        'Draft a poll confirmation card. Call this when the player asks to start a poll or gauge interest (e.g. "poll the group for Saturday"). If a time is mentioned, resolve it to an ISO-8601 UTC instant yourself using the asker\'s timezone and the current time given in your context — targetTime must already be in the future. Omit targetTime for an open-ended poll. If the player asks you to pick or suggest a time rather than naming one, call get_group_availability first and prefer a slot where more members are free. Never claim the poll was created: only a card was drafted, which the player must confirm themselves.',
       inputSchema: z.object({
         question: z.string(),
         targetTime: z.string().optional(),
@@ -219,6 +230,8 @@ export class AnthropicAssistantClient implements AssistantClient {
   }
 }
 
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
 /**
  * Deterministic keyword router for tests/e2e — fakes ONLY the NL→intent hop;
  * the tools it calls are the REAL assistant tools with real auth scoping, so
@@ -234,6 +247,8 @@ export class AnthropicAssistantClient implements AssistantClient {
  *   that id, playing a maximally prompt-injected model (A0.2 scenario 10)
  * - "who am i playing" / "next match" → real get_my_matches
  * - "standings" → real get_standings on the first group-linked tournament
+ * - "when can we play" / "good time for everyone" → real get_group_availability,
+ *   citing only counts (P12 privacy wall)
  * - anything else → canned "[mock] Coach reply"
  */
 export class MockAssistantClient implements AssistantClient {
@@ -317,6 +332,18 @@ export class MockAssistantClient implements AssistantClient {
       const res = await getStandings(ctx, { tournamentId })
       if ('error' in res) return { text: "I couldn't find that tournament.", toolRounds: 1 }
       return { text: formatStandings(res), toolRounds: 1 }
+    }
+
+    if (/when can we play|when.*(everyone|we all).*free|good time for everyone/i.test(q)) {
+      const res = await getGroupAvailability(ctx)
+      if (res.slots.length === 0) {
+        return { text: "Nobody's set their availability yet.", toolRounds: 1 }
+      }
+      const best = res.slots.reduce((a, b) => (b.freeCount > a.freeCount ? b : a))
+      return {
+        text: `${best.freeCount} of ${res.totalMembers} free ${WEEKDAY_NAMES[best.weekday]} ${best.dayPart}.`,
+        toolRounds: 1,
+      }
     }
 
     return { text: '[mock] Coach reply', toolRounds: 0 }

@@ -133,7 +133,7 @@ describe('AnthropicAssistantClient', () => {
       expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0 })
     })
 
-    it('registers the four Phase A read-only tools plus the Phase B propose_* tools', async () => {
+    it('registers the Phase A read-only tools (incl. Personalization P12) plus the Phase B propose_* tools', async () => {
       mockToolRunner.mockReturnValue(Promise.resolve({ content: [], usage: {} }))
       const client = new AnthropicAssistantClient({ adapter: 'anthropic', model: 'claude-haiku-4-5' })
       await client.runTurn(turnInput())
@@ -144,6 +144,7 @@ describe('AnthropicAssistantClient', () => {
         'get_standings',
         'get_bracket',
         'get_tournament',
+        'get_group_availability',
         'propose_score',
         'propose_poll',
         'propose_poll_vote',

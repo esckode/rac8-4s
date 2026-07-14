@@ -24,6 +24,8 @@ import {
 } from '../db'
 import { buildRankReason, type RankReasonRow } from './rank-reason'
 import type { IBroadcastBus } from '../broadcast-bus'
+import { GroupRepository as PlayerGroupRepository } from '../repositories/group-repository'
+import { AvailabilityRepository } from '../repositories/availability-repository'
 
 export interface AssistantToolContext {
   db: Pool
@@ -45,6 +47,7 @@ export const ASSISTANT_TOOL_NAMES = [
   'get_standings',
   'get_bracket',
   'get_tournament',
+  'get_group_availability',
 ] as const
 
 export interface ToolNotFound {
@@ -344,4 +347,31 @@ export async function getTournament(
 function toIso(value: string | null): string | null {
   if (!value) return null
   return new Date(value).toISOString()
+}
+
+// ── get_group_availability ───────────────────────────────────────────────────
+
+export interface GroupAvailabilitySlot {
+  weekday: number
+  dayPart: 'morning' | 'afternoon' | 'evening'
+  freeCount: number
+}
+
+/**
+ * P12 aggregates wall: returns per-slot COUNTS of the ctx group's members
+ * who marked themselves free, never player ids or names — enforced by only
+ * ever reading `AvailabilityRepository.countFreeByGroup`'s aggregate output,
+ * which has no per-member row in its return shape to leak (same pattern as
+ * A3.3's authorization wall — the tool cannot expose what it never fetches).
+ */
+export async function getGroupAvailability(
+  ctx: AssistantToolContext
+): Promise<{ totalMembers: number; slots: GroupAvailabilitySlot[] }> {
+  const playerGroupRepo = new PlayerGroupRepository(ctx.db)
+  const availabilityRepo = new AvailabilityRepository(ctx.db)
+
+  const members = await playerGroupRepo.getGroupMembers(ctx.groupId)
+  const slots = await availabilityRepo.countFreeByGroup(members.map(m => m.playerId))
+
+  return { totalMembers: members.length, slots }
 }
