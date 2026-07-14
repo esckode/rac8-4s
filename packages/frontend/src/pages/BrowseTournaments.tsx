@@ -69,6 +69,21 @@ export const BrowseTournaments: React.FC = () => {
     return colors[index % colors.length]
   }
 
+  // Personalized empty state (P8) — names what's waiting instead of a
+  // generic zero-state, fed by the same P5 payload as the up-next strip.
+  const { unscoredMatches, openPolls, pendingCards } = pendingActions
+  const pendingParts: string[] = []
+  if (unscoredMatches.length > 0) {
+    pendingParts.push(`${unscoredMatches.length} match${unscoredMatches.length > 1 ? 'es' : ''} to score`)
+  }
+  if (openPolls.length > 0) {
+    pendingParts.push(`${openPolls.length} poll${openPolls.length > 1 ? 's' : ''} to vote on`)
+  }
+  if (pendingCards.length > 0) {
+    pendingParts.push(`${pendingCards.length} card${pendingCards.length > 1 ? 's' : ''} to confirm`)
+  }
+  const pendingSummary = pendingParts.length > 0 ? pendingParts.join(' · ') : null
+
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--surface)' }}>
@@ -130,7 +145,14 @@ export const BrowseTournaments: React.FC = () => {
           </div>
         )}
 
-        {!loading && filteredTournaments.length === 0 && !error && (
+        {!loading && filteredTournaments.length === 0 && !error && pendingSummary && (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--ink-500)' }}>
+            <p style={{ margin: 0, fontWeight: 600, color: 'var(--ink-900)' }}>Welcome back</p>
+            <p style={{ margin: '8px 0 0', fontSize: 14 }}>{pendingSummary}</p>
+          </div>
+        )}
+
+        {!loading && filteredTournaments.length === 0 && !error && !pendingSummary && (
           <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--ink-500)' }}>
             <p style={{ margin: 0 }}>No tournaments available</p>
             <p style={{ margin: '8px 0 0', fontSize: 14 }}>Check back later for upcoming tournaments</p>

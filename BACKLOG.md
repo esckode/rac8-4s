@@ -161,6 +161,16 @@ here.
   (`/test/complete-tournament`, `NODE_ENV!=production` only). Fix: add an organizer "mark tournament
   complete" action (or auto-transition on final knockout match score) the next time someone touches the
   scheduled-tournament lifecycle.
+- **BE-GAP-3 — `NotificationMessage` has no correlation id, so an "awaiting me" filter on `/notifications`
+  can't be built cleanly.** Surfaced building Player Personalization P8's "small touches" (S4.6,
+  2026-07-14): the design calls for a personal-inbox view filtered to items the P5 pending-actions endpoint
+  says are awaiting the player, but `NotificationCard`/`NotificationMessage` (`components/NotificationCard.tsx`)
+  carry only `{id, body, type, createdAt}` — no `matchId`/`pollId`/`cardId` to join against
+  `pending-actions-service.ts`'s output. A body-text heuristic would be fragile (breaks on copy changes);
+  correlating properly needs a metadata field threaded through wherever these system messages are
+  authored. Deferred rather than half-built. Own-vote styling on `PollCard` (the other P8 touch) was
+  already present from Phase B and needed no work; the personalized `/browse` empty state (P8's third
+  touch) **was built** (S4.6, `BrowseTournaments.tsx`).
 
 ### 🚀 Production readiness (before multi-instance prod cutover)
 > Cross-cutting gaps surfaced during the messaging V2 build — **not** blocking the build (V1–V6 done), but
