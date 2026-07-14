@@ -1,10 +1,10 @@
-# 1:1 Coach — Design (pre-grill draft)
+# 1:1 Coach — Design
 ## A private per-player Coach conversation for performance, tactics, and strategy
 
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
-**Date:** 2026-07-13
-**Status:** 📝 DRAFT — **not grilled.** Extends the @coach assistant
+**Date:** 2026-07-13 (drafted); **grilled to resolution 2026-07-14 — see §7.**
+**Status:** ✅ **GRILLED** — ready for implementation planning. Extends the @coach assistant
 ([LLM_ASSISTANT_DESIGN.md](./LLM_ASSISTANT_DESIGN.md), Phases A–C merged to `main`); referenced
 as the "later phase" of [PERSONALIZATION_DESIGN.md](./PERSONALIZATION_DESIGN.md) §4.
 **Sequencing:** after the personalization foundation tier (P0–P5) + its reception checkpoint;
@@ -59,7 +59,7 @@ The 1:1 surface is also the natural home for three already-deferred items:
 | Topic scope | app + tournaments + racket sport (Q14) | same, **plus** coaching-specific rules: technique framed as suggestions; **hard decline for injury/medical-adjacent asks** (new liability boundary) |
 | Model stakes | verbalize precomputed data | tactics advice is where Haiku's limits would actually show — likeliest trigger for Q8's "upgrade on evidence" (Sonnet for this surface only?) |
 
-## 4. Open questions for the grill
+## 4. Open questions for the grill *(all resolved 2026-07-14 — see §7)*
 
 1. **Surface:** reuse the `personal` thread (Coach replies interleave with system
    notifications) vs. a new `type='coach'` conversation per player (clean separation, one more
@@ -108,7 +108,8 @@ stale-memory embarrassment in front of the group); in a 1:1 it becomes tractable
   one — the `assistant_cards` precedent.
 - **Grill:** opt-in UX (per-player toggle, P0 preferences store); what Coach may propose to
   remember (preferences yes; inferences about skill/behavior no — boundary needs writing
-  down); staleness (memories rot — surface age? prompt to re-confirm?).
+  down); staleness (memories rot — surface age? prompt to re-confirm?). *(Resolved
+  2026-07-14 — §7 #7a–7c.)*
 
 ### 5.1 State architecture — does 1:1 need long-term state, and how?
 
@@ -143,7 +144,8 @@ erase.
 **V1 stance: layers 1+2+3 (bigger window + data-derived trends + consented memory) — no new
 state mechanism beyond §5. First upgrade: B. C held behind evidence. D dropped.**
 **Grill:** window size N (token cost vs continuity); whether B ships in v1 or waits for the
-re-engagement signal; the K/visibility rules for C *if* it is ever revisited.
+re-engagement signal; the K/visibility rules for C *if* it is ever revisited. *(Resolved
+2026-07-14 — §7 #4 window=50, #8 B held for evidence; C untouched.)*
 
 ### 5.2 `propose_remember` on the Phase B card machinery — mapping, reuse, deviations
 
@@ -208,10 +210,41 @@ had.
 ## 6. Non-goals (v1)
 
 - No proactive 1:1 messages (Coach never initiates the private conversation — Phase C's
-  proactive machinery stays group-scoped).
+  proactive machinery stays group-scoped). **Held absolute in the grill (§7 #11c): the
+  personal digest does not get a carve-out.**
 - No write actions in 1:1 beyond `propose_remember` (score cards etc. stay in the group,
   where the social context lives).
 - No coach-to-coach continuity across surfaces (group Coach does not reference 1:1 content —
   hard privacy line in v1).
 - No human-coach marketplace / video analysis / training-plan generation — this is a chat
   surface over existing data, not a coaching platform.
+
+**Named post-v1 follow-ups (grilled 2026-07-14):** T1.4 chat catch-up (privacy blocker now
+resolved by this surface; needs a new chat-content read tool class + read-position semantics);
+personal digest (arrives as an opt-in notification/inbox shape, not an unprompted Coach
+message); goal objects (§5.1 Option B, on the cross-week re-engagement signal).
+
+## 7. Grill resolutions (2026-07-14)
+
+Grilled to resolution with the product owner; same standard as the assistant design §10/§11 —
+settled, do not relitigate without new evidence. Owner calls against the drafted
+recommendation are marked ⚖.
+
+| # | Decision |
+|---|----------|
+| 1 Surface | **New `type='coach'` conversation, one per player** (046 pattern: widen the type CHECK + partial unique index; lazy get-or-create on first open). Reuse of the `personal` notification thread rejected: with every-message-is-a-turn semantics, any reply to a kick/promote notification would silently become a billed Coach turn; separation also keeps retention scope and the §5.2 card FK semantics clean |
+| 2 Economics | Every message is a turn; per-player **20/hr + 60/day** (existing Redis rate-limit machinery); the shared global `ASSISTANT_DAILY_BUDGET_USD` stays the one kill-switch (C-Q4 principle). **Near-limit heads-up:** when a turn leaves ≤3 messages in either window, the worker appends a one-line footer to that reply ("⚠ 3 messages left this hour") — deterministic string, no extra model call; polite cap message at the limit as today. Group `assistant_enabled` has **no bearing** — an owner's control over their social space doesn't reach a player's private surface |
+| 3 Model ⚖ | **Haiku 4.5 + mandatory cost levers** (owner call; Sonnet-for-1:1 was the recommendation — tactics generation has no rank_reason-style mitigation). The levers are **v1 requirements, not later optimizations** — the naive replay shape is simply wrong for a conversation surface: (a) a second `cache_control` breakpoint on the conversation history, so warm-session turns re-read prior history at 0.1× and pay full rate only on new tokens; (b) a **deterministic player snapshot** (next match, standings row + `rank_reason`, last ~5 results; ~300 tokens from existing queries) injected into the user context so most turns need zero tool rounds. Config: new `COACH_MODEL` env var (group surface keeps `ASSISTANT_MODEL`). **Pre-agreed upgrade trigger** (no re-grill): first genuine tactics-quality complaint, or owner dogfood judgment → flip `COACH_MODEL` to Sonnet. Cost with levers: ~$0.002–0.007/warm turn on Haiku; pathological 60-turn/day ceiling ≈ $5/mo/player, realistic heavy user well under $1/mo (Sonnet would be ~3×; naive no-lever Sonnet was ~$60/mo pathological — the number that forced the levers) |
+| 4 Turn shape | **≤120 words** default, expand on request; embedded data lookups ("when do I play next?") stay terse — the 20-word tier carries over per answer *type*, not per surface; `max_tokens` ≈500 safety ceiling only; replay window **50 messages** (riding the history cache; single-topic 1:1 threads make 50 messages cover weeks) |
+| 5 Scouting | **Allowed, stats-grounded only** — normal sport behavior; everyone reads the standings. Opponent analysis must cite visible results (scores, records, streaks — the P11 store) and be framed as gameplay advice for the asker; **no personality/temperament/behavior profiling of the opponent** ("Bob has lost 4 of 5 tiebreaks" yes; "Bob cracks under pressure" never). Boundary text is a design deliverable, prompt-enforced; the structural wall already limits data to asker-visible |
+| 6 Medical line | **Symptoms vs. general practice.** Anything referencing the asker's own pain/injury/symptom/recovery/medication → hard decline with one warm sentence pointing to a physio/doctor (wording written at design time, not improvised). General warm-ups, conditioning, prevention, strain-reducing technique stay allowed under the Q14 general-knowledge framing ("how do I avoid tennis elbow" answers; "my elbow hurts when I serve" declines) |
+| 7a Memory opt-in ⚖ | `player_settings.coach_memory_enabled` **default ON** (owner call; default-OFF was the recommendation) — the per-memory confirm card remains the real consent gate; `/profile` gains the toggle + a memories list with per-entry delete buttons |
+| 7b Memory bounds | Coach may propose only **player-stated facts** (preferences, equipment, self-declared goals/focus areas, logistics); it never proposes its own inferences about skill/temperament/behavior — offering the inference for archival is itself the harm. Player-dictated memories ("remember that I…") accept anything within length/cap limits |
+| 7c Staleness | **Age-annotated injection** ("[noted 3 months ago] prefers morning matches") so the model hedges old facts; created_at shown in the `/profile` list; prompt nudges conversational re-confirmation of plainly stale entries. No TTL, no re-confirm cards, no sweeper (C0 lesson) |
+| 8 Goals | §5.1 Option B **held for evidence**, per the doc stance — trigger: cross-week re-engagement visible in usage logs. Goal-flavored memories captured under 7b are migration candidates when B lands, so nothing is wasted |
+| 9 UI | Pinned **Coach** entry at the top of the existing messages/conversations list; renders as a normal conversation; lazily created; one-time intro message on first open (Q15 adapted). Exists for **every authenticated player** — zero-group players included (they're exactly who lack a group surface); magic-link guests excluded, matching where messaging sits. Deep-link entry points (match card / standings → "ask Coach") deferred to v2 |
+| 10a Retention & policy | Coaching history keeps the **same durable retention** as group chat — no auto-purge sweeper; clear-conversation (10b) is the user-controlled valve; `type='coach'` makes a later purge query trivial. **Privacy policy: discovery during the grill — no policy document exists anywhere in the app** (the DobScreen "Privacy Policy" text is a dead span) and the missing A9.2 clause is already the launch gate keeping Phases A–C dark. **Decision: write the privacy-policy page as part of this build** — static page + link wiring, with an AI section covering group-visible assistance (A9.2's debt), the private 1:1 conversation, the consented memory store (what's stored, player-approved, how to delete), and what leaves the system (message text + display names to the model vendor; never emails/tokens). One page clears both gates; owner reads/approves the final text before it gates anything |
+| 10b Moderation | **Prompt-only say-side control, accepted eyes-open** — the structural walls are the guarantee and a successful jailbreak's only audience is the jailbreaker — **plus player-side "clear conversation"** in v1: hard-delete of the coach-thread message rows (no shared-feed integrity to preserve in a 1:1; not tombstones). Memories survive a clear — they have their own delete controls |
+| 11a DSR | Confirmed §5.2: erasure cascade explicitly covers `assistant_cards.args` for `action='remember'` rows + the `player_memories` table; the [RED] personal-scope card erasure test ships before the implementation |
+| 11b T1.4 catch-up | **Deferred — named first follow-up.** Its privacy blocker is resolved by this surface, but it's a summarization feature needing a new tool class (chat-content reads) + read-position semantics; v1 stays coaching-focused |
+| 11c Personal digest | **Deferred — the "Coach never initiates" non-goal stays absolute in v1.** Future shape: opt-in notification/inbox-style delivery, not an unprompted Coach message |
