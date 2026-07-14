@@ -20,9 +20,11 @@
  * proxy (an edited score re-surfaces in the next digest).
  */
 import { Pool } from 'pg'
+import { calculateStandings } from '@core/index'
 import type { IBroadcastBus } from '../broadcast-bus'
 import { GroupRepository as StageGroupRepository, GroupMatchRow } from '../db'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
+import { StandingsSnapshotRepository } from '../repositories/standings-snapshot-repository'
 import { proactiveMarkerExists } from '../assistant/proactive-marker'
 import { buildDigest, type DigestResult, type DigestUpcomingDeadline } from '../assistant/digest'
 import { resolveEffectiveGroupTimezone } from '../group-timezone'
@@ -65,6 +67,18 @@ export function isoWeekString(date: Date): string {
   return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`
 }
 
+/** 1 -> "1st", 2 -> "2nd", 3 -> "3rd", 11-13 -> "11th"/"12th"/"13th", else "Nth". */
+function ordinal(n: number): string {
+  const mod100 = n % 100
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`
+  switch (n % 10) {
+    case 1: return `${n}st`
+    case 2: return `${n}nd`
+    case 3: return `${n}rd`
+    default: return `${n}th`
+  }
+}
+
 interface DueGroupRow {
   id: string
   name: string
@@ -78,13 +92,84 @@ interface GroupTournamentRow {
   group_stage_deadline: string | null
 }
 
+/**
+ * P11 — writes this week's standings snapshot for a SINGLES tournament
+ * (compose from repo data + calculateStandings — the C0 pin applies, never
+ * the asker-scoped tools) and returns a movement line per player whose rank
+ * differs from last week's snapshot. Doubles is out of scope (migration
+ * 055's FK is to players directly — a team id has no players row).
+ */
+async function writeSnapshotAndComputeMovements(
+  stageGroupRepo: StageGroupRepository,
+  snapshotRepo: StandingsSnapshotRepository,
+  tournament: { id: string; match_format: 'singles' | 'doubles' },
+  week: string,
+  previousWeek: string
+): Promise<string[]> {
+  if (tournament.match_format === 'doubles') return []
+
+  const stageGroups = await stageGroupRepo.findGroupsByTournament(tournament.id)
+  const participants: Array<{ id: string; name: string }> = []
+  const matches: Array<{ participant1Id: string; participant2Id: string; winnerId: string | null; score: string | null }> = []
+
+  for (const stageGroup of stageGroups) {
+    const members = await stageGroupRepo.findMembersByGroup(stageGroup.id)
+    for (const m of members) participants.push({ id: m.id, name: m.name })
+
+    const groupMatches = await stageGroupRepo.findMatchesByGroup(stageGroup.id)
+    for (const gm of groupMatches as GroupMatchRow[]) {
+      if (!gm.player1_id || !gm.player2_id) continue
+      matches.push({
+        participant1Id: gm.player1_id,
+        participant2Id: gm.player2_id,
+        winnerId: gm.winner_id ?? null,
+        score: gm.score ?? null,
+      })
+    }
+  }
+
+  if (participants.length === 0) return []
+
+  const standings = calculateStandings(participants, matches)
+  const nameById = new Map(participants.map(p => [p.id, p.name]))
+
+  const movements: string[] = []
+  for (const s of standings) {
+    const previous = await snapshotRepo.getSnapshot(tournament.id, s.participantId, previousWeek)
+    await snapshotRepo.writeSnapshot(s.participantId, {
+      tournamentId: tournament.id,
+      isoWeek: week,
+      rank: s.rank,
+      wins: s.wins,
+      setsWon: s.setsWon,
+    })
+
+    if (previous && previous.rank !== s.rank) {
+      const diff = previous.rank - s.rank
+      const arrow = diff > 0 ? '↑' : '↓'
+      const name = nameById.get(s.participantId) ?? 'Unknown'
+      movements.push(`${name} ${arrow}${Math.abs(diff)} to ${ordinal(s.rank)}`)
+    }
+  }
+
+  return movements
+}
+
 async function composeGroupDigestData(
   pool: Pool,
   stageGroupRepo: StageGroupRepository,
+  snapshotRepo: StandingsSnapshotRepository,
   groupId: string,
+  week: string,
+  previousWeek: string,
   weekStart: Date,
   now: Date
-): Promise<{ resultsThisWeek: DigestResult[]; pendingCount: number; upcomingDeadline: DigestUpcomingDeadline | null }> {
+): Promise<{
+  resultsThisWeek: DigestResult[]
+  pendingCount: number
+  upcomingDeadline: DigestUpcomingDeadline | null
+  rankMovements: string[]
+}> {
   const tournaments = await pool.query(
     `SELECT id, name, match_format, status, group_stage_deadline
      FROM public.tournaments WHERE group_id = $1 AND deleted_at IS NULL`,
@@ -94,6 +179,7 @@ async function composeGroupDigestData(
   const resultsThisWeek: DigestResult[] = []
   let pendingCount = 0
   let upcomingDeadline: DigestUpcomingDeadline | null = null
+  const rankMovements: string[] = []
 
   for (const t of tournaments.rows as GroupTournamentRow[]) {
     const stageGroups = await stageGroupRepo.findGroupsByTournament(t.id)
@@ -130,18 +216,24 @@ async function composeGroupDigestData(
         upcomingDeadline = { tournamentName: t.name, hoursRemaining }
       }
     }
+
+    if (!TERMINAL_STATUSES.includes(t.status)) {
+      rankMovements.push(...await writeSnapshotAndComputeMovements(stageGroupRepo, snapshotRepo, t, week, previousWeek))
+    }
   }
 
-  return { resultsThisWeek, pendingCount, upcomingDeadline }
+  return { resultsThisWeek, pendingCount, upcomingDeadline, rankMovements }
 }
 
 export async function processDigestSweep(deps: DigestSweepDeps): Promise<void> {
   const { pool, broadcastBus, now = new Date() } = deps
   const stageGroupRepo = new StageGroupRepository(pool as any)
   const groupMessageRepo = new GroupMessageRepository(pool as any)
+  const snapshotRepo = new StandingsSnapshotRepository(pool as any)
 
-  const week = isoWeekString(now)
   const weekStart = new Date(now.getTime() - 7 * 24 * 3_600_000)
+  const week = isoWeekString(now)
+  const previousWeek = isoWeekString(weekStart)
 
   const due = await pool.query(
     `SELECT id, name FROM public.player_groups WHERE assistant_enabled = true AND digest_enabled = true`
@@ -156,15 +248,18 @@ export async function processDigestSweep(deps: DigestSweepDeps): Promise<void> {
     const marker = `digest:${groupId}:${week}`
     if (await proactiveMarkerExists(pool, groupId, marker)) continue
 
-    const { resultsThisWeek, pendingCount, upcomingDeadline } = await composeGroupDigestData(
+    const { resultsThisWeek, pendingCount, upcomingDeadline, rankMovements } = await composeGroupDigestData(
       pool,
       stageGroupRepo,
+      snapshotRepo,
       groupId,
+      week,
+      previousWeek,
       weekStart,
       now
     )
 
-    const body = buildDigest(g.name, resultsThisWeek, pendingCount, upcomingDeadline)
+    const body = buildDigest(g.name, resultsThisWeek, pendingCount, upcomingDeadline, rankMovements)
     if (body === null) continue
 
     const { message, conversationId } = await groupMessageRepo.sendAssistantMessage({
@@ -193,6 +288,7 @@ export async function processDigestSweep(deps: DigestSweepDeps): Promise<void> {
       resultsCount: resultsThisWeek.length,
       pendingCount,
       hasDeadline: upcomingDeadline !== null,
+      movementCount: rankMovements.length,
     })
   }
 }

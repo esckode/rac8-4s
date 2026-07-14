@@ -19,6 +19,7 @@ import { PlayerRepository, TournamentRepository, GroupRepository as StageGroupRe
 import { defaultAdultAttestation } from '../factories/player.factory'
 import { processDigestSweep } from '../../workers/digest-processor'
 import { PlayerSettingsRepository } from '../../repositories/player-settings-repository'
+import { StandingsSnapshotRepository } from '../../repositories/standings-snapshot-repository'
 
 // A known Sunday, 18:00 UTC — the legacy fallback window for groups with no
 // derivable effective timezone (verified via Date.getUTCDay() === 0).
@@ -229,5 +230,74 @@ describe('processDigestSweep', () => {
 
     const marker = `digest:${chatGroupId}:${isoWeek(outsideWindow)}`
     expect(await digestRows(pool, chatGroupId, marker)).toHaveLength(0)
+  })
+
+  // ── S6.2 — Personalization P11: rank-movement line ──────────────────────
+
+  /** createTournamentWithResult scores gm.player1_id as the winner — resolve which of owner/opponent that actually is. */
+  async function findWinnerId(tournamentId: string): Promise<string> {
+    const stageGroupRepo = new StageGroupRepository(pool)
+    const stageGroups = await stageGroupRepo.findGroupsByTournament(tournamentId)
+    const matches = await stageGroupRepo.findMatchesByGroup(stageGroups[0].id)
+    return matches[0].winner_id!
+  }
+
+  it('P11: writes a standings snapshot for the week (idempotent — a second sweep does not duplicate it)', async () => {
+    const owner = await createPlayer(pool)
+    const opponent = await createPlayer(pool)
+    const chatGroupId = await createChatGroup(pool, owner.id)
+    const tournamentId = await createTournamentWithResult(pool, chatGroupId, [owner, opponent])
+    const winnerId = await findWinnerId(tournamentId)
+
+    const now = SUNDAY_1800_UTC
+    await processDigestSweep({ pool, now })
+    await processDigestSweep({ pool, now }) // same week — dedupe marker also blocks re-composition
+
+    const snapshotRepo = new StandingsSnapshotRepository(pool)
+    const snap = await snapshotRepo.getSnapshot(tournamentId, winnerId, isoWeek(now))
+    expect(snap).toMatchObject({ rank: 1, wins: 1 })
+
+    const res = await pool.query(
+      `SELECT * FROM public.standings_snapshots WHERE tournament_id = $1 AND player_id = $2`,
+      [tournamentId, winnerId]
+    )
+    expect(res.rows).toHaveLength(1)
+  })
+
+  it('P11: first week (no previous snapshot) has no movement line', async () => {
+    const owner = await createPlayer(pool)
+    const opponent = await createPlayer(pool)
+    const chatGroupId = await createChatGroup(pool, owner.id)
+    await createTournamentWithResult(pool, chatGroupId, [owner, opponent])
+
+    const now = SUNDAY_1800_UTC
+    await processDigestSweep({ pool, now })
+
+    const marker = `digest:${chatGroupId}:${isoWeek(now)}`
+    const rows = await digestRows(pool, chatGroupId, marker)
+    expect(rows[0].body).not.toMatch(/rank/i)
+  })
+
+  it('P11: includes a rank-movement line when this week\'s rank differs from a seeded previous week', async () => {
+    const owner = await createPlayer(pool)
+    const opponent = await createPlayer(pool)
+    const chatGroupId = await createChatGroup(pool, owner.id)
+    const tournamentId = await createTournamentWithResult(pool, chatGroupId, [owner, opponent])
+    const winnerId = await findWinnerId(tournamentId)
+    const winnerName = winnerId === owner.id ? owner.name : opponent.name
+
+    const now = SUNDAY_1800_UTC
+    const previousWeek = isoWeek(new Date(now.getTime() - 7 * 24 * 3_600_000))
+    // The winner is rank 1 today (2-player round robin) — seed last week's
+    // snapshot showing them at rank 2, so a movement line is expected.
+    const snapshotRepo = new StandingsSnapshotRepository(pool)
+    await snapshotRepo.writeSnapshot(winnerId, { tournamentId, isoWeek: previousWeek, rank: 2, wins: 0, setsWon: 0 })
+
+    await processDigestSweep({ pool, now })
+
+    const marker = `digest:${chatGroupId}:${isoWeek(now)}`
+    const rows = await digestRows(pool, chatGroupId, marker)
+    expect(rows[0].body).toContain(winnerName)
+    expect(rows[0].body).toMatch(/1st/)
   })
 })

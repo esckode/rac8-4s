@@ -48,6 +48,22 @@ describe('buildDigest', () => {
     expect(body).toContain('Summer Slam')
   })
 
+  it('P11: includes a rank-movement line when movements are passed', () => {
+    const body = buildDigest('Weekend Warriors', [], 0, null, ['Alice ↑2 to 1st'])
+    expect(body).toContain('Alice')
+    expect(body).toContain('1st')
+  })
+
+  it('P11: omits the movement section when no movements are passed', () => {
+    const body = buildDigest('Weekend Warriors', [{ player1Name: 'Alice', player2Name: 'Bob', score: '6-3 6-4' }], 0, null, [])
+    expect(body).not.toMatch(/rank/i)
+  })
+
+  it('P11: a movement-only week (no results/pending/deadline) still posts, not skipped', () => {
+    const body = buildDigest('Weekend Warriors', [], 0, null, ['Alice ↑2 to 1st'])
+    expect(body).not.toBeNull()
+  })
+
   it('stays within budget (≤120 words)', () => {
     const body = buildDigest(
       'Weekend Warriors',

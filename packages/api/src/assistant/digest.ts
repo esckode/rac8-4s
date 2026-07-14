@@ -1,10 +1,11 @@
 /**
- * Weekly digest template (Phase C / T3.2 — design §11 C-Q11).
+ * Weekly digest template (Phase C / T3.2 — design §11 C-Q11; Personalization
+ * P11 adds a fourth section).
  *
- * Template-only in v1 (no standings-movement diffs — needs a snapshot store,
- * rejected). Three sections computed from existing repo data: results this
- * week, matches pending, nearest upcoming deadline. All three empty → null
- * (skip — no digest posts for a dead week).
+ * Four sections computed from existing repo data: results this week, matches
+ * pending, nearest upcoming deadline, and (P11) rank movement vs the
+ * previous week's standings snapshot. All four empty → null (skip — no
+ * digest posts for a dead week).
  */
 
 export interface DigestResult {
@@ -23,9 +24,15 @@ export function buildDigest(
   groupName: string,
   resultsThisWeek: DigestResult[],
   pendingCount: number,
-  upcomingDeadline: DigestUpcomingDeadline | null
+  upcomingDeadline: DigestUpcomingDeadline | null,
+  rankMovements: string[] = []
 ): string | null {
-  if (resultsThisWeek.length === 0 && pendingCount === 0 && upcomingDeadline === null) {
+  if (
+    resultsThisWeek.length === 0 &&
+    pendingCount === 0 &&
+    upcomingDeadline === null &&
+    rankMovements.length === 0
+  ) {
     return null
   }
 
@@ -46,6 +53,10 @@ export function buildDigest(
         ? 'less than a day left'
         : `${Math.ceil(upcomingDeadline.hoursRemaining / 24)} days left`
     parts.push(`Nearest deadline: ${upcomingDeadline.tournamentName} — ${relative}.`)
+  }
+
+  if (rankMovements.length > 0) {
+    parts.push(`Rank changes: ${rankMovements.join(', ')}.`)
   }
 
   return `${groupName} weekly digest. ${parts.join(' ')}`
