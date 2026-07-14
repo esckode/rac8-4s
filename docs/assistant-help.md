@@ -158,7 +158,12 @@ scores, standings) always appear in the app in real time regardless of notificat
   can try again later.
 - Coach can also speak up on its own, without being asked: a **deadline reminder** when a
   scheduled tournament's group-stage deadline is 2 days or 1 day away and matches are still
-  unscored (it names the pending matches); a **recap** naming the winner and standings once a
-  group-linked tournament finishes; and, for groups that opt in, a **weekly digest** summarizing
-  results, pending matches, and the nearest upcoming deadline. These only post while Coach is
-  enabled for the group. The weekly digest is off by default — turn it on in group settings.
+  unscored (it names the pending matches and states the deadline as a clock time); a **recap**
+  naming the winner and standings once a group-linked tournament finishes; and, for groups that
+  opt in, a **weekly digest** — posted Sunday morning — summarizing results, pending matches,
+  and the nearest upcoming deadline. These only post while Coach is enabled for the group. The
+  weekly digest is off by default — turn it on in group settings.
+- Times Coach states to the whole group (deadlines, the weekly digest) use the **group's
+  timezone** — derived from members' own timezones, or pinned by a group owner in group
+  settings. Your **own timezone** (used for your profile and anything shown just to you) follows
+  your device automatically unless you set one manually in your profile.
