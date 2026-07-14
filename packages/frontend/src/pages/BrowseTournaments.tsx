@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react'
+import { usePendingActions } from '../hooks/usePendingActions'
+import { UpNextStrip } from '../components/shared/UpNextStrip'
 
 interface Tournament {
   id: string
@@ -19,6 +21,7 @@ const coverColors: Record<string, string> = {
 }
 
 export const BrowseTournaments: React.FC = () => {
+  const pendingActions = usePendingActions()
   const [filterActive, setFilterActive] = useState('All')
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,6 +82,8 @@ export const BrowseTournaments: React.FC = () => {
           🔍
         </button>
       </div>
+
+      <UpNextStrip actions={pendingActions} />
 
       {/* Search */}
       <div style={{ padding: '12px 20px' }}>

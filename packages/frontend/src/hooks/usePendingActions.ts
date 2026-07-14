@@ -9,22 +9,44 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 
-export interface PendingActionsSummary {
-  unscoredMatches: number
-  openPolls: number
-  pendingCards: number
+export interface PendingMatch {
+  tournamentId: string
+  tournamentName: string
+  matchId: string
+  opponentName: string
 }
 
-interface PendingActionsPayload {
-  unscoredMatches: unknown[]
-  openPolls: unknown[]
-  pendingCards: unknown[]
+export interface PendingPoll {
+  groupId: string
+  groupName: string
+  pollId: string
+  question: string
 }
 
-const EMPTY: PendingActionsSummary = { unscoredMatches: 0, openPolls: 0, pendingCards: 0 }
+export interface PendingCard {
+  groupId: string
+  groupName: string
+  cardId: string
+  action: string
+}
 
-export function usePendingActions(): PendingActionsSummary {
-  const [summary, setSummary] = useState<PendingActionsSummary>(EMPTY)
+export interface NearestDeadline {
+  tournamentId: string
+  tournamentName: string
+  deadline: string
+}
+
+export interface PendingActions {
+  unscoredMatches: PendingMatch[]
+  openPolls: PendingPoll[]
+  pendingCards: PendingCard[]
+  nearestDeadline: NearestDeadline | null
+}
+
+const EMPTY: PendingActions = { unscoredMatches: [], openPolls: [], pendingCards: [], nearestDeadline: null }
+
+export function usePendingActions(): PendingActions {
+  const [actions, setActions] = useState<PendingActions>(EMPTY)
 
   const refetch = useCallback(() => {
     const token = localStorage.getItem('auth_token')
@@ -34,13 +56,9 @@ export function usePendingActions(): PendingActionsSummary {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => (r.ok ? r.json() : null))
-      .then((data: PendingActionsPayload | null) => {
-        if (!data) return
-        setSummary({
-          unscoredMatches: data.unscoredMatches.length,
-          openPolls: data.openPolls.length,
-          pendingCards: data.pendingCards.length,
-        })
+      .then((data: PendingActions | null) => {
+        if (!data || !Array.isArray(data.unscoredMatches)) return
+        setActions(data)
       })
       .catch(() => {})
   }, [])
@@ -51,5 +69,5 @@ export function usePendingActions(): PendingActionsSummary {
     return () => window.removeEventListener('focus', refetch)
   }, [refetch])
 
-  return summary
+  return actions
 }

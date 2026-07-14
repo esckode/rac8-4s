@@ -131,7 +131,7 @@ const BottomNav = () => {
   const groupsUnread = useGroupUnread()
   const notificationUnread = useNotificationUnread()
   const pendingActions = usePendingActions()
-  const pendingGroupItems = pendingActions.openPolls + pendingActions.pendingCards
+  const pendingGroupItems = pendingActions.openPolls.length + pendingActions.pendingCards.length
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const isActive = (path: string) => location.pathname.startsWith(path)
 
@@ -155,7 +155,7 @@ const BottomNav = () => {
             <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
               {tab.icon}
               {tab.testId === 'nav-matches' && isAuthenticated && (
-                <NavCountBadge count={pendingActions.unscoredMatches} testId="nav-badge-matches" />
+                <NavCountBadge count={pendingActions.unscoredMatches.length} testId="nav-badge-matches" />
               )}
             </span>
             <span>{tab.label}</span>
