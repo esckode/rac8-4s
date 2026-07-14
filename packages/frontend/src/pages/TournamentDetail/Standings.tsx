@@ -3,12 +3,14 @@ import { useParams } from 'react-router-dom'
 import { useTournament } from '../../hooks/useTournament'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useAuth } from '../../hooks/useAuth'
+import { usePlayerSettings } from '../../hooks/usePlayerSettings'
 import { StandingsTable } from '../../components/shared/StandingsTable'
 import '../../styles/globals.css'
 
 export const Standings: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
   const { isAuthenticated, user } = useAuth()
+  const { tableDensity } = usePlayerSettings()
   const { standings, isLoading, error, refetch } = useTournament(tournamentId || '')
   const { organizerRole } = usePermissions(tournamentId || '')
   const [overrideInProgress, setOverrideInProgress] = useState(false)
@@ -60,6 +62,7 @@ export const Standings: React.FC = () => {
         onOverride={organizerRole ? handleOverride : undefined}
         onRetry={refetch}
         currentPlayerId={user?.playerId ?? undefined}
+        density={tableDensity}
       />
 
       {overrideInProgress && (

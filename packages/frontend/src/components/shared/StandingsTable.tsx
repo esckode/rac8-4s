@@ -27,6 +27,8 @@ export interface StandingsTableProps {
   className?: string
   /** Player Personalization P2 — highlights and auto-scrolls to this row. */
   currentPlayerId?: string
+  /** Player Personalization P10 — tighter row spacing. Default 'comfortable'. */
+  density?: 'comfortable' | 'compact'
 }
 
 type SortField = 'rank' | 'wins' | 'losses' | 'setDiff'
@@ -42,10 +44,14 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
   onRetry,
   className,
   currentPlayerId,
+  density = 'comfortable',
 }) => {
   const [sortField, setSortField] = useState<SortField>('rank')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const listRef = useListRef(null)
+  const isCompact = density === 'compact'
+  const rowHeight = isCompact ? 32 : 44
+  const rowPaddingY = isCompact ? 'py-[--s-1]' : 'py-[--s-3]'
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -154,7 +160,7 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
           flex
           items-center
           px-[--s-4]
-          py-[--s-3]
+          ${rowPaddingY}
           border-b
           border-[--border]
           text-sm
@@ -230,7 +236,10 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
   }
 
   return (
-    <div data-testid="standings-table" className={`bg-white rounded-[--r-lg] border border-[--border] overflow-hidden ${className}`}>
+    <div
+      data-testid="standings-table"
+      className={`bg-white rounded-[--r-lg] border border-[--border] overflow-hidden ${isCompact ? 'standings-table--compact' : ''} ${className}`}
+    >
       {/* Header */}
       <div className="bg-[--ink-100] px-[--s-4] py-[--s-3] border-b border-[--border] grid grid-cols-auto gap-0 sticky top-0 z-10">
         <div className="w-16 text-center">
@@ -255,11 +264,11 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
       </div>
 
       {/* Virtualized Body */}
-      <div style={{ height: Math.min(sortedStandings.length * 44 + 44, 600), width: '100%' }}>
+      <div style={{ height: Math.min(sortedStandings.length * rowHeight + rowHeight, 600), width: '100%' }}>
         <List
           listRef={listRef}
           rowCount={sortedStandings.length}
-          rowHeight={44}
+          rowHeight={rowHeight}
           rowComponent={RowRenderer as any}
           rowProps={{} as any}
           style={{ width: '100%' }}
