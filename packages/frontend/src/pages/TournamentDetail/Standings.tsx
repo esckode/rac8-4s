@@ -8,7 +8,7 @@ import '../../styles/globals.css'
 
 export const Standings: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const { standings, isLoading, error, refetch } = useTournament(tournamentId || '')
   const { organizerRole } = usePermissions(tournamentId || '')
   const [overrideInProgress, setOverrideInProgress] = useState(false)
@@ -59,6 +59,7 @@ export const Standings: React.FC = () => {
         userRole={userRole}
         onOverride={organizerRole ? handleOverride : undefined}
         onRetry={refetch}
+        currentPlayerId={user?.playerId ?? undefined}
       />
 
       {overrideInProgress && (

@@ -6,8 +6,8 @@
  * Supports sorting, role-based actions, and responsive design.
  */
 
-import React, { useState, useMemo } from 'react'
-import { List } from 'react-window'
+import React, { useState, useMemo, useEffect } from 'react'
+import { List, useListRef } from 'react-window'
 import type { Standing } from '@shared/types'
 import { playerCache } from '../../state'
 import { Button } from './Button'
@@ -24,6 +24,8 @@ export interface StandingsTableProps {
   onOverride?: (playerId: string) => void
   onRetry?: () => void
   className?: string
+  /** Player Personalization P2 — highlights and auto-scrolls to this row. */
+  currentPlayerId?: string
 }
 
 type SortField = 'rank' | 'wins' | 'losses' | 'setDiff'
@@ -38,9 +40,11 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
   onOverride,
   onRetry,
   className,
+  currentPlayerId,
 }) => {
   const [sortField, setSortField] = useState<SortField>('rank')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const listRef = useListRef(null)
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -81,6 +85,18 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
 
     return sorted
   }, [standings, sortField, sortDirection])
+
+  // P2 — auto-scroll the viewer's own row into view (~2nd from top so
+  // context shows) — highlight + scroll, no sticky pin (scrolling away
+  // afterward is free). react-window virtualizes rows, so bringing the
+  // target row into the rendered window is done via its own imperative
+  // scrollToRow API, not a plain DOM scrollIntoView.
+  useEffect(() => {
+    if (!currentPlayerId) return
+    const index = sortedStandings.findIndex(s => s.participantId === currentPlayerId)
+    if (index === -1) return
+    listRef.current?.scrollToRow({ index: Math.max(0, index - 1), align: 'start', behavior: 'auto' })
+  }, [currentPlayerId, sortedStandings, listRef])
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return null
@@ -126,11 +142,12 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
     const standing = sortedStandings[index]
     const player = playerCache.get(standing.participantId)
     const isEven = index % 2 === 0
+    const isYou = currentPlayerId !== undefined && standing.participantId === currentPlayerId
 
     return (
       <div
         style={style}
-        data-testid="standings-row"
+        data-testid={isYou ? 'standings-row-you' : 'standings-row'}
         onClick={() => onRowClick?.(standing.participantId)}
         className={`
           flex
@@ -142,7 +159,7 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
           text-sm
           transition-colors
           duration-[--duration-normal]
-          ${isEven ? 'bg-white' : 'bg-[--ink-50]'}
+          ${isYou ? 'bg-[--court-50] border-l-4 border-l-[--court-500]' : isEven ? 'bg-white' : 'bg-[--ink-50]'}
           ${onRowClick ? 'hover:bg-[--court-50] cursor-pointer' : ''}
         `}
       >
@@ -150,7 +167,10 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
         <div className="w-16 text-center font-semibold text-[--ink-900]">{standing.rank}</div>
 
         {/* Team Name */}
-        <div className="flex-1 font-medium text-[--ink-900]">{player?.name || standing.participantId}</div>
+        <div className="flex-1 font-medium text-[--ink-900]">
+          {player?.name || standing.participantId}
+          {isYou && <span className="ml-[--s-2] text-xs font-semibold text-[--court-600]">(You)</span>}
+        </div>
 
         {/* Matches */}
         <div className="w-20 text-center text-[--ink-600]">{standing.wins + standing.losses}</div>
@@ -235,6 +255,7 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
       {/* Virtualized Body */}
       <div style={{ height: Math.min(sortedStandings.length * 44 + 44, 600), width: '100%' }}>
         <List
+          listRef={listRef}
           rowCount={sortedStandings.length}
           rowHeight={44}
           rowComponent={RowRenderer as any}
