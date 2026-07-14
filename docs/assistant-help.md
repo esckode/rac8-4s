@@ -29,6 +29,10 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   any push that would otherwise arrive during that window — nothing is queued up to send later.
   Quiet hours never hide anything from you inside the app: your unscored matches, open polls,
   and pending confirmations still show up on your badges and the up-next strip regardless.
+- **Availability** is a weekly grid (morning/afternoon/evening x each day) you can set in your
+  profile. It's used only to suggest times where most of a group is free — ask "when can we
+  play?" in a group chat and Coach will reply with a count like "4 of 6 free Saturday evening."
+  Coach never says or implies which specific person is or isn't free at a slot.
 
 ## Finding and joining tournaments
 
