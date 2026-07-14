@@ -11,6 +11,7 @@ export interface GroupRow {
   createdAt: Date
   assistantEnabled: boolean
   digestEnabled: boolean
+  groupTimezone: string | null
 }
 
 export interface MemberRow {
@@ -50,7 +51,7 @@ export class GroupRepository {
       const groupResult = await client.query(
         `INSERT INTO public.player_groups (name, created_by${defaultMatchFormat ? ', default_match_format' : ''})
          VALUES ($1, $2${defaultMatchFormat ? ', $3' : ''})
-         RETURNING id, name, created_by, default_match_format, created_at, assistant_enabled, digest_enabled`,
+         RETURNING id, name, created_by, default_match_format, created_at, assistant_enabled, digest_enabled, group_timezone`,
         defaultMatchFormat ? [name, createdBy, defaultMatchFormat] : [name, createdBy]
       )
       const row = groupResult.rows[0]
@@ -293,9 +294,9 @@ export class GroupRepository {
    */
   async getGroupsForPlayer(
     playerId: string
-  ): Promise<Array<{ id: string; name: string; role: 'owner' | 'member'; memberCount: number; assistantEnabled: boolean; digestEnabled: boolean }>> {
+  ): Promise<Array<{ id: string; name: string; role: 'owner' | 'member'; memberCount: number; assistantEnabled: boolean; digestEnabled: boolean; groupTimezone: string | null }>> {
     const result = await this.pool.query(
-      `SELECT g.id, g.name, m.role, g.assistant_enabled, g.digest_enabled,
+      `SELECT g.id, g.name, m.role, g.assistant_enabled, g.digest_enabled, g.group_timezone,
               (SELECT COUNT(*) FROM public.player_group_members WHERE group_id = g.id)::int AS member_count
        FROM public.player_groups g
        JOIN public.player_group_members m ON m.group_id = g.id AND m.player_id = $1
@@ -309,6 +310,7 @@ export class GroupRepository {
       memberCount: row.member_count as number,
       assistantEnabled: row.assistant_enabled as boolean,
       digestEnabled: row.digest_enabled as boolean,
+      groupTimezone: row.group_timezone ?? null,
     }))
   }
 
@@ -384,7 +386,7 @@ export class GroupRepository {
   async updateGroup(
     groupId: string,
     actorPlayerId: string,
-    updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles'; assistantEnabled?: boolean; digestEnabled?: boolean }
+    updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles'; assistantEnabled?: boolean; digestEnabled?: boolean; groupTimezone?: string | null }
   ): Promise<GroupRow & { assistantEnabledTransitionedOn: boolean }> {
     const client = await this.pool.connect()
     try {
@@ -418,11 +420,15 @@ export class GroupRepository {
         params.push(updates.digestEnabled)
         setClauses.push(`digest_enabled = $${params.length}`)
       }
+      if (updates.groupTimezone !== undefined) {
+        params.push(updates.groupTimezone)
+        setClauses.push(`group_timezone = $${params.length}`)
+      }
 
       if (setClauses.length === 0) {
         // Nothing to update — return current row
         const current = await client.query(
-          `SELECT id, name, created_by, default_match_format, created_at, assistant_enabled, digest_enabled
+          `SELECT id, name, created_by, default_match_format, created_at, assistant_enabled, digest_enabled, group_timezone
            FROM public.player_groups WHERE id = $1`,
           [groupId]
         )
@@ -432,7 +438,7 @@ export class GroupRepository {
 
       const result = await client.query(
         `UPDATE public.player_groups SET ${setClauses.join(', ')} WHERE id = $1
-         RETURNING id, name, created_by, default_match_format, created_at, assistant_enabled, digest_enabled`,
+         RETURNING id, name, created_by, default_match_format, created_at, assistant_enabled, digest_enabled, group_timezone`,
         params
       )
 
@@ -526,5 +532,6 @@ function rowToGroup(row: any): GroupRow {
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
     assistantEnabled: row.assistant_enabled as boolean,
     digestEnabled: row.digest_enabled as boolean,
+    groupTimezone: row.group_timezone ?? null,
   }
 }

@@ -33,6 +33,7 @@ import {
 } from '../auth/magic-link'
 import { getLogger } from '../logger'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
+import { PlayerSettingsRepository } from '../repositories/player-settings-repository'
 import { ConversationRepository } from '../repositories/conversation-repository'
 import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-notify-selector'
 import { PollRepository } from '../repositories/poll-repository'
@@ -84,6 +85,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   const router = Router({ mergeParams: true })
   const groupRepo = new GroupRepository(deps.db as any)
   const playerRepo = new PlayerRepository(deps.db as any)
+  const playerSettingsRepo = new PlayerSettingsRepository(deps.db as any)
   const groupMsgRepo = new GroupMessageRepository(deps.db as any)
   const conversationRepo = new ConversationRepository(deps.db as any)
   const pollRepo = new PollRepository(deps.db as any)
@@ -149,14 +151,21 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     try {
       const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
       const groupId = req.params.groupId as string
-      const { name, defaultMatchFormat, assistantEnabled, digestEnabled } = req.body as {
+      const { name, defaultMatchFormat, assistantEnabled, digestEnabled, groupTimezone } = req.body as {
         name?: unknown
         defaultMatchFormat?: unknown
         assistantEnabled?: unknown
         digestEnabled?: unknown
+        groupTimezone?: unknown
       }
 
-      const updates: { name?: string; defaultMatchFormat?: 'singles' | 'doubles'; assistantEnabled?: boolean; digestEnabled?: boolean } = {}
+      const updates: {
+        name?: string
+        defaultMatchFormat?: 'singles' | 'doubles'
+        assistantEnabled?: boolean
+        digestEnabled?: boolean
+        groupTimezone?: string | null
+      } = {}
 
       if (name !== undefined) {
         if (typeof name !== 'string' || !name.trim()) {
@@ -189,6 +198,13 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         updates.digestEnabled = digestEnabled
       }
 
+      if (groupTimezone !== undefined) {
+        if (groupTimezone !== null && typeof groupTimezone !== 'string') {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'groupTimezone must be a string or null' })
+        }
+        updates.groupTimezone = groupTimezone
+      }
+
       const group = await groupRepo.updateGroup(groupId, session.playerId, updates)
 
       log.info('group.updated', { groupId, actorPlayerId: session.playerId, updates })
@@ -218,12 +234,17 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         log.info('assistant.toggled', { groupId, actorPlayerId: session.playerId, enabled: updates.assistantEnabled })
       }
 
+      if (updates.groupTimezone !== undefined) {
+        log.info('group.timezone.pinned', { groupId, actorPlayerId: session.playerId, groupTimezone: updates.groupTimezone })
+      }
+
       return res.status(200).json({
         id: group.id,
         name: group.name,
         defaultMatchFormat: group.defaultMatchFormat,
         assistantEnabled: group.assistantEnabled,
         digestEnabled: group.digestEnabled,
+        groupTimezone: group.groupTimezone,
       })
     } catch (err) {
       next(handleGroupError(err))
@@ -549,6 +570,15 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         const timezoneErr = validateGroupMessageTimezone(req.body.timezone)
         if (timezoneErr) {
           return res.status(400).json({ code: 'VALIDATION_ERROR', message: timezoneErr })
+        }
+
+        // P1a: auto-follow the browser tz on every message POST, unless the
+        // player has manually set one in /profile (sticky until reset).
+        if (typeof req.body.timezone === 'string') {
+          const currentSettings = await playerSettingsRepo.getOrDefaults(session.playerId)
+          if (!currentSettings.timezoneManual) {
+            await playerSettingsRepo.upsert(session.playerId, { timezone: req.body.timezone })
+          }
         }
 
         const { message, conversationId } = await groupMsgRepo.sendGroupMessage({
