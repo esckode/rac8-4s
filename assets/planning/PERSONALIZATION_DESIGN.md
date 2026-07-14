@@ -4,9 +4,9 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-07-13
-**Status:** 📐 **GRILLED to resolution 2026-07-13** (P0–P12 + §3; see §5 resolution table —
-do not relitigate without new evidence). P13 ratings still needs its own grill; the 1:1 Coach
-later phase (§4) has its own doc. Builds on the community layer ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)),
+**Status:** ✅ **Built** (P0–P12, 2026-07-14 — see [PERSONALIZATION_IMPLEMENTATION.md](./PERSONALIZATION_IMPLEMENTATION.md)'s
+Definition of done). P13 ratings still needs its own grill; the 1:1 Coach later phase (§4) has
+its own doc, ungrilled. Builds on the community layer ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)),
 the @coach assistant ([LLM_ASSISTANT_DESIGN.md](./LLM_ASSISTANT_DESIGN.md) — Phases A–C merged to
 `main` 2026-07-12/13), and the Task-19 mobile-first frontend architecture
 ([TASK19_DESIGN_SPEC.md](./TASK19_DESIGN_SPEC.md)).

@@ -5,7 +5,8 @@
 > resolution table — **read it first; do not relitigate**, especially the three ⚖ owner calls).
 
 **Date:** 2026-07-13
-**Status:** 📋 PLAN READY — not started.
+**Status:** ✅ **Built** (2026-07-14, S0–S8, branch `personalization-design`). See "Definition of
+done" at the end of this document.
 **Method:** TDD-first per CLAUDE.md §4/§11 — every step is a **[RED]** commit (failing tests,
 run them, confirm they fail *for the right reason*) then a **[GREEN]** commit. E2E scenarios
 land in `e2e-scenarios.md` **before** code (S0). Coverage ≥85% on new modules. One logical
@@ -263,3 +264,52 @@ the item still shows in badge/strip.
   ids · DSR export/erasure verified for all three new tables (S1.1/S6.1/S7.1 tests are the
   gate) · no live-model dependency anywhere (mock adapter covers S7's Coach path; live
   availability-suggestion quality joins the A0.1b-blocked smoke list).
+
+## Definition of done (final — S0–S8)
+
+- [x] All S-steps (S0–S8) built with [RED]→[GREEN] commit history, 2026-07-14, branch
+      `personalization-design`. Migrations 052–056 (`player_settings`, `player_groups.
+      group_timezone`/`locations.timezone`, notify prefs, `standings_snapshots`,
+      `player_availability`), each auto-applied via the existing `runMigrations()` harness.
+- [x] `npm test`: api 2344 passed (only the pre-existing, unrelated `partial-indexes.spec.ts`
+      query-planner flake fails — confirmed via repeated isolated runs, predates this branch,
+      same as Phases A–C); frontend 1323 passed. `npx tsc --noEmit` clean on both packages.
+      `npm run lint` (repo-wide) clean.
+- [x] `npx playwright test` — the full Personalization ladder (personalization-ui,
+      -pending-actions, -quiet-hours, -digest-movement, -availability, profile) is 22/22 on
+      chromium+firefox; the full assistant Phase A/B/C ladder (assistant, assistant-actions,
+      assistant-proactive) re-run at 28/28 with no regression from the digest/nudge notify-gate
+      and prompt/tool changes.
+- [x] Coverage on the core new backend modules (`repositories/player-settings-repository.ts`,
+      `services/pending-actions-service.ts`, `repositories/availability-repository.ts`,
+      `notify-gate.ts`, `quiet-hours.ts`, `repositories/standings-snapshot-repository.ts`):
+      statements 92.48%, functions 100%, lines 94.73% — all ≥85%. Branches 81.69% — short of 85%,
+      same "diminishing returns on scattered edge-case branches" pattern accepted in Phases A–C.
+      Core touched FE modules (`usePendingActions`, `usePlayerSettings`, `UpNextStrip`,
+      `Profile.tsx`, plus their consuming component tests): statements 95.19%, lines 96.73%,
+      functions 86.66%; branches 75.4% (same acceptance).
+- [x] `LOG_LEVEL=debug` trace confirmed `settings.updated` (with `playerId`), `group.timezone.
+      pinned` (with `actorPlayerId`), and `availability.updated` (with `playerId`) all present,
+      each carrying the request's `requestId` for correlation.
+- [x] DSR export/erasure verified for all three new tables — `player_settings` (S1.1),
+      `standings_snapshots` (S6.1), `player_availability` (S7.1) — 26/26 passing across the
+      three integration spec files; a single `erase()` call fans out to all three stores in one
+      trace (confirmed in the debug log).
+- [x] No live-model dependency anywhere — every test and e2e run used `ASSISTANT_ADAPTER=mock`
+      (the default); `get_group_availability`'s live-model reply quality joins the A0.1b-blocked
+      manual-smoke list alongside Phase C's recap polish.
+- [x] `docs/assistant-help.md` final sweep done in the same change as this DoD: added the
+      digest's rank-movement line (S6, missed at the time — caught here) and a short badges/
+      strip/composer-chip mention (S4, never had help-corpus text); profile/notify/quiet-hours/
+      availability sections confirmed already present and accurate from their own stages.
+- [x] Four grounding findings recorded in BACKLOG.md, none blocking: **BE-GAP-3** (no
+      `matchId`/`pollId`/`cardId` correlation on `NotificationMessage`, so the P8 "awaiting me"
+      inbox filter is deferred), **BE-GAP-4** (`standings_snapshots` is singles-only — a doubles
+      team id has no `players` row for the FK), plus the S4 dual-auth fix and the pre-existing
+      `Standings.spec.tsx` fixture bug (both fixed in-branch, not deferred).
+- [x] A real dual-auth bug (pending-actions initially only accepted account JWTs, silently
+      breaking the composer chip for every group-chat visitor — who authenticates via a
+      magic-link player session) was found via live e2e and fixed in the same session; the fix
+      pattern (try player-session, fall back to an account JWT's own `playerId` claim, mirroring
+      `routes/player.ts`'s `resolvePlayerId`) was then applied proactively to `/api/auth/me/
+      availability` from the start in S7, rather than waiting to find the same bug twice.

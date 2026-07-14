@@ -33,6 +33,11 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   profile. It's used only to suggest times where most of a group is free — ask "when can we
   play?" in a group chat and Coach will reply with a count like "4 of 6 free Saturday evening."
   Coach never says or implies which specific person is or isn't free at a slot.
+- Your **Matches** and **Groups** tabs show a number badge when you have something waiting on
+  you (an unscored match, an open poll, a card to confirm) — it clears once you act. The top of
+  **Browse** shows the same items as an "up next" list when you have any. In a group chat, the
+  message box may suggest a one-tap action (report a score, cast a vote) based on what's
+  pending for you there.
 
 ## Finding and joining tournaments
 
@@ -170,8 +175,9 @@ scores, standings) always appear in the app in real time regardless of notificat
   unscored (it names the pending matches and states the deadline as a clock time); a **recap**
   naming the winner and standings once a group-linked tournament finishes; and, for groups that
   opt in, a **weekly digest** — posted Sunday morning — summarizing results, pending matches,
-  and the nearest upcoming deadline. These only post while Coach is enabled for the group. The
-  weekly digest is off by default — turn it on in group settings.
+  the nearest upcoming deadline, and (from your second week onward) a line naming anyone whose
+  rank moved since last week. These only post while Coach is enabled for the group. The weekly
+  digest is off by default — turn it on in group settings.
 - Times Coach states to the whole group (deadlines, the weekly digest) use the **group's
   timezone** — derived from members' own timezones, or pinned by a group owner in group
   settings. Your **own timezone** (used for your profile and anything shown just to you) follows
