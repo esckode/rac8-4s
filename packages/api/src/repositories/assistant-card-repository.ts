@@ -187,6 +187,21 @@ export class AssistantCardRepository {
     return card
   }
 
+  /**
+   * Pending, unexpired cards proposed by a given player — Player
+   * Personalization P5 (pending-actions aggregation). Only the proposer can
+   * act on a card (B-Q2), so this is the exact set relevant to them.
+   */
+  async findPendingForProposer(proposerPlayerId: string): Promise<AssistantCardRow[]> {
+    const res = await this.pool.query(
+      `SELECT ${CARD_COLUMNS} FROM messaging.assistant_cards
+       WHERE proposer_player_id = $1 AND status = 'pending' AND expires_at > now()
+       ORDER BY created_at DESC`,
+      [proposerPlayerId]
+    )
+    return res.rows.map(rowToCard)
+  }
+
   /** Attach/replace a result without requiring a status transition. */
   async setResult(cardId: string, result: Record<string, unknown>): Promise<AssistantCardRow | null> {
     const res = await this.pool.query(

@@ -395,6 +395,36 @@ export class PollRepository {
   }
 
   /**
+   * Open polls across a set of groups that a given player has NOT yet voted
+   * in — Player Personalization P5 (pending-actions aggregation).
+   */
+  async findOpenPollsNotVotedByPlayer(
+    groupIds: string[],
+    playerId: string
+  ): Promise<Array<{ pollId: string; messageId: string; question: string; groupId: string }>> {
+    if (groupIds.length === 0) return []
+    const res = await this.pool.query(
+      `SELECT p.id, p.message_id, p.question, c.group_id
+       FROM messaging.polls p
+       JOIN messaging.group_messages gm ON gm.id = p.message_id
+       JOIN messaging.conversations c ON c.id = gm.conversation_id
+       WHERE c.group_id = ANY($1) AND p.closed_at IS NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM messaging.poll_votes pv
+           WHERE pv.message_id = p.message_id AND pv.player_id = $2
+         )
+       ORDER BY gm.created_at DESC`,
+      [groupIds, playerId]
+    )
+    return res.rows.map(r => ({
+      pollId: r.id as string,
+      messageId: r.message_id as string,
+      question: r.question as string,
+      groupId: r.group_id as string,
+    }))
+  }
+
+  /**
    * Find ALL polls (open or closed) in a group — used by propose_casual_launch
    * (B5) to resolve a natural-language poll reference. Unlike voting, launch
    * is not gated on the poll still being open (the real launch route has no

@@ -14,6 +14,7 @@ import { TokenInvalidError } from '../auth/errors'
 import { sendPasswordResetEmail } from '../email-adapter'
 import { isReservedDisplayName } from '../assistant/trigger'
 import { PlayerSettingsRepository, DEFAULT_PLAYER_SETTINGS } from '../repositories/player-settings-repository'
+import { getPendingActions } from '../services/pending-actions-service'
 
 const log = getLogger('auth')
 
@@ -389,6 +390,30 @@ export default function authRouter(deps: AppDependencies) {
       log.info('settings.updated', { playerId: account.player_id, fields: Object.keys(updates) })
 
       return res.status(200).json({ settings })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /api/auth/me/pending-actions - Player Personalization P5: caller-scoped
+  // aggregation of unscored matches, unvoted open polls, my pending assistant
+  // cards, and the nearest deadline across my tournaments. Read-only, no
+  // linked-player 400 (an account with no player has nothing pending — empty
+  // state is a valid 200, not an error).
+  router.get('/me/pending-actions', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const account = await accountRepo.findById(payload.sub)
+      if (!account) {
+        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Account not found' })
+      }
+
+      if (!account.player_id) {
+        return res.status(200).json({ unscoredMatches: [], openPolls: [], pendingCards: [], nearestDeadline: null })
+      }
+
+      const pendingActions = await getPendingActions(deps.db as any, account.player_id)
+      return res.status(200).json(pendingActions)
     } catch (err) {
       next(err)
     }
