@@ -24,6 +24,11 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
 - Tap the **Profile** link in the header to open your personal settings.
 - **Table density** controls how compact standings and other tables render — "Comfortable" or
   "Compact".
+- **Notifications**: three toggles control whether you get pushed for @mentions, new polls, and
+  deadline reminders — each defaults to on. **Quiet hours** (a start/end hour) additionally drop
+  any push that would otherwise arrive during that window — nothing is queued up to send later.
+  Quiet hours never hide anything from you inside the app: your unscored matches, open polls,
+  and pending confirmations still show up on your badges and the up-next strip regardless.
 
 ## Finding and joining tournaments
 
