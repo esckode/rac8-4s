@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useGroupUnread } from '../../hooks/useGroupUnread'
 import { useNotificationUnread } from '../../hooks/useNotificationUnread'
+import { usePendingActions } from '../../hooks/usePendingActions'
 import { MyGroupsUnreadBadge } from '../GroupChatPanel'
 import '../../styles/globals.css'
 
@@ -10,6 +11,22 @@ export interface ResponsiveLayoutProps {
   children: React.ReactNode
   showHeader?: boolean
   showNav?: boolean
+}
+
+/** Numeric nav-tab badge, capped at "9+" (P5 — counts communicate workload). */
+const NavCountBadge: React.FC<{ count: number; testId: string; corner?: 'top' | 'bottom' }> = ({
+  count, testId, corner = 'top',
+}) => {
+  if (count <= 0) return null
+  return (
+    <span
+      data-testid={testId}
+      style={{ position: 'absolute', [corner]: -6, right: -6 } as React.CSSProperties}
+      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-[--rose-500] text-white rounded-full"
+    >
+      {count > 9 ? '9+' : count}
+    </span>
+  )
 }
 
 const MORE_ITEMS = [
@@ -113,6 +130,8 @@ const BottomNav = () => {
   const { isAuthenticated } = useAuth()
   const groupsUnread = useGroupUnread()
   const notificationUnread = useNotificationUnread()
+  const pendingActions = usePendingActions()
+  const pendingGroupItems = pendingActions.openPolls + pendingActions.pendingCards
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const isActive = (path: string) => location.pathname.startsWith(path)
 
@@ -133,7 +152,12 @@ const BottomNav = () => {
             className={`responsive-bottom-nav-item ${isActive(tab.path) ? 'active' : ''}`}
             aria-current={isActive(tab.path) ? 'page' : undefined}
           >
-            <span aria-hidden="true">{tab.icon}</span>
+            <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
+              {tab.icon}
+              {tab.testId === 'nav-matches' && isAuthenticated && (
+                <NavCountBadge count={pendingActions.unscoredMatches} testId="nav-badge-matches" />
+              )}
+            </span>
             <span>{tab.label}</span>
           </a>
         ))}
@@ -151,6 +175,7 @@ const BottomNav = () => {
                   <MyGroupsUnreadBadge count={groupsUnread} />
                 </span>
               )}
+              <NavCountBadge count={pendingGroupItems} testId="nav-badge-groups" corner="bottom" />
             </span>
             <span>Groups</span>
           </a>
