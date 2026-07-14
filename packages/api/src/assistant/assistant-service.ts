@@ -14,6 +14,7 @@ import type { IBroadcastBus } from '../broadcast-bus'
 import type { AssistantClient } from './assistant-client'
 import { buildAssistantToolContext } from './tools'
 import { buildSystemPrompt, loadHelpCorpus } from './prompt'
+import { resolveEffectiveGroupTimezone } from '../group-timezone'
 import { getLogger } from '../logger'
 
 const log = getLogger('assistant-service')
@@ -86,6 +87,7 @@ export async function handleAssistantJob(
     const askerName = (await groupMessageRepo.getPlayerName(playerId)) ?? 'A member'
     const recent = await groupMessageRepo.getRecentMessages({ conversationId, limit: 20 })
     const toolContext = await buildAssistantToolContext(pool, { playerId, groupId, broadcastBus })
+    const groupTimezone = await resolveEffectiveGroupTimezone(pool, groupId)
 
     const historyLines = recent
       .map(m => `${m.senderName ?? 'Someone'}: ${m.body}`)
@@ -94,7 +96,9 @@ export async function handleAssistantJob(
     const contextBlock = `Recent group chat (oldest first):
 ${historyLines}
 
-The asking player is ${askerName} (timezone: ${askerTimezone}). Current time: ${currentDateTime}. Their message: ${body}`
+The asking player is ${askerName} (timezone: ${askerTimezone}). This group's effective
+timezone (use for any time you state to the whole group): ${groupTimezone ?? 'UTC'}. Current
+time: ${currentDateTime}. Their message: ${body}`
 
     const result = await client.runTurn({
       systemPrompt: systemPrompt(),

@@ -50,13 +50,15 @@ export async function registerAssistantSweepJobs(options: AssistantSweepSchedule
       }
     )
 
-    // Weekly: Sunday 18:00 UTC (C-Q11).
+    // Hourly, same tick as nudge/recap — the processor itself gates on
+    // whether it's ~Sunday 09:00 in each group's effective timezone
+    // (Personalization P1b reworks the old fixed Sunday-18:00-UTC schedule).
     await digestQueue.add(
       'assistant.digest',
       {},
       {
-        repeat: { pattern: '0 18 * * 0', utc: true },
-        jobId: 'assistant.digest.weekly',
+        repeat: { pattern: '0 * * * *', utc: true },
+        jobId: 'assistant.digest.hourly',
       }
     )
   } finally {

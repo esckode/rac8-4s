@@ -23,6 +23,7 @@ import { GroupRepository as StageGroupRepository, GroupMatchRow } from '../db'
 import { GroupRepository as PlayerGroupRepository } from '../repositories/group-repository'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
 import { MAX_PROACTIVE_POSTS_PER_DAY, proactiveMarkerExists, proactivePostsToday } from '../assistant/proactive-marker'
+import { resolveEffectiveGroupTimezone } from '../group-timezone'
 import { getLogger } from '../logger'
 
 const log = getLogger('nudge-processor')
@@ -53,10 +54,40 @@ export interface PendingMatchName {
   playerIds: string[]
 }
 
-/** Pure template — nudge ≤40 words + match list (Q16 addendum), relative time only. */
-export function buildNudgeBody(matches: PendingMatchName[], relativeLabel: string): string {
+/**
+ * Absolute deadline in the group's effective timezone (falls back to UTC
+ * when the group has none) — e.g. "Sun 6:00pm". Personalization P1b/P4
+ * supersedes the earlier assistant-design C-Q8 relative-only rule.
+ */
+export function formatAbsoluteGroupTime(date: Date, effectiveTz: string | null): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: effectiveTz ?? 'UTC',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).formatToParts(date)
+  const weekday = parts.find(p => p.type === 'weekday')?.value ?? ''
+  const hour = parts.find(p => p.type === 'hour')?.value ?? ''
+  const minute = parts.find(p => p.type === 'minute')?.value ?? ''
+  const dayPeriod = (parts.find(p => p.type === 'dayPeriod')?.value ?? '').toLowerCase()
+  return `${weekday} ${hour}:${minute}${dayPeriod}`
+}
+
+/**
+ * Pure template — nudge ≤40 words + match list (Q16 addendum). Leads with
+ * an absolute group-local time, relative phrasing demoted to secondary
+ * (design §P4 — supersedes the earlier relative-only rule, C-Q8).
+ */
+export function buildNudgeBody(
+  matches: PendingMatchName[],
+  deadline: Date,
+  effectiveTz: string | null,
+  relativeLabel: string
+): string {
   const list = matches.map(m => `${m.name1} vs ${m.name2}`).join(', ')
-  return `Reminder: ${list} — unscored, ${relativeLabel}.`
+  const absolute = formatAbsoluteGroupTime(deadline, effectiveTz)
+  return `Reminder: ${list} — unscored, deadline ${absolute} (${relativeLabel}).`
 }
 
 interface DueTournamentRow {
@@ -154,7 +185,8 @@ export async function processNudgeSweep(deps: NudgeSweepDeps): Promise<void> {
         continue
       }
 
-      const body = buildNudgeBody(pendingMatches, milestone.relativeLabel)
+      const effectiveTz = await resolveEffectiveGroupTimezone(pool, groupId)
+      const body = buildNudgeBody(pendingMatches, deadline, effectiveTz, milestone.relativeLabel)
       const { message, conversationId } = await groupMessageRepo.sendAssistantMessage({
         groupId,
         body,
@@ -188,7 +220,7 @@ export async function processNudgeSweep(deps: NudgeSweepDeps): Promise<void> {
         }
       }
 
-      log.info('assistant.nudged', { groupId, tournamentId, marker, matchCount: pendingMatches.length })
+      log.info('assistant.nudged', { groupId, tournamentId, marker, matchCount: pendingMatches.length, effectiveTz })
     }
   }
 }

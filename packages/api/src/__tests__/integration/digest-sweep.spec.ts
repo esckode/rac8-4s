@@ -1,12 +1,15 @@
 /**
  * C5.1 — Digest sweep (T3.2) integration tests (RED first)
+ * S2.5/S2.6 — Personalization P1b digest rework: hourly sweep gated on
+ * ~Sunday 09:00 in the group's effective timezone (owner pin > member
+ * majority), falling back to Sunday 18:00 UTC when no effective tz exists.
  *
  * processDigestSweep(deps): opted-in groups (assistant_enabled AND
  * digest_enabled) get a weekly digest when at least one section has
  * content; an empty week is skipped; a non-opted-in group never gets one.
  * Weekly dedupe via an iso-week metadata marker.
  *
- * Plan: assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md §C5.
+ * Plan: assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md §C5, §S2.
  */
 
 import { Pool } from 'pg'
@@ -15,6 +18,11 @@ import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/d
 import { PlayerRepository, TournamentRepository, GroupRepository as StageGroupRepository } from '../../db'
 import { defaultAdultAttestation } from '../factories/player.factory'
 import { processDigestSweep } from '../../workers/digest-processor'
+import { PlayerSettingsRepository } from '../../repositories/player-settings-repository'
+
+// A known Sunday, 18:00 UTC — the legacy fallback window for groups with no
+// derivable effective timezone (verified via Date.getUTCDay() === 0).
+const SUNDAY_1800_UTC = new Date('2026-07-12T18:00:00Z')
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -115,7 +123,7 @@ describe('processDigestSweep', () => {
     const chatGroupId = await createChatGroup(pool, owner.id)
     await createTournamentWithResult(pool, chatGroupId, [owner, opponent])
 
-    const now = new Date()
+    const now = SUNDAY_1800_UTC
     await processDigestSweep({ pool, now })
 
     const marker = `digest:${chatGroupId}:${isoWeek(now)}`
@@ -129,7 +137,7 @@ describe('processDigestSweep', () => {
     const chatGroupId = await createChatGroup(pool, owner.id)
     // No tournaments at all — nothing to report.
 
-    const now = new Date()
+    const now = SUNDAY_1800_UTC
     await processDigestSweep({ pool, now })
 
     const marker = `digest:${chatGroupId}:${isoWeek(now)}`
@@ -142,7 +150,7 @@ describe('processDigestSweep', () => {
     const chatGroupId = await createChatGroup(pool, owner.id, { digestEnabled: false })
     await createTournamentWithResult(pool, chatGroupId, [owner, opponent])
 
-    const now = new Date()
+    const now = SUNDAY_1800_UTC
     await processDigestSweep({ pool, now })
 
     const marker = `digest:${chatGroupId}:${isoWeek(now)}`
@@ -155,7 +163,7 @@ describe('processDigestSweep', () => {
     const chatGroupId = await createChatGroup(pool, owner.id, { assistantEnabled: false })
     await createTournamentWithResult(pool, chatGroupId, [owner, opponent])
 
-    const now = new Date()
+    const now = SUNDAY_1800_UTC
     await processDigestSweep({ pool, now })
 
     const marker = `digest:${chatGroupId}:${isoWeek(now)}`
@@ -168,11 +176,58 @@ describe('processDigestSweep', () => {
     const chatGroupId = await createChatGroup(pool, owner.id)
     await createTournamentWithResult(pool, chatGroupId, [owner, opponent])
 
-    const now = new Date()
+    const now = SUNDAY_1800_UTC
     await processDigestSweep({ pool, now })
     await processDigestSweep({ pool, now })
 
     const marker = `digest:${chatGroupId}:${isoWeek(now)}`
     expect(await digestRows(pool, chatGroupId, marker)).toHaveLength(1)
+  })
+
+  it('posts at ~09:00 in the group-derived effective timezone, not the UTC fallback hour', async () => {
+    const owner = await createPlayer(pool)
+    const opponent = await createPlayer(pool)
+    const chatGroupId = await createChatGroup(pool, owner.id)
+    await createTournamentWithResult(pool, chatGroupId, [owner, opponent])
+
+    // Both members in America/Los_Angeles (UTC-7 in July) → majority-derived
+    // effective tz. Local 09:00 on this Sunday = 16:00 UTC (not 18:00).
+    const settingsRepo = new PlayerSettingsRepository(pool)
+    await settingsRepo.upsert(owner.id, { timezone: 'America/Los_Angeles' })
+    await settingsRepo.upsert(opponent.id, { timezone: 'America/Los_Angeles' })
+    await pool.query(`INSERT INTO public.player_group_members (group_id, player_id, role) VALUES ($1, $2, 'member')`, [
+      chatGroupId,
+      opponent.id,
+    ])
+
+    const localWindow = new Date('2026-07-12T16:00:00Z')
+    await processDigestSweep({ pool, now: localWindow })
+
+    const marker = `digest:${chatGroupId}:${isoWeek(localWindow)}`
+    expect(await digestRows(pool, chatGroupId, marker)).toHaveLength(1)
+  })
+
+  it('does not post outside the group-effective-tz window even on the right day', async () => {
+    const owner = await createPlayer(pool)
+    const opponent = await createPlayer(pool)
+    const chatGroupId = await createChatGroup(pool, owner.id)
+    await createTournamentWithResult(pool, chatGroupId, [owner, opponent])
+
+    const settingsRepo = new PlayerSettingsRepository(pool)
+    await settingsRepo.upsert(owner.id, { timezone: 'America/Los_Angeles' })
+    await settingsRepo.upsert(opponent.id, { timezone: 'America/Los_Angeles' })
+    await pool.query(`INSERT INTO public.player_group_members (group_id, player_id, role) VALUES ($1, $2, 'member')`, [
+      chatGroupId,
+      opponent.id,
+    ])
+
+    // Same Sunday, but the group's own effective-tz window (16:00 UTC) has
+    // not arrived yet — the legacy 18:00 UTC fallback must NOT apply since
+    // this group DOES have an effective timezone.
+    const outsideWindow = new Date('2026-07-12T10:00:00Z')
+    await processDigestSweep({ pool, now: outsideWindow })
+
+    const marker = `digest:${chatGroupId}:${isoWeek(outsideWindow)}`
+    expect(await digestRows(pool, chatGroupId, marker)).toHaveLength(0)
   })
 })

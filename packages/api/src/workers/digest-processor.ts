@@ -1,5 +1,6 @@
 /**
- * Weekly digest sweep (Phase C / T3.2 — design §11 C-Q11).
+ * Weekly digest sweep (Phase C / T3.2 — design §11 C-Q11; Personalization
+ * P1b reworks the schedule — design §3.1 ⚖).
  *
  * Unlike nudges/recap (per-tournament), the digest is per-GROUP: it
  * aggregates across every tournament linked to that chat group. Gating
@@ -7,6 +8,12 @@
  * Weekly dedupe via an iso-week metadata marker
  * (`{nudge: 'digest:<groupId>:<isoWeek>'}`) — not subject to the nudge cap
  * (recap/digest are frequency-bounded by construction).
+ *
+ * Runs on the SAME hourly tick as the nudge/recap sweeps (not weekly) — each
+ * tick checks whether it is currently Sunday ~09:00 in the group's effective
+ * timezone (P1b: owner pin > member majority), falling back to Sunday 18:00
+ * UTC when the group has no derivable timezone at all. The iso-week marker
+ * means only the first tick that satisfies the window posts.
  *
  * "Results this week": no scored_at column exists — status IN
  * ('completed','walkover') AND updated_at >= now() - 7 days is the accepted
@@ -18,9 +25,27 @@ import { GroupRepository as StageGroupRepository, GroupMatchRow } from '../db'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
 import { proactiveMarkerExists } from '../assistant/proactive-marker'
 import { buildDigest, type DigestResult, type DigestUpcomingDeadline } from '../assistant/digest'
+import { resolveEffectiveGroupTimezone } from '../group-timezone'
 import { getLogger } from '../logger'
 
 const log = getLogger('digest-processor')
+
+/** True when `now` falls in the group's weekly digest window (~Sunday 09:00 local). */
+export function isDigestWindow(now: Date, effectiveTz: string | null): boolean {
+  if (effectiveTz === null) {
+    return now.getUTCDay() === 0 && now.getUTCHours() === 18
+  }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: effectiveTz,
+    weekday: 'short',
+    hour: 'numeric',
+    hour12: false,
+  }).formatToParts(now)
+  const weekday = parts.find(p => p.type === 'weekday')?.value
+  const hourStr = parts.find(p => p.type === 'hour')?.value
+  const hour = hourStr !== undefined ? parseInt(hourStr, 10) % 24 : -1
+  return weekday === 'Sun' && hour === 9
+}
 
 const TERMINAL_STATUSES = ['completed', 'tournament_complete', 'abandoned']
 
@@ -124,6 +149,10 @@ export async function processDigestSweep(deps: DigestSweepDeps): Promise<void> {
 
   for (const g of due.rows as DueGroupRow[]) {
     const groupId = g.id
+
+    const effectiveTz = await resolveEffectiveGroupTimezone(pool, groupId)
+    if (!isDigestWindow(now, effectiveTz)) continue
+
     const marker = `digest:${groupId}:${week}`
     if (await proactiveMarkerExists(pool, groupId, marker)) continue
 
@@ -160,6 +189,7 @@ export async function processDigestSweep(deps: DigestSweepDeps): Promise<void> {
     log.info('assistant.digested', {
       groupId,
       marker,
+      effectiveTz,
       resultsCount: resultsThisWeek.length,
       pendingCount,
       hasDeadline: upcomingDeadline !== null,

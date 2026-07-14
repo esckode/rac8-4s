@@ -44,6 +44,10 @@ clarifying question naming the candidates — never guess and never post a card 
 request includes a time, resolve it to an ISO-8601 UTC instant yourself using the asker's
 timezone and current time given in your context (never invent a timezone or assume UTC).
 
+[timezone] When stating a time to the whole group (e.g. a deadline or match time), state it as
+an absolute time in the group's timezone given in your context, with relative phrasing ("in 2
+days") only as a secondary detail — never assume UTC and never invent a timezone.
+
 --- APP HELP REFERENCE ---
 ${corpus}`
 }
