@@ -62,6 +62,12 @@ async function runNudgeSweep(): Promise<void> {
   if (!res.ok) throw new Error(`nudge-sweep trigger failed: ${await res.text()}`)
 }
 
+/** Auto-follows the player's stored timezone (P1a) via a normal message POST. */
+async function setPlayerTimezoneViaMessage(groupId: string, token: string, timezone: string): Promise<void> {
+  const res = await apiCall(`/player/groups/${groupId}/messages`, 'POST', { body: 'hi', timezone }, token)
+  if (!res.ok) throw new Error(`message post (tz seed) failed: ${await res.text()}`)
+}
+
 async function setAssistantEnabled(groupId: string, token: string, enabled: boolean): Promise<void> {
   const res = await apiCall(`/player/groups/${groupId}`, 'PATCH', { assistantEnabled: enabled }, token)
   if (!res.ok) throw new Error(`assistant toggle failed: ${await res.text()}`)
@@ -82,8 +88,8 @@ async function setDigestEnabled(groupId: string, token: string, enabled: boolean
   if (!res.ok) throw new Error(`digest toggle failed: ${await res.text()}`)
 }
 
-async function runDigestSweep(): Promise<void> {
-  const res = await apiCall('/test/digest-sweep', 'POST')
+async function runDigestSweep(now?: string): Promise<void> {
+  const res = await apiCall('/test/digest-sweep', 'POST', now ? { now } : undefined)
   if (!res.ok) throw new Error(`digest-sweep trigger failed: ${await res.text()}`)
 }
 
@@ -207,6 +213,32 @@ test.describe('LLM Assistant (@coach) — Phase C proactive nudges', () => {
 
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE)).toHaveCount(2, { timeout: 8000 })
   })
+
+  test('nudge names the match and includes an absolute group-local time (Personalization P1b/P4)', async ({ page }) => {
+    const owner = createTestUser()
+    const opponent = createTestUser()
+    const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
+    const { playerId: opponentPlayerId } = await signupAndGetToken(opponent)
+    const groupId = await createGroup(ownerToken, `Nudge Tz Group ${Date.now()}`)
+
+    // The owner (the group's only member here) sets a stored timezone →
+    // the group's effective tz derives to it (majority of 1/1), so the
+    // nudge composes an absolute time in that zone instead of the UTC
+    // fallback.
+    await setPlayerTimezoneViaMessage(groupId, ownerToken, 'America/Los_Angeles')
+    await seedScheduledSession(groupId, [ownerPlayerId, opponentPlayerId], 47)
+
+    await runNudgeSweep()
+
+    await loginFrontend(page, ownerToken)
+    await page.goto(`http://localhost:5173/groups/${groupId}`)
+
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toBeVisible({ timeout: 8000 })
+    // Absolute time format is "<Weekday> H:MMam/pm" (e.g. "Sun 11:00am") —
+    // assert the day-period suffix rather than an exact clock value (the
+    // deadline is computed relative to "now" when the test runs).
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toContainText(/\d{1,2}:\d{2}(am|pm)/)
+  })
 })
 
 test.describe('LLM Assistant (@coach) — Phase C proactive recap', () => {
@@ -272,7 +304,7 @@ test.describe('LLM Assistant (@coach) — Phase C weekly digest', () => {
     const tournamentId = await seedScheduledSession(groupId, [ownerPlayerId, opponentPlayerId], 200)
     await completeTournament(tournamentId)
 
-    await runDigestSweep()
+    await runDigestSweep('2026-07-12T18:00:00Z')
 
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
@@ -288,7 +320,7 @@ test.describe('LLM Assistant (@coach) — Phase C weekly digest', () => {
     await setDigestEnabled(groupId, ownerToken, true)
     // No tournaments seeded at all.
 
-    await runDigestSweep()
+    await runDigestSweep('2026-07-12T18:00:00Z')
 
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
@@ -306,11 +338,37 @@ test.describe('LLM Assistant (@coach) — Phase C weekly digest', () => {
     const tournamentId = await seedScheduledSession(groupId, [ownerPlayerId, opponentPlayerId], 200)
     await completeTournament(tournamentId)
 
-    await runDigestSweep()
+    await runDigestSweep('2026-07-12T18:00:00Z')
 
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE)).toHaveCount(0)
+  })
+
+  test('fires at the group-derived effective timezone window, not the UTC fallback hour (Personalization P1b)', async ({ page }) => {
+    const owner = createTestUser()
+    const opponent = createTestUser()
+    const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
+    const { playerId: opponentPlayerId } = await signupAndGetToken(opponent)
+    const groupId = await createGroup(ownerToken, `Digest Tz Group ${Date.now()}`)
+    await setDigestEnabled(groupId, ownerToken, true)
+    // Owner (the group's only member here) sets a stored timezone →
+    // majority-of-1 effective tz.
+    await setPlayerTimezoneViaMessage(groupId, ownerToken, 'America/Los_Angeles')
+    const tournamentId = await seedScheduledSession(groupId, [ownerPlayerId, opponentPlayerId], 200)
+    await completeTournament(tournamentId)
+
+    // The legacy UTC-fallback hour (18:00) is NOT this group's window — it
+    // now has an effective tz (America/Los_Angeles, UTC-7 in July), whose
+    // local 09:00 is 16:00 UTC.
+    await runDigestSweep('2026-07-12T18:00:00Z')
+    await loginFrontend(page, ownerToken)
+    await page.goto(`http://localhost:5173/groups/${groupId}`)
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE)).toHaveCount(0)
+
+    await runDigestSweep('2026-07-12T16:00:00Z')
+    await page.reload()
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toBeVisible({ timeout: 8000 })
   })
 })

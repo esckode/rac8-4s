@@ -376,9 +376,14 @@ export function createApp(deps: AppDependencies): Express {
     // Test-only endpoint — runs the Phase C weekly digest sweep synchronously
     // so e2e can drive it without waiting on a real BullMQ cron tick.
     // Disabled in production to prevent auth bypass.
-    app.post('/test/digest-sweep', async (_req: Request, res: Response) => {
+    app.post('/test/digest-sweep', async (req: Request, res: Response) => {
       try {
-        await processDigestSweep({ pool: appDeps.db as any, broadcastBus: appDeps.broadcastBus })
+        const { now } = req.body as { now?: string }
+        await processDigestSweep({
+          pool: appDeps.db as any,
+          broadcastBus: appDeps.broadcastBus,
+          ...(now ? { now: new Date(now) } : {}),
+        })
         return res.json({ ok: true })
       } catch (err) {
         return res.status(500).json({ error: String(err) })
