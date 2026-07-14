@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import type { Match } from '@shared/types'
 import { useTournament } from '../../hooks/useTournament'
@@ -13,8 +13,9 @@ export const Bracket: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
   const { bracket, isLoading, error, refetch } = useTournament(tournamentId || '')
   const { organizerRole } = usePermissions(tournamentId || '')
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const [scoringMatchId, setScoringMatchId] = useState<string | null>(null)
+  const nextMatchRef = useRef<HTMLDivElement>(null)
 
   const knockoutMatches = useMemo(
     () => (bracket?.rounds ?? []).flatMap((r) => r.matches),
@@ -26,6 +27,23 @@ export const Bracket: React.FC = () => {
     [knockoutMatches]
   )
   const scoringMatch = knockoutMatches.find((m) => m.id === scoringMatchId) || null
+
+  // P2 — center the bracket on the viewer's next match (same auto-scroll
+  // intent as standings anchoring; this view is already a plain grid, not
+  // virtualized, so a direct scrollIntoView is enough — no xyflow viewport
+  // is touched here, that's the organizer-only flow-canvas variant).
+  const myPlayerId = user?.playerId
+  const nextMatchId = useMemo(() => {
+    if (!myPlayerId) return null
+    const mine = playableMatches.find(
+      (m) => (m.player1Id === myPlayerId || m.player2Id === myPlayerId) && m.status !== 'completed'
+    )
+    return mine?.id ?? null
+  }, [playableMatches, myPlayerId])
+
+  useEffect(() => {
+    nextMatchRef.current?.scrollIntoView({ block: 'center' })
+  }, [nextMatchId])
 
   if (!isAuthenticated) {
     return (
@@ -87,12 +105,17 @@ export const Bracket: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-[--s-4]">
           {playableMatches.map((m) => (
-            <MatchCard
+            <div
               key={m.id}
-              match={m as unknown as Match}
-              userRole="player"
-              onSubmitScore={setScoringMatchId}
-            />
+              ref={m.id === nextMatchId ? nextMatchRef : undefined}
+              data-testid={m.id === nextMatchId ? 'match-card-you' : undefined}
+            >
+              <MatchCard
+                match={m as unknown as Match}
+                userRole="player"
+                onSubmitScore={setScoringMatchId}
+              />
+            </div>
           ))}
         </div>
       )}
