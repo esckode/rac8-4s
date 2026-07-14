@@ -8,6 +8,7 @@ import { GroupRepository } from './repositories/group-repository'
 import { GroupMessageRepository } from './repositories/group-message-repository'
 import { PlayerSettingsRepository, type PlayerSettings } from './repositories/player-settings-repository'
 import { StandingsSnapshotRepository } from './repositories/standings-snapshot-repository'
+import { AvailabilityRepository, type AvailabilitySlot } from './repositories/availability-repository'
 
 const log = getLogger('dsr-service')
 
@@ -20,6 +21,7 @@ export interface PlayerExport {
   pollVoteCount: number
   matchCount: number
   settings: PlayerSettings
+  availability: AvailabilitySlot[]
 }
 
 export type EraseResult = { status: 'erased'; playerId: string } | { status: 'not_found' }
@@ -34,6 +36,7 @@ export class DataSubjectRequestService {
   private groupMsgRepo: GroupMessageRepository
   private playerSettingsRepo: PlayerSettingsRepository
   private standingsSnapshotRepo: StandingsSnapshotRepository
+  private availabilityRepo: AvailabilityRepository
 
   constructor(private pool: Pool) {
     this.playerRepo = new PlayerRepository(pool as any)
@@ -44,6 +47,7 @@ export class DataSubjectRequestService {
     this.groupMsgRepo = new GroupMessageRepository(pool as any)
     this.playerSettingsRepo = new PlayerSettingsRepository(pool as any)
     this.standingsSnapshotRepo = new StandingsSnapshotRepository(pool as any)
+    this.availabilityRepo = new AvailabilityRepository(pool as any)
   }
 
   /**
@@ -70,6 +74,7 @@ export class DataSubjectRequestService {
     await this.groupMsgRepo.deletePersonalThreadFor(playerId)
     await this.playerSettingsRepo.deleteFor(playerId)
     await this.standingsSnapshotRepo.deleteFor(playerId)
+    await this.availabilityRepo.deleteFor(playerId)
 
     // Hard-delete membership
     await this.groupRepo.removeFromAllGroups(playerId)
@@ -114,6 +119,7 @@ export class DataSubjectRequestService {
     const matchCount = Number(matchResult.rows[0].c)
 
     const settings = await this.playerSettingsRepo.getOrDefaults(playerId)
+    const availability = await this.availabilityRepo.getSlots(playerId)
 
     const data: PlayerExport = {
       playerId,
@@ -124,6 +130,7 @@ export class DataSubjectRequestService {
       pollVoteCount,
       matchCount,
       settings,
+      availability,
     }
 
     log.info('dsr.exported', { playerId })

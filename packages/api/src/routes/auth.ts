@@ -15,6 +15,7 @@ import { sendPasswordResetEmail } from '../email-adapter'
 import { isReservedDisplayName } from '../assistant/trigger'
 import { PlayerSettingsRepository, DEFAULT_PLAYER_SETTINGS } from '../repositories/player-settings-repository'
 import { getPendingActions } from '../services/pending-actions-service'
+import { AvailabilityRepository } from '../repositories/availability-repository'
 
 const log = getLogger('auth')
 
@@ -53,6 +54,7 @@ export default function authRouter(deps: AppDependencies) {
   const resetCodeRepo = new PasswordResetCodeRepository(deps.db)
   const playerRepo = new PlayerRepository(deps.db)
   const playerSettingsRepo = new PlayerSettingsRepository(deps.db as any)
+  const availabilityRepo = new AvailabilityRepository(deps.db as any)
 
   // POST /api/auth/signup - Create a new account
   router.post('/signup', async (req: Request, res: Response, next: NextFunction) => {
@@ -429,6 +431,61 @@ export default function authRouter(deps: AppDependencies) {
 
       const pendingActions = await getPendingActions(deps.db as any, playerId)
       return res.status(200).json(pendingActions)
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  const VALID_DAY_PARTS = new Set(['morning', 'afternoon', 'evening'])
+
+  function validateAvailabilitySlots(slots: unknown): string | null {
+    if (!Array.isArray(slots)) return 'slots must be an array'
+    for (const slot of slots) {
+      if (!slot || typeof slot !== 'object') return 'each slot must be an object'
+      const { weekday, dayPart } = slot as { weekday?: unknown; dayPart?: unknown }
+      if (typeof weekday !== 'number' || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+        return 'weekday must be an integer 0-6'
+      }
+      if (typeof dayPart !== 'string' || !VALID_DAY_PARTS.has(dayPart)) {
+        return "dayPart must be one of 'morning', 'afternoon', 'evening'"
+      }
+    }
+    return null
+  }
+
+  // GET /api/auth/me/availability - Player Personalization P12: the caller's
+  // own weekly availability grid (dual-auth, same as pending-actions).
+  router.get('/me/availability', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePendingActionsPlayerId(req.headers.authorization)
+      if (!playerId) {
+        return res.status(200).json({ slots: [], updatedAt: null })
+      }
+      const [slots, updatedAt] = await Promise.all([
+        availabilityRepo.getSlots(playerId),
+        availabilityRepo.getAvailabilityUpdatedAt(playerId),
+      ])
+      return res.status(200).json({ slots, updatedAt: updatedAt ? updatedAt.toISOString() : null })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // PUT /api/auth/me/availability - full-grid replace, owner-only by
+  // construction (caller-scoped, no target playerId param exists to spoof).
+  router.put('/me/availability', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePendingActionsPlayerId(req.headers.authorization)
+      if (!playerId) {
+        return res.status(400).json({ code: 'NO_LINKED_PLAYER', message: 'This account has no linked player' })
+      }
+      const validationError = validateAvailabilitySlots(req.body.slots)
+      if (validationError) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: validationError })
+      }
+      await availabilityRepo.replaceSlots(playerId, req.body.slots)
+      log.info('availability.updated', { playerId, slotCount: req.body.slots.length })
+      return res.status(200).json({ ok: true })
     } catch (err) {
       next(err)
     }
