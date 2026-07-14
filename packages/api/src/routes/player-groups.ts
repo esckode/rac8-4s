@@ -35,7 +35,8 @@ import { getLogger } from '../logger'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
 import { PlayerSettingsRepository } from '../repositories/player-settings-repository'
 import { ConversationRepository } from '../repositories/conversation-repository'
-import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-notify-selector'
+import { selectNotifyRecipients, parseMentions, type GroupMemberForNotify } from '../group-notify-selector'
+import { shouldEnqueueNotify } from '../notify-gate'
 import { PollRepository } from '../repositories/poll-repository'
 import { isReservedDisplayName, detectAssistantTrigger } from '../assistant/trigger'
 import { LeaderboardRepository } from '../repositories/leaderboard-repository'
@@ -618,7 +619,19 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             body: message.body,
             senderPlayerId: session.playerId,
           })
+
+          // P9 AND-layer: personal notify_mentions toggle + quiet hours, on
+          // top of the group-level notify_level dial above (untouched).
+          // Only @mentioned recipients are gated by notify_mentions — the
+          // baseline "all"-tier text notification has no personal toggle
+          // in this pass (no notify_messages column exists).
+          const mentionedNameSet = new Set(parseMentions(message.body).map(n => n.toLowerCase()))
+          const mentionedPlayerIds = new Set(
+            membersForNotify.filter(m => mentionedNameSet.has(m.name.toLowerCase())).map(m => m.playerId)
+          )
           for (const recipientId of recipientIds) {
+            const eventType = mentionedPlayerIds.has(recipientId) ? 'mentions' : null
+            if (!(await shouldEnqueueNotify(deps.db as any, recipientId, eventType))) continue
             await deps.jobQueue.add(
               'messaging.notify',
               { conversationId, groupId },
@@ -793,7 +806,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
 
         const { question, targetTime, autoCloseAt, autoLaunch, minPlayers, launchMatchFormat } = req.body
         const result = await createPoll(
-          { pollRepo, groupRepo, conversationRepo, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
+          { pollRepo, groupRepo, conversationRepo, pool: deps.db as any, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
           { groupId, playerId: session.playerId, question, targetTime, autoCloseAt, autoLaunch, minPlayers, launchMatchFormat }
         )
         if (!result.ok) {
@@ -1022,7 +1035,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
 
         const { choice } = req.body
         const result = await castVote(
-          { pollRepo, groupRepo, conversationRepo, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
+          { pollRepo, groupRepo, conversationRepo, pool: deps.db as any, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
           { groupId, pollId, playerId: session.playerId, choice }
         )
         if (!result.ok) {
@@ -1327,7 +1340,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             launchMatchFormat: string | null
           }
           const result = await createPoll(
-            { pollRepo, groupRepo, conversationRepo, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
+            { pollRepo, groupRepo, conversationRepo, pool: deps.db as any, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
             {
               groupId,
               playerId: session.playerId,
@@ -1345,7 +1358,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         } else if (card.action === 'propose_poll_vote') {
           const args = card.args as { pollId: string; choice: 'in' | 'out' | 'maybe' }
           const result = await castVote(
-            { pollRepo, groupRepo, conversationRepo, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
+            { pollRepo, groupRepo, conversationRepo, pool: deps.db as any, jobQueue: deps.jobQueue, broadcastBus: deps.broadcastBus },
             { groupId, pollId: args.pollId, playerId: session.playerId, choice: args.choice }
           )
           claimed = result.ok

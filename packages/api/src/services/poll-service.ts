@@ -11,10 +11,12 @@
  * route and the assistant-cards confirm route already check it identically
  * (groupRepo.getMemberRole) before calling in.
  */
+import type { Pool } from 'pg'
 import type { PollRepository, PollChoice } from '../repositories/poll-repository'
 import type { GroupRepository } from '../repositories/group-repository'
 import type { ConversationRepository } from '../repositories/conversation-repository'
 import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-notify-selector'
+import { shouldEnqueueNotify } from '../notify-gate'
 import type { JobQueue } from '@worker/job-queue'
 import type { IBroadcastBus } from '../broadcast-bus'
 import { getLogger } from '../logger'
@@ -25,6 +27,8 @@ export interface PollServiceDeps {
   pollRepo: PollRepository
   groupRepo: GroupRepository
   conversationRepo: ConversationRepository
+  /** Needed for the P9 per-event notify-toggle + quiet-hours AND-layer. */
+  pool: Pool
   jobQueue?: JobQueue
   broadcastBus?: IBroadcastBus
 }
@@ -63,7 +67,7 @@ export const CREATE_POLL_ERROR_HTTP_STATUS: Record<CreatePollErrorCode, number> 
 }
 
 export async function createPoll(deps: PollServiceDeps, input: CreatePollInput): Promise<CreatePollResult> {
-  const { pollRepo, groupRepo, conversationRepo, jobQueue, broadcastBus } = deps
+  const { pollRepo, groupRepo, conversationRepo, pool, jobQueue, broadcastBus } = deps
   const { groupId, playerId, question, targetTime, autoCloseAt, autoLaunch, minPlayers, launchMatchFormat } = input
 
   if (!question || typeof question !== 'string' || !question.trim()) {
@@ -117,7 +121,9 @@ export async function createPoll(deps: PollServiceDeps, input: CreatePollInput):
       body: question.trim(),
       senderPlayerId: playerId,
     })
+    // P9 AND-layer: personal notify_polls toggle + quiet hours.
     for (const recipientId of recipientIds) {
+      if (!(await shouldEnqueueNotify(pool, recipientId, 'polls'))) continue
       await jobQueue.add(
         'messaging.notify',
         { conversationId, groupId },
