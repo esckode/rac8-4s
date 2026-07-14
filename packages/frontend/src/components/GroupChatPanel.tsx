@@ -21,6 +21,7 @@ import { MentionAutocomplete } from './MentionAutocomplete'
 import { parseMentions } from '../utils/parseMentions'
 import { ReconnectingIndicator } from './shared'
 import { Avatar } from './shared/Avatar'
+import { usePendingActions } from '../hooks/usePendingActions'
 
 interface VoterSummary {
   voterName: string
@@ -51,6 +52,7 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
   const { messages, send, reconnecting } = useGroupMessages(groupId, active)
   const { user } = useAuth()
   const navigate = useNavigate()
+  const pendingActions = usePendingActions()
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -244,6 +246,30 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
     }
   }
 
+  // State-aware composer quick chip (P7) — one chip, highest applicable
+  // priority: Report score > Vote > generic @coach. Pre-fills or navigates
+  // only — never sends, never mutates. Hidden entirely when the group's
+  // assistant is off (mirrors the mention picker).
+  const groupOpenPoll = pendingActions.openPolls.find(p => p.groupId === groupId)
+  const composerChip = !assistantEnabled
+    ? null
+    : pendingActions.unscoredMatches.length > 0
+    ? { kind: 'report' as const, label: 'Report score', opponentName: pendingActions.unscoredMatches[0].opponentName }
+    : groupOpenPoll
+    ? { kind: 'vote' as const, label: 'Vote', pollId: groupOpenPoll.pollId }
+    : { kind: 'generic' as const, label: "@coach when's my next match?" }
+
+  function handleComposerChipClick() {
+    if (!composerChip) return
+    if (composerChip.kind === 'report') {
+      setBody(`@coach beat ${composerChip.opponentName} `)
+    } else if (composerChip.kind === 'vote') {
+      document.getElementById(`poll-message-${composerChip.pollId}`)?.scrollIntoView({ behavior: 'smooth' })
+    } else {
+      setBody("@coach when's my next match? ")
+    }
+  }
+
   return (
     <div data-testid="group-chat-panel" className="flex flex-col h-full min-h-[300px] max-h-[600px]">
       {/* Message list */}
@@ -317,7 +343,7 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
           if (m.type === 'poll' && m.pollId) {
             const isCreator = m.playerId != null && m.playerId === user?.playerId
             return (
-              <div key={m.id} data-testid="group-message-item">
+              <div key={m.id} id={`poll-message-${m.pollId}`} data-testid="group-message-item">
                 <PollCard
                   groupId={groupId}
                   messageId={m.id}
@@ -413,8 +439,22 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
         <p className="px-4 py-2 text-sm text-[--rose-700] bg-[--rose-50]">{error}</p>
       )}
 
+      {/* State-aware composer chip (P7) */}
+      {composerChip && (
+        <div className="px-3 pt-2 border-t border-[--border]">
+          <button
+            type="button"
+            data-testid="composer-chip"
+            onClick={handleComposerChipClick}
+            className="px-3 py-1 text-xs font-medium rounded-full bg-[--court-100] text-[--court-800] hover:bg-[--court-200]"
+          >
+            {composerChip.label}
+          </button>
+        </div>
+      )}
+
       {/* Send form */}
-      <form onSubmit={handleSend} className="border-t border-[--border] p-3 flex gap-2 relative">
+      <form onSubmit={handleSend} className={`p-3 flex gap-2 relative ${composerChip ? '' : 'border-t border-[--border]'}`}>
         {mentionQuery !== null && (
           <MentionAutocomplete
             members={members}
