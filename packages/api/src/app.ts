@@ -200,7 +200,7 @@ export function createApp(deps: AppDependencies): Express {
   if (process.env.NODE_ENV !== 'production') {
     app.post('/test/player-token', async (req: Request, res: Response) => {
       try {
-        const { email, name } = req.body as { email: string; name: string }
+        const { email, name, tournamentId } = req.body as { email: string; name: string; tournamentId?: string }
         if (!email || !name) return res.status(400).json({ error: 'email and name required' })
         const playerRepo = new PlayerRepository(appDeps.db as any)
         const player = await playerRepo.findOrCreatePlayerByEmail(
@@ -211,7 +211,7 @@ export function createApp(deps: AppDependencies): Express {
           { dateOfBirth: '2000-01-01', policyVersion: 'v1' }
         )
         const session = await generatePlayerSession(
-          { playerId: player.id, tournamentId: 'test', email: player.email, createdAt: Date.now() },
+          { playerId: player.id, tournamentId: tournamentId ?? 'test', email: player.email, createdAt: Date.now() },
           3600,
           appDeps.tokenStore
         )

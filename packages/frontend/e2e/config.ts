@@ -402,6 +402,12 @@ export const SELECTORS = {
   // Player Personalization (P0)
   NAV_PROFILE: '[data-testid="nav-profile"]',
   PROFILE_PAGE: '[data-testid="profile-page"]',
+
+  // Player Personalization (P2/P3/P4)
+  STANDINGS_ROW_YOU: '[data-testid="standings-row-you"]',
+  AVATAR: '[data-testid="avatar"]',
+  DEADLINE_VALUE: '[data-testid="deadline-value"]',
+  DEADLINE_RELATIVE: '[data-testid="deadline-relative"]',
   DENSITY_SELECT: '[data-testid="density-select"]',
 }
 
