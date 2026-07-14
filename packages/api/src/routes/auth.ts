@@ -7,7 +7,7 @@ import { AccountRepository, PasswordResetCodeRepository, PlayerRepository, AgeAt
 import { hashPassword } from '../auth/password'
 import { issueOrganizerToken } from '../auth/tokens'
 import { validateMagicLinkToken } from '../auth/magic-link'
-import { requireOrganizerAuth } from '../auth/middleware'
+import { requireOrganizerAuth, requirePlayerSessionAuth } from '../auth/middleware'
 import { createRateLimitMiddleware } from '../middleware/rate-limit'
 import { getLogger } from '../logger'
 import { TokenInvalidError } from '../auth/errors'
@@ -395,24 +395,39 @@ export default function authRouter(deps: AppDependencies) {
     }
   })
 
+  // Resolve the acting player's id from either a magic-link player session or
+  // a registered player's account JWT (role 'player', carries playerId) — same
+  // dual-auth pattern as routes/player.ts's resolvePlayerId. Needed because a
+  // group-chat visitor's auth_token is a player-session token, not an account
+  // JWT, and pending-actions must work there too (it feeds the composer chip).
+  async function resolvePendingActionsPlayerId(authHeader: string | undefined): Promise<string | null> {
+    try {
+      const session = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
+      return session.playerId
+    } catch (sessionErr) {
+      let account
+      try {
+        account = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
+      } catch {
+        throw sessionErr
+      }
+      return account.playerId ?? null
+    }
+  }
+
   // GET /api/auth/me/pending-actions - Player Personalization P5: caller-scoped
   // aggregation of unscored matches, unvoted open polls, my pending assistant
   // cards, and the nearest deadline across my tournaments. Read-only, no
-  // linked-player 400 (an account with no player has nothing pending — empty
-  // state is a valid 200, not an error).
+  // linked-player 400 (an authenticated caller with no linked player has
+  // nothing pending — empty state is a valid 200, not an error).
   router.get('/me/pending-actions', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
-      const account = await accountRepo.findById(payload.sub)
-      if (!account) {
-        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Account not found' })
-      }
-
-      if (!account.player_id) {
+      const playerId = await resolvePendingActionsPlayerId(req.headers.authorization)
+      if (!playerId) {
         return res.status(200).json({ unscoredMatches: [], openPolls: [], pendingCards: [], nearestDeadline: null })
       }
 
-      const pendingActions = await getPendingActions(deps.db as any, account.player_id)
+      const pendingActions = await getPendingActions(deps.db as any, playerId)
       return res.status(200).json(pendingActions)
     } catch (err) {
       next(err)

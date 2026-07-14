@@ -23,6 +23,8 @@ import { PollRepository } from '../../repositories/poll-repository'
 import { AssistantCardRepository } from '../../repositories/assistant-card-repository'
 import { TournamentFactory } from '../factories'
 import { defaultAdultAttestation } from '../factories/player.factory'
+import { generatePlayerSession } from '../../auth/magic-link'
+import type { InMemoryTokenStore } from '../../auth/token-store'
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -111,11 +113,14 @@ async function createTournamentWithRoster(
 }
 
 describe('S4.1 — GET /api/auth/me/pending-actions', () => {
+  let tokenStore: InMemoryTokenStore
+
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
     const deps = createTestApp(pool)
     app = deps.app
+    tokenStore = deps.tokenStore
     accountRepo = new AccountRepository(pool)
     playerRepo = new PlayerRepository(pool)
     groupRepo = new GroupRepository(pool)
@@ -131,6 +136,24 @@ describe('S4.1 — GET /api/auth/me/pending-actions', () => {
   it('requires authentication', async () => {
     const res = await request(app).get('/api/auth/me/pending-actions')
     expect(res.status).toBe(401)
+  })
+
+  it('also authenticates via a magic-link player-session token (dual-auth, same pattern as routes/player.ts)', async () => {
+    const opponent = await createBarePlayer()
+    const player = await createBarePlayer()
+    const tournamentId = await createTournamentWithRoster([player.id, opponent.id])
+
+    const session = await generatePlayerSession(
+      { playerId: player.id, tournamentId: crypto.randomUUID(), email: `${player.name}@test.local`, createdAt: Date.now() },
+      3600,
+      tokenStore
+    )
+
+    const res = await request(app).get('/api/auth/me/pending-actions').set('Authorization', `Bearer ${session.token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.unscoredMatches).toHaveLength(1)
+    expect(res.body.unscoredMatches[0]).toMatchObject({ tournamentId })
   })
 
   it('returns empty arrays and a null nearestDeadline when nothing is pending', async () => {
