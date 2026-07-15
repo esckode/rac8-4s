@@ -38,12 +38,33 @@ const GearIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 // ─── GroupList ────────────────────────────────────────────────────────────────
 
+/**
+ * Pinned 1:1 Coach entry — every authenticated account-holder has one,
+ * regardless of group count OR whether the groups list itself loaded
+ * successfully (COACH_1TO1_DESIGN.md §7 #9: "exists for every authenticated
+ * account-holder" has no exceptions for a failed/loading groups fetch).
+ */
+const CoachEntryLink: React.FC = () => (
+  <Link
+    to="/coach"
+    data-testid="coach-entry"
+    className="flex items-center gap-3 p-4 bg-[--court-50] border border-[--court-200] rounded-xl hover:shadow-md transition-shadow"
+  >
+    <span className="flex items-center justify-center w-10 h-10 rounded-full bg-[--court-500] text-white font-bold">C</span>
+    <div>
+      <span className="font-semibold text-[--ink-900]">Coach</span>
+      <p className="text-xs text-[--ink-500]">Your private coach</p>
+    </div>
+  </Link>
+)
+
 export const GroupList: React.FC = () => {
   const { groups, loading, error } = useGroupList()
 
   if (loading) {
     return (
-      <div className="p-4">
+      <div className="p-4 space-y-[--s-3]">
+        <CoachEntryLink />
         <p className="text-[--ink-600]">Loading your groups…</p>
       </div>
     )
@@ -51,7 +72,8 @@ export const GroupList: React.FC = () => {
 
   if (error) {
     return (
-      <div className="p-4">
+      <div className="p-4 space-y-[--s-3]">
+        <CoachEntryLink />
         <p data-testid="group-list-error" className="text-[--rose-700]">{error}</p>
       </div>
     )
@@ -61,19 +83,7 @@ export const GroupList: React.FC = () => {
     <div className="space-y-[--s-3] p-4">
       <h1 className="text-2xl font-bold text-[--ink-900]">My Groups</h1>
 
-      {/* Pinned 1:1 Coach entry — every authenticated account-holder has one,
-          regardless of group count (COACH_1TO1_DESIGN.md §7 #9). */}
-      <Link
-        to="/coach"
-        data-testid="coach-entry"
-        className="flex items-center gap-3 p-4 bg-[--court-50] border border-[--court-200] rounded-xl hover:shadow-md transition-shadow"
-      >
-        <span className="flex items-center justify-center w-10 h-10 rounded-full bg-[--court-500] text-white font-bold">C</span>
-        <div>
-          <span className="font-semibold text-[--ink-900]">Coach</span>
-          <p className="text-xs text-[--ink-500]">Your private coach</p>
-        </div>
-      </Link>
+      <CoachEntryLink />
 
       {groups.length === 0 && (
         <p data-testid="group-list-empty" className="text-center text-[--ink-500] pt-2">

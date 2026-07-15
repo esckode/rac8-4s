@@ -63,6 +63,10 @@ export const ROUTES = {
 
   // Player Personalization P0
   PROFILE: '/profile',
+
+  // 1:1 Coach (S0-S10)
+  COACH: '/coach',
+  PRIVACY: '/privacy',
 }
 
 // ============================================================================
@@ -416,6 +420,19 @@ export const SELECTORS = {
   UP_NEXT_STRIP: '[data-testid="up-next-strip"]',
   UP_NEXT_MATCH: '[data-testid="up-next-match"]',
   COMPOSER_CHIP: '[data-testid="composer-chip"]',
+
+  // 1:1 Coach (S0-S10)
+  COACH_ENTRY: '[data-testid="coach-entry"]',
+  COACH_CHAT_PAGE: '[data-testid="coach-chat-page"]',
+  COACH_MESSAGE_INPUT: '[data-testid="coach-message-input"]',
+  COACH_MESSAGE_SEND_BUTTON: '[data-testid="coach-message-send-button"]',
+  COACH_PLAYER_BUBBLE: '[data-testid="coach-player-bubble"]',
+  COACH_ASSISTANT_BUBBLE: '[data-testid="coach-assistant-bubble"]',
+  COACH_MEMORY_TOGGLE: '[data-testid="coach-memory-toggle"]',
+  MEMORY_DELETE: '[data-testid="memory-delete"]',
+  COACH_CLEAR: '[data-testid="coach-clear"]',
+  COACH_CLEAR_CONFIRM: '[data-testid="coach-clear-confirm"]',
+  PRIVACY_POLICY_PAGE: '[data-testid="privacy-policy-page"]',
 }
 
 // ============================================================================
