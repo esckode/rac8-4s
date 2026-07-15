@@ -198,7 +198,7 @@ export async function getMyMatches(
   return { matches }
 }
 
-function opponentNameFor(row: any, playerId: string, matchFormat: string): string {
+export function opponentNameFor(row: any, playerId: string, matchFormat: string): string {
   if (matchFormat === 'doubles') {
     const askerInTeam1 = row.t1_player1_id === playerId || row.t1_player2_id === playerId
     return askerInTeam1
