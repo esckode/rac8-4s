@@ -235,4 +235,48 @@ describe('S1.1 — coach schema (migration 057)', () => {
       expect(cardRes.rows[0].conversation_id).toBe(conversationId)
     })
   })
+
+  describe('S1.3 — AssistantCardRepository.createCoachCard', () => {
+    it('inserts a coach-scope card + assistant message, group_id NULL, metadata.cardId set', async () => {
+      const player = await createPlayer(pool)
+      const conversationId = await conversationRepo.resolveCoachConversation(player.id)
+
+      const { card } = await cardRepo.createCoachCard({
+        conversationId,
+        proposerPlayerId: player.id,
+        action: 'remember',
+        args: { text: 'prefers morning matches' },
+        body: 'Coach wants to remember: "prefers morning matches". Only you can confirm.',
+      })
+
+      expect(card.groupId).toBeNull()
+      expect(card.conversationId).toBe(conversationId)
+      expect(card.status).toBe('pending')
+
+      const msgRow = await pool.query(
+        `SELECT type, metadata, sender_name_snapshot FROM messaging.group_messages WHERE id = $1`,
+        [card.messageId]
+      )
+      expect(msgRow.rows[0].type).toBe('assistant')
+      expect(msgRow.rows[0].sender_name_snapshot).toBe('Coach')
+      expect(msgRow.rows[0].metadata).toMatchObject({ cardId: card.id })
+    })
+
+    it('getCard returns conversationId for a coach-scope card', async () => {
+      const player = await createPlayer(pool)
+      const conversationId = await conversationRepo.resolveCoachConversation(player.id)
+
+      const { card } = await cardRepo.createCoachCard({
+        conversationId,
+        proposerPlayerId: player.id,
+        action: 'remember',
+        args: { text: 'plays lefty' },
+        body: 'Coach wants to remember: "plays lefty". Only you can confirm.',
+      })
+
+      const fetched = await cardRepo.getCard(card.id)
+      expect(fetched?.conversationId).toBe(conversationId)
+      expect(fetched?.groupId).toBeNull()
+    })
+  })
 })
