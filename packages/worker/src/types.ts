@@ -7,6 +7,7 @@ export type JobName =
   | 'messaging.read_receipt.flush'
   | 'messaging.notify'
   | 'assistant.reply'
+  | 'coach.turn'
 
 export type JobPayload = {
   'standings.recalculate': { tournamentId: string; groupId: string; conversationId?: string }
@@ -22,6 +23,13 @@ export type JobPayload = {
     groupId: string
     playerId: string
     body: string
+  }
+  'coach.turn': {
+    messageId: string
+    conversationId: string
+    playerId: string
+    body: string
+    timezone?: string
   }
 }
 

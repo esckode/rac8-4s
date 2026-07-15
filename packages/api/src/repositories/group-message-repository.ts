@@ -474,4 +474,38 @@ export class GroupMessageRepository {
       client.release()
     }
   }
+
+  /**
+   * Hard-deletes every message (and card) in a conversation, but keeps the
+   * conversation row itself — used by 1:1 Coach "clear conversation" (S2,
+   * COACH_1TO1_DESIGN.md §7 #10b: player-initiated, hard-delete, not a
+   * tombstone; distinct from deletePersonalThreadFor, which is a DSR
+   * primitive that also removes the conversation row). Memories live in a
+   * separate store and are untouched. Returns the number of message rows
+   * deleted.
+   */
+  async clearConversation(conversationId: string): Promise<number> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      await client.query(
+        `DELETE FROM messaging.assistant_cards WHERE conversation_id = $1`,
+        [conversationId]
+      )
+      const result = await client.query(
+        `DELETE FROM messaging.group_messages WHERE conversation_id = $1`,
+        [conversationId]
+      )
+
+      await client.query('COMMIT')
+      log.info('conversation.cleared', { conversationId, deleted: result.rowCount })
+      return result.rowCount ?? 0
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
 }

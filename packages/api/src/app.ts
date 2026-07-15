@@ -15,6 +15,7 @@ import tournamentsRouter from './routes/tournaments'
 import messagesRouter from './routes/messages'
 import playerRouter from './routes/player'
 import playerGroupsRouter from './routes/player-groups'
+import coachRouter from './routes/coach'
 import analyticsRouter from './routes/analytics'
 import authRouter from './routes/auth'
 import { adminRouter } from './routes/admin'
@@ -192,6 +193,8 @@ export function createApp(deps: AppDependencies): Express {
   app.use('/tournaments', messagesRouter(appDeps))
   app.use('/player', playerRouter(appDeps))
   app.use('/player/groups', playerGroupsRouter(appDeps))
+  // Rides the existing /player mount — no new top-level path, no CloudFront change (CLAUDE.md §9).
+  app.use('/player/coach', coachRouter(appDeps))
   app.use('/api/analytics', analyticsRouter(appDeps))
   app.use('/api/auth', authRouter(appDeps))
 
