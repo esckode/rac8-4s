@@ -371,6 +371,15 @@ export interface AssistantConfig {
    * Override via ASSISTANT_DAILY_BUDGET_USD env var.
    */
   dailyBudgetUsd: number
+
+  /**
+   * Model ID for 1:1 Coach turns (private per-player conversation).
+   * Default: "claude-haiku-4-5"
+   * Kept separate from `model` (the group-surface model) per COACH_1TO1_DESIGN.md §7 #3 —
+   * pre-agreed upgrade trigger is a config flip to Sonnet, no re-grill.
+   * Override via COACH_MODEL env var.
+   */
+  coachModel: string
 }
 
 /**
@@ -503,6 +512,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     adapter: 'mock',           // No network by default; real channel is opt-in via env
     model: 'claude-haiku-4-5', // Cheapest capable model (design Q8)
     dailyBudgetUsd: 5,         // Global daily spend kill-switch (design Q10)
+    coachModel: 'claude-haiku-4-5', // 1:1 Coach model (COACH_1TO1_DESIGN.md §7 #3)
   },
 }
 
@@ -680,6 +690,7 @@ export function getAppConfig(): AppConfig {
       dailyBudgetUsd: parseFloat(
         process.env.ASSISTANT_DAILY_BUDGET_USD ?? String(DEFAULT_APP_CONFIG.assistant.dailyBudgetUsd)
       ),
+      coachModel: process.env.COACH_MODEL ?? DEFAULT_APP_CONFIG.assistant.coachModel,
     },
   }
 }
