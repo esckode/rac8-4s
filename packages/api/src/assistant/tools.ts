@@ -39,6 +39,19 @@ export interface AssistantToolContext {
    * without this, cards only ever appeared on the next full history fetch).
    */
   broadcastBus?: IBroadcastBus
+  /**
+   * Discriminates the group surface (default, `groupId` is one real group)
+   * from the 1:1 Coach surface (COACH_1TO1_DESIGN.md §7 #5's Q5 relaxation —
+   * private audience, so a merely-registered tournament gets full detail too,
+   * not just the group-linked ones). Absent = 'group' semantics, unchanged.
+   */
+  surface?: 'group' | 'coach'
+  /**
+   * All groups the player belongs to — only populated for the coach surface
+   * (a 1:1 turn has no single default group). Used by get_group_availability
+   * to validate an explicit groupId tool argument against real membership.
+   */
+  memberGroupIds?: string[]
 }
 
 /** Phase A registry: read-only, no write tools (structural guarantee). */
@@ -73,6 +86,39 @@ export async function buildAssistantToolContext(
     groupId: input.groupId,
     groupLinkedTournamentIds: res.rows.map((r: { id: string }) => r.id),
     broadcastBus: input.broadcastBus,
+  }
+}
+
+/**
+ * Player-level tool context for the 1:1 Coach surface (S3, COACH_1TO1_DESIGN.md
+ * §7 #5): scope is the union of tournaments linked to ANY group the player
+ * belongs to, PLUS tournaments the player is registered in directly — there is
+ * no single default group, so `groupId` is left empty (unused by any of the
+ * read tools except get_group_availability, which requires an explicit arg
+ * here instead).
+ */
+export async function buildCoachToolContext(
+  db: Pool,
+  playerId: string,
+  opts: { broadcastBus?: IBroadcastBus } = {}
+): Promise<AssistantToolContext> {
+  const memberGroupIds = (await new PlayerGroupRepository(db).getGroupsForPlayer(playerId)).map(g => g.id)
+
+  const res = memberGroupIds.length > 0
+    ? await db.query(
+        `SELECT DISTINCT id FROM public.tournaments WHERE group_id = ANY($1) AND deleted_at IS NULL`,
+        [memberGroupIds]
+      )
+    : { rows: [] as Array<{ id: string }> }
+
+  return {
+    db,
+    playerId,
+    groupId: '',
+    memberGroupIds,
+    groupLinkedTournamentIds: res.rows.map((r: { id: string }) => r.id),
+    surface: 'coach',
+    broadcastBus: opts.broadcastBus,
   }
 }
 
@@ -222,8 +268,12 @@ export async function getStandings(
       setsLost: s.setsLost,
     }))
 
-    if (scope === 'group') {
-      // Full standings with the precomputed rank explanation (T1.2)
+    if (scope === 'group' || ctx.surface === 'coach') {
+      // Full standings with the precomputed rank explanation (T1.2).
+      // Coach's 1:1 surface is a private audience (Q5 relaxation) — a
+      // merely-registered ('own') tournament gets the same full detail as a
+      // group-linked one; the group surface's own-row-only branch below is
+      // unchanged.
       const headToHead = new Map<string, number>()
       for (const m of matchData) {
         if (!m.winnerId) continue
@@ -358,19 +408,46 @@ export interface GroupAvailabilitySlot {
 }
 
 /**
- * P12 aggregates wall: returns per-slot COUNTS of the ctx group's members
+ * P12 aggregates wall: returns per-slot COUNTS of the target group's members
  * who marked themselves free, never player ids or names — enforced by only
  * ever reading `AvailabilityRepository.countFreeByGroup`'s aggregate output,
  * which has no per-member row in its return shape to leak (same pattern as
  * A3.3's authorization wall — the tool cannot expose what it never fetches).
+ *
+ * Group surface (no explicit `groupId`, unchanged): scopes to `ctx.groupId`
+ * — the one group this turn is bound to; the group is trusted (the caller
+ * already resolved the turn against it), so no ToolNotFound branch exists in
+ * this overload's return type.
+ *
+ * Coach surface (S3, explicit `groupId` required — a 1:1 turn has no single
+ * default group): the id must be one the player actually belongs to
+ * (`ctx.memberGroupIds`), else not-found.
  */
 export async function getGroupAvailability(
   ctx: AssistantToolContext
-): Promise<{ totalMembers: number; slots: GroupAvailabilitySlot[] }> {
+): Promise<{ totalMembers: number; slots: GroupAvailabilitySlot[] }>
+export async function getGroupAvailability(
+  ctx: AssistantToolContext,
+  input: { groupId: string }
+): Promise<{ totalMembers: number; slots: GroupAvailabilitySlot[] } | ToolNotFound>
+export async function getGroupAvailability(
+  ctx: AssistantToolContext,
+  input?: { groupId?: string }
+): Promise<{ totalMembers: number; slots: GroupAvailabilitySlot[] } | ToolNotFound> {
+  let groupId: string
+  if (input?.groupId !== undefined) {
+    if (!(ctx.memberGroupIds ?? []).includes(input.groupId)) {
+      return { error: 'not_found', message: 'Group not found' }
+    }
+    groupId = input.groupId
+  } else {
+    groupId = ctx.groupId
+  }
+
   const playerGroupRepo = new PlayerGroupRepository(ctx.db)
   const availabilityRepo = new AvailabilityRepository(ctx.db)
 
-  const members = await playerGroupRepo.getGroupMembers(ctx.groupId)
+  const members = await playerGroupRepo.getGroupMembers(groupId)
   const slots = await availabilityRepo.countFreeByGroup(members.map(m => m.playerId))
 
   return { totalMembers: members.length, slots }
