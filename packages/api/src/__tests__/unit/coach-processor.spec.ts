@@ -41,6 +41,9 @@ function makePool(opts: { alreadyReplied?: boolean; coachMemoryEnabled?: boolean
       if (sql.includes('coach_memory_enabled')) {
         return { rows: [{ coach_memory_enabled: opts.coachMemoryEnabled ?? true }] }
       }
+      if (sql.includes('AS count') || sql.includes('as count')) {
+        return { rows: [{ count: 0 }] }
+      }
       return { rows: [] }
     }),
   } as unknown as Pool
@@ -171,10 +174,12 @@ describe('processCoachTurn', () => {
     const memoryRepo = makeMemoryRepo()
     const { client, calls } = makeClient()
     const store = new InMemoryCounterStore()
-    const limiter = new AssistantRateLimiter(store, { ...LIMITS, playerPerHour: 1 })
+    const limiter = new AssistantRateLimiter(store, LIMITS)
+    // Prime the hourly counter to 19 so this call is the 20th (still allowed, at the boundary).
+    for (let i = 0; i < 19; i++) await store.increment(`coach:player:${payload.playerId}`, 3600)
 
     await processCoachTurn(payload, { pool: makePool(), groupMessageRepo: repo, memoryRepo, client, rateLimiter: limiter })
-    expect(calls).toHaveLength(1) // first call allowed
+    expect(calls).toHaveLength(1) // first call allowed (20th overall, at the limit)
 
     await processCoachTurn(
       { ...payload, messageId: 'msg-2' },

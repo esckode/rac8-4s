@@ -21,6 +21,7 @@ import { processReadReceiptFlush } from './workers/read-receipt-processor'
 import { processPartitionEnsure, processPartitionPurge } from './workers/partition-processor'
 import { processMessagingNotify } from './workers/notify-processor'
 import { processAssistantReply } from './workers/assistant-processor'
+import { processCoachTurn } from './workers/coach-processor'
 import { processNudgeSweep } from './workers/nudge-processor'
 import { processRecapSweep } from './workers/recap-processor'
 import { processDigestSweep } from './workers/digest-processor'
@@ -32,6 +33,8 @@ import { createEmailService } from './services/email-service'
 import { DEFAULT_APP_CONFIG, getAppConfig } from './config'
 import { GroupMessageRepository } from './repositories/group-message-repository'
 import { selectAssistantClient } from './assistant/assistant-client-factory'
+import { selectCoachClient } from './assistant/coach-client-factory'
+import { PlayerMemoryRepository } from './repositories/player-memory-repository'
 import { AssistantRateLimiter, ASSISTANT_HOURLY_LIMITS } from './assistant/rate-limiter'
 import { selectRateLimitStore } from './middleware/rate-limit-store'
 import { selectBroadcastBus } from './broadcast-bus'
@@ -120,6 +123,17 @@ async function main() {
     broadcastBus: selectBroadcastBus(),
   }
 
+  // ── 1:1 Coach processor deps — shares the rate limiter's budget kill-switch
+  // and store with the group surface (design §7 #2: one kill-switch).
+  const coachDeps = {
+    pool,
+    groupMessageRepo: assistantDeps.groupMessageRepo,
+    memoryRepo: new PlayerMemoryRepository(pool),
+    client: selectCoachClient(appConfig),
+    rateLimiter: assistantDeps.rateLimiter,
+    broadcastBus: assistantDeps.broadcastBus,
+  }
+
   // Proactive sweeps enqueue their own downstream jobs (e.g. messaging.notify
   // for nudge recipients) — a dedicated BullMQ-backed queue, not the request-
   // path selectJobQueue() (that one is driven by the API's JOB_QUEUE env var,
@@ -168,6 +182,14 @@ async function main() {
       redisUrl: REDIS_URL!,
       processor: async (job) => {
         await processAssistantReply(job.data, assistantDeps)
+      },
+    }),
+
+    createWorker({
+      queueName: 'coach.turn',
+      redisUrl: REDIS_URL!,
+      processor: async (job) => {
+        await processCoachTurn(job.data, coachDeps)
       },
     }),
 

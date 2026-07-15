@@ -162,6 +162,16 @@ export default function coachRouter(deps: AppDependencies): Router {
         }
         // Hyphen, not colon (Phase A live-run lesson) — BullMQ rejects ':' in custom job ids.
         await deps.jobQueue.add('coach.turn', payload, { jobId: `coach-${message.id}` })
+        // In-memory queue has no consumer — process inline, off the request path
+        // (fire-and-forget; undefined in BullMQ mode, mirrors the assistant.reply pattern).
+        if (deps.processCoachJob) {
+          const processJob = deps.processCoachJob
+          setImmediate(() => {
+            processJob(payload).catch((e: Error) => {
+              log.error('coach.inline.failed', { playerId, error: e.message })
+            })
+          })
+        }
       }
 
       log.info('coach.message.posted', { playerId, messageId: message.id })

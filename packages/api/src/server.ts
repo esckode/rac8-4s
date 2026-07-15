@@ -25,6 +25,9 @@ import { selectRateLimitStore } from './middleware/rate-limit-store'
 import { processAssistantReply } from './workers/assistant-processor'
 import { processRecapSweep as runRecapSweep } from './workers/recap-processor'
 import type { AssistantJobPayload } from './assistant/assistant-service'
+import { selectCoachClient } from './assistant/coach-client-factory'
+import { PlayerMemoryRepository } from './repositories/player-memory-repository'
+import { processCoachTurn, type CoachJobPayload } from './workers/coach-processor'
 
 const log = getLogger('server')
 
@@ -91,6 +94,7 @@ async function main() {
     // inline processor for single-process dev/e2e.
     let processAssistantJob: ((payload: AssistantJobPayload) => Promise<void>) | undefined
     let processRecapSweep: (() => Promise<void>) | undefined
+    let processCoachJob: ((payload: CoachJobPayload) => Promise<void>) | undefined
     if (config.redis.jobQueue !== 'bullmq') {
       const assistantDeps = {
         pool,
@@ -110,6 +114,17 @@ async function main() {
           rateLimiter: assistantDeps.rateLimiter,
           broadcastBus: assistantDeps.broadcastBus,
         })
+
+      // 1:1 Coach shares the assistant rate limiter's budget kill-switch/store (design §7 #2).
+      const coachDeps = {
+        pool,
+        groupMessageRepo: assistantDeps.groupMessageRepo,
+        memoryRepo: new PlayerMemoryRepository(pool),
+        client: selectCoachClient(config),
+        rateLimiter: assistantDeps.rateLimiter,
+        broadcastBus,
+      }
+      processCoachJob = payload => processCoachTurn(payload, coachDeps)
     }
 
     // Create Express app (health route is inside createApp)
@@ -125,6 +140,7 @@ async function main() {
       standingsCache,
       processAssistantJob,
       processRecapSweep,
+      processCoachJob,
     })
 
     // Create HTTP server

@@ -36,6 +36,8 @@ export interface CoachTurnInput {
   /** The triggering message body. */
   newMessage: string
   toolContext: AssistantToolContext
+  /** player_settings.coach_memory_enabled — gates propose_remember's presence in the tool registry. Defaults true. */
+  memoryEnabled?: boolean
 }
 
 export interface CoachClient {
@@ -87,8 +89,8 @@ export function buildCoachMessages(
 }
 
 /** The 1:1 registry wall: read tools + propose_remember only — no propose_score/poll/pollVote/casualLaunch. */
-function buildCoachTools(ctx: AssistantToolContext, onToolRun: () => void) {
-  return [
+function buildCoachTools(ctx: AssistantToolContext, onToolRun: () => void, memoryEnabled: boolean) {
+  const readTools = [
     betaZodTool({
       name: 'get_my_matches',
       description:
@@ -138,6 +140,12 @@ function buildCoachTools(ctx: AssistantToolContext, onToolRun: () => void) {
         return JSON.stringify(await getGroupAvailability(ctx, input))
       },
     }),
+  ]
+
+  if (!memoryEnabled) return readTools
+
+  return [
+    ...readTools,
     betaZodTool({
       name: 'propose_remember',
       description:
@@ -180,7 +188,7 @@ export class AnthropicCoachClient implements CoachClient {
       max_tokens: 500,
       system: [{ type: 'text', text: input.systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: buildCoachMessages(input.history, input.volatileBlock, input.newMessage),
-      tools: buildCoachTools(input.toolContext, () => toolRounds++),
+      tools: buildCoachTools(input.toolContext, () => toolRounds++, input.memoryEnabled ?? true),
       max_iterations: 5,
     })
     const final = await runner
@@ -212,7 +220,7 @@ export class MockCoachClient implements CoachClient {
 
   async runCoachTurn(input: CoachTurnInput): Promise<AssistantTurnResult> {
     this.lastInput = input
-    const result = await this.route(input.newMessage, input.toolContext)
+    const result = await this.route(input.newMessage, input.toolContext, input.memoryEnabled ?? true)
     return {
       text: result.text,
       usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0 },
@@ -220,12 +228,19 @@ export class MockCoachClient implements CoachClient {
     }
   }
 
-  private async route(q: string, ctx: AssistantToolContext): Promise<{ text: string; toolRounds: number }> {
+  private async route(
+    q: string,
+    ctx: AssistantToolContext,
+    memoryEnabled: boolean
+  ): Promise<{ text: string; toolRounds: number }> {
     if (/\b(my|i've got|i have)\b.*\b(pain|injur|hurt|sore|ache|sprain|strain)\w*/i.test(q) || /\bhurts?\b/i.test(q)) {
       return { text: COACH_MEDICAL_DECLINE_MESSAGE, toolRounds: 0 }
     }
 
     if (/\bremember\b/i.test(q)) {
+      if (!memoryEnabled) {
+        return { text: "Memory is turned off in your profile, so I can't remember that.", toolRounds: 0 }
+      }
       // eslint-disable-next-line security/detect-unsafe-regex -- bounded repetition, mirrors assistant-client.ts's score regex
       const text = q.replace(/^.*\bremember\b\s*(that\s+)?/i, '').trim()
       const result = await proposeRemember(ctx, { text })

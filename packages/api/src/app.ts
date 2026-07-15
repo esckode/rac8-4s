@@ -135,6 +135,17 @@ export interface AppDependencies {
    * NODE_ENV!=production /test/recap-sweep e2e trigger.
    */
   processRecapSweep?: () => Promise<void>
+  /**
+   * In-memory-queue consumer for coach.turn jobs — same rationale as
+   * processAssistantJob (S5.4). Wired by server.ts only when JOB_QUEUE=memory.
+   */
+  processCoachJob?: (payload: {
+    messageId: string
+    conversationId: string
+    playerId: string
+    body: string
+    timezone?: string
+  }) => Promise<void>
 }
 
 export function createApp(deps: AppDependencies): Express {
