@@ -239,6 +239,30 @@ export class GroupMessageRepository {
   }
 
   /**
+   * Conversation-first sibling of sendAssistantMessage — for the 1:1 Coach
+   * surface, which has no group to resolve a conversation from (S5).
+   */
+  async sendAssistantMessageToConversation(
+    conversationId: string,
+    body: string,
+    metadata?: Record<string, unknown>
+  ): Promise<{ message: GroupMessageRow; conversationId: string }> {
+    const result = await this.pool.query(
+      `INSERT INTO messaging.group_messages
+         (conversation_id, player_id, sender_name_snapshot, body, type, metadata)
+       VALUES ($1, NULL, 'Coach', $2, 'assistant', $3)
+       RETURNING id, conversation_id, player_id, sender_name_snapshot, body, type,
+                 created_at, metadata`,
+      [conversationId, body, metadata ?? null]
+    )
+
+    const message = rowToGroupMessage(result.rows[0])
+    log.info('coach.assistant.message.sent', { conversationId, messageId: message.id })
+
+    return { message, conversationId }
+  }
+
+  /**
    * Get the newest N messages of a conversation in chronological order — the
    * assistant's bounded context window (design Q13, ~20 messages).
    */
