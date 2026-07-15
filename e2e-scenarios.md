@@ -2391,3 +2391,129 @@ Then no messaging.notify job is enqueued for that player
 - Frontend: `pages/Profile.tsx`, `shared/Avatar.tsx`, `shared/formatLocal.ts`,
   `hooks/usePendingActions.ts`, `ResponsiveLayout.tsx` (badges, avatar entry),
   `BrowseTournaments.tsx` (up-next strip), `GroupChatPanel.tsx` (composer chip)
+
+## Feature: 1:1 Coach (private per-player conversation + opt-in memory)
+
+> Per `assets/planning/COACH_1TO1_IMPLEMENTATION.md` (S0–S10) and
+> `assets/planning/COACH_1TO1_DESIGN.md` (§7, grilled 2026-07-14). Backend runs
+> `ASSISTANT_ADAPTER=mock`, `JOB_QUEUE=memory` — the mock router (§0.8) fakes only the
+> NL→intent hop; every tool it calls is real, exercising genuine player-level scoping.
+
+### Scenario: First open shows the intro message, including for a zero-group player
+```
+Given a signed-in player who has never opened Coach
+When they click the pinned Coach entry in the conversations list
+Then they land on /coach and see a one-time intro message from Coach
+Given a different signed-in player who belongs to no groups
+Then the pinned Coach entry is still visible and works identically
+```
+
+### Scenario: Turn loop — a message gets a reply without reload
+```
+Given a signed-in player on /coach
+When they send "hello"
+Then their message bubble appears immediately
+  And a Coach reply bubble appears shortly after via SSE, with no page reload
+```
+
+### Scenario: Data Q&A names the seeded opponent (full-path regression)
+```
+Given a player registered in a group-linked tournament with a pending match
+When they ask Coach "who am I playing next?"
+Then the reply names the seeded opponent and tournament
+```
+
+### Scenario: Union scope — a zero-group player gets an answer the group surface could never give
+```
+Given a player with no groups, registered directly in a standalone tournament with a pending match
+When they ask Coach "who am I playing next?"
+Then the reply names that match's opponent
+```
+
+### Scenario: Scouting plumbing surfaces the opponent's real record
+```
+Given an opponent with a seeded win/loss record in the standings
+When the player asks Coach "how do I beat <opponent>?"
+Then the reply contains the opponent's seeded W-L record
+```
+
+### Scenario: Medical decline is exact and unconditional
+```
+Given a signed-in player on /coach
+When they say "my elbow hurts when I serve"
+Then the reply is exactly the design's medical decline sentence
+  And no coaching advice is given
+```
+
+### Scenario: Remember flow — propose, confirm, list, delete
+```
+Given a signed-in player on /coach with coach_memory_enabled on
+When they say "remember I prefer morning matches"
+Then a remember ActionCard appears
+When they tap Confirm
+Then the card flips to confirmed via a live card.updated patch (no reload)
+  And the memory appears in their Profile memories list
+When they delete it from Profile
+Then it is removed immediately (optimistic) and does not reappear on reload
+```
+
+### Scenario: Memory toggle off suppresses the propose flow
+```
+Given a player has turned off the coach_memory_enabled toggle in Profile
+When they say "remember I prefer morning matches"
+Then Coach declines to remember and no card is created
+```
+
+### Scenario: Clear conversation resets the thread but not memories
+```
+Given a player's Coach thread has messages and a confirmed memory
+When they clear the conversation from Profile (with the confirm dialog)
+Then the thread shows only a fresh intro message
+  And the earlier memory is still listed in Profile
+  And asking a data question (e.g. next match) still works normally
+```
+
+### Scenario: NEGATIVE — data wall holds against an adversarial tournament id
+```
+Given a tournament the player has no relationship to
+When the player's message adversarially references that tournament's id
+Then the reply is a not-found response
+  And the private tournament's name and participants never appear in the thread
+```
+
+### Scenario: NEGATIVE — Coach never writes to a group on the player's behalf
+```
+Given a player with an unscored match in a group tournament
+When they ask Coach to "submit my score 2-1"
+Then Coach replies that it can only draft score cards in group chat
+  And the match's score in the group tournament UI is unchanged
+```
+
+### Scenario: Heads-up footer and rate cap
+```
+Given a player's hourly Coach counter is preloaded to 17 (via the test-only endpoint)
+When they send one more message
+Then the reply carries a "⚠ 3 messages left" footer
+Given the counter is preloaded to 20 (the hourly limit)
+When they send another message
+Then they get a polite cap reply and no model turn is made
+```
+
+### Scenario: Privacy policy page is reachable and linked
+```
+Given a logged-out visitor
+When they navigate to /privacy
+Then the privacy policy page renders (public, no auth required)
+Given a signed-in player on the DobScreen
+Then the "Privacy Policy" text is a working link to /privacy
+```
+
+**Implementation (S0–S10, planned):**
+- Playwright: `packages/frontend/e2e/coach.spec.ts`
+- Backend: migration `057_coach_conversation_memory.sql`, `routes/coach.ts`,
+  `assistant/coach-prompt.ts`, `assistant/coach-client.ts`, `assistant/player-snapshot.ts`,
+  `assistant/propose-remember.ts`, `workers/coach-processor.ts`,
+  `repositories/player-memory-repository.ts`, `services/memory-service.ts`,
+  `assistant/rate-limiter.ts` (coach methods), `assistant/tools.ts` (coach tool context)
+- Frontend: `pages/CoachChat.tsx`, `hooks/useCoachMessages.ts`, `pages/PrivacyPolicy.tsx`,
+  `pages/Profile.tsx` (Coach section), `pages/MyGroups.tsx` (pinned entry)
