@@ -90,11 +90,20 @@ export default function coachRouter(deps: AppDependencies): Router {
       const rawLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : DEFAULT_HISTORY_LIMIT
       const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, MAX_HISTORY_LIMIT) : DEFAULT_HISTORY_LIMIT
 
+      // LEFT JOIN assistant_cards so remember-cards render as ActionCard on the
+      // client (mirrors GroupMessageRepository.getGroupHistory's exact join —
+      // a coach-scope card is looked up by message_id just like a group card).
       const result = await (deps.db as any).query(
-        `SELECT id, conversation_id, player_id, sender_name_snapshot, body, type, created_at, metadata
-         FROM messaging.group_messages
-         WHERE conversation_id = $1
-         ORDER BY created_at ASC, id ASC
+        `SELECT gm.id, gm.conversation_id, gm.player_id, gm.sender_name_snapshot, gm.body,
+                gm.type, gm.created_at, gm.metadata,
+                ac.id AS card_id, ac.action AS card_action, ac.args AS card_args,
+                ac.status AS card_status, ac.expires_at AS card_expires_at,
+                ac.schema_version AS card_schema_version, ac.result AS card_result,
+                ac.proposer_player_id AS card_proposer_player_id
+         FROM messaging.group_messages gm
+         LEFT JOIN messaging.assistant_cards ac ON ac.message_id = gm.id
+         WHERE gm.conversation_id = $1
+         ORDER BY gm.created_at ASC, gm.id ASC
          LIMIT $2`,
         [conversationId, limit]
       )
@@ -110,6 +119,16 @@ export default function coachRouter(deps: AppDependencies): Router {
           type: r.type,
           createdAt: r.created_at,
           metadata: r.metadata ?? null,
+          ...(r.type === 'assistant' && r.card_id != null && {
+            cardId: r.card_id,
+            cardAction: r.card_action,
+            cardArgs: r.card_args,
+            cardStatus: r.card_status,
+            cardExpiresAt: r.card_expires_at,
+            cardSchemaVersion: r.card_schema_version,
+            cardResult: r.card_result ?? null,
+            cardProposerPlayerId: r.card_proposer_player_id,
+          }),
         })),
       })
     } catch (err) {

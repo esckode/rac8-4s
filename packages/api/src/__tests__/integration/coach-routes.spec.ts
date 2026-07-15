@@ -27,6 +27,7 @@ import { generatePlayerSession } from '../../auth/magic-link'
 import { AccountRepository, PlayerRepository } from '../../db'
 import { defaultAdultAttestation } from '../factories/player.factory'
 import { ConversationRepository } from '../../repositories/conversation-repository'
+import { AssistantCardRepository } from '../../repositories/assistant-card-repository'
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -158,6 +159,32 @@ describe('S2.1 — 1:1 Coach routes', () => {
       // ascending: earlier-created message first
       expect(new Date(res.body.messages[0].createdAt).getTime())
         .toBeLessThanOrEqual(new Date(res.body.messages[1].createdAt).getTime())
+    })
+
+    it('exposes card fields (cardId, cardStatus, ...) for a message with a coach-scope card — the ActionCard render path', async () => {
+      const { token, playerId } = await createAccountHolder()
+      const conversationRepo = new ConversationRepository(pool)
+      const cardRepo = new AssistantCardRepository(pool)
+      const conversationId = await conversationRepo.resolveCoachConversation(playerId)
+      const { card } = await cardRepo.createCoachCard({
+        conversationId,
+        proposerPlayerId: playerId,
+        action: 'remember',
+        args: { text: 'prefers morning matches' },
+        body: 'Coach wants to remember: "prefers morning matches". Only you can confirm.',
+      })
+
+      const res = await request(app).get('/player/coach/messages').set('Authorization', `Bearer ${token}`)
+      expect(res.status).toBe(200)
+      const cardMessage = res.body.messages.find((m: any) => m.id === card.messageId)
+      expect(cardMessage).toMatchObject({
+        cardId: card.id,
+        cardAction: 'remember',
+        cardArgs: { text: 'prefers morning matches' },
+        cardStatus: 'pending',
+        cardProposerPlayerId: playerId,
+      })
+      expect(cardMessage.cardExpiresAt).toBeTruthy()
     })
   })
 
