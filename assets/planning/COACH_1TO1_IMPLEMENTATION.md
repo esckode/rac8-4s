@@ -8,8 +8,8 @@
 > personalization foundation ([PERSONALIZATION_IMPLEMENTATION.md](./PERSONALIZATION_IMPLEMENTATION.md), P0–P12).
 
 **Date:** 2026-07-14
-**Status:** ✅ **Built** (2026-07-14/15, S0–S10, branch `coach-1to1`, not yet merged to `main`).
-See "Definition of done" at the end of this document.
+**Status:** ✅ **Built & merged** (2026-07-14/15, S0–S10, branch `coach-1to1`, fast-forward
+merged to `main` 2026-07-15). See "Definition of done" at the end of this document.
 **Method:** TDD-first per CLAUDE.md §4/§11 — every step is a **[RED]** commit (failing tests,
 run them, confirm they fail *for the right reason*) followed by a **[GREEN]** commit
 (implementation, tests pass). E2E scenarios land in `e2e-scenarios.md` **before** code (S0.2).
