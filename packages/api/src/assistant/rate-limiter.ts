@@ -115,7 +115,11 @@ export class AssistantRateLimiter {
   ): Promise<CoachLimitCheck> {
     const spentMicro = await this.store.incrementBy(this.budgetKey(), 0, BUDGET_TTL_SECONDS)
     if (spentMicro / MICRO + estimatedTurnUsd > this.opts.dailyBudgetUsd) {
-      return { limited: true, capMessage: COACH_CAP_MESSAGE, remainingHour: 0, remainingDay: 0 }
+      const notifies = await this.store.increment(
+        `assistant:budget-notified:${new Date().toISOString().slice(0, 10)}`,
+        BUDGET_TTL_SECONDS
+      )
+      return { limited: true, capMessage: notifies === 1 ? COACH_CAP_MESSAGE : undefined, remainingHour: 0, remainingDay: 0 }
     }
 
     const hourCount = await this.store.increment(`coach:player:${playerId}`, HOUR_SECONDS)
@@ -124,7 +128,16 @@ export class AssistantRateLimiter {
     const remainingDay = Math.max(0, COACH_DAILY_LIMIT - dayCount)
 
     if (hourCount > COACH_HOURLY_LIMIT || dayCount > COACH_DAILY_LIMIT) {
-      return { limited: true, capMessage: COACH_CAP_MESSAGE, remainingHour, remainingDay }
+      // capMessage fires only on the FIRST call that crosses either limit —
+      // the route always enqueues (no trigger gate), so a capped player's
+      // later messages must not re-post the cap row every time.
+      const firstOverLimit = hourCount === COACH_HOURLY_LIMIT + 1 || dayCount === COACH_DAILY_LIMIT + 1
+      return {
+        limited: true,
+        capMessage: firstOverLimit ? COACH_CAP_MESSAGE : undefined,
+        remainingHour,
+        remainingDay,
+      }
     }
 
     return { limited: false, remainingHour, remainingDay }
