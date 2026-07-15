@@ -126,6 +126,15 @@ describe('Profile — Coach section', () => {
     })
   })
 
+  it('links to the privacy policy in the footer (S9)', async () => {
+    mockFetchRouter()
+    render(<Profile />)
+    await waitFor(() => expect(screen.getByTestId('profile-page')).toBeInTheDocument())
+
+    const link = screen.getByRole('link', { name: /privacy policy/i })
+    expect(link).toHaveAttribute('href', '/privacy')
+  })
+
   it('Clear conversation shows a confirm dialog, then POSTs /player/coach/clear', async () => {
     mockFetchRouter()
     render(<Profile />)

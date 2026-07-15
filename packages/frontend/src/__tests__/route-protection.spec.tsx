@@ -182,6 +182,12 @@ describe('Route Constants', () => {
     expect(ROUTES.BROWSE).toBe('/browse')
   })
 
+  it('should expose /privacy as a public route (S9, clears the A9.2 launch gate)', () => {
+    const { ROUTES } = require('../constants/routes')
+
+    expect(ROUTES.PRIVACY).toBe('/privacy')
+  })
+
   it('should have correct protected route paths', () => {
     const { ROUTES } = require('../constants/routes')
 

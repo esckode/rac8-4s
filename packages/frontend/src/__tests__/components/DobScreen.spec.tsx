@@ -10,6 +10,7 @@
  */
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { DobScreen } from '../../pages/DobScreen'
 
@@ -32,7 +33,7 @@ describe('DobScreen', () => {
   // ── Renders a neutral DOB screen ──────────────────────────────────────────
 
   it('renders a date input (not a checkbox)', () => {
-    render(<DobScreen onConfirm={onConfirm} onBack={onBack} />)
+    render(<MemoryRouter><DobScreen onConfirm={onConfirm} onBack={onBack} /></MemoryRouter>)
 
     const dateInput = screen.getByTestId('dob-input')
     expect(dateInput).toBeInTheDocument()
@@ -43,13 +44,21 @@ describe('DobScreen', () => {
     expect(screen.queryByRole('checkbox')).toBeNull()
   })
 
+  // S9.1 — the "Privacy Policy" text is a working link to /privacy, not a dead span.
+  it('links "Privacy Policy" to /privacy', () => {
+    render(<MemoryRouter><DobScreen onConfirm={onConfirm} onBack={onBack} /></MemoryRouter>)
+
+    const link = screen.getByRole('link', { name: 'Privacy Policy' })
+    expect(link).toHaveAttribute('href', '/privacy')
+  })
+
   it('renders a continue / confirm button', () => {
-    render(<DobScreen onConfirm={onConfirm} onBack={onBack} />)
+    render(<MemoryRouter><DobScreen onConfirm={onConfirm} onBack={onBack} /></MemoryRouter>)
     expect(screen.getByTestId('dob-submit')).toBeInTheDocument()
   })
 
   it('renders the screen title and 18+ notice', () => {
-    render(<DobScreen onConfirm={onConfirm} onBack={onBack} />)
+    render(<MemoryRouter><DobScreen onConfirm={onConfirm} onBack={onBack} /></MemoryRouter>)
     // Some form of "date of birth" heading
     expect(screen.getByTestId('dob-heading')).toBeInTheDocument()
     // 18+ requirement text
@@ -59,7 +68,7 @@ describe('DobScreen', () => {
   // ── Under-18: blocked ─────────────────────────────────────────────────────
 
   it('shows a blocking error message for an under-18 DOB', async () => {
-    render(<DobScreen onConfirm={onConfirm} onBack={onBack} />)
+    render(<MemoryRouter><DobScreen onConfirm={onConfirm} onBack={onBack} /></MemoryRouter>)
 
     const input = screen.getByTestId('dob-input')
     fireEvent.change(input, { target: { value: dobForAge(15) } })
@@ -77,7 +86,7 @@ describe('DobScreen', () => {
     d.setDate(d.getDate() + 1) // not yet 18
     const dob = d.toISOString().slice(0, 10)
 
-    render(<DobScreen onConfirm={onConfirm} onBack={onBack} />)
+    render(<MemoryRouter><DobScreen onConfirm={onConfirm} onBack={onBack} /></MemoryRouter>)
 
     const input = screen.getByTestId('dob-input')
     fireEvent.change(input, { target: { value: dob } })
@@ -92,7 +101,7 @@ describe('DobScreen', () => {
   // ── 18+: proceeds ────────────────────────────────────────────────────────
 
   it('calls onConfirm with AgeAttestation when DOB is 18+ years ago', async () => {
-    render(<DobScreen onConfirm={onConfirm} onBack={onBack} />)
+    render(<MemoryRouter><DobScreen onConfirm={onConfirm} onBack={onBack} /></MemoryRouter>)
 
     const input = screen.getByTestId('dob-input')
     fireEvent.change(input, { target: { value: dobForAge(25) } })
@@ -111,7 +120,7 @@ describe('DobScreen', () => {
   })
 
   it('accepts a DOB of exactly 18 years ago today', async () => {
-    render(<DobScreen onConfirm={onConfirm} onBack={onBack} />)
+    render(<MemoryRouter><DobScreen onConfirm={onConfirm} onBack={onBack} /></MemoryRouter>)
 
     const input = screen.getByTestId('dob-input')
     fireEvent.change(input, { target: { value: dobForAge(18) } })
@@ -125,7 +134,7 @@ describe('DobScreen', () => {
   // ── Back navigation ───────────────────────────────────────────────────────
 
   it('calls onBack when the back button is pressed', () => {
-    render(<DobScreen onConfirm={onConfirm} onBack={onBack} />)
+    render(<MemoryRouter><DobScreen onConfirm={onConfirm} onBack={onBack} /></MemoryRouter>)
     fireEvent.click(screen.getByTestId('dob-back'))
     expect(onBack).toHaveBeenCalledTimes(1)
   })
