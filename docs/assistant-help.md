@@ -182,3 +182,30 @@ scores, standings) always appear in the app in real time regardless of notificat
   timezone** — derived from members' own timezones, or pinned by a group owner in group
   settings. Your **own timezone** (used for your profile and anything shown just to you) follows
   your device automatically unless you set one manually in your profile.
+
+## 1:1 Coach (your private conversation)
+
+- Every signed-in player has a private **Coach** conversation — a pinned entry at the top of
+  your conversations list, separate from any group chat. It exists even if you're not in any
+  groups. Guests who haven't created a full account don't have one.
+- Unlike group chat, there's no `@coach` mention needed here — **every message you send is
+  answered**. That also means it counts against your usage limits (below), so it's for
+  questions you actually want answered, not idle chatter.
+- This is the place to ask things you wouldn't want your group to see: "how do I beat Bob?",
+  "am I getting worse at closing out sets?", or anything about your own game. Coach can discuss
+  an opponent's game using only their visible match results (scores, records, streaks) — never
+  their personality or mental state.
+- Coach won't advise on injuries or pain. If you mention a physical symptom, it'll point you to
+  a physio or doctor instead of guessing. General warm-up, conditioning, and technique questions
+  are still fine.
+- **Coach can remember things you tell it** — a preference, a piece of equipment, a goal — if
+  you ask it to (or it offers, and you confirm). Nothing is remembered without your explicit
+  confirmation on a card, the same tap-to-confirm pattern as group chat actions. You can see and
+  delete everything Coach remembers about you from your **Profile** page, and you can turn
+  memory off entirely there too.
+- **Clear conversation** (in your Profile) permanently erases your Coach chat history and starts
+  fresh — this does not delete anything Coach remembers about you; manage memories separately.
+- Coach has its own hourly and daily usage limits here, separate from group chat; if you're
+  close to a limit it lets you know, and if you hit it, it says so and you can try again later.
+- Nothing you say to 1:1 Coach is ever visible to your groups, and group Coach never sees your
+  1:1 conversation or memories.
