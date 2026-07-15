@@ -4,7 +4,8 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-07-13 (drafted); **grilled to resolution 2026-07-14 — see §7.**
-**Status:** ✅ **GRILLED** — ready for implementation planning. Extends the @coach assistant
+**Status:** ✅ **Built** (2026-07-14/15, see [COACH_1TO1_IMPLEMENTATION.md](./COACH_1TO1_IMPLEMENTATION.md)'s
+Definition of done). Extends the @coach assistant
 ([LLM_ASSISTANT_DESIGN.md](./LLM_ASSISTANT_DESIGN.md), Phases A–C merged to `main`); referenced
 as the "later phase" of [PERSONALIZATION_DESIGN.md](./PERSONALIZATION_DESIGN.md) §4.
 **Sequencing:** after the personalization foundation tier (P0–P5) + its reception checkpoint;
