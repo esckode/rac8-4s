@@ -28,7 +28,7 @@ async function seedPersonalNotification(
   const convRes = await pool.query(
     `INSERT INTO messaging.conversations (type, player_id)
      VALUES ('personal', $1)
-     ON CONFLICT (player_id) WHERE player_id IS NOT NULL DO NOTHING
+     ON CONFLICT (player_id) WHERE type = 'personal' DO NOTHING
      RETURNING id`,
     [playerId],
   )
@@ -37,7 +37,7 @@ async function seedPersonalNotification(
     convId = convRes.rows[0].id as string
   } else {
     const sel = await pool.query(
-      `SELECT id FROM messaging.conversations WHERE player_id = $1`,
+      `SELECT id FROM messaging.conversations WHERE player_id = $1 AND type = 'personal'`,
       [playerId],
     )
     convId = sel.rows[0].id as string

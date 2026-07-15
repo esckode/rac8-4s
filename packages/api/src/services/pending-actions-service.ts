@@ -118,12 +118,16 @@ export async function getPendingActions(pool: Pool, playerId: string): Promise<P
   }))
 
   const cardRows = await cardRepo.findPendingForProposer(playerId)
-  const pendingCards: PendingCard[] = cardRows.map(c => ({
-    groupId: c.groupId,
-    groupName: groupNameById.get(c.groupId) ?? 'Unknown',
-    cardId: c.id,
-    action: c.action,
-  }))
+  // Coach-scope cards (1:1 conversation, no group) are out of scope for this
+  // group-aggregated view — they never feed the Matches/Groups nav badges.
+  const pendingCards: PendingCard[] = cardRows
+    .filter((c): c is typeof c & { groupId: string } => c.groupId !== null)
+    .map(c => ({
+      groupId: c.groupId,
+      groupName: groupNameById.get(c.groupId) ?? 'Unknown',
+      cardId: c.id,
+      action: c.action,
+    }))
 
   return { unscoredMatches, openPolls, pendingCards, nearestDeadline }
 }

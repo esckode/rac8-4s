@@ -72,6 +72,7 @@ const testConfig: AppConfig = {
     adapter: 'mock',
     model: 'claude-haiku-4-5',
     dailyBudgetUsd: 5,
+    coachModel: 'claude-haiku-4-5',
   },
 }
 

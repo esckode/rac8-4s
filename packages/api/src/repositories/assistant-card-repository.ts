@@ -22,7 +22,8 @@ export type AssistantCardStatus = 'pending' | 'confirmed' | 'failed' | 'cancelle
 export interface AssistantCardRow {
   id: string
   messageId: string
-  groupId: string
+  groupId: string | null
+  conversationId: string
   proposerPlayerId: string
   action: string
   args: Record<string, unknown>
@@ -49,7 +50,8 @@ function rowToCard(row: any): AssistantCardRow {
   return {
     id: row.id as string,
     messageId: row.message_id as string,
-    groupId: row.group_id as string,
+    groupId: row.group_id ?? null,
+    conversationId: row.conversation_id as string,
     proposerPlayerId: row.proposer_player_id as string,
     action: row.action as string,
     args: row.args as Record<string, unknown>,
@@ -61,7 +63,7 @@ function rowToCard(row: any): AssistantCardRow {
   }
 }
 
-const CARD_COLUMNS = `id, message_id, group_id, proposer_player_id, action, args,
+const CARD_COLUMNS = `id, message_id, group_id, conversation_id, proposer_player_id, action, args,
                        status, expires_at, schema_version, result, created_at`
 
 export class AssistantCardRepository {
@@ -118,10 +120,10 @@ export class AssistantCardRepository {
 
       const cardRes = await client.query(
         `INSERT INTO messaging.assistant_cards
-           (message_id, group_id, proposer_player_id, action, args, status, expires_at, schema_version)
-         VALUES ($1, $2, $3, $4, $5, 'pending', now() + make_interval(secs => $6), $7)
+           (message_id, group_id, conversation_id, proposer_player_id, action, args, status, expires_at, schema_version)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', now() + make_interval(secs => $7), $8)
          RETURNING ${CARD_COLUMNS}`,
-        [messageId, groupId, proposerPlayerId, action, args, expiresInSeconds, schemaVersion]
+        [messageId, groupId, conversationId, proposerPlayerId, action, args, expiresInSeconds, schemaVersion]
       )
       const card = rowToCard(cardRes.rows[0])
 

@@ -345,7 +345,7 @@ export class GroupMessageRepository {
       const convResult = await client.query(
         `INSERT INTO messaging.conversations (type, player_id)
          VALUES ('personal', $1)
-         ON CONFLICT (player_id) WHERE player_id IS NOT NULL DO NOTHING
+         ON CONFLICT (player_id) WHERE type = 'personal' DO NOTHING
          RETURNING id`,
         [playerId]
       )
@@ -354,7 +354,7 @@ export class GroupMessageRepository {
         conversationId = convResult.rows[0].id as string
       } else {
         const sel = await client.query(
-          `SELECT id FROM messaging.conversations WHERE player_id = $1`,
+          `SELECT id FROM messaging.conversations WHERE player_id = $1 AND type = 'personal'`,
           [playerId]
         )
         conversationId = sel.rows[0].id as string

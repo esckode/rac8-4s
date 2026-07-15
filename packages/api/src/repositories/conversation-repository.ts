@@ -96,7 +96,7 @@ export class ConversationRepository {
     const result = await this.pool.query(
       `INSERT INTO messaging.conversations (type, player_id)
        VALUES ('personal', $1)
-       ON CONFLICT (player_id) WHERE player_id IS NOT NULL DO NOTHING
+       ON CONFLICT (player_id) WHERE type = 'personal' DO NOTHING
        RETURNING id`,
       [playerId]
     )
@@ -107,7 +107,34 @@ export class ConversationRepository {
     }
 
     const existing = await this.pool.query(
-      `SELECT id FROM messaging.conversations WHERE player_id = $1`,
+      `SELECT id FROM messaging.conversations WHERE player_id = $1 AND type = 'personal'`,
+      [playerId]
+    )
+    return existing.rows[0].id as string
+  }
+
+  /**
+   * Return the conversation_id for a player's 1:1 Coach thread, creating one if it
+   * does not exist yet. Idempotent (INSERT ON CONFLICT + SELECT, the 046 pattern).
+   * Distinct from resolvePersonalConversation (type='personal', system notifications) —
+   * a player may hold one of each simultaneously (COACH_1TO1_DESIGN.md §7 #1).
+   */
+  async resolveCoachConversation(playerId: string): Promise<string> {
+    const result = await this.pool.query(
+      `INSERT INTO messaging.conversations (type, player_id)
+       VALUES ('coach', $1)
+       ON CONFLICT (player_id) WHERE type = 'coach' DO NOTHING
+       RETURNING id`,
+      [playerId]
+    )
+
+    if (result.rows.length > 0) {
+      log.debug('conversation.coach.created', { playerId, conversationId: result.rows[0].id })
+      return result.rows[0].id as string
+    }
+
+    const existing = await this.pool.query(
+      `SELECT id FROM messaging.conversations WHERE player_id = $1 AND type = 'coach'`,
       [playerId]
     )
     return existing.rows[0].id as string
