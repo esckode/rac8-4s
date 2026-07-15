@@ -31,6 +31,16 @@ describe('AssistantRateLimiter.checkCoach', () => {
     expect(twentyFirst).toMatchObject({ limited: true, capMessage: COACH_CAP_MESSAGE })
   })
 
+  it('capMessage fires only once per limited window — repeat capped calls omit it', async () => {
+    const rl = new AssistantRateLimiter(store, OPTS)
+    for (let i = 0; i < 20; i++) await rl.checkCoach('p1')
+    const first = await rl.checkCoach('p1')
+    expect(first).toMatchObject({ limited: true, capMessage: COACH_CAP_MESSAGE })
+    const second = await rl.checkCoach('p1')
+    expect(second.limited).toBe(true)
+    expect(second.capMessage).toBeUndefined()
+  })
+
   it('allows up to 60 calls per player per day; the 61st is limited (hourly window reset between)', async () => {
     const rl = new AssistantRateLimiter(store, OPTS)
     let count = 0
