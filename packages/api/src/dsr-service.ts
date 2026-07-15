@@ -9,6 +9,7 @@ import { GroupMessageRepository } from './repositories/group-message-repository'
 import { PlayerSettingsRepository, type PlayerSettings } from './repositories/player-settings-repository'
 import { StandingsSnapshotRepository } from './repositories/standings-snapshot-repository'
 import { AvailabilityRepository, type AvailabilitySlot } from './repositories/availability-repository'
+import { PlayerMemoryRepository, type PlayerMemoryRow } from './repositories/player-memory-repository'
 
 const log = getLogger('dsr-service')
 
@@ -22,6 +23,10 @@ export interface PlayerExport {
   matchCount: number
   settings: PlayerSettings
   availability: AvailabilitySlot[]
+  /** 1:1 Coach (S8): the player's own rows + Coach's replies in their private thread. */
+  coachMessageCount: number
+  memories: PlayerMemoryRow[]
+  rememberCardCount: number
 }
 
 export type EraseResult = { status: 'erased'; playerId: string } | { status: 'not_found' }
@@ -37,6 +42,7 @@ export class DataSubjectRequestService {
   private playerSettingsRepo: PlayerSettingsRepository
   private standingsSnapshotRepo: StandingsSnapshotRepository
   private availabilityRepo: AvailabilityRepository
+  private memoryRepo: PlayerMemoryRepository
 
   constructor(private pool: Pool) {
     this.playerRepo = new PlayerRepository(pool as any)
@@ -48,6 +54,7 @@ export class DataSubjectRequestService {
     this.playerSettingsRepo = new PlayerSettingsRepository(pool as any)
     this.standingsSnapshotRepo = new StandingsSnapshotRepository(pool as any)
     this.availabilityRepo = new AvailabilityRepository(pool as any)
+    this.memoryRepo = new PlayerMemoryRepository(pool as any)
   }
 
   /**
@@ -75,6 +82,20 @@ export class DataSubjectRequestService {
     await this.playerSettingsRepo.deleteFor(playerId)
     await this.standingsSnapshotRepo.deleteFor(playerId)
     await this.availabilityRepo.deleteFor(playerId)
+
+    // 1:1 Coach (S8, design §5.2): the ids-only args rule breaks deliberately
+    // for propose_remember (args carry the actual text) — scrub any remaining
+    // remember-card args, explicitly delete player_memories (belt-and-braces;
+    // don't rely solely on the FK cascade, which only fires if the player row
+    // itself is ever hard-deleted, which erase() never does), then hard-delete
+    // the whole coach conversation (cards + messages + the conversation row).
+    await this.pool.query(
+      `UPDATE messaging.assistant_cards SET args = '{}'::jsonb
+       WHERE proposer_player_id = $1 AND action = 'remember'`,
+      [playerId]
+    )
+    await this.memoryRepo.deleteAllFor(playerId)
+    await this.groupMsgRepo.deleteCoachThreadFor(playerId)
 
     // Hard-delete membership
     await this.groupRepo.removeFromAllGroups(playerId)
@@ -121,6 +142,24 @@ export class DataSubjectRequestService {
     const settings = await this.playerSettingsRepo.getOrDefaults(playerId)
     const availability = await this.availabilityRepo.getSlots(playerId)
 
+    // 1:1 Coach (S8): it's their own private conversation, so both their own
+    // rows AND Coach's replies to them count (unlike group messageCount above,
+    // which is scoped to player_id = them only).
+    const coachMsgResult = await this.pool.query(
+      `SELECT COUNT(*) AS c FROM messaging.group_messages gm
+       JOIN messaging.conversations c ON c.id = gm.conversation_id
+       WHERE c.type = 'coach' AND c.player_id = $1`,
+      [playerId]
+    )
+    const coachMessageCount = Number(coachMsgResult.rows[0].c)
+    const memories = await this.memoryRepo.listMemories(playerId)
+    const rememberCardResult = await this.pool.query(
+      `SELECT COUNT(*) AS c FROM messaging.assistant_cards
+       WHERE proposer_player_id = $1 AND action = 'remember'`,
+      [playerId]
+    )
+    const rememberCardCount = Number(rememberCardResult.rows[0].c)
+
     const data: PlayerExport = {
       playerId,
       email: player.email,
@@ -130,6 +169,9 @@ export class DataSubjectRequestService {
       pollVoteCount,
       matchCount,
       settings,
+      coachMessageCount,
+      memories,
+      rememberCardCount,
       availability,
     }
 

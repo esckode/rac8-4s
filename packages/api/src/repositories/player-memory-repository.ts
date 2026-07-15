@@ -83,4 +83,10 @@ export class PlayerMemoryRepository {
     log.info('coach.memory.deleted', { playerId, memoryId, deleted: res.rowCount })
     return res.rowCount ?? 0
   }
+
+  /** DSR erasure primitive (S8) — belt-and-braces explicit delete, not reliant on the FK cascade. */
+  async deleteAllFor(playerId: string): Promise<void> {
+    await this.pool.query(`DELETE FROM public.player_memories WHERE player_id = $1`, [playerId])
+    log.debug('coach.memories.deleted_all', { playerId })
+  }
 }

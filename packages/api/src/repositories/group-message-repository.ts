@@ -532,4 +532,50 @@ export class GroupMessageRepository {
       client.release()
     }
   }
+
+  /**
+   * DSR erasure primitive (S8, design §5.2): hard-deletes a player's entire
+   * 1:1 Coach conversation — cards, messages, and the conversation row itself.
+   * Single-party data (no shared-feed integrity to preserve, unlike group
+   * chat), so hard-delete is simpler than tombstoning and matches "clear
+   * conversation" semantics (S2's clearConversation, which keeps the row for
+   * reuse — this variant removes it entirely since the player is being erased).
+   */
+  async deleteCoachThreadFor(playerId: string): Promise<void> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      const convRes = await client.query(
+        `SELECT id FROM messaging.conversations WHERE type = 'coach' AND player_id = $1`,
+        [playerId]
+      )
+      if (convRes.rows.length === 0) {
+        await client.query('COMMIT')
+        return
+      }
+      const conversationId = convRes.rows[0].id as string
+
+      await client.query(
+        `DELETE FROM messaging.assistant_cards WHERE conversation_id = $1`,
+        [conversationId]
+      )
+      await client.query(
+        `DELETE FROM messaging.group_messages WHERE conversation_id = $1`,
+        [conversationId]
+      )
+      await client.query(
+        `DELETE FROM messaging.conversations WHERE id = $1`,
+        [conversationId]
+      )
+
+      await client.query('COMMIT')
+      log.info('coach.thread.deleted', { playerId, conversationId })
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
 }
