@@ -33,4 +33,5 @@ export const ROUTES = {
   NOTIFICATIONS: '/notifications',
   PROFILE: '/profile',
   COACH: '/coach',
+  PRIVACY: '/privacy',
 }

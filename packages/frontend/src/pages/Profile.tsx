@@ -370,6 +370,12 @@ export const Profile: React.FC = () => {
           This deletes your Coach conversation history. What Coach remembers about you is not affected.
         </p>
       </Modal>
+
+      <footer className="text-center pt-2">
+        <a href="/privacy" className="text-xs text-[--ink-500] hover:text-[--ink-700] underline">
+          Privacy Policy
+        </a>
+      </footer>
     </div>
   )
 }

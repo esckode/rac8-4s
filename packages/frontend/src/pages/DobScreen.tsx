@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 export interface AgeAttestation {
   /** ISO 8601 date string (YYYY-MM-DD). Transient — not stored beyond this screen. */
@@ -104,7 +105,7 @@ export function DobScreen({ onConfirm, onBack }: DobScreenProps) {
         You must be 18 or older to use this app. By continuing, you confirm you
         meet the age requirement and accept our{' '}
         <span style={{ color: 'var(--onboard-accent)' }}>Terms of Service</span> and{' '}
-        <span style={{ color: 'var(--onboard-accent)' }}>Privacy Policy</span>.
+        <Link to="/privacy" style={{ color: 'var(--onboard-accent)' }}>Privacy Policy</Link>.
       </p>
 
       <form onSubmit={handleSubmit}>

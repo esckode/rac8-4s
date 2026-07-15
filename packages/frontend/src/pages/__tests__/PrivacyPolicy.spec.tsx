@@ -17,7 +17,7 @@ describe('PrivacyPolicy', () => {
 
   it('describes the group assistant AI feature', () => {
     render(<PrivacyPolicy />)
-    expect(screen.getByText(/Anthropic/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Anthropic/).length).toBeGreaterThan(0)
     expect(screen.getByText(/visible to the group/i)).toBeInTheDocument()
   })
 
@@ -46,7 +46,7 @@ describe('PrivacyPolicy', () => {
 
   it('describes export and erasure rights', () => {
     render(<PrivacyPolicy />)
-    expect(screen.getByText(/export/i)).toBeInTheDocument()
-    expect(screen.getByText(/erasure/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/export/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/erasure/i).length).toBeGreaterThan(0)
   })
 })

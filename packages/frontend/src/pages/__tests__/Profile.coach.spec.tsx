@@ -129,7 +129,7 @@ describe('Profile — Coach section', () => {
   it('links to the privacy policy in the footer (S9)', async () => {
     mockFetchRouter()
     render(<Profile />)
-    await waitFor(() => expect(screen.getByTestId('profile-page')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('coach-clear')).toBeInTheDocument())
 
     const link = screen.getByRole('link', { name: /privacy policy/i })
     expect(link).toHaveAttribute('href', '/privacy')

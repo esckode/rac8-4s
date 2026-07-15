@@ -19,6 +19,7 @@ import { InviteAcceptPage } from './pages/InviteAcceptPage'
 import { Notifications } from './pages/Notifications'
 import { Profile } from './pages/Profile'
 import { CoachChat } from './pages/CoachChat'
+import { PrivacyPolicy } from './pages/PrivacyPolicy'
 import { PartnerRequestConfirm } from './pages/PartnerRequestConfirm'
 import { OrganizerManage } from './pages/OrganizerManage'
 import { OrganizerDashboard } from './pages/OrganizerDashboard'
@@ -42,6 +43,9 @@ export const App: React.FC = () => {
         <Routes>
           {/* Public routes (no auth required) */}
           <Route path={ROUTES.HOME} element={<Landing />} />
+
+          {/* Public — clears the A9.2 launch gate (COACH_1TO1_IMPLEMENTATION.md §S9) */}
+          <Route path={ROUTES.PRIVACY} element={<PrivacyPolicy />} />
 
           {/* Auth routes (public, but redirected if already authenticated) */}
           <Route path={ROUTES.LOGIN} element={<PublicRoute><Login /></PublicRoute>} />
