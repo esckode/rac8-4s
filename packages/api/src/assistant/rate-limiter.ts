@@ -10,8 +10,10 @@
  * integer-only).
  */
 import type { RateLimitCounterStore } from '../middleware/rate-limit-store'
+import { COACH_HOURLY_LIMIT, COACH_DAILY_LIMIT, COACH_HEADS_UP_THRESHOLD, COACH_CAP_MESSAGE } from './coach-constants'
 
 const HOUR_SECONDS = 3600
+const DAY_SECONDS = 86400
 const BUDGET_TTL_SECONDS = 48 * 3600 // key is date-scoped; TTL is just cleanup
 const MICRO = 1e6
 
@@ -99,4 +101,51 @@ export class AssistantRateLimiter {
     const spentMicro = await this.store.incrementBy(this.budgetKey(), 0, BUDGET_TTL_SECONDS)
     return spentMicro / MICRO + estimatedTurnUsd <= this.opts.dailyBudgetUsd
   }
+
+  /**
+   * 1:1 Coach limits (design §7 #2): 20/player/hour + 60/player/day, plus the
+   * SAME shared daily budget kill-switch used by check() — one kill-switch
+   * for both surfaces. Unlike check()'s player→group early-return chain, both
+   * coach windows describe the same event (one turn happened) so both always
+   * increment together, regardless of whether either is already over.
+   */
+  async checkCoach(
+    playerId: string,
+    estimatedTurnUsd: number = DEFAULT_TURN_ESTIMATE_USD
+  ): Promise<CoachLimitCheck> {
+    const spentMicro = await this.store.incrementBy(this.budgetKey(), 0, BUDGET_TTL_SECONDS)
+    if (spentMicro / MICRO + estimatedTurnUsd > this.opts.dailyBudgetUsd) {
+      return { limited: true, capMessage: COACH_CAP_MESSAGE, remainingHour: 0, remainingDay: 0 }
+    }
+
+    const hourCount = await this.store.increment(`coach:player:${playerId}`, HOUR_SECONDS)
+    const dayCount = await this.store.increment(`coach:player-day:${playerId}`, DAY_SECONDS)
+    const remainingHour = Math.max(0, COACH_HOURLY_LIMIT - hourCount)
+    const remainingDay = Math.max(0, COACH_DAILY_LIMIT - dayCount)
+
+    if (hourCount > COACH_HOURLY_LIMIT || dayCount > COACH_DAILY_LIMIT) {
+      return { limited: true, capMessage: COACH_CAP_MESSAGE, remainingHour, remainingDay }
+    }
+
+    return { limited: false, remainingHour, remainingDay }
+  }
+}
+
+export interface CoachLimitCheck {
+  limited: boolean
+  capMessage?: string
+  remainingHour: number
+  remainingDay: number
+}
+
+/**
+ * Pure derivation of the near-limit heads-up footer (design §7 #2): fires
+ * when the tighter of the two windows has ≤ COACH_HEADS_UP_THRESHOLD
+ * messages left (but > 0 — a window already at 0 is a cap, not a heads-up).
+ */
+export function deriveCoachHeadsUpFooter(remainingHour: number, remainingDay: number): string | undefined {
+  const tightest = Math.min(remainingHour, remainingDay)
+  if (tightest <= 0 || tightest > COACH_HEADS_UP_THRESHOLD) return undefined
+  const window = remainingHour <= remainingDay ? 'this hour' : 'today'
+  return `⚠ ${tightest} messages left ${window}`
 }
