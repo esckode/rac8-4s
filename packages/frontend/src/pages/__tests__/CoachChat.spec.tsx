@@ -10,6 +10,7 @@ import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { CoachChat } from '../CoachChat'
+import { clearCoachMessageStore } from '../../hooks/useCoachMessages'
 
 const mockFetch = jest.fn()
 global.fetch = mockFetch
@@ -78,6 +79,7 @@ describe('CoachChat', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     localStorage.setItem('auth_token', 'test-token')
+    clearCoachMessageStore()
   })
 
   it('renders the intro message like any assistant row', async () => {

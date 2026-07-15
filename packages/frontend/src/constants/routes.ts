@@ -32,4 +32,5 @@ export const ROUTES = {
   REGISTRATION_CONFIRM: '/registrations/:registrationId/confirm',
   NOTIFICATIONS: '/notifications',
   PROFILE: '/profile',
+  COACH: '/coach',
 }

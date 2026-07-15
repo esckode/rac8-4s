@@ -1,3 +1,13 @@
+/**
+ * @jest-environment node
+ *
+ * This suite runs ESLint programmatically against in-memory fixtures — no
+ * DOM needed. Forced to the node environment because jsdom's global scope
+ * lacks `structuredClone`, which @typescript-eslint/no-redeclare's rule
+ * loader calls into (added when tools.ts's getGroupAvailability overloads
+ * needed the rule turned on) — that call only fails under jsdom, not in a
+ * real Node process (npx eslint) or here once forced back to node.
+ */
 import { lintText } from '../../lint/lint-text'
 
 const CLEAN_FIXTURE = `import React from 'react'

@@ -57,22 +57,30 @@ export const GroupList: React.FC = () => {
     )
   }
 
-  if (groups.length === 0) {
-    return (
-      <div className="p-4 text-center">
-        <p
-          data-testid="group-list-empty"
-          className="text-[--ink-500]"
-        >
-          No groups yet. Ask a group owner to invite you.
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-[--s-3] p-4">
       <h1 className="text-2xl font-bold text-[--ink-900]">My Groups</h1>
+
+      {/* Pinned 1:1 Coach entry — every authenticated account-holder has one,
+          regardless of group count (COACH_1TO1_DESIGN.md §7 #9). */}
+      <Link
+        to="/coach"
+        data-testid="coach-entry"
+        className="flex items-center gap-3 p-4 bg-[--court-50] border border-[--court-200] rounded-xl hover:shadow-md transition-shadow"
+      >
+        <span className="flex items-center justify-center w-10 h-10 rounded-full bg-[--court-500] text-white font-bold">C</span>
+        <div>
+          <span className="font-semibold text-[--ink-900]">Coach</span>
+          <p className="text-xs text-[--ink-500]">Your private coach</p>
+        </div>
+      </Link>
+
+      {groups.length === 0 && (
+        <p data-testid="group-list-empty" className="text-center text-[--ink-500] pt-2">
+          No groups yet. Ask a group owner to invite you.
+        </p>
+      )}
+
       {groups.map(g => (
         <Link
           key={g.id}

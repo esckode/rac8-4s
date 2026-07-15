@@ -6,6 +6,7 @@ export interface ModalAction {
   label: string
   onClick: () => void
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'soft' | 'dark'
+  testId?: string
 }
 
 export interface ModalProps {
@@ -141,6 +142,7 @@ export const Modal: React.FC<ModalProps> = ({
                 size="md"
                 onClick={action.onClick}
                 className="flex-1"
+                data-testid={action.testId}
               >
                 {action.label}
               </Button>
