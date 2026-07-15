@@ -16,7 +16,7 @@ import type { AssistantCardRow } from '../repositories/assistant-card-repository
 export function emitCardCreated(
   broadcastBus: IBroadcastBus | undefined,
   conversationId: string,
-  groupId: string,
+  groupId: string | null,
   card: AssistantCardRow,
   body: string
 ): void {

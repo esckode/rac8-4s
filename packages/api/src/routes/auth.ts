@@ -357,13 +357,19 @@ export default function authRouter(deps: AppDependencies) {
         return res.status(400).json({ code: 'NO_LINKED_PLAYER', message: 'This account has no linked player' })
       }
 
-      const { timezone, timezoneManual, tableDensity } = req.body as {
+      const { timezone, timezoneManual, tableDensity, coachMemoryEnabled } = req.body as {
         timezone?: unknown
         timezoneManual?: unknown
         tableDensity?: unknown
+        coachMemoryEnabled?: unknown
       }
 
-      const updates: { timezone?: string | null; timezoneManual?: boolean; tableDensity?: 'comfortable' | 'compact' } = {}
+      const updates: {
+        timezone?: string | null
+        timezoneManual?: boolean
+        tableDensity?: 'comfortable' | 'compact'
+        coachMemoryEnabled?: boolean
+      } = {}
 
       if (timezone !== undefined) {
         if (timezone !== null && typeof timezone !== 'string') {
@@ -385,6 +391,12 @@ export default function authRouter(deps: AppDependencies) {
           })
         }
         updates.tableDensity = tableDensity
+      }
+      if (coachMemoryEnabled !== undefined) {
+        if (typeof coachMemoryEnabled !== 'boolean') {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'coachMemoryEnabled must be a boolean' })
+        }
+        updates.coachMemoryEnabled = coachMemoryEnabled
       }
 
       const settings = await playerSettingsRepo.upsert(account.player_id, updates)

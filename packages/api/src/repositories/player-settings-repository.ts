@@ -19,6 +19,7 @@ export interface PlayerSettings {
   notifyNudges: boolean
   quietHoursStart: number | null
   quietHoursEnd: number | null
+  coachMemoryEnabled: boolean
 }
 
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
@@ -30,6 +31,7 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   notifyNudges: true,
   quietHoursStart: null,
   quietHoursEnd: null,
+  coachMemoryEnabled: true,
 }
 
 export interface PlayerSettingsUpdate {
@@ -41,6 +43,7 @@ export interface PlayerSettingsUpdate {
   notifyNudges?: boolean
   quietHoursStart?: number | null
   quietHoursEnd?: number | null
+  coachMemoryEnabled?: boolean
 }
 
 function rowToSettings(row: any): PlayerSettings {
@@ -53,6 +56,7 @@ function rowToSettings(row: any): PlayerSettings {
     notifyNudges: row.notify_nudges,
     quietHoursStart: row.quiet_hours_start,
     quietHoursEnd: row.quiet_hours_end,
+    coachMemoryEnabled: row.coach_memory_enabled,
   }
 }
 
@@ -80,22 +84,25 @@ export class PlayerSettingsRepository {
       notifyNudges: updates.notifyNudges !== undefined ? updates.notifyNudges : current.notifyNudges,
       quietHoursStart: updates.quietHoursStart !== undefined ? updates.quietHoursStart : current.quietHoursStart,
       quietHoursEnd: updates.quietHoursEnd !== undefined ? updates.quietHoursEnd : current.quietHoursEnd,
+      coachMemoryEnabled:
+        updates.coachMemoryEnabled !== undefined ? updates.coachMemoryEnabled : current.coachMemoryEnabled,
     }
 
     const res = await this.pool.query(
       `INSERT INTO public.player_settings
          (player_id, timezone, timezone_manual, table_density,
-          notify_mentions, notify_polls, notify_nudges, quiet_hours_start, quiet_hours_end, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+          notify_mentions, notify_polls, notify_nudges, quiet_hours_start, quiet_hours_end,
+          coach_memory_enabled, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
        ON CONFLICT (player_id) DO UPDATE SET
          timezone = $2, timezone_manual = $3, table_density = $4,
          notify_mentions = $5, notify_polls = $6, notify_nudges = $7,
-         quiet_hours_start = $8, quiet_hours_end = $9, updated_at = now()
+         quiet_hours_start = $8, quiet_hours_end = $9, coach_memory_enabled = $10, updated_at = now()
        RETURNING *`,
       [
         playerId, merged.timezone, merged.timezoneManual, merged.tableDensity,
         merged.notifyMentions, merged.notifyPolls, merged.notifyNudges,
-        merged.quietHoursStart, merged.quietHoursEnd,
+        merged.quietHoursStart, merged.quietHoursEnd, merged.coachMemoryEnabled,
       ]
     )
     return rowToSettings(res.rows[0])

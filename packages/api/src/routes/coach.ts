@@ -17,6 +17,9 @@ import { requireOrganizerAuth } from '../auth'
 import { ForbiddenError } from '../auth/errors'
 import { ConversationRepository } from '../repositories/conversation-repository'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
+import { AssistantCardRepository } from '../repositories/assistant-card-repository'
+import { PlayerMemoryRepository } from '../repositories/player-memory-repository'
+import { confirmRemember } from '../services/memory-service'
 import { getLogger } from '../logger'
 
 const log = getLogger('coach')
@@ -51,6 +54,8 @@ export default function coachRouter(deps: AppDependencies): Router {
   const router = Router()
   const conversationRepo = new ConversationRepository(deps.db as any)
   const groupMsgRepo = new GroupMessageRepository(deps.db as any)
+  const cardRepo = new AssistantCardRepository(deps.db as any)
+  const memoryRepo = new PlayerMemoryRepository(deps.db as any)
 
   async function resolveAccountPlayerId(authHeader: string | undefined): Promise<string> {
     const account = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
@@ -237,6 +242,122 @@ export default function coachRouter(deps: AppDependencies): Router {
       req.on('close', () => {
         unsubscribe()
       })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /player/coach/cards/:cardId/confirm — mutate-first (memory service
+  // inserts player_memories), then an atomic pending->confirmed flip.
+  router.post('/cards/:cardId/confirm', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolveAccountPlayerId(req.headers.authorization)
+      const cardId = req.params.cardId as string
+
+      const card = await cardRepo.getCard(cardId)
+      if (!card || card.action !== 'remember') {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Card not found' })
+      }
+      if (card.proposerPlayerId !== playerId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the proposer can confirm this card' })
+      }
+      if (card.status !== 'pending') {
+        return res.status(409).json({ code: 'ALREADY_RESOLVED', message: `This card is already ${card.status}` })
+      }
+      if (Date.now() > card.expiresAt.getTime()) {
+        return res.status(409).json({ code: 'EXPIRED', message: 'This card has expired' })
+      }
+
+      const args = card.args as { text: string }
+      const result = await confirmRemember({ cardRepo, memoryRepo }, { cardId, playerId, text: args.text })
+      if (!result.ok) {
+        const reread = await cardRepo.getCard(cardId)
+        return res.status(409).json({ code: 'ALREADY_RESOLVED', message: `This card is already ${reread?.status}` })
+      }
+
+      const cardResult = result.status === 'confirmed' ? { memoryId: result.memoryId } : { reason: result.reason }
+
+      if (deps.broadcastBus) {
+        const conversationId = await conversationRepo.resolveCoachConversation(playerId)
+        deps.broadcastBus.emit(conversationId, 'card.updated', {
+          messageId: card.messageId,
+          cardId,
+          status: result.status,
+          result: cardResult,
+        })
+      }
+
+      return res.status(200).json({ card: { id: cardId, status: result.status, result: cardResult } })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /player/coach/cards/:cardId/cancel — proposer dismisses a pending card.
+  router.post('/cards/:cardId/cancel', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolveAccountPlayerId(req.headers.authorization)
+      const cardId = req.params.cardId as string
+
+      const card = await cardRepo.getCard(cardId)
+      if (!card || card.action !== 'remember') {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Card not found' })
+      }
+      if (card.proposerPlayerId !== playerId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the proposer can cancel this card' })
+      }
+      if (card.status !== 'pending') {
+        return res.status(409).json({ code: 'ALREADY_RESOLVED', message: `This card is already ${card.status}` })
+      }
+
+      const claimed = await cardRepo.claimCard(cardId, 'cancelled')
+      if (!claimed) {
+        const reread = await cardRepo.getCard(cardId)
+        return res.status(409).json({ code: 'ALREADY_RESOLVED', message: `This card is already ${reread?.status}` })
+      }
+
+      if (deps.broadcastBus) {
+        const conversationId = await conversationRepo.resolveCoachConversation(playerId)
+        deps.broadcastBus.emit(conversationId, 'card.updated', {
+          messageId: card.messageId,
+          cardId,
+          status: 'cancelled',
+          result: null,
+        })
+      }
+
+      return res.status(200).json({ card: { id: cardId, status: 'cancelled' } })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /player/coach/memories — owner's memories, newest-first.
+  router.get('/memories', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolveAccountPlayerId(req.headers.authorization)
+      const memories = await memoryRepo.listMemories(playerId)
+      res.status(200).json({
+        memories: memories.map(m => ({ id: m.id, body: m.body, source: m.source, createdAt: m.createdAt })),
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // DELETE /player/coach/memories/:id — owner-scoped; no card for forget (low-stakes direction).
+  router.delete('/memories/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolveAccountPlayerId(req.headers.authorization)
+      const memoryId = req.params.id as string
+
+      const deleted = await memoryRepo.deleteMemory(playerId, memoryId)
+      if (deleted === 0) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Memory not found' })
+      }
+
+      log.info('coach.memory.deleted', { playerId, memoryId })
+      res.status(204).send()
     } catch (err) {
       next(err)
     }
