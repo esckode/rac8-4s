@@ -46,6 +46,18 @@ export interface CreateCardInput {
   schemaVersion?: number
 }
 
+export interface CreateCoachCardInput {
+  conversationId: string
+  proposerPlayerId: string
+  action: string
+  args: Record<string, unknown>
+  /** Human-readable prose summary — the durable/export/fallback record. */
+  body: string
+  /** Default 900 (15 minutes, matching the group-card default). */
+  expiresInSeconds?: number
+  schemaVersion?: number
+}
+
 function rowToCard(row: any): AssistantCardRow {
   return {
     id: row.id as string,
@@ -135,6 +147,59 @@ export class AssistantCardRepository {
       await client.query('COMMIT')
 
       log.info('assistant.card.created', { groupId, messageId, cardId: card.id, action, proposerPlayerId })
+
+      return { card, conversationId }
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
+  /**
+   * Conversation-first card creation for the 1:1 Coach surface (design §5.2 deviation 1):
+   * no group involved, group_id is NULL, scope is the coach conversation_id directly
+   * (already resolved by the caller — S1.3 does not need resolveConversationId).
+   */
+  async createCoachCard(
+    input: CreateCoachCardInput
+  ): Promise<{ card: AssistantCardRow; conversationId: string }> {
+    const {
+      conversationId, proposerPlayerId, action, args, body,
+      expiresInSeconds = 900, schemaVersion = 1,
+    } = input
+
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      const msgRes = await client.query(
+        `INSERT INTO messaging.group_messages
+           (conversation_id, player_id, sender_name_snapshot, body, type)
+         VALUES ($1, NULL, 'Coach', $2, 'assistant')
+         RETURNING id`,
+        [conversationId, body]
+      )
+      const messageId = msgRes.rows[0].id as string
+
+      const cardRes = await client.query(
+        `INSERT INTO messaging.assistant_cards
+           (message_id, group_id, conversation_id, proposer_player_id, action, args, status, expires_at, schema_version)
+         VALUES ($1, NULL, $2, $3, $4, $5, 'pending', now() + make_interval(secs => $6), $7)
+         RETURNING ${CARD_COLUMNS}`,
+        [messageId, conversationId, proposerPlayerId, action, args, expiresInSeconds, schemaVersion]
+      )
+      const card = rowToCard(cardRes.rows[0])
+
+      await client.query(
+        `UPDATE messaging.group_messages SET metadata = jsonb_build_object('cardId', $2::text) WHERE id = $1`,
+        [messageId, card.id]
+      )
+
+      await client.query('COMMIT')
+
+      log.info('assistant.card.created', { conversationId, messageId, cardId: card.id, action, proposerPlayerId })
 
       return { card, conversationId }
     } catch (err) {
