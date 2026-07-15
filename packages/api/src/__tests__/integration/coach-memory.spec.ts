@@ -35,10 +35,12 @@ describe('S6 — 1:1 Coach memory', () => {
   let memoryRepo: PlayerMemoryRepository
   let cardRepo: AssistantCardRepository
 
+  const broadcastBus = { emit: jest.fn(), subscribe: jest.fn(() => () => {}) }
+
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { broadcastBus: broadcastBus as any })
     app = deps.app
     accountRepo = new AccountRepository(pool)
     playerRepo = new PlayerRepository(pool)
@@ -153,6 +155,23 @@ describe('S6 — 1:1 Coach memory', () => {
       expect(memories.some(m => m.body === 'plays lefty')).toBe(true)
     })
 
+    it('emits card.updated on the coach conversation channel', async () => {
+      const { token, playerId } = await createAccountHolder()
+      const ctx = await buildCoachToolContext(pool, playerId)
+      const conversationId = await new ConversationRepository(pool).resolveCoachConversation(playerId)
+      const proposed = await proposeRemember(ctx, { text: 'emit test' })
+      const cardId = (proposed as { cardId: string }).cardId
+
+      const before = broadcastBus.emit.mock.calls.length
+      await request(app).post(`/player/coach/cards/${cardId}/confirm`).set('Authorization', `Bearer ${token}`)
+
+      const calls = broadcastBus.emit.mock.calls.slice(before) as any[]
+      expect(calls).toHaveLength(1)
+      expect(calls[0][0]).toBe(conversationId)
+      expect(calls[0][1]).toBe('card.updated')
+      expect(calls[0][2]).toMatchObject({ cardId, status: 'confirmed' })
+    })
+
     it('another player cannot confirm someone else\'s card (403/404)', async () => {
       const owner = await createAccountHolder()
       const intruder = await createAccountHolder()
@@ -238,6 +257,57 @@ describe('S6 — 1:1 Coach memory', () => {
       expect(res.status).toBe(200)
       expect(res.body.card.status).toBe('cancelled')
       expect(await memoryRepo.countMemories(playerId)).toBe(0)
+    })
+
+    it('emits card.updated with status cancelled', async () => {
+      const { token, playerId } = await createAccountHolder()
+      const ctx = await buildCoachToolContext(pool, playerId)
+      const conversationId = await new ConversationRepository(pool).resolveCoachConversation(playerId)
+      const proposed = await proposeRemember(ctx, { text: 'cancel emit test' })
+      const cardId = (proposed as { cardId: string }).cardId
+
+      const before = broadcastBus.emit.mock.calls.length
+      await request(app).post(`/player/coach/cards/${cardId}/cancel`).set('Authorization', `Bearer ${token}`)
+
+      const calls = broadcastBus.emit.mock.calls.slice(before) as any[]
+      expect(calls).toHaveLength(1)
+      expect(calls[0][0]).toBe(conversationId)
+      expect(calls[0][1]).toBe('card.updated')
+      expect(calls[0][2]).toMatchObject({ cardId, status: 'cancelled' })
+    })
+
+    it('an unknown card id is 404', async () => {
+      const { token } = await createAccountHolder()
+      const res = await request(app)
+        .post(`/player/coach/cards/${crypto.randomUUID()}/cancel`)
+        .set('Authorization', `Bearer ${token}`)
+      expect(res.status).toBe(404)
+    })
+
+    it('another player cannot cancel someone else\'s card (403)', async () => {
+      const owner = await createAccountHolder()
+      const intruder = await createAccountHolder()
+      const ctx = await buildCoachToolContext(pool, owner.playerId)
+      const proposed = await proposeRemember(ctx, { text: 'not yours to cancel' })
+      const cardId = (proposed as { cardId: string }).cardId
+
+      const res = await request(app)
+        .post(`/player/coach/cards/${cardId}/cancel`)
+        .set('Authorization', `Bearer ${intruder.token}`)
+      expect(res.status).toBe(403)
+    })
+
+    it('an already-resolved card is 409', async () => {
+      const { token, playerId } = await createAccountHolder()
+      const ctx = await buildCoachToolContext(pool, playerId)
+      const proposed = await proposeRemember(ctx, { text: 'cancel twice' })
+      const cardId = (proposed as { cardId: string }).cardId
+
+      await request(app).post(`/player/coach/cards/${cardId}/cancel`).set('Authorization', `Bearer ${token}`)
+      const second = await request(app)
+        .post(`/player/coach/cards/${cardId}/cancel`)
+        .set('Authorization', `Bearer ${token}`)
+      expect(second.status).toBe(409)
     })
   })
 

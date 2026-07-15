@@ -18,6 +18,20 @@
 
 import { buildCoachSystemPrompt, COACH_MEDICAL_DECLINE_MESSAGE } from '../../assistant/coach-prompt'
 import { buildCoachMessages } from '../../assistant/coach-client'
+import * as tools from '../../assistant/tools'
+import * as proposeRememberModule from '../../assistant/propose-remember'
+
+jest.mock('../../assistant/tools', () => ({
+  getMyMatches: jest.fn().mockResolvedValue({ matches: [] }),
+  getStandings: jest.fn().mockResolvedValue({ tournamentId: 't1', groups: [] }),
+  getBracket: jest.fn().mockResolvedValue({ rounds: [] }),
+  getTournament: jest.fn().mockResolvedValue({ tournamentId: 't1' }),
+  getGroupAvailability: jest.fn().mockResolvedValue({ slots: [] }),
+}))
+
+jest.mock('../../assistant/propose-remember', () => ({
+  proposeRemember: jest.fn().mockResolvedValue({ status: 'card_posted', cardId: 'card-1', messageId: 'msg-1' }),
+}))
 
 describe('buildCoachSystemPrompt', () => {
   const corpus = 'APP HELP CORPUS TEXT'
@@ -205,5 +219,72 @@ describe('AnthropicCoachClient.runCoachTurn (SDK mocked, no network)', () => {
       'get_group_availability',
       'propose_remember',
     ])
+  })
+
+  it('each tool\'s run() delegates to the matching real tool function and JSON-stringifies the result', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { AnthropicCoachClient } = require('../../assistant/coach-client')
+    const client = new AnthropicCoachClient({ adapter: 'anthropic', model: 'claude-haiku-4-5' })
+
+    await client.runCoachTurn({
+      systemPrompt: 'sys',
+      history: [],
+      volatileBlock: 'snapshot',
+      newMessage: 'hello',
+      toolContext: ctx(),
+    })
+
+    const opts = mockToolRunner.mock.calls[0][0]
+    const byName = Object.fromEntries(opts.tools.map((t: { name: string; run: (i: unknown) => Promise<string> }) => [t.name, t.run]))
+
+    expect(await byName.get_my_matches({ tournamentId: 'tourn-1' })).toBe(JSON.stringify({ matches: [] }))
+    expect(tools.getMyMatches).toHaveBeenCalledWith(ctx(), { tournamentId: 'tourn-1' })
+
+    expect(await byName.get_standings({ tournamentId: 'tourn-1' })).toBe(JSON.stringify({ tournamentId: 't1', groups: [] }))
+    expect(tools.getStandings).toHaveBeenCalledWith(ctx(), { tournamentId: 'tourn-1' })
+
+    expect(await byName.get_bracket({ tournamentId: 'tourn-1' })).toBe(JSON.stringify({ rounds: [] }))
+    expect(tools.getBracket).toHaveBeenCalledWith(ctx(), { tournamentId: 'tourn-1' })
+
+    expect(await byName.get_tournament({ tournamentId: 'tourn-1' })).toBe(JSON.stringify({ tournamentId: 't1' }))
+    expect(tools.getTournament).toHaveBeenCalledWith(ctx(), { tournamentId: 'tourn-1' })
+
+    expect(await byName.get_group_availability({ groupId: 'group-1' })).toBe(JSON.stringify({ slots: [] }))
+    expect(tools.getGroupAvailability).toHaveBeenCalledWith(ctx(), { groupId: 'group-1' })
+
+    expect(await byName.propose_remember({ text: 'I prefer mornings' })).toBe(
+      JSON.stringify({ status: 'card_posted', cardId: 'card-1', messageId: 'msg-1' })
+    )
+    expect(proposeRememberModule.proposeRemember).toHaveBeenCalledWith(ctx(), { text: 'I prefer mornings' })
+  })
+
+  it('omits propose_remember from the tool registry when memoryEnabled is false', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { AnthropicCoachClient } = require('../../assistant/coach-client')
+    const client = new AnthropicCoachClient({ adapter: 'anthropic', model: 'claude-haiku-4-5' })
+
+    await client.runCoachTurn({
+      systemPrompt: 'sys',
+      history: [],
+      volatileBlock: 'snapshot',
+      newMessage: 'hello',
+      toolContext: ctx(),
+      memoryEnabled: false,
+    })
+
+    const opts = mockToolRunner.mock.calls[0][0]
+    const names = opts.tools.map((t: { name: string }) => t.name)
+    expect(names).not.toContain('propose_remember')
+  })
+
+  it('constructs the AWS adapter when config.adapter is "anthropic-aws"', () => {
+    jest.doMock('@anthropic-ai/aws-sdk', () => ({
+      default: jest.fn().mockImplementation(() => ({ beta: { messages: { toolRunner: jest.fn() } } })),
+    }), { virtual: true })
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { AnthropicCoachClient } = require('../../assistant/coach-client')
+      expect(() => new AnthropicCoachClient({ adapter: 'anthropic-aws', model: 'claude-haiku-4-5' })).not.toThrow()
+    })
   })
 })

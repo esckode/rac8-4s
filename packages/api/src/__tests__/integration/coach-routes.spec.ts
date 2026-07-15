@@ -26,6 +26,7 @@ import { InMemoryJobQueue } from '@worker/job-queue'
 import { generatePlayerSession } from '../../auth/magic-link'
 import { AccountRepository, PlayerRepository } from '../../db'
 import { defaultAdultAttestation } from '../factories/player.factory'
+import { OrganizerFactory } from '../factories'
 import { ConversationRepository } from '../../repositories/conversation-repository'
 import { AssistantCardRepository } from '../../repositories/assistant-card-repository'
 
@@ -38,6 +39,7 @@ describe('S2.1 — 1:1 Coach routes', () => {
   let app: Express
   let tokenStore: InMemoryTokenStore
   let jobQueue: InMemoryJobQueue
+  let jwtConfig: ReturnType<typeof createTestApp>['jwtConfig']
   let accountRepo: AccountRepository
   let playerRepo: PlayerRepository
   let conversationRepo: ConversationRepository
@@ -52,6 +54,7 @@ describe('S2.1 — 1:1 Coach routes', () => {
     const deps = createTestApp(pool, { jobQueue, broadcastBus: broadcastBus as any })
     app = deps.app
     tokenStore = deps.tokenStore
+    jwtConfig = deps.jwtConfig
     accountRepo = new AccountRepository(pool)
     playerRepo = new PlayerRepository(pool)
     conversationRepo = new ConversationRepository(pool)
@@ -120,6 +123,14 @@ describe('S2.1 — 1:1 Coach routes', () => {
         .get('/player/coach/messages')
         .set('Authorization', `Bearer ${guestToken}`)
       expect([401, 403]).toContain(res.status)
+    })
+
+    it('rejects an organizer-role JWT with no linked player with 403', async () => {
+      const { accessToken } = OrganizerFactory.token(jwtConfig)
+      const res = await request(app)
+        .get('/player/coach/messages')
+        .set('Authorization', `Bearer ${accessToken}`)
+      expect(res.status).toBe(403)
     })
   })
 
@@ -288,6 +299,11 @@ describe('S2.1 — 1:1 Coach routes', () => {
     // round trip is exercised for real by e2e/coach.spec.ts (S10.1 scenario 2) instead.
     it('rejects with 401 when no auth header is present', async () => {
       const res = await request(app).get('/player/coach/events')
+      expect(res.status).toBe(401)
+    })
+
+    it('rejects an invalid ?token= query param (EventSource compat path) with 401', async () => {
+      const res = await request(app).get('/player/coach/events?token=not-a-real-token')
       expect(res.status).toBe(401)
     })
 
