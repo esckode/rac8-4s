@@ -20,3 +20,7 @@ export const COACH_MAX_TOKENS = 500
 /** Memory store caps (§7 #7a-c). */
 export const COACH_MEMORY_CAP = 20
 export const COACH_MEMORY_MAX_LENGTH = 280
+
+/** Polite cap message at the rate/budget limit (§7 #2). */
+export const COACH_CAP_MESSAGE =
+  "I've hit my limit for now — back in a bit. Your matches are still in the Matches tab."
