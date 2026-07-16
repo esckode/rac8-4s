@@ -35,6 +35,7 @@ show a friend. v1 draws only from data that already has queries or repo methods.
 | 1 Surface | Where does it live? | **Own page `/stats`** — premium (account-JWT) route, linked prominently from `/profile` and the home hub. No bottom-tab rework at v1 (tab promotion is a cheap later change); a flagship paid feature gets its own URL |
 | 2 Content | What's on it? | **Core four:** ① all-time W-L record + current streak, ② active-tournament standings cards (rank, W-L, `rank_reason` — reuse the snapshot composition), ③ weekly rank-trend sparkline per tournament (singles-only, active + ≤90-day-completed — the 055 bounds), ④ full match history, paginated. **Head-to-head deferred to v1.1** (new aggregate surface + touches other players' data; the coach already discusses named opponents) |
 | 3 Casual ⚖ | Do casual (group) results appear? | **Include casual, as a separated section** (owner call; rec was tournament-only). A "Casual play" section aggregates `group_match_log` across the player's groups: individual casual W-L (incl. matches played in a pair) + per-group breakdown rows. **Never blended** into competitive numbers — separate section, separate totals. Cost accepted: a second aggregation pipeline in the launch build |
+| 4 Window *(2026-07-16)* | Compute over subscription duration or all history? | **All history** (incl. guest-era play). Owner proposed subscription-window with 90-day start-reinstatement (mirroring the coach-data grace, MONETIZATION_DESIGN §2 #6b) — a real stay-subscribed incentive, but rejected: the instantly-rich day-one dashboard **is** the conversion moment (Strava model — premium analyzes free-era data), especially during the 14-day trial when a windowed dashboard would sit empty; the coach already reads full history, so a windowed dashboard would refuse to chart matches the same subscription's coach discusses; and windowing is *more* build (`subscription_effective_start`, reinstatement rule, lapse-period edge cases) vs. zero new state. Underlying data is retained either way — this was purely a display-window choice. A "since you subscribed" baseline callout is the deferred remnant (§6) |
 
 ### Stated assumptions (not grilled — flag if wrong)
 
@@ -72,8 +73,9 @@ show a friend. v1 draws only from data that already has queries or repo methods.
 | Item | Trigger |
 |---|---|
 | Head-to-head per-opponent records (v1.1) | Subscriber requests / coach H2H questions in usage logs |
+| "Since you subscribed" baseline callout (§3 #4 remnant — chapter-marker line like "since joining: +12% win rate", anchored to `subscription_effective_start` w/ the 90-day reinstatement rule) | Post-launch polish; revisit with the first retention-feature pass |
 | Doubles rank trends | 055's own deferral — doubles snapshot support lands |
-| Career-long trend arcs (beyond 90-day purge) | Real demand → new retention decision, its own data class |
+| Career-long trend arcs — **promoted to v1.1 roadmap** (MONETIZATION_DESIGN §2 #10d, 2026-07-16): exempt active subscribers from the 90-day snapshot purge so rank-trend depth accrues with tenure | v1.1 (retention lever, owner-adopted) |
 | Skill ratings on the dashboard | P13's own grill (PERSONALIZATION_DESIGN.md) |
 | Bottom-tab promotion for `/stats` | Usage shows it's a top-3 destination |
 

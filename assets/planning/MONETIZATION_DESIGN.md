@@ -41,10 +41,12 @@ per-feature entitlement checks are needed — subscription status *is* the entit
 | 3 Price | Launch price? | **$10/mo list, monthly-only** at v1 (annual waits for churn data). Cost floor for scale: pathological rate-limit-pinned coach user ≈ $5/mo, realistic heavy user well under $1/mo ([cost-breakdown.md](./cost-breakdown.md)) — priced on value, not cost recovery |
 | 4 Early perks ⚖ | How are early users rewarded? | **Intro discount: $5/mo for the first 3 months** for the launch cohort, then $10 (Stripe repeating coupon; launch-window end = implementation config). Recommendation was a founding price-lock ($5 forever); owner chose to protect long-term revenue over permanent loyalty discount |
 | 5 Trial | Taste before paying? | **14-day trial, card upfront** — signup goes through Stripe Checkout with `trial_period_days=14`; Stripe handles the trial-ending email. Keeps registration=subscription pure; single entitlement state machine (Stripe status). Trial abuse is bounded ≈$2.50 by existing coach rate limits |
-| 6 Lapse | Cancelled / failed payment? | **Login + resubscribe wall.** Cancellation keeps access until period end (Stripe default); after lapse the account still logs in, premium surfaces show a resubscribe wall, **all data retained indefinitely** (coach memories, history, settings) so return is one click. Deletion only via explicit account-deletion/DSR. Entitlement mirrors Stripe subscription status — no custom state |
+| 6 Lapse | Cancelled / failed payment? | **Login + resubscribe wall.** Cancellation keeps access until period end (Stripe default); after lapse the account still logs in, premium surfaces show a resubscribe wall. Entitlement mirrors Stripe subscription status — no custom state. Retention: see 6b |
+| 6b Lapse retention *(amended 2026-07-16)* | Why keep a lapsed customer's data indefinitely? | **Tiered — "indefinitely" withdrawn.** Owner challenge → data inventory showed the subscriber-exclusive pile is small: (a) **shared competitive/community records** — player-keyed, kept for everyone incl. guests, anonymize-on-DSR (other players' history lives in the same rows); (b) **account shell** (credentials, account→player link) — kept while lapsed (win-back; the player may still play free via magic link); (c) **billing records** — legally mandated retention regardless; (d) **coach conversation + consented memories** (the only discretionary class) — **purged 90 days after lapse** (owner opened at 30; 90 reuses the app's existing retention constant, absorbs card-expiry/vacation accidents, keeps the sweeper post-launch), **pre-purge email notice** (doubles as win-back), resubscribe within the window finds everything intact. Player-controlled valves (clear-conversation, memory delete, account deletion) unchanged |
 | 7 Rail & tax | Who is merchant; who remits tax? | **Stripe Billing/Checkout, owner as merchant, US-only at launch.** US exposure negligible under state economic-nexus thresholds (~$100k/state); add Stripe Tax when volume warrants; EU (VAT-from-first-euro) deferred until demand shows. Merchant-of-record platforms (Paddle/LemonSqueezy) rejected: they can't do marketplace payouts, and the future entry-fee wedge needs Stripe Connect — one stack, not two |
 | 8 IAP posture | App-store 30% on a digital sub? | Paid registration is exactly the *digital* good the 30% cut targets. **PWA-first ([FRONTEND_PLATFORM_STRATEGY.md](./FRONTEND_PLATFORM_STRATEGY.md)) is now load-bearing for monetization** — a Capacitor flip must re-grill this design (default mitigation: purchase stays web-only) |
 | 9 v1 scope ⚖ | Ship existing features only, or build stats first? | **Build the personal stats dashboard before launch** so the advertised bundle is complete day one. Recommendation was existing-features-only for speed; owner chose the stronger day-one value story. Stats dashboard needs its own scope pass (§4) |
+| 10 Retention levers *(2026-07-16)* | What makes staying subscribed valuable (beyond utility)? | Principle: staying **accrues** value; leaving never has value destroyed that we secretly still hold (the rejected stats-window lesson, STATS_DASHBOARD_DESIGN §3 #4). Four adopted: (a) **continuous-subscriber price lock** — rate never rises while continuously subscribed; lapse >90d → rejoin at current list price (Stripe grandfathers by default; this is a written commitment, zero build); (b) **coach memory framed as the benefit** — memory continuity + the #6b 90-day grace presented in product/privacy copy as "your coach keeps knowing your game", no new build; (c) **pause-instead-of-cancel at launch** — Stripe subscription pause offered in the cancel flow (seasonal sport, off-season churn); (d) **tenure data depth → v1.1 roadmap** — exempt active subscribers from the 90-day snapshot purge so career rank-trend arcs accrue with tenure (STATS_DASHBOARD_DESIGN §6). Not adopted (existing triggers stand): coach goals (COACH_1TO1 §5.1-B), P13 rating history |
 
 ## 3. The two tiers
 
@@ -77,16 +79,21 @@ to v1.1. Presentation of existing data only — **P13 skill ratings**
 ```
 signup → Stripe Checkout (card, trial_period_days=14, launch coupon $5×3mo)
   trialing ──14d──> active ($5×3 → $10)
+  active ──cancel flow──> pause offered first (#10c) ──> paused ──resume──> active
   active ──cancel──> active-until-period-end ──> lapsed
   active ──payment fails──> past_due (Stripe dunning) ──> lapsed
-  lapsed ──resubscribe (1 click, data intact)──> active
+  lapsed ──resubscribe ≤90d (1 click, everything intact, original rate #10a)──> active
+  lapsed ──resubscribe >90d (coach data purged #6b, current list price #10a)──> active
 ```
 
 - Entitlement check = "Stripe subscription status ∈ {trialing, active, past_due-in-grace}" on
   account-JWT surfaces; guests are simply never entitled. No new entitlement tables beyond a
   `stripe_customer_id` / subscription-status mirror on the account (webhook-updated).
 - Lapsed = login works; coach, `/matches`, `/standings`, profile, stats show the resubscribe
-  wall. Nothing is deleted.
+  wall. Player-keyed data untouched; **coach conversation + memories purge 90 days after lapse**
+  (#6b): notice email ~day 75 → scheduled sweeper deletes at day 90 (`type='coach'` conversation +
+  `player_memories` rows). Must be a **scheduled job** — the unscheduled-partition-jobs gap
+  (MESSAGING_DESIGN §16) is the anti-pattern to avoid repeating.
 
 ## 6. Compliance & policy touchpoints
 
@@ -98,6 +105,13 @@ signup → Stripe Checkout (card, trial_period_days=14, launch coupon $5×3mo)
   revisit with Stripe Tax + OSS if demand shows.
 - **DSR/deletion**: unchanged — account deletion cascades as designed; add Stripe customer
   deletion to the cascade.
+- **Retention statement** in the privacy policy (#6b): coach conversation + memories deleted 90
+  days after subscription lapse (with notice); competitive records kept as shared tournament
+  history (anonymize-on-DSR); billing records kept as legally required.
+- **Product-copy commitments** (#10): the price-lock promise ("your rate never increases while
+  continuously subscribed") appears wherever price is shown; coach memory continuity + the 90-day
+  grace framed as a subscriber benefit in the same copy, consistent with the privacy page's
+  memory section.
 - `docs/assistant-help.md` must gain pricing/subscription answers in the same change
   (CLAUDE.md §9 — user-visible behavior).
 
