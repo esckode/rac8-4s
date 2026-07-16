@@ -23,7 +23,9 @@ here.
 | [MESSAGING_DESIGN.md](assets/planning/MESSAGING_DESIGN.md) | §16 as-built messaging (single-instance MVP) + §17 multi-instance forward design (diagram + R-requirements) | §16 ✅ **Built**; §17 📐 **Design** → has a plan (V2 below) |
 | [PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) | Durable groups, group chat, availability polls, casual-mode group-launched tournaments | 📐 **Design (fully grilled, §11–§12)** → plan ✅ **Built & merged** ([PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md)) |
 | [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) | PWA-first now; Capacitor (native wrapper) deferred | 🧭 **Decision** — PWA work pending; Capacitor ⏸️ **Deferred** (trigger documented) |
-| [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (primary) + organizer SaaS (secondary); ads rejected | 📐 **Design (draft)** — **not yet grilled**, needs detail |
+| [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (long-term primary) + organizer SaaS (secondary); ads rejected; §3.2 coach-led player subscription added 2026-07-15 | 📐 **Strategy** — wedge/pricing/rail **grilled 2026-07-15 → MONETIZATION_DESIGN.md** |
+| [MONETIZATION_DESIGN.md](assets/planning/MONETIZATION_DESIGN.md) | Paid player registration ($10/mo, 14-day card trial, $5×3mo launch intro; Stripe Billing, US-only): guests keep tournaments + community layer free forever; registration = identity + /matches + /standings + profile + stats dashboard (new build) + 1:1 coach | 📐 **Design (fully grilled 2026-07-15, §2; 2 ⚖ owner calls)** — stats scope ✅ grilled (row below); → `MONETIZATION_IMPLEMENTATION.md` next |
+| [STATS_DASHBOARD_DESIGN.md](assets/planning/STATS_DASHBOARD_DESIGN.md) | Premium `/stats` page (monetization launch blocker): core four — all-time W-L + streak, standings cards w/ rank_reason, per-tournament rank sparkline (singles, 90-day snapshot window), match history; ⚖ casual play as separated section; H2H → v1.1 | 📐 **Design (fully grilled 2026-07-16, §3; 1 ⚖ owner call)** — build folds into `MONETIZATION_IMPLEMENTATION.md` phase 1 |
 | [LLM_ASSISTANT_DESIGN.md](assets/planning/LLM_ASSISTANT_DESIGN.md) | @coach LLM assistant in group chat — Tier 1 read-only Q&A (MVP), Tier 2 confirmed write actions, Tier 3 proactive nudges | 📐 **Design (fully grilled 2026-07-10 §10, Phase B/C mechanics grilled 2026-07-11/12 §11)** → Tier 1 ✅ **Built**, Tier 2 ✅ **Built**, Tier 3 ✅ **Built** (nudges/recap/digest) ([LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md)) |
 | [PERSONALIZATION_DESIGN.md](assets/planning/PERSONALIZATION_DESIGN.md) | Player personalization P0–P13 — `player_settings` store + first `/profile` page, 3-level timezone hierarchy (player/group/venue — supersedes assistant B-Q6/C-Q3/C-Q8), self-centered UI (standings anchoring, initials avatars, local times), pending-actions endpoint → badges/up-next strip/composer chip, per-event notify prefs + quiet hours, table density (theme system ⚖ cut), standings snapshots → trends, availability grid | 📐 **Design (fully grilled 2026-07-13, §5; 3 ⚖ owner calls)** → P0–P12 ✅ **Built & merged** ([PERSONALIZATION_IMPLEMENTATION.md](assets/planning/PERSONALIZATION_IMPLEMENTATION.md)); P13 skill ratings **needs its own grill**; 1:1 Coach later phase → own docs below |
 | [COACH_1TO1_DESIGN.md](assets/planning/COACH_1TO1_DESIGN.md) | Private per-player 1:1 Coach conversation (performance/tactics/scouting) + opt-in consented memory (`propose_remember` cards) + privacy-policy page | 📐 **Design (fully grilled 2026-07-14, §7)** → ✅ **Built & merged** ([COACH_1TO1_IMPLEMENTATION.md](assets/planning/COACH_1TO1_IMPLEMENTATION.md)) |
@@ -86,8 +88,13 @@ here.
 - **Accessibility e2e** ([e2e-scenarios.md](e2e-scenarios.md)) — 5 a11y scenarios (keyboard nav, input
   labels, button roles, color-independence, error-field association). **Separate frontend-quality item,
   NOT PWA-specific** — applies to any web frontend. → its own spec / general frontend hardening.
-- **Monetization** (MONETIZATION_STRATEGY.md) → **grill first** to pick the wedge (transaction fee vs.
-  organizer SaaS), then create `MONETIZATION_IMPLEMENTATION.md` (payments integration first).
+- **Monetization** — ~~grill first to pick the wedge~~ **grilled 2026-07-15
+  ([MONETIZATION_DESIGN.md](assets/planning/MONETIZATION_DESIGN.md)): wedge = paid player
+  registration ($10/mo), coach as headline.** ~~Stats-dashboard scope pass~~ **grilled 2026-07-16
+  ([STATS_DASHBOARD_DESIGN.md](assets/planning/STATS_DASHBOARD_DESIGN.md))**. Next: create
+  `MONETIZATION_IMPLEMENTATION.md` — phase 1 = stats dashboard build (launch blocker, TDD-first),
+  then Stripe Checkout/Billing signup rework, subscription-status webhook mirror, resubscribe wall,
+  privacy-policy billing section.
 - *(done)* ~~**LLM assistant (@coach)** → `LLM_ASSISTANT_IMPLEMENTATION.md`~~ — **Phase A (A0–A9) +
   Phase B (B0–B7)** merged to `main`; **Phase C (C0–C6) built 2026-07-13** on branch
   `llm-assistant-phase-c` (not yet merged to `main`).
@@ -235,8 +242,11 @@ here.
   - **Casual mid-game late-join (open roster)** *(Q14, option B).* v1 keeps a **fixed roster** (the open poll
     window is the join window). Trigger: demand to join *after* a casual tournament starts → a **core casual-
     engine change** (round-robin re-scheduling + social-mixer rotation recompute + re-seeding), not a FE change.
-- Monetization (MONETIZATION_STRATEGY.md §6): wedge choice (transaction fee vs. organizer SaaS), pricing
-  shape, payments integration (Stripe Connect), tax/compliance, free-forever community boundary.
+- ~~Monetization (MONETIZATION_STRATEGY.md §6): wedge choice, pricing shape, payments integration,
+  tax/compliance, free-forever community boundary~~ — **grilled 2026-07-15
+  ([MONETIZATION_DESIGN.md](assets/planning/MONETIZATION_DESIGN.md) §2)**. Still parked with triggers
+  (§7): **organizer registration pricing** (owner unsure it stays free — resolve with organizer-SaaS
+  grill), entry-fee/Stripe-Connect details, sponsorship mechanics, annual pricing, EU sales.
 - Design system (DESIGN_SYSTEM.md §4): formality bar (doc-only vs. + Storybook/visual regression),
   portability, a11y bar, theming/dark-mode scope, ~~token-usage governance~~ **(governance grilled
   2026-06-29 → [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md))**, component
