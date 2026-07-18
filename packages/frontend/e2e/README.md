@@ -12,6 +12,14 @@ These are non-negotiable; ignoring them is how specs rot or flake:
 4. **Respect route access (it follows `rac8-4s-HL.md`).** Public: `/browse`, `/tournament/:id/browse` (guest registration). Auth-gated: `/matches`, `/standings`, tournament detail. **Authenticate before visiting protected routes**; for "must redirect to login" assertions use a protected route like `/matches` (not `/browse`, which is public).
 5. **Match the real API contract.** `GET /tournaments/:id/groups` returns a `players` array (not `playerCount`); the score endpoint returns `{ winnerId, status }`. Assert what the API actually returns — verify against the route, don't guess field names.
 6. **`TEMPLATE.spec.ts` is a scaffold,** excluded from runs via `testIgnore` in `playwright.config.ts`. Copy it to a real filename to use it; don't add assertions to the template itself.
+7. **`pwa-*.spec.ts` need a production build, not the dev server.** They run only on
+   the `pwa` project (chromium, `baseURL: http://localhost:4173`) and are excluded
+   from `chromium`/`firefox` via `testIgnore`. The injected precache manifest and
+   the built service worker only exist after `vite build`, and module service
+   workers don't run on Firefox dev — so before running them: have the API up on
+   :3001, then `npm run preview:pwa --workspace=packages/frontend` (builds + serves
+   preview on :4173) in a separate terminal. Run with
+   `npx playwright test --project=pwa`.
 
 ## Core Helper Functions
 

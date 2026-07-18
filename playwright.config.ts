@@ -24,10 +24,21 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      // pwa-*.spec.ts need a production build (injectManifest SW + module-SW support) —
+      // they run only on the `pwa` project below, against `vite preview`.
+      testIgnore: '**/pwa-*.spec.ts',
     },
     {
       name: 'firefox',
       use: { ...devices['Desktop Firefox'] },
+      // Module service workers (devOptions type: 'module') don't run on Firefox dev;
+      // the pwa project is chromium-only against the classic-built prod SW.
+      testIgnore: '**/pwa-*.spec.ts',
+    },
+    {
+      name: 'pwa',
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
+      testMatch: '**/pwa-*.spec.ts',
     },
   ],
 

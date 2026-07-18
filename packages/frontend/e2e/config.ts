@@ -421,6 +421,15 @@ export const SELECTORS = {
   UP_NEXT_MATCH: '[data-testid="up-next-match"]',
   COMPOSER_CHIP: '[data-testid="composer-chip"]',
 
+  // PWA Venue Mode (offline caching + score sync queue)
+  OFFLINE_BANNER: '[data-testid="offline-banner"]',
+  SNAPSHOT_UPDATED_AT: '[data-testid="snapshot-updated-at"]',
+  SCORE_PENDING_BADGE: '[data-testid="score-pending-badge"]',
+  UPDATE_TOAST: '[data-testid="update-toast"]',
+  SCORE_NEEDS_AUTH: '[data-testid="score-needs-auth"]',
+  SCORE_REJECTED: '[data-testid="score-rejected"]',
+  SCORE_EXPIRED: '[data-testid="score-expired"]',
+
   // 1:1 Coach (S0-S10)
   COACH_ENTRY: '[data-testid="coach-entry"]',
   COACH_CHAT_PAGE: '[data-testid="coach-chat-page"]',

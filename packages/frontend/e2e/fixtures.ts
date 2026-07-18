@@ -746,3 +746,23 @@ export async function getOrganizerToken(): Promise<string> {
   const data = await response.json()
   return data.token
 }
+
+// ============================================================================
+// PWA Venue Mode helpers
+// ============================================================================
+
+/**
+ * Wait for the current page to become a client controlled by an active service
+ * worker. Per D9, the SW never calls skipWaiting()/clients.claim() on
+ * install/activate, so the page that triggers registration is never itself
+ * controlled — a reload is required after the SW activates. Callers should
+ * `page.goto(...)` once first, then call this, then reload again if they need
+ * the *current* document to be controlled.
+ */
+export async function waitForControllingServiceWorker(page: any, timeoutMs = 10000): Promise<void> {
+  await page.waitForFunction(
+    () => navigator.serviceWorker.controller !== null,
+    null,
+    { timeout: timeoutMs }
+  )
+}

@@ -33,4 +33,21 @@ export default defineConfig({
     sourcemap: false,
     minify: 'terser',
   },
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/tournaments': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/player': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
 })

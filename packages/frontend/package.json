@@ -13,6 +13,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "preview:pwa": "vite build && vite preview --port 4173",
     "clean": "rm -rf dist"
   },
   "devDependencies": {
