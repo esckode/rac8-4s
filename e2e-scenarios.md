@@ -964,7 +964,12 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 
 ## Feature: Offline Support & Error Handling
 
-### Scenario: User submits score while offline (Singles)
+> **Superseded** — the three offline/sync scenarios below (previously covering
+> `e2e/offline.spec.ts`, itself API/SW-boundary only, no UI) are replaced by
+> **§ Feature: PWA Venue Mode (Offline)** below, per `assets/planning/PWA_CACHING_DESIGN.md`
+> and `PWA_CACHING_IMPLEMENTATION.md`. Kept here for history; do not implement against these.
+
+### Scenario: ~~User submits score while offline (Singles)~~ — superseded, see PWA Venue Mode
 - **Type:** Happy path - offline
 - **Given** I am offline (network disconnected)
 - **When** I click [Submit Score] and fill in "2-1"
@@ -972,7 +977,7 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 - **Then** I should see banner "📱 Offline - will retry"
 - **And** the request should be queued in Service Worker
 
-### Scenario: User submits score while offline - syncs on reconnect
+### Scenario: ~~User submits score while offline - syncs on reconnect~~ — superseded, see PWA Venue Mode
 - **Type:** Happy path - offline
 - **Given** I submitted a score while offline
 - **When** I go back online
@@ -980,7 +985,7 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 - **Then** I should see notification "✓ Score synced"
 - **And** standings should update normally
 
-### Scenario: Offline submission fails after retries
+### Scenario: ~~Offline submission fails after retries~~ — superseded, see PWA Venue Mode
 - **Type:** Error path - offline
 - **Given** I submitted while offline
 - **And** reconnected, but server returns 409 (score already submitted)
@@ -995,6 +1000,103 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 - **Then** I should see error "Too many attempts"
 - **And** "Try again in 15 minutes"
 - **And** form fields should be disabled
+
+---
+
+## Feature: PWA Venue Mode (Offline)
+
+> Per `assets/planning/PWA_CACHING_DESIGN.md` (grilled 2026-07-18, decisions D1–D10) and
+> `assets/planning/PWA_CACHING_IMPLEMENTATION.md`. Venue mode: a player at a court with bad
+> signal can view a timestamped offline snapshot of their tournament (list, matches,
+> standings, bracket) and queue score submits for replay on reconnect. Status markers below:
+> ⏳ planned (authored red in S0.5, turned green in S6).
+
+### ⏳ Scenario: Venue views readable offline
+```
+Given a player has loaded matches/standings/bracket for their tournament while online
+When they go offline and reload the page
+Then each view still renders from the cached snapshot
+  And a global offline banner is visible
+  And each view shows "Updated HH:MM" for its snapshot
+```
+
+### ⏳ Scenario: Offline score submit shows pending, not success
+```
+Given a player is offline on a match they can score
+When they submit a score
+Then they see a "Saved offline — will send when connected" badge
+  And no success state is shown
+  And the submission is recorded in the local sync queue
+```
+
+### ⏳ Scenario: Reconnect replays the queue
+```
+Given a player has a queued score submission from being offline
+When connectivity returns
+Then the service worker replays the queue and the server accepts it
+  And the pending badge clears
+  And the match shows the submitted score
+```
+
+### ⏳ Scenario: Replay rejection surfaces and drops
+```
+Given a player submitted a score offline for a match
+  And their opponent scored the same match while the player was still offline
+When connectivity returns and the queued entry replays
+Then the server rejects it with a 4xx (already recorded)
+Then the player sees "Not applied — already recorded"
+  And the queue entry is removed (no retry)
+```
+
+### ⏳ Scenario: Non-queueable writes fail fast offline
+```
+Given a player is offline
+When they attempt a non-score write (e.g. a partner request)
+Then it fails immediately with a normal error
+  And nothing is queued
+  And no fake 202/pending state is shown
+```
+
+### ⏳ Scenario: Sign-out wipes offline data
+```
+Given a player has a cached venue snapshot and/or a queued score
+When they sign out
+Then Cache Storage has no venue-data entries afterward
+  And the sync queue is empty
+  And going offline immediately after shows "no saved data" (not the prior player's snapshot)
+```
+
+### ⏳ Scenario: No token-bearing URL is ever cached
+```
+Given a full player session including live SSE updates
+When the session ends
+Then no Cache Storage key contains "/events" or "token=" for any entry
+```
+
+### ⏳ Scenario: App shell boots offline (preview build only)
+```
+Given a player has visited the installed app online at least once
+When they go offline and hard-reload
+Then the app shell boots (no browser error page)
+  And the offline banner is shown
+```
+
+### ⏳ Scenario: Installable
+```
+Given the production build is served
+When a client requests /manifest.webmanifest
+Then it is served with the required PWA fields (name, icons, start_url, display)
+  And navigator.serviceWorker.ready resolves with a controlling service worker
+```
+
+**Implementation (S0–S9):**
+- Playwright (`pwa` project, preview :4173, chromium only): `e2e/pwa-offline-venue.spec.ts`
+  (scenarios 1, 8), `e2e/pwa-score-queue.spec.ts` (scenarios 2–5), `e2e/pwa-hygiene.spec.ts`
+  (scenarios 6–7), `e2e/pwa-install.spec.ts` (scenario 9)
+- Frontend: `src/workers/service-worker.ts` (rewritten) + `src/workers/sw-lib/{routing,venue-cache,sync-queue,messages}.ts`,
+  `src/pwa/{register,sw-bridge,OfflineSnapshotContext,OfflineBanner,UpdateToast}.tsx`
+- Superseded: `e2e/offline.spec.ts` (deleted), the three offline scenarios in
+  § Feature: Offline Support & Error Handling above
 
 ---
 
