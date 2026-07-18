@@ -5,6 +5,7 @@ import App from './App'
 import { ServiceUnavailableProvider } from './context/ServiceUnavailableContext'
 import { OfflineSnapshotProvider } from './pwa/OfflineSnapshotContext'
 import { initPwa } from './pwa/register'
+import { initSwBridge } from './pwa/sw-bridge'
 import './styles/globals.css'
 
 const rootElement = document.getElementById('root')
@@ -28,3 +29,4 @@ root.render(
 )
 
 initPwa()
+initSwBridge()
