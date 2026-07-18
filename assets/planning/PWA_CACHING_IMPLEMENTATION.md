@@ -7,7 +7,50 @@
 > starting; do not relitigate those decisions**).
 
 **Date:** 2026-07-18
-**Status:** 📝 PLANNED — not started.
+**Status:** ✅ **Built & merged-ready** (S0–S9 complete, branch `pwa-caching`) — DoD verified 2026-07-18:
+
+1. Unit: 1444/1444 green. Coverage: `src/workers/sw-lib/**` 98.78/100/92.68/100
+   (stmts/branch/fn/lines), `src/pwa/**` 99.23/93.33/100/100 — both ≥85% on every metric.
+   Global 80% gate **fails** (76.49/63.29/78/69.13) — pre-existing on `main` before this
+   branch (dozens of unrelated files), unchanged by this work; the plan's own text says
+   this gate "stays untouched."
+2. E2E: `pwa` project 11/11 green (preview :4173). Full chromium+firefox regression run
+   against the dev server surfaced ~116 failures — root-caused, not assumed: two were
+   **real regressions from this branch and are fixed** (D10 navigation fallback wasn't
+   network-first, breaking every controlled navigation once a SW existed; a `testIgnore`
+   config bug had un-excluded `TEMPLATE.spec.ts`/`multi-instance/`). The remainder are
+   pre-existing and unrelated — confirmed directly, not assumed: an `AGE_ATTESTATION_REQUIRED`
+   age-gate a bunch of older e2e fixtures don't send (backend is byte-identical to `main`
+   on this branch), a background worker (`dev:worker`) never started in this session that
+   Coach/assistant replies and nudge/recap sweeps depend on, and a documented pre-existing
+   SSE timing flake (this file's own `playwright.config.ts` comment). `e2e-scenarios.md`
+   updated (10/10 PWA Venue Mode scenarios ✅).
+3. Build assertions: clean `npm run clean && npm run build` — `dist/service-worker.js`
+   contains all 14 injected precache entries (no `design.html`/`design-system.html` leak),
+   `dist/manifest.webmanifest` exists, `dist/index.html` links it. `npm test` green.
+4. Infra: `tofu fmt`/`validate` clean with the two new `ordered_cache_behavior` blocks.
+   `tofu plan` against a live uat stack needs AWS credentials this session doesn't have,
+   and the uat stack was already torn down after its own prior validation — deferred to
+   whoever next applies this to a real environment.
+5. Manual checklist — verified live (scripted where no existing e2e/unit spec already
+   covered it; Lighthouse's PWA/installability audit category has been removed from the
+   installed CLI version (13.4.0), so it's substituted with the equivalent underlying
+   checks): manifest served with required fields + SW registers and controls the page
+   (`pwa-install.spec.ts`, 2/2) · offline hard reload boots the shell with the banner
+   (`pwa-offline-venue.spec.ts`) · offline hard reload on a venue route stays signed in
+   (offline-unvalidated) and renders the snapshot, reconnect revalidates with no re-login
+   (D11, both magic-link and registered-account personas) · rebuild+update-check shows the
+   toast and clicking Refresh fires `controllerchange` (verified live via a simulated
+   redeploy against the running preview) · Cache Storage has no `/events` or `token=` URL
+   after a full session (`pwa-hygiene.spec.ts`) · sign-out leaves no `venue-data` cache, an
+   empty `score-queue`, **and no `auth_session_snapshot`** (verified live — the existing
+   hygiene e2e spec predates D11 and didn't check the snapshot key; the `useAuth` unit
+   suite does, and a live sign-out was additionally scripted to confirm end-to-end).
+6. Docs: `docs/assistant-help.md` (S8.2) done. `IaC-implementation.md` Step 7a runbook
+   (S7.2) done. `BACKLOG.md` rows synced for the design + implementation docs, including
+   resolving the pre-existing R-B (PWA reconciliation) queue item.
+7. No stray changes — `git diff --stat main..HEAD` reviewed; every file traces to a step
+   above (new deps' `package-lock.json` churn aside).
 **Method:** TDD-first per CLAUDE.md §4/§11 — every step is a **[RED]** commit (failing
 tests; run them, confirm they fail *for the right reason*) followed by a **[GREEN]** commit
 (implementation, tests pass). E2E scenarios land in `e2e-scenarios.md` **and the full
