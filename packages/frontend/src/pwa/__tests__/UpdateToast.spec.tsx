@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { UpdateToast } from '../UpdateToast'
 import * as register from '../register'
 
@@ -43,7 +43,7 @@ describe('UpdateToast', () => {
     expect(screen.queryByTestId('update-toast')).not.toBeInTheDocument()
 
     mockGetUpdateAvailable.mockReturnValue(true)
-    notify()
+    act(() => notify())
 
     expect(screen.getByTestId('update-toast')).toBeInTheDocument()
   })

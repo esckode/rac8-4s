@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { wipePlayerData, notifyLogin } from '../pwa/sw-bridge'
 
 const API_BASE_URL = ''  // Use relative paths with Vite proxy (/api)
 const TOKEN_KEY = 'auth_token'
+const LAST_PLAYER_KEY = 'last_player_id'
 
 export interface AuthUser {
   id: string
@@ -140,7 +142,19 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
 
     const data = (await response.json()) as LoginResponse
     localStorage.setItem(TOKEN_KEY, data.token)
+
+    // D5 — a different player/account signing in on this device wipes the
+    // prior player's offline venue cache + sync queue. Nothing to wipe on
+    // this device's very first login (no prior id stored).
+    const newPlayerKey = data.user.playerId ?? data.user.id
+    const lastPlayerKey = localStorage.getItem(LAST_PLAYER_KEY)
+    if (lastPlayerKey && lastPlayerKey !== newPlayerKey) {
+      await wipePlayerData()
+    }
+    localStorage.setItem(LAST_PLAYER_KEY, newPlayerKey)
+
     setUser(data.user)
+    notifyLogin()
   }, [])
 
   const signup = useCallback(

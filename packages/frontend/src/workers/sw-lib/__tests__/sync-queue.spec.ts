@@ -91,6 +91,21 @@ describe('sync-queue', () => {
   })
 
   describe('replayAll', () => {
+    it('falls back to empty ids when the queued URL does not match the score pattern', async () => {
+      await enqueue({
+        url: 'https://example.com/tournaments/t1/advance',
+        method: 'POST',
+        headers: {},
+        body: '{}',
+      })
+      const notify = jest.fn()
+      const fetchImpl = jest.fn().mockResolvedValue(mockResponse(200))
+
+      await replayAll(fetchImpl as unknown as typeof fetch, notify)
+
+      expect(notify).toHaveBeenCalledWith({ outcome: 'success', tournamentId: '', matchId: '' })
+    })
+
     it('removes the entry and notifies success on a 2xx response', async () => {
       await enqueueEntry()
       const notify = jest.fn()

@@ -26,6 +26,7 @@ import { OrganizerDashboard } from './pages/OrganizerDashboard'
 import { ServiceUnavailable } from './pages/ServiceUnavailable'
 import { useServiceUnavailable } from './context/ServiceUnavailableContext'
 import { OfflineBanner } from './pwa/OfflineBanner'
+import { UpdateToast } from './pwa/UpdateToast'
 import { ROUTES } from './constants/routes'
 import './styles/globals.css'
 
@@ -41,6 +42,7 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <OfflineBanner />
+      <UpdateToast />
       <AuthProvider>
         <Routes>
           {/* Public routes (no auth required) */}
