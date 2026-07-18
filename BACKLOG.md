@@ -22,7 +22,8 @@ here.
 |---|---|---|
 | [MESSAGING_DESIGN.md](assets/planning/MESSAGING_DESIGN.md) | §16 as-built messaging (single-instance MVP) + §17 multi-instance forward design (diagram + R-requirements) | §16 ✅ **Built**; §17 📐 **Design** → has a plan (V2 below) |
 | [PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) | Durable groups, group chat, availability polls, casual-mode group-launched tournaments | 📐 **Design (fully grilled, §11–§12)** → plan ✅ **Built & merged** ([PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md)) |
-| [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) | PWA-first now; Capacitor (native wrapper) deferred | 🧭 **Decision** — PWA work pending; Capacitor ⏸️ **Deferred** (trigger documented) |
+| [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) | PWA-first now; Capacitor (native wrapper) deferred | 🧭 **Decision** — offline caching + installable shell ✅ **Built** ([PWA_CACHING_DESIGN.md](assets/planning/PWA_CACHING_DESIGN.md) below); web push still pending; Capacitor ⏸️ **Deferred** (trigger documented) |
+| [PWA_CACHING_DESIGN.md](assets/planning/PWA_CACHING_DESIGN.md) | Venue-mode offline caching (four venue views + scores sync queue) + installable shell, decisions D1–D11 (D11: offline session survival — network failure never signs a player out) | 📐 **Design (fully grilled 2026-07-18, §1 D1–D10 + amendment D11)** → plan ✅ **Built & merged** ([PWA_CACHING_IMPLEMENTATION.md](assets/planning/PWA_CACHING_IMPLEMENTATION.md)) |
 | [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (long-term primary) + organizer SaaS (secondary); ads rejected; §3.2 coach-led player subscription added 2026-07-15 | 📐 **Strategy** — wedge/pricing/rail **grilled 2026-07-15 → MONETIZATION_DESIGN.md** |
 | [MONETIZATION_DESIGN.md](assets/planning/MONETIZATION_DESIGN.md) | Paid player registration ($10/mo, 14-day card trial, $5×3mo launch intro; Stripe Billing, US-only): guests keep tournaments + community layer free forever; registration = identity + /matches + /standings + profile + stats dashboard (new build) + 1:1 coach | 📐 **Design (fully grilled 2026-07-15, §2; 2 ⚖ owner calls; amended 2026-07-16: #6b lapse retention — coach data purges 90d after lapse; #10 retention levers — price lock, memory-as-benefit, pause, tenure data depth)** — stats scope ✅ grilled (row below); → `MONETIZATION_IMPLEMENTATION.md` next |
 | [STATS_DASHBOARD_DESIGN.md](assets/planning/STATS_DASHBOARD_DESIGN.md) | Premium `/stats` page (monetization launch blocker): core four — all-time W-L + streak, standings cards w/ rank_reason, per-tournament rank sparkline (singles, 90-day snapshot window), match history; ⚖ casual play as separated section; H2H → v1.1 | 📐 **Design (fully grilled 2026-07-16, §3; 1 ⚖ owner call; window grilled same day → all-history, subscription-window rejected)** — build folds into `MONETIZATION_IMPLEMENTATION.md` phase 1 |
@@ -44,11 +45,12 @@ here.
 | [PERSONALIZATION_IMPLEMENTATION.md](assets/planning/PERSONALIZATION_IMPLEMENTATION.md) | Player personalization — S0–S8 (migrations 052–056: `player_settings` + `/profile` page; timezone hierarchy + group-tz digest reschedule; "you" anchoring + initials avatars + viewer-local times; pending-actions endpoint + tab badges + up-next strip + composer chip; notify prefs + quiet hours AND-layered with the group dial; table density; digest-aligned standings snapshots + rank movement; availability grid + Coach counts-only tool). TDD + e2e-scenario-first | ✅ **Built & merged** (S0–S8, 2026-07-14, branch `personalization-design` → `main`) — found+fixed a real dual-auth bug via live e2e |
 | [COACH_1TO1_IMPLEMENTATION.md](assets/planning/COACH_1TO1_IMPLEMENTATION.md) | 1:1 Coach — S0–S10 (migration 057: `type='coach'` convo + `player_memories` + `assistant_cards.conversation_id` re-key; `/player/coach/*` routes + SSE; player-level tool context + snapshot; history-cached coach client (`COACH_MODEL`); 20/hr+60/day limiter + heads-up; `propose_remember` + memory routes; pinned entry + `/coach` page + Profile section; DSR export/erasure incl. the §5.2 [RED] personal-scope card test; **privacy-policy page** clearing the A9.2 gate). TDD + e2e-scenario-first | ✅ **Built & merged** (S0–S10, 2026-07-14/15, branch `coach-1to1` → `main`) — e2e 8/8 chromium+firefox, coverage ≥85% stmts on all named modules, regression ladder green modulo documented pre-existing flakes. Privacy-policy page (`/privacy`) live; **owner review/approval of its text still pending**, and manual live-model smoke blocked on A0.1b (P-AWS enrollment) — A9.2 + launch-readiness clear once those land |
 | [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md) | Token-usage lint gate — Phases E0–E5: (b) repair broken ESLint config + clear 53 errors + gate lint in CI, (a) color-literal `no-restricted-syntax` rule on the unified gate w/ interim baseline + permanent allowlist, (c) husky/lint-staged pre-commit, **(E5 mandatory) full retrofit of all ~301 legacy color literals across 11 files + tear down the baseline** (gate becomes total). TDD-first via ESLint fixture harness | ✅ **Built & merged** to `main` |
+| [PWA_CACHING_IMPLEMENTATION.md](assets/planning/PWA_CACHING_IMPLEMENTATION.md) | Venue-mode offline caching — S0–S9 (service worker rewrite as testable `sw-lib/` modules via `vite-plugin-pwa` injectManifest, network-first venue-read cache + 48h TTL, IndexedDB scores sync queue with explicit pending/replay states, offline banner + per-view snapshot timestamps, D11 offline session survival in `useAuth`, sign-out wipe, update-prompt toast, CloudFront no-cache behaviors for the SW/manifest, real icons). TDD + e2e-scenario-first, ≥85% coverage on new modules | ✅ **Built & merged** (S0–S9, 2026-07-18, branch `pwa-caching`) — pwa e2e project 11/11; found+fixed 2 real regressions via the mandated full-suite regression check (D10 navigation fallback wasn't network-first; a `testIgnore` config bug had un-excluded 2 unrelated spec files) |
 
 ## Test scenarios
 | Spec doc | Covers | Status |
 |---|---|---|
-| [e2e-scenarios.md](e2e-scenarios.md) | Browser e2e scenarios (Gherkin → Playwright) | Phases 1–7 + Messaging ✅ **Built** (17 spec files); **Phases 8–10 ⏳ pending: Offline (4) + Mobile (4) → **folded into PWA-first**; Accessibility (5) → **tracked separately** (general frontend quality)** |
+| [e2e-scenarios.md](e2e-scenarios.md) | Browser e2e scenarios (Gherkin → Playwright) | Phases 1–7 + Messaging ✅ **Built** (17 spec files); **PWA Venue Mode (Offline) ✅ Built** (10 scenarios, `pwa` project, superseding the old offline-error specs); Mobile (4) ⏳ **pending**; Accessibility (5) → **tracked separately** (general frontend quality)** |
 
 ---
 
@@ -82,10 +84,16 @@ here.
 ### 📐 Design → needs an implementation plan
 - *(done)* ~~**Player Groups** → `PLAYER_GROUPS_IMPLEMENTATION.md`~~ — **✅ Built & merged** (G0.1–G5.1,
   migrations 038–045). See the Built queue above.
-- **PWA-first frontend** (FRONTEND_PLATFORM_STRATEGY.md) → create `PWA_FRONTEND_IMPLEMENTATION.md` =
-  PWA enablement (manifest, web push, service worker) **+ the Offline (`offline-error.spec.ts`) and
-  Mobile/Responsive (`mobile-responsive.spec.ts`) e2e specs** ([e2e-scenarios.md](e2e-scenarios.md)) —
-  these *are* the PWA surface. TDD-first.
+- *(done)* ~~**PWA-first frontend** (FRONTEND_PLATFORM_STRATEGY.md) → create
+  `PWA_FRONTEND_IMPLEMENTATION.md` = PWA enablement (manifest, web push, service worker) + the
+  Offline (`offline-error.spec.ts`) e2e specs~~ — manifest/service-worker/offline-caching piece
+  **✅ Built & merged** as [PWA_CACHING_IMPLEMENTATION.md](assets/planning/PWA_CACHING_IMPLEMENTATION.md)
+  (`offline-error.spec.ts` superseded by the new `pwa-*.spec.ts` suite). **Web push remains
+  unbuilt** (explicitly out of scope for the caching build — its own future item). Mobile/Responsive
+  e2e (`mobile-responsive.spec.ts`) was never part of this build — still pending, tracked
+  separately below.
+- **Mobile/Responsive e2e** ([e2e-scenarios.md](e2e-scenarios.md)) — 4 scenarios, general frontend
+  quality (not PWA-specific). Still pending.
 - **Accessibility e2e** ([e2e-scenarios.md](e2e-scenarios.md)) — 5 a11y scenarios (keyboard nav, input
   labels, button roles, color-independence, error-field association). **Separate frontend-quality item,
   NOT PWA-specific** — applies to any web frontend. → its own spec / general frontend hardening.
@@ -127,10 +135,14 @@ here.
     **both** `visibility = unlisted` **and** `mode = casual` (two fields). We use **`unlisted`**, *not*
     "private," to avoid private/casual confusion. There is **no separate "private tournaments" item** —
     it's the `visibility` attribute. (HL:1140 "only public shown" → the `unlisted` browse-filter carve-out.)
-- **R-B — PWA reconciliation** *(triggered by PWA-first; resolve in the PWA build).* HL **already**
-  mandates PWA + Service Workers + IndexedDB sync queue + "Offline - will retry" banner (HL
-  21/112/137/172/589) — the PWA plan **folds these in, doesn't reinvent**. Promote **push notifications
-  "future" → in-scope** (web push). Update the HL roadmap status; reference existing offline reqs.
+- *(done)* ~~**R-B — PWA reconciliation** *(triggered by PWA-first; resolve in the PWA build).* HL
+  **already** mandates PWA + Service Workers + IndexedDB sync queue + "Offline - will retry" banner
+  (HL 21/112/137/172/589) — the PWA plan **folds these in, doesn't reinvent**.~~ — **✅ resolved** by
+  [PWA_CACHING_IMPLEMENTATION.md](assets/planning/PWA_CACHING_IMPLEMENTATION.md): HL's existing
+  "PWA with offline support via Service Workers" / "Offline: Service Workers + IndexedDB" claims
+  (previously aspirational — the old SW was dead code) are now actually true, no HL text changes
+  needed. **Push notifications remain "future"** — promoting that to in-scope was NOT done; it's
+  explicitly out of scope for the caching build (own future item).
 
 ### 🔍 Frontend gaps (surfaced by e2e work, 2026-07-01)
 > Small, standalone implementation gaps found while writing Playwright specs. No design grilling needed —
