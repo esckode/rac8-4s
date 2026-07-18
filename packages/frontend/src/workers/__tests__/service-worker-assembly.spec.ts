@@ -124,8 +124,23 @@ describe('service-worker assembly', () => {
       expect(buildQueuedResponse).toHaveBeenCalledWith('queued-1')
     })
 
-    it('dispatches navigation requests to the precached shell', async () => {
+    it('serves the live network response for navigation requests when online (D10 — network-first)', async () => {
       (classifyRequest as jest.Mock).mockReturnValue('navigation')
+      const networkResponse = fakeResponse()
+      ;(globalThis as any).fetch = jest.fn().mockResolvedValue(networkResponse)
+      const { handleFetch } = await import('../service-worker')
+      const event = fakeFetchEvent({ url: 'https://example.com/tournament/t1/matches' })
+
+      handleFetch(event as any)
+
+      expect(event.respondWith).toHaveBeenCalledTimes(1)
+      await expect(event.respondWith.mock.calls[0][0]).resolves.toBe(networkResponse)
+      expect(matchPrecache).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the precached shell when the network fetch fails', async () => {
+      (classifyRequest as jest.Mock).mockReturnValue('navigation')
+      ;(globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('offline'))
       const shellResponse = fakeResponse()
       ;(matchPrecache as jest.Mock).mockResolvedValue(shellResponse)
       const { handleFetch } = await import('../service-worker')
@@ -136,6 +151,22 @@ describe('service-worker assembly', () => {
       expect(event.respondWith).toHaveBeenCalledTimes(1)
       await expect(event.respondWith.mock.calls[0][0]).resolves.toBe(shellResponse)
       expect(matchPrecache).toHaveBeenCalledWith('index.html')
+    })
+
+    it('falls back to /offline.html when the network fetch fails and there is no precached shell', async () => {
+      (classifyRequest as jest.Mock).mockReturnValue('navigation')
+      ;(globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('offline'))
+      ;(matchPrecache as jest.Mock).mockResolvedValue(undefined)
+      const offlineResponse = fakeResponse()
+      ;(globalThis as any).caches = { match: jest.fn().mockResolvedValue(offlineResponse) }
+      const { handleFetch } = await import('../service-worker')
+      const event = fakeFetchEvent({ url: 'https://example.com/tournament/t1/matches' })
+
+      handleFetch(event as any)
+
+      expect(event.respondWith).toHaveBeenCalledTimes(1)
+      await expect(event.respondWith.mock.calls[0][0]).resolves.toBe(offlineResponse)
+      expect((globalThis as any).caches.match).toHaveBeenCalledWith('/offline.html')
     })
   })
 
