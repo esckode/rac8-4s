@@ -61,6 +61,11 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
 locals {
   # Step 6 decision — keep in sync with the API's top-level mounts (CLAUDE.md §9).
   api_path_patterns = ["/api/*", "/tournaments/*", "/player/*"]
+
+  # PWA_CACHING_IMPLEMENTATION.md S7 (R5) — these two S3-origin files must never be
+  # served stale: a cached service-worker.js blocks the D9 update-prompt flow, and a
+  # cached manifest.webmanifest can keep pointing at renamed/removed icons.
+  pwa_no_cache_paths = ["/service-worker.js", "/manifest.webmanifest"]
 }
 
 resource "aws_cloudfront_distribution" "main" {
@@ -110,6 +115,18 @@ resource "aws_cloudfront_distribution" "main" {
       cached_methods           = ["GET", "HEAD"]
       cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
       origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+    }
+  }
+
+  dynamic "ordered_cache_behavior" {
+    for_each = local.pwa_no_cache_paths
+    content {
+      path_pattern           = ordered_cache_behavior.value
+      target_origin_id       = "s3-frontend"
+      viewer_protocol_policy = "redirect-to-https"
+      allowed_methods        = ["GET", "HEAD"]
+      cached_methods         = ["GET", "HEAD"]
+      cache_policy_id        = data.aws_cloudfront_cache_policy.caching_disabled.id
     }
   }
 

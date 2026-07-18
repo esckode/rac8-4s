@@ -2438,11 +2438,23 @@ npm run build --workspace=packages/frontend
 BUCKET=$(cd infra && tofu output -raw frontend_bucket_name)
 aws s3 sync packages/frontend/dist/ s3://$BUCKET/ --delete
 
+# PWA_CACHING_IMPLEMENTATION.md S7 — service-worker.js and manifest.webmanifest carry
+# the CachingDisabled behavior at the CloudFront layer (frontend module), but S3's own
+# default Content-Type-derived caching metadata still needs an explicit no-cache so an
+# intermediate/browser cache can't serve either stale (blocking the D9 update-prompt
+# flow, or pointing at renamed/removed icons).
+aws s3 cp packages/frontend/dist/service-worker.js s3://$BUCKET/service-worker.js \
+  --cache-control "no-cache" --metadata-directive REPLACE
+aws s3 cp packages/frontend/dist/manifest.webmanifest s3://$BUCKET/manifest.webmanifest \
+  --cache-control "no-cache" --metadata-directive REPLACE
+
 DIST_ID=$(cd infra && tofu output -raw cloudfront_distribution_id)
 aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
 ```
 
 **Verify:** `aws s3 ls s3://$BUCKET/ --recursive | head` shows `index.html` + `assets/…`.
+`aws s3api head-object --bucket $BUCKET --key service-worker.js --query CacheControl`
+should show `"no-cache"`.
 
 ### 7b. Health + Routing Checks
 
