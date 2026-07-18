@@ -32,6 +32,7 @@ describe('useTournament — bundle authorization', () => {
     localStorage.clear()
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
+      headers: new Map(),
       json: async () => ({
         tournament: null,
         standings: [],

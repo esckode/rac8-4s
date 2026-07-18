@@ -11,12 +11,12 @@ if (typeof global.Response === 'undefined') {
   global.Response = class Response {
     body: string
     status: number
-    headers: Record<string, string>
+    headers: Map<string, string>
     ok: boolean
-    constructor(body: string, init?: { status?: number }) {
+    constructor(body: string, init?: { status?: number; headers?: Record<string, string> }) {
       this.body = body
       this.status = init?.status || 200
-      this.headers = {}
+      this.headers = new Map(Object.entries(init?.headers ?? {}))
       this.ok = this.status >= 200 && this.status < 300
     }
     json() {

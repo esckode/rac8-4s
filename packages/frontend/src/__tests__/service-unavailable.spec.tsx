@@ -153,8 +153,9 @@ describe('App-level 503 interception', () => {
       ok: false,
       status: 503,
       statusText: 'Service Unavailable',
+      headers: new Map(),
       json: async () => ({ code: 'SERVICE_UNAVAILABLE' }),
-    } as Response)
+    } as unknown as Response)
     global.fetch = mockFetch
 
     const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -202,8 +203,9 @@ describe('App-level 503 interception', () => {
       ok: false,
       status: 404,
       statusText: 'Not Found',
+      headers: new Map(),
       json: async () => ({ code: 'NOT_FOUND' }),
-    } as Response)
+    } as unknown as Response)
 
     const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       const { serviceUnavailable } = useServiceUnavailable()

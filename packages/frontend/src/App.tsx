@@ -25,6 +25,7 @@ import { OrganizerManage } from './pages/OrganizerManage'
 import { OrganizerDashboard } from './pages/OrganizerDashboard'
 import { ServiceUnavailable } from './pages/ServiceUnavailable'
 import { useServiceUnavailable } from './context/ServiceUnavailableContext'
+import { OfflineBanner } from './pwa/OfflineBanner'
 import { ROUTES } from './constants/routes'
 import './styles/globals.css'
 
@@ -39,6 +40,7 @@ export const App: React.FC = () => {
 
   return (
     <BrowserRouter>
+      <OfflineBanner />
       <AuthProvider>
         <Routes>
           {/* Public routes (no auth required) */}

@@ -7,6 +7,7 @@ import type {
   BracketData,
 } from '../types'
 import { notify503 } from '../context/ServiceUnavailableContext'
+import { notifyOfflineSnapshot, clearOfflineSnapshot } from '../pwa/OfflineSnapshotContext'
 
 const API_BASE = ''  // Use relative paths with Vite proxy (/api)
 
@@ -48,6 +49,13 @@ async function apiFetch<T>(
     }
 
     const response = await fetch(url, fetchOptions)
+
+    const cachedAt = response.headers.get('sw-cached-at')
+    if (response.headers.get('sw-cache') === 'fallback' && cachedAt) {
+      notifyOfflineSnapshot(path, cachedAt)
+    } else {
+      clearOfflineSnapshot(path)
+    }
 
     if (!response.ok) {
       if (response.status === 503) {

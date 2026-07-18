@@ -8,6 +8,7 @@ import { MatchCard } from '../../components/shared/MatchCard'
 import type { MessageOpponentArgs } from '../../components/shared/MatchCard'
 import { ScoreSubmitForm } from '../../components/ScoreSubmitForm'
 import { MatchMessageCompose } from '../../components/MatchMessageCompose'
+import { SnapshotUpdatedAt } from '../../pwa/SnapshotUpdatedAt'
 import '../../styles/globals.css'
 
 type FilterStatus = 'all' | 'pending' | 'completed'
@@ -15,7 +16,7 @@ type FilterStatus = 'all' | 'pending' | 'completed'
 export const Matches: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
   const { isAuthenticated, user } = useAuth()
-  const { matches, isLoading, error, refetch } = useTournament(tournamentId || '')
+  const { matches, isLoading, error, refetch, updatedAt } = useTournament(tournamentId || '')
   const { organizerRole } = usePermissions(tournamentId || '')
   const [selectedStatus, setSelectedStatus] = useState<FilterStatus>('all')
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null)
@@ -97,6 +98,7 @@ export const Matches: React.FC = () => {
               ? `${filteredMatches.length} ${filteredMatches.length === 1 ? 'match' : 'matches'}`
               : 'No matches scheduled'}
           </p>
+          <SnapshotUpdatedAt updatedAt={updatedAt} />
         </div>
       </div>
 

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { fetchPlayerTournaments, type PlayerTournamentSummary } from '../api/client'
+import { useOfflineSnapshot } from '../pwa/OfflineSnapshotContext'
+import { SnapshotUpdatedAt } from '../pwa/SnapshotUpdatedAt'
 import '../styles/globals.css'
 
 type HubTab = 'standings' | 'matches'
@@ -32,6 +34,7 @@ const COPY: Record<HubTab, { title: string; subtitle: string }> = {
 export const MyTournamentsHub: React.FC<{ tab: HubTab }> = ({ tab }) => {
   const { isAuthenticated } = useAuth()
   const navigate = useNavigate()
+  const { updatedAtFor } = useOfflineSnapshot()
   const [tournaments, setTournaments] = useState<PlayerTournamentSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -87,6 +90,7 @@ export const MyTournamentsHub: React.FC<{ tab: HubTab }> = ({ tab }) => {
       <div className="space-y-[--s-1]">
         <h1 className="text-3xl font-bold text-[--ink-900]">{copy.title}</h1>
         <p className="text-[--ink-600]">{copy.subtitle}</p>
+        <SnapshotUpdatedAt updatedAt={updatedAtFor('/player/tournaments')} />
       </div>
 
       {loading && <p className="text-[--ink-600]">Loading your tournaments...</p>}

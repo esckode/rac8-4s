@@ -63,6 +63,19 @@ describe('OfflineSnapshotContext', () => {
     expect(screen.getByTestId('updated-at')).toHaveTextContent('none')
   })
 
+  it('clearOfflineSnapshot on a path that was never set is a safe no-op', () => {
+    render(
+      <OfflineSnapshotProvider>
+        <Probe path="/player/tournaments" />
+      </OfflineSnapshotProvider>
+    )
+
+    act(() => clearOfflineSnapshot('/player/tournaments'))
+
+    expect(screen.getByTestId('is-offline')).toHaveTextContent('false')
+    expect(screen.getByTestId('updated-at')).toHaveTextContent('none')
+  })
+
   it('tracks timestamps independently per path', () => {
     function TwoProbes() {
       const { updatedAtFor } = useOfflineSnapshot()

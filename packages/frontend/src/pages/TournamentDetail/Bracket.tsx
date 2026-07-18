@@ -7,11 +7,12 @@ import { useAuth } from '../../hooks/useAuth'
 import { MatchCard } from '../../components/shared/MatchCard'
 import { OrganizerBracket } from '../../components/shared/OrganizerBracket'
 import { ScoreSubmitForm } from '../../components/ScoreSubmitForm'
+import { SnapshotUpdatedAt } from '../../pwa/SnapshotUpdatedAt'
 import '../../styles/globals.css'
 
 export const Bracket: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
-  const { bracket, isLoading, error, refetch } = useTournament(tournamentId || '')
+  const { bracket, isLoading, error, refetch, updatedAt } = useTournament(tournamentId || '')
   const { organizerRole } = usePermissions(tournamentId || '')
   const { isAuthenticated, user } = useAuth()
   const [scoringMatchId, setScoringMatchId] = useState<string | null>(null)
@@ -84,6 +85,7 @@ export const Bracket: React.FC = () => {
     return (
       <div className="space-y-[--s-6]">
         <h2 className="text-2xl font-bold text-[--ink-900]">Bracket</h2>
+        <SnapshotUpdatedAt updatedAt={updatedAt} />
         <div
           data-testid="bracket-pending"
           className="bg-[--ink-50] border border-[--border] rounded-[--r-lg] p-[--s-8] text-center"
@@ -99,6 +101,7 @@ export const Bracket: React.FC = () => {
   return (
     <div className="space-y-[--s-6]">
       <h2 className="text-2xl font-bold text-[--ink-900]">Bracket</h2>
+      <SnapshotUpdatedAt updatedAt={updatedAt} />
 
       {organizerRole ? (
         <OrganizerBracket rounds={bracket.rounds} />

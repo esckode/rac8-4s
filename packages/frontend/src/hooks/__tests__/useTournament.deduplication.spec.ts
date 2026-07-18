@@ -49,6 +49,7 @@ describe('useTournament - Request Deduplication (Integration Tests)', () => {
 
     mockFetch.mockResolvedValue({
       ok: true,
+      headers: new Map(),
       json: async () => ({
         tournament: {
           id: 'tourn_123',

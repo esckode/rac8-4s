@@ -143,6 +143,7 @@ describe('TournamentDetail - Integration Flow Tests', () => {
 
     mockFetch.mockResolvedValue({
       ok: true,
+      headers: new Map(),
       json: async () => ({
         tournament: {
           id: 'tourn_123',
@@ -393,6 +394,7 @@ describe('TournamentDetail - Integration Flow Tests', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: new Map(),
         json: async () => ({
           tournament: { ...mockFetch.mock.results[0].value, id: 'tourn_123', name: 'Test Tournament 1' },
           standings: [],
@@ -403,6 +405,7 @@ describe('TournamentDetail - Integration Flow Tests', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: new Map(),
         json: async () => ({
           tournament: { ...mockFetch.mock.results[0].value, id: 'tourn_456', name: 'Test Tournament 2' },
           standings: [],

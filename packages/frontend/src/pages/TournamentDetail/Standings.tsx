@@ -5,13 +5,14 @@ import { usePermissions } from '../../hooks/usePermissions'
 import { useAuth } from '../../hooks/useAuth'
 import { usePlayerSettings } from '../../hooks/usePlayerSettings'
 import { StandingsTable } from '../../components/shared/StandingsTable'
+import { SnapshotUpdatedAt } from '../../pwa/SnapshotUpdatedAt'
 import '../../styles/globals.css'
 
 export const Standings: React.FC = () => {
   const { tournamentId } = useParams<{ tournamentId: string }>()
   const { isAuthenticated, user } = useAuth()
   const { tableDensity } = usePlayerSettings()
-  const { standings, isLoading, error, refetch } = useTournament(tournamentId || '')
+  const { standings, isLoading, error, refetch, updatedAt } = useTournament(tournamentId || '')
   const { organizerRole } = usePermissions(tournamentId || '')
   const [overrideInProgress, setOverrideInProgress] = useState(false)
 
@@ -51,6 +52,7 @@ export const Standings: React.FC = () => {
               ? `${standings.length} ${standings.length === 1 ? 'player' : 'players'} registered`
               : 'Waiting for registrations'}
           </p>
+          <SnapshotUpdatedAt updatedAt={updatedAt} />
         </div>
       </div>
 
