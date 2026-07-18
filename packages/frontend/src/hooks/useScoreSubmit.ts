@@ -11,7 +11,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { submitScore } from '../api/client'
 import { useAuth } from './useAuth'
 
-export type SubmitStatus = 'idle' | 'submitting' | 'retrying' | 'success' | 'failed'
+export type SubmitStatus = 'idle' | 'submitting' | 'retrying' | 'success' | 'queued' | 'failed'
 
 export interface UseScoreSubmitReturn {
   status: SubmitStatus
@@ -52,8 +52,8 @@ export function useScoreSubmit(
       setStatus(attempt === 1 ? 'submitting' : 'retrying')
 
       try {
-        await submitScore(tournamentId, matchId, score, user.id, matchType)
-        setStatus('success')
+        const result = await submitScore(tournamentId, matchId, score, user.id, matchType)
+        setStatus(result.queued ? 'queued' : 'success')
         setError(null)
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Submission failed'

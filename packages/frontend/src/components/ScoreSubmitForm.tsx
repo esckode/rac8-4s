@@ -1,5 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { submitScore, editScore } from '../api/client'
+import { subscribeReplayResults } from '../pwa/sw-bridge'
+import type { ReplayNotification } from '../workers/sw-lib/sync-queue'
 
 /**
  * ScoreSubmitForm — a player submits or edits a single match score.
@@ -39,14 +41,39 @@ function messageFor(code?: string): string {
   return (code && ERROR_MESSAGES[code]) || "Couldn't submit the score. Please try again."
 }
 
+const REPLAY_NOTICES: Record<Exclude<ReplayNotification['outcome'], 'success'>, string> = {
+  'needs-auth': 'Sign in to finish submitting your score.',
+  rejected: 'Score not applied — already recorded.',
+  expired: 'Offline score expired — submit again.',
+}
+
 export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: ScoreSubmitFormProps) {
   const [score, setScore] = useState(match.score ?? '')
   const [isEdit, setIsEdit] = useState(match.status === 'completed')
   const [error, setError] = useState<string | null>(null)
   const [offerEdit, setOfferEdit] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [queued, setQueued] = useState(false)
+  const [replayOutcome, setReplayOutcome] = useState<Exclude<ReplayNotification['outcome'], 'success'> | null>(null)
+  const [replayDetail, setReplayDetail] = useState<string | undefined>(undefined)
 
   const matchType = match.type === 'knockout' ? 'knockout' : 'group'
+
+  useEffect(() => {
+    if (!queued) return undefined
+
+    return subscribeReplayResults((result) => {
+      if (result.tournamentId !== tournamentId || result.matchId !== match.id) return
+
+      if (result.outcome === 'success') {
+        setQueued(false)
+        onSuccess()
+        return
+      }
+      setReplayOutcome(result.outcome)
+      setReplayDetail(result.detail)
+    })
+  }, [queued, tournamentId, match.id, onSuccess])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -60,12 +87,15 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
 
     setSubmitting(true)
     try {
-      if (isEdit) {
-        await editScore(tournamentId, match.id, score, token, matchType)
+      const result = isEdit
+        ? await editScore(tournamentId, match.id, score, token, matchType)
+        : await submitScore(tournamentId, match.id, score, token, matchType)
+
+      if (result.queued) {
+        setQueued(true)
       } else {
-        await submitScore(tournamentId, match.id, score, token, matchType)
+        onSuccess()
       }
-      onSuccess()
     } catch (err) {
       const code = (err as { code?: string } | null)?.code
       setError(messageFor(code))
@@ -75,6 +105,40 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (queued) {
+    return (
+      <div
+        data-testid="score-submit-form"
+        className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-4] space-y-[--s-3]"
+      >
+        <p data-testid="score-pending-badge" className="text-sm font-medium text-[--ink-700]">
+          Saved offline — will send when connected
+        </p>
+
+        {replayOutcome && (
+          <p
+            data-testid={`score-${replayOutcome}`}
+            role="alert"
+            className="text-sm text-[--rose-700]"
+          >
+            {REPLAY_NOTICES[replayOutcome]}
+            {replayOutcome === 'rejected' && replayDetail ? ` ${replayDetail}` : ''}
+          </p>
+        )}
+
+        <div className="flex gap-[--s-2] justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-[--s-3] py-[--s-2] text-sm text-[--ink-600]"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

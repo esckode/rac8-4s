@@ -21,8 +21,8 @@ jest.mock('../../../components/shared/OrganizerBracket', () => ({
   ),
 }))
 jest.mock('../../../api/client', () => ({
-  submitScore: jest.fn().mockResolvedValue(undefined),
-  editScore: jest.fn().mockResolvedValue(undefined),
+  submitScore: jest.fn().mockResolvedValue({ queued: false }),
+  editScore: jest.fn().mockResolvedValue({ queued: false }),
 }))
 const { submitScore } = jest.requireMock('../../../api/client')
 

@@ -77,6 +77,15 @@ describe('sw-bridge', () => {
     })
   })
 
+  describe('initSwBridge without serviceWorker support', () => {
+    it('is a no-op and does not throw', () => {
+      delete (navigator as { serviceWorker?: unknown }).serviceWorker
+
+      expect(() => initSwBridge()).not.toThrow()
+      expect('serviceWorker' in navigator).toBe(false)
+    })
+  })
+
   describe('replay triggers', () => {
     it('posts REPLAY_QUEUE to the controller once the SW is ready (init)', async () => {
       const { controller } = installServiceWorkerContainer()

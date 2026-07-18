@@ -138,17 +138,24 @@ export async function fetchBracket(tournamentId: string): Promise<BracketData> {
   return response
 }
 
+/** A 202 {code:'QUEUED'} means the service worker queued this for offline
+ * replay (D8) — the caller must never treat it as a normal success. */
 export async function submitScore(
   tournamentId: string,
   matchId: string,
   score: string,
   token: string,
   matchType: 'group' | 'knockout' = 'group'
-): Promise<void> {
+): Promise<{ queued: boolean }> {
   const path = matchType === 'knockout'
     ? `/tournaments/${tournamentId}/knockout/${matchId}/score`
     : `/tournaments/${tournamentId}/matches/${matchId}/score`
-  await apiFetch<{ message: string }>(path, { method: 'POST', token, body: { score } })
+  const response = await apiFetch<{ message?: string; code?: string }>(path, {
+    method: 'POST',
+    token,
+    body: { score },
+  })
+  return { queued: response.code === 'QUEUED' }
 }
 
 export interface PlayerTournamentSummary {
@@ -167,17 +174,24 @@ export async function fetchPlayerTournaments(token: string): Promise<PlayerTourn
   return response.tournaments
 }
 
+/** Score edits (PATCH) hit the same …/score path, so an offline edit also
+ * queues (D7) — same 202 {code:'QUEUED'} contract as submitScore. */
 export async function editScore(
   tournamentId: string,
   matchId: string,
   score: string,
   token: string,
   matchType: 'group' | 'knockout' = 'group'
-): Promise<void> {
+): Promise<{ queued: boolean }> {
   const path = matchType === 'knockout'
     ? `/tournaments/${tournamentId}/knockout/${matchId}/score`
     : `/tournaments/${tournamentId}/matches/${matchId}/score`
-  await apiFetch<{ match: unknown }>(path, { method: 'PATCH', token, body: { score } })
+  const response = await apiFetch<{ match?: unknown; code?: string }>(path, {
+    method: 'PATCH',
+    token,
+    body: { score },
+  })
+  return { queued: response.code === 'QUEUED' }
 }
 
 export interface AvailablePartner {
