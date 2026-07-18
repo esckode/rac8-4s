@@ -11,6 +11,7 @@ import { test, expect } from '@playwright/test'
 import {
   getOrganizerToken,
   createSinglesTournamentInGroupStage,
+  waitForServiceWorkerReady,
   waitForControllingServiceWorker,
 } from './fixtures'
 import { API_CONFIG } from './config'
@@ -86,6 +87,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — hygiene', () => {
     }, fixture.playerToken)
 
     await page.goto(`/tournament/${fixture.tournamentId}/matches`)
+    await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
 
@@ -117,6 +119,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — hygiene', () => {
     // Visit every venue view — Matches opens the live SSE connection
     // (?token=<JWT> in the URL), which must never be written to Cache Storage.
     await page.goto(`/tournament/${fixture.tournamentId}/matches`)
+    await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
     await page.waitForTimeout(1500) // let the SSE connection open

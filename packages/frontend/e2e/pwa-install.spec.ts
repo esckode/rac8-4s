@@ -8,7 +8,12 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { getOrganizerToken, createSinglesTournamentInGroupStage, waitForControllingServiceWorker } from './fixtures'
+import {
+  getOrganizerToken,
+  createSinglesTournamentInGroupStage,
+  waitForServiceWorkerReady,
+  waitForControllingServiceWorker,
+} from './fixtures'
 import { API_CONFIG } from './config'
 
 async function apiRunning(): Promise<boolean> {
@@ -49,6 +54,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — installability', () => {
     }, fixture.playerToken)
 
     await page.goto(`/tournament/${fixture.tournamentId}/matches`)
+    await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
 

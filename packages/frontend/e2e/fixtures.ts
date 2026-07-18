@@ -752,12 +752,25 @@ export async function getOrganizerToken(): Promise<string> {
 // ============================================================================
 
 /**
+ * Wait for the SW registered against the current document to finish
+ * activating. `navigator.serviceWorker.ready` resolves once there's an
+ * active worker for this scope — calling `page.reload()` before this
+ * resolves races the reload's navigation against SW activation, and the
+ * reload can lose that race (the resulting document never becomes
+ * controlled, even many seconds later, since only navigations that start
+ * *after* activation get intercepted).
+ */
+export async function waitForServiceWorkerReady(page: any): Promise<void> {
+  await page.evaluate(() => navigator.serviceWorker.ready)
+}
+
+/**
  * Wait for the current page to become a client controlled by an active service
  * worker. Per D9, the SW never calls skipWaiting()/clients.claim() on
  * install/activate, so the page that triggers registration is never itself
  * controlled — a reload is required after the SW activates. Callers should
- * `page.goto(...)` once first, then call this, then reload again if they need
- * the *current* document to be controlled.
+ * `page.goto(...)` once first, await `waitForServiceWorkerReady(page)`,
+ * *then* `page.reload()`, then call this.
  */
 export async function waitForControllingServiceWorker(page: any, timeoutMs = 10000): Promise<void> {
   await page.waitForFunction(

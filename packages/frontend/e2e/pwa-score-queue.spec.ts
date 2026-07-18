@@ -17,6 +17,7 @@ import {
   createTestTournament,
   createTournamentWithOpenRegistration,
   createSinglesTournamentInGroupStage,
+  waitForServiceWorkerReady,
   waitForControllingServiceWorker,
 } from './fixtures'
 import { API_CONFIG, SELECTORS } from './config'
@@ -86,6 +87,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — score sync queue', () => {
     }, fixture.playerToken)
 
     await page.goto(`/tournament/${fixture.tournamentId}/matches`)
+    await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
 
@@ -114,6 +116,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — score sync queue', () => {
     }, tokenA)
 
     await page.goto(`/tournament/${tournamentId}/matches`)
+    await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
 
@@ -148,6 +151,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — score sync queue', () => {
     }, fixture.playerToken)
 
     await page.goto(`/tournament/${fixture.tournamentId}/matches`)
+    await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
 
