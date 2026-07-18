@@ -38,11 +38,15 @@ async function handleQueueableScore(request: Request): Promise<Response> {
   }
 }
 
-async function handleNavigation(): Promise<Response> {
-  const shell = await matchPrecache('index.html')
-  if (shell) return shell
-  const offline = await caches.match('/offline.html')
-  return offline ?? new Response('Offline', { status: 503, statusText: 'Service Unavailable' })
+async function handleNavigation(request: Request): Promise<Response> {
+  try {
+    return await fetch(request)
+  } catch {
+    const shell = await matchPrecache('index.html')
+    if (shell) return shell
+    const offline = await caches.match('/offline.html')
+    return offline ?? new Response('Offline', { status: 503, statusText: 'Service Unavailable' })
+  }
 }
 
 /** Dispatches a fetch event per the §0.5 classification contract (routing.ts).
@@ -56,7 +60,7 @@ export function handleFetch(event: FetchEvent): void {
   } else if (requestClass === 'queueable-score') {
     event.respondWith(handleQueueableScore(event.request))
   } else if (requestClass === 'navigation') {
-    event.respondWith(handleNavigation())
+    event.respondWith(handleNavigation(event.request))
   }
 }
 
