@@ -87,6 +87,10 @@ class MockCacheStorage {
 function install(): MockCacheStorage {
   const mockCaches = new MockCacheStorage()
   ;(globalThis as any).caches = mockCaches
+  // jsdom has no Response/Request globals — the module under test constructs
+  // real `new Response(...)`/`new Request(...)` instances, so stand them in.
+  ;(globalThis as any).Response = MockResponse
+  ;(globalThis as any).Request = MockRequest
   return mockCaches
 }
 
@@ -98,6 +102,8 @@ describe('venue-cache', () => {
   afterEach(() => {
     delete (globalThis as any).caches
     delete (globalThis as any).fetch
+    delete (globalThis as any).Response
+    delete (globalThis as any).Request
     jest.useRealTimers()
   })
 
@@ -237,6 +243,17 @@ describe('venue-cache', () => {
 
       expect(await cache.match(freshReq)).toBeDefined()
       expect(await cache.match(staleReq)).toBeUndefined()
+    })
+
+    it('treats an entry missing sw-cached-at as expired', async () => {
+      const mockCaches = install()
+      const cache = await mockCaches.open(VENUE_CACHE_NAME)
+      const unstampedReq = new MockRequest('https://example.com/player/tournaments')
+      await cache.put(unstampedReq, new MockResponse('{}', { status: 200 }))
+
+      await pruneExpired()
+
+      expect(await cache.match(unstampedReq)).toBeUndefined()
     })
   })
 
