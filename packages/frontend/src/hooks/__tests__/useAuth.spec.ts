@@ -204,6 +204,178 @@ describe('useAuth', () => {
     })
   })
 
+  describe('D11 — offline session survival', () => {
+    const SNAPSHOT_KEY = 'auth_session_snapshot'
+    const snapshotUser = { id: 'user-123', email: 'test@example.com', role: 'player', playerId: 'player-1' }
+
+    function writeSnapshot(ageMs: number, user = snapshotUser) {
+      const validatedAt = new Date(Date.now() - ageMs).toISOString()
+      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ user, validatedAt }))
+    }
+
+    it('writes a session snapshot on a successful /api/auth/me restore', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => snapshotUser,
+      })
+      localStorage.setItem('auth_token', 'valid-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      const raw = localStorage.getItem(SNAPSHOT_KEY)
+      expect(raw).toBeTruthy()
+      const snapshot = JSON.parse(raw as string)
+      expect(snapshot.user).toEqual(snapshotUser)
+      expect(snapshot.validatedAt).toBeTruthy()
+    })
+
+    it('writes a session snapshot on a successful /player/session fallback restore', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ ok: false, status: 401 })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ playerId: 'player-789', tournamentId: 'tourn-1' }),
+        })
+      localStorage.setItem('auth_token', 'player-session-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      const raw = localStorage.getItem(SNAPSHOT_KEY)
+      expect(raw).toBeTruthy()
+      const snapshot = JSON.parse(raw as string)
+      expect(snapshot.user).toMatchObject({ id: 'player-789', role: 'player', playerId: 'player-789' })
+    })
+
+    it('restores the user from a fresh (<48h) snapshot on a network failure, marks offlineUnvalidated, and keeps the token', async () => {
+      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Failed to fetch'))
+      writeSnapshot(60 * 60 * 1000) // 1h old
+      localStorage.setItem('auth_token', 'still-here-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.user).toEqual(snapshotUser)
+      expect(result.current.isAuthenticated).toBe(true)
+      expect(result.current.offlineUnvalidated).toBe(true)
+      expect(localStorage.getItem('auth_token')).toBe('still-here-token')
+    })
+
+    it('signs the UI out (user null) but keeps the token when there is no snapshot to fall back on', async () => {
+      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Failed to fetch'))
+      localStorage.setItem('auth_token', 'still-here-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.user).toBeNull()
+      expect(result.current.isAuthenticated).toBe(false)
+      expect(localStorage.getItem('auth_token')).toBe('still-here-token')
+    })
+
+    it('treats a snapshot older than 48h as untrusted (signed-out UI) but still keeps the token', async () => {
+      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Failed to fetch'))
+      writeSnapshot(49 * 60 * 60 * 1000) // 49h old
+      localStorage.setItem('auth_token', 'still-here-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.user).toBeNull()
+      expect(localStorage.getItem('auth_token')).toBe('still-here-token')
+    })
+
+    it('treats an unexpected 5xx the same as a network failure — keeps the token, restores from snapshot', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 500 })
+      writeSnapshot(60 * 60 * 1000)
+      localStorage.setItem('auth_token', 'still-here-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.user).toEqual(snapshotUser)
+      expect(result.current.offlineUnvalidated).toBe(true)
+      expect(localStorage.getItem('auth_token')).toBe('still-here-token')
+    })
+
+    it('a real 401 with a failed player-session fallback removes both the token and the snapshot', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ ok: false, status: 401 })
+        .mockResolvedValueOnce({ ok: false, status: 401 })
+      writeSnapshot(60 * 60 * 1000)
+      localStorage.setItem('auth_token', 'bogus-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.user).toBeNull()
+      expect(localStorage.getItem('auth_token')).toBeNull()
+      expect(localStorage.getItem(SNAPSHOT_KEY)).toBeNull()
+    })
+
+    it('revalidates on the online event while offline-unvalidated, clearing the flag on success', async () => {
+      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Failed to fetch'))
+      writeSnapshot(60 * 60 * 1000)
+      localStorage.setItem('auth_token', 'still-here-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current.offlineUnvalidated).toBe(true)
+
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({ ok: true, json: async () => snapshotUser })
+
+      await act(async () => {
+        window.dispatchEvent(new Event('online'))
+        await Promise.resolve()
+      })
+
+      await waitFor(() => expect(result.current.offlineUnvalidated).toBe(false))
+      expect(result.current.user).toEqual(snapshotUser)
+    })
+
+    it('a real 401 discovered on reconnect revalidation clears the token + snapshot and triggers the D5 wipe', async () => {
+      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Failed to fetch'))
+      writeSnapshot(60 * 60 * 1000)
+      localStorage.setItem('auth_token', 'now-revoked-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current.offlineUnvalidated).toBe(true)
+
+      ;(global.fetch as jest.Mock)
+        .mockResolvedValueOnce({ ok: false, status: 401 })
+        .mockResolvedValueOnce({ ok: false, status: 401 })
+
+      await act(async () => {
+        window.dispatchEvent(new Event('online'))
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      await waitFor(() => expect(result.current.user).toBeNull())
+      expect(localStorage.getItem('auth_token')).toBeNull()
+      expect(localStorage.getItem(SNAPSHOT_KEY)).toBeNull()
+      expect(mockWipePlayerData).toHaveBeenCalled()
+    })
+
+    it('sign-out (logout()) also removes the session snapshot', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: true, json: async () => snapshotUser })
+      localStorage.setItem('auth_token', 'user-token')
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(localStorage.getItem(SNAPSHOT_KEY)).toBeTruthy()
+
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({ ok: true })
+      await act(async () => {
+        await result.current.logout()
+      })
+
+      expect(localStorage.getItem(SNAPSHOT_KEY)).toBeNull()
+    })
+  })
+
   describe('login', () => {
     it('successfully logs in user and stores token', async () => {
       const mockResponse = {
@@ -396,6 +568,25 @@ describe('useAuth', () => {
 
       expect(mockNotifyLogin).toHaveBeenCalledTimes(1)
     })
+
+    it('writes a session snapshot on successful login (D11)', async () => {
+      const user = { id: 'user-123', email: 'a@example.com', role: 'player', playerId: 'player-A' }
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user, token: 'tok' }),
+      })
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.login('a@example.com', 'password123')
+      })
+
+      const raw = localStorage.getItem('auth_session_snapshot')
+      expect(raw).toBeTruthy()
+      expect(JSON.parse(raw as string).user).toEqual(user)
+    })
   })
 
   describe('signup', () => {
@@ -437,6 +628,25 @@ describe('useAuth', () => {
       })
       expect(result.current.isAuthenticated).toBe(true)
       expect(localStorage.getItem('auth_token')).toBe('signup-token-abc')
+    })
+
+    it('writes a session snapshot on successful signup (D11)', async () => {
+      const user = { id: 'new-user-456', email: 'newuser@example.com', name: 'New User', role: 'player' }
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user, token: 'signup-token-abc' }),
+      })
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.signup('newuser@example.com', 'New User', 'password123')
+      })
+
+      const raw = localStorage.getItem('auth_session_snapshot')
+      expect(raw).toBeTruthy()
+      expect(JSON.parse(raw as string).user).toEqual(user)
     })
 
     it('signup with magic link token', async () => {
