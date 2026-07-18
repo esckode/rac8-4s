@@ -1,6 +1,9 @@
 import { renderHook, act, waitFor } from '@testing-library/react'
 import React from 'react'
 import { AuthProvider, useAuth } from '../useAuth'
+import * as swBridge from '../../pwa/sw-bridge'
+
+jest.mock('../../pwa/sw-bridge')
 
 // Set up mock environment
 const originalEnv = process.env
@@ -8,6 +11,9 @@ const API_BASE = 'http://localhost:3000'
 
 // Mock fetch globally
 global.fetch = jest.fn()
+
+const mockWipePlayerData = swBridge.wipePlayerData as jest.MockedFunction<typeof swBridge.wipePlayerData>
+const mockNotifyLogin = swBridge.notifyLogin as jest.MockedFunction<typeof swBridge.notifyLogin>
 
 const renderWithAuthProvider = (callback: () => any) => {
   return renderHook(callback, {
@@ -23,6 +29,7 @@ describe('useAuth', () => {
     localStorage.clear()
     process.env.REACT_APP_API_BASE = API_BASE
     ;(global.fetch as jest.Mock).mockClear()
+    mockWipePlayerData.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -287,6 +294,107 @@ describe('useAuth', () => {
       ).rejects.toThrow('Network error')
 
       expect(result.current.user).toBeNull()
+    })
+
+    it('wipes offline venue data when a different player logs in on this device (D5 account-switch)', async () => {
+      localStorage.setItem('last_player_id', 'player-A')
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          user: { id: 'user-123', email: 'b@example.com', role: 'player', playerId: 'player-B' },
+          token: 'tok',
+        }),
+      })
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.login('b@example.com', 'password123')
+      })
+
+      expect(mockWipePlayerData).toHaveBeenCalledTimes(1)
+      expect(localStorage.getItem('last_player_id')).toBe('player-B')
+    })
+
+    it('does not wipe when the same player logs in again', async () => {
+      localStorage.setItem('last_player_id', 'player-A')
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          user: { id: 'user-123', email: 'a@example.com', role: 'player', playerId: 'player-A' },
+          token: 'tok',
+        }),
+      })
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.login('a@example.com', 'password123')
+      })
+
+      expect(mockWipePlayerData).not.toHaveBeenCalled()
+    })
+
+    it('does not wipe on the very first login on this device (no prior last_player_id)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          user: { id: 'user-123', email: 'a@example.com', role: 'player', playerId: 'player-A' },
+          token: 'tok',
+        }),
+      })
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.login('a@example.com', 'password123')
+      })
+
+      expect(mockWipePlayerData).not.toHaveBeenCalled()
+      expect(localStorage.getItem('last_player_id')).toBe('player-A')
+    })
+
+    it('falls back to the account id when the user has no playerId (organizer-only)', async () => {
+      localStorage.setItem('last_player_id', 'user-999')
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          user: { id: 'user-123', email: 'org@example.com', role: 'organizer' },
+          token: 'tok',
+        }),
+      })
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.login('org@example.com', 'password123')
+      })
+
+      expect(mockWipePlayerData).toHaveBeenCalledTimes(1)
+      expect(localStorage.getItem('last_player_id')).toBe('user-123')
+    })
+
+    it('notifies the replay bridge (notifyLogin) after a successful login', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          user: { id: 'user-123', email: 'a@example.com', role: 'player', playerId: 'player-A' },
+          token: 'tok',
+        }),
+      })
+
+      const { result } = renderWithAuthProvider(() => useAuth())
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.login('a@example.com', 'password123')
+      })
+
+      expect(mockNotifyLogin).toHaveBeenCalledTimes(1)
     })
   })
 
