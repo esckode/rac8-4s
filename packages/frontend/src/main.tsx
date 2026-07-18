@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { ServiceUnavailableProvider } from './context/ServiceUnavailableContext'
+import { initPwa } from './pwa/register'
 import './styles/globals.css'
 
 const rootElement = document.getElementById('root')
@@ -23,20 +24,4 @@ root.render(
   </React.StrictMode>
 )
 
-// Register Service Worker for offline-first functionality
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/service-worker.js')
-      .then((registration) => {
-        console.info('[ServiceWorker] Registered successfully', {
-          scope: registration.scope,
-        })
-      })
-      .catch((error) => {
-        console.warn('[ServiceWorker] Registration failed', {
-          message: error.message,
-        })
-      })
-  })
-}
+initPwa()
