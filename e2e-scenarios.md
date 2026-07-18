@@ -1089,12 +1089,25 @@ Then it is served with the required PWA fields (name, icons, start_url, display)
   And navigator.serviceWorker.ready resolves with a controlling service worker
 ```
 
+### ⏳ Scenario: Offline reload keeps the session (D11 — scenario 1's hidden dependency)
+```
+Given an authenticated player (covers both a registered-account JWT and a magic-link
+  player session) has loaded a venue route while online
+When they go offline and hard-reload that route
+Then they stay signed in (offline-unvalidated) — no redirect to /login
+  And the cached venue snapshot renders
+When connectivity returns and they reload again
+Then the session revalidates with no re-login required (the token was never deleted)
+```
+
 **Implementation (S0–S9):**
 - Playwright (`pwa` project, preview :4173, chromium only): `e2e/pwa-offline-venue.spec.ts`
-  (scenarios 1, 8), `e2e/pwa-score-queue.spec.ts` (scenarios 2–5), `e2e/pwa-hygiene.spec.ts`
+  (scenarios 1, 8, 10), `e2e/pwa-score-queue.spec.ts` (scenarios 2–5), `e2e/pwa-hygiene.spec.ts`
   (scenarios 6–7), `e2e/pwa-install.spec.ts` (scenario 9)
 - Frontend: `src/workers/service-worker.ts` (rewritten) + `src/workers/sw-lib/{routing,venue-cache,sync-queue,messages}.ts`,
-  `src/pwa/{register,sw-bridge,OfflineSnapshotContext,OfflineBanner,UpdateToast}.tsx`
+  `src/pwa/{register,sw-bridge,OfflineSnapshotContext,OfflineBanner,UpdateToast}.tsx`,
+  `src/hooks/useAuth.tsx` (D11 offline session survival — restoreSession distinguishes
+  network failure from HTTP 401; `auth_session_snapshot` in localStorage)
 - Superseded: `e2e/offline.spec.ts` (deleted), the three offline scenarios in
   § Feature: Offline Support & Error Handling above
 

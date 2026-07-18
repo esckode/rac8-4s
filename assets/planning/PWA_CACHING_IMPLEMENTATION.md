@@ -62,6 +62,16 @@ installable (manifest + icons + CloudFront no-cache behaviors).
   skipWaiting + reload. **No `skipWaiting()`/`clients.claim()` on install/activate.**
 - **D10 — navigation fallback is the precached app shell** (`index.html`); `offline.html`
   only if the shell is missing from cache.
+- **D11 (added by amendment 2026-07-18) — offline session survival**: `restoreSession()`
+  must distinguish network failure from HTTP 401. Network failure **never deletes the
+  token**; identity is restored from a localStorage session snapshot
+  (`{ user, validatedAt }`, written on every successful validation/login) trusted for
+  48h (⚖, reuses `VENUE_TTL_MS`), marking the session offline-unvalidated; revalidate
+  on reconnect (a real 401 then clears token + snapshot + D5 wipe); 5xx counts as
+  network failure, not rejection; the sign-out wipe extends to the snapshot. Without
+  this, `ProtectedRoute` redirects every offline reload to `/login` and the whole
+  feature is unreachable (the current blanket catch even destroys the session
+  permanently). Magic-link tokens are opaque — never attempt client-side decoding.
 - **§2 settled facts**: `/tournaments/:id/events` (SSE, token in query string) is **never
   intercepted and never cached** — nor is any token-bearing URL. Replay triggers are SW
   startup + app-signaled connectivity regain + app foreground (**iOS Safari has no
@@ -82,6 +92,8 @@ installable (manifest + icons + CloudFront no-cache behaviors).
 | Venue views (timestamps in S5c) | `packages/frontend/src/pages/MyTournamentsHub.tsx`, `packages/frontend/src/pages/TournamentDetail/{Matches,Standings,Bracket}.tsx` |
 | Module-level notifier precedent to copy | `packages/frontend/src/context/ServiceUnavailableContext.tsx` (`notify503()` — module listener set by provider; `apiFetch` calls it) |
 | Sign-out flow (wipe hook point) | `packages/frontend/src/pages/Signout.tsx` (calls `useAuth().logout()`); `logout` in `src/hooks/useAuth.tsx` ~line 212 |
+| Session restore (the D11 defect; fixed in S5d) | `src/hooks/useAuth.tsx` — `restoreSession()` lines 79–114: blanket `catch` at line 107 deletes the token on **any** failure incl. network errors; the `/player/session` fallback (line 99) only runs on a real HTTP 401 |
+| Route guard (no change needed) | `src/components/ProtectedRoute.tsx` — redirects to `/login` when `isAuthenticated` is false; behaves correctly once S5d restores offline identity |
 | Offline page (kept, last-resort) | `packages/frontend/public/offline.html` |
 | Non-app HTML to exclude from precache | `packages/frontend/public/design.html`, `public/design-system.html` |
 | Broken favicon to replace (S8) | `packages/frontend/index.html` line 5 → `/vite.svg` (does not exist in `public/`) |
@@ -163,6 +175,10 @@ on it).
   the hand-rolled IDB mocks in the old `offline-flow.spec.tsx`).
 - Precache: managed by Workbox (`precacheAndRoute(self.__WB_MANIFEST)` +
   `cleanupOutdatedCaches()`); never touched by wipe.
+- Session snapshot (D11): localStorage key `auth_session_snapshot` =
+  `{ user, validatedAt }`. Written on every successful auth validation/login/signup;
+  read **only** when session restore hits a network failure; trusted for `VENUE_TTL_MS`
+  (48h); removed on sign-out wipe and on a genuine 401.
 
 ### 0.8 Build/tooling facts Sonnet must not rediscover the hard way
 
@@ -247,6 +263,11 @@ on it).
      app boots (no browser error page), banner shown.
   9. *Installable*: `manifest.webmanifest` served with required fields;
      `navigator.serviceWorker.ready` resolves; SW controls the page.
+  10. *Offline reload keeps the session* (D11 — scenario 1 silently depends on this):
+     authenticated player reloads a venue route offline → **stays signed in**
+     (offline-unvalidated, no redirect to `/login`), venue snapshot renders; then back
+     online + reload → session revalidates with **no re-login** (token was never
+     deleted). Covers both personas: registered-account JWT and magic-link player.
   Also mark the old "Offline / Sync" scenarios tied to `e2e/offline.spec.ts` as
   superseded by this feature block.
 - **S0.3 [chore commit]** Frontend deps: `vite-plugin-pwa`, `workbox-precaching`,
@@ -274,10 +295,12 @@ on it).
     `score-expired`). Implementation steps S5a–S5c consume these constants — they do
     not invent ids.
   - Author the full suite, mapping 1:1 to the S0.2 scenarios:
-    - `e2e/pwa-offline-venue.spec.ts` — scenarios 1, 8 (seed via
+    - `e2e/pwa-offline-venue.spec.ts` — scenarios 1, 8, 10 (seed via
       `createSinglesTournamentInGroupStage`, log in, wait for
       `navigator.serviceWorker.ready` + a controlling SW, warm the venue views, then
-      `context.setOffline(true)` + `page.reload()`).
+      `context.setOffline(true)` + `page.reload()`; scenario 10 additionally asserts
+      no `/login` redirect offline, then `setOffline(false)` + reload revalidates
+      without re-login — run it for both a magic-link player and a registered account).
     - `e2e/pwa-score-queue.spec.ts` — scenarios 2, 3, 4, 5 (scenario 4: while player A
       is offline, submit player B's score via `apiCall` with B's token, then reconnect A).
     - `e2e/pwa-hygiene.spec.ts` — scenarios 6, 7 (sign-out wipe; Cache Storage key
@@ -377,7 +400,8 @@ on it).
 
 ## S5 — Client UX: queued scores, replay results, banner, timestamps, toast, wipe
 
-Three RED/GREEN pairs — keep the commits separate:
+Four RED/GREEN pairs — keep the commits separate. **S5d is the keystone: without it,
+every offline view sits unreachable behind `ProtectedRoute` (D11).**
 
 **S5a — queued submit + replay results**
 - **S5a.1 [RED]** Specs: `api/client` `submitScore` returns `{queued:boolean}` (202 +
@@ -418,6 +442,27 @@ Three RED/GREEN pairs — keep the commits separate:
   `wipePlayerData()`, then store new id (spec on the login path in `useAuth`).
 - **S5c.2** Red, commit. **S5c.3 [GREEN]** Implement (wipe call sits next to the
   existing `logout()` in `Signout.tsx`'s `finally`, before navigate). Commit.
+
+**S5d — offline session survival (D11)**
+- **S5d.1 [RED]** Specs on `useAuth` (extend its existing spec file; mock `fetch`):
+  - successful `/api/auth/me` (and successful `/player/session` fallback) writes
+    `auth_session_snapshot` with the restored user + `validatedAt`; login/signup do too;
+  - **fetch rejection** during restore with a fresh (<48h) snapshot → `user` restored
+    from snapshot, `isAuthenticated` true, an `offlineUnvalidated` flag exposed, and
+    the token **still in localStorage**;
+  - fetch rejection with no snapshot, or snapshot older than 48h → `user` null but
+    token **still in localStorage**;
+  - unexpected 5xx during restore → same as fetch rejection (token kept) — the current
+    `throw` at line 105 must stop funneling into token deletion;
+  - real 401 with failed player fallback → token **and** snapshot removed (existing
+    sign-out semantics preserved);
+  - `'online'` event while offline-unvalidated → revalidation runs; success clears the
+    flag; a real 401 clears token + snapshot and triggers the D5 wipe via the bridge;
+  - extend the S5c sign-out spec: the wipe also removes `auth_session_snapshot`.
+- **S5d.2** Red, commit. **S5d.3 [GREEN]** Implement in `useAuth.tsx` (restore path
+  lines 79–114 restructured around rejection-vs-network; snapshot helpers kept inside
+  the hook module — no new abstraction layers). `ProtectedRoute` needs no change.
+  Commit.
 - **S5.4** All rendered testids must come from the `e2e/config.ts` constants defined in
   S0.5 — no new ids invented here; if implementation reveals a missing state, add the
   constant *and* the corresponding red e2e assertion in the same commit. Full unit
@@ -482,9 +527,12 @@ only on request):
 4. `tofu validate`/`plan` clean with the two behaviors.
 5. Manual checklist (record results in this doc's status header):
    Lighthouse installability ✅ on preview · DevTools-offline hard reload boots the
-   shell with banner · rebuild+reload shows the update toast and refreshing applies it ·
+   shell with banner · an offline hard reload on a venue route **stays signed in**
+   (offline-unvalidated) and renders the snapshot; reconnect revalidates without
+   re-login (D11) · rebuild+reload shows the update toast and refreshing applies it ·
    Cache Storage contains no `/events` or `token=` URLs after a full session ·
-   sign-out leaves no `venue-data` cache and an empty `score-queue`.
+   sign-out leaves no `venue-data` cache, an empty `score-queue`, and no
+   `auth_session_snapshot`.
 6. Docs: `assistant-help.md` (S8.2), `IaC-implementation.md` (S7.2), backlog rows for
    the design + implementation docs synced in `BACKLOG.md`.
 7. No stray changes: every touched line traces to this plan (CLAUDE.md §3).

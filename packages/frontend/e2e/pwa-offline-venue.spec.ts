@@ -12,6 +12,7 @@ import { test, expect } from '@playwright/test'
 import {
   getOrganizerToken,
   createSinglesTournamentInGroupStage,
+  waitForServiceWorkerReady,
   waitForControllingServiceWorker,
 } from './fixtures'
 import { API_CONFIG, SELECTORS } from './config'
@@ -44,6 +45,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — venue views + app shell', (
     // First navigation installs the SW but does not control this document (D9 — no
     // clients.claim()). Reload once the SW is active so the tab becomes controlled.
     await page.goto(`/tournament/${fixture.tournamentId}/matches`)
+    await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
 
@@ -83,6 +85,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — venue views + app shell', (
     }, fixture.playerToken)
 
     await page.goto(`/tournament/${fixture.tournamentId}/matches`)
+    await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
 
@@ -93,5 +96,57 @@ test.describe('Feature: PWA Venue Mode (Offline) — venue views + app shell', (
     await page.reload()
     await expect(page.locator('#root')).not.toBeEmpty()
     await expect(page.locator(SELECTORS.OFFLINE_BANNER)).toBeVisible()
+  })
+
+  test('Scenario: Offline reload keeps the session (D11) — magic-link player', async ({ page }) => {
+    const fixture = await createSinglesTournamentInGroupStage(organizerToken, 2)
+    await page.addInitScript((token: string) => {
+      localStorage.setItem('auth_token', token)
+    }, fixture.playerToken)
+
+    await page.goto(`/tournament/${fixture.tournamentId}/matches`)
+    await waitForServiceWorkerReady(page)
+    await page.reload()
+    await waitForControllingServiceWorker(page)
+    await expect(page.locator(SELECTORS.BRACKET_MATCHES).first()).toBeVisible()
+
+    await page.context().setOffline(true)
+    await page.reload()
+
+    // Stays signed in offline — no redirect to /login — and the snapshot renders.
+    await expect(page).not.toHaveURL(/\/login/)
+    await expect(page.locator(SELECTORS.OFFLINE_BANNER)).toBeVisible()
+    await expect(page.locator(SELECTORS.BRACKET_MATCHES).first()).toBeVisible()
+
+    await page.context().setOffline(false)
+    await page.reload()
+
+    // Revalidates on reconnect — no re-login required.
+    await expect(page).not.toHaveURL(/\/login/)
+    await expect(page.locator(SELECTORS.BRACKET_MATCHES).first()).toBeVisible()
+  })
+
+  test('Scenario: Offline reload keeps the session (D11) — registered account', async ({ page }) => {
+    await page.addInitScript((token: string) => {
+      localStorage.setItem('auth_token', token)
+    }, organizerToken)
+
+    await page.goto('/organizer')
+    await waitForServiceWorkerReady(page)
+    await page.reload()
+    await waitForControllingServiceWorker(page)
+    await expect(page).not.toHaveURL(/\/login/)
+
+    await page.context().setOffline(true)
+    await page.reload()
+
+    // Stays signed in offline — no redirect to /login.
+    await expect(page).not.toHaveURL(/\/login/)
+
+    await page.context().setOffline(false)
+    await page.reload()
+
+    // Revalidates on reconnect — no re-login required.
+    await expect(page).not.toHaveURL(/\/login/)
   })
 })

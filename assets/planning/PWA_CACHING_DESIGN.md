@@ -62,6 +62,42 @@ token-URL exclusion (§2) is not triggered; (c) `useTournament` performs its own
 (d) the dead getters stay in place per CLAUDE.md §3 (mention, don't delete) and their
 paths are deliberately **not** cached.
 
+### Amendment 2026-07-18 — D11: offline session survival (implementation recon)
+
+**The gap:** venue mode as designed cannot work for its main persona. On every page
+load, `useAuth`'s `restoreSession()` validates the stored token via `GET /api/auth/me`
+(falling back to `GET /player/session` for magic-link players — but only on a real HTTP
+401). When offline, that first fetch **rejects with a network error**, landing in a
+blanket `catch` that **deletes the token from localStorage** and signs the player out.
+An offline reload of a venue route therefore shows the login page — the cached snapshot
+never renders — and the session is destroyed even for when signal returns. Magic-link
+tokens are opaque (not JWTs), so client-side token decoding is not an option; identity
+must be persisted at validation time. Neither D1–D10 nor §2 addressed this.
+
+**Decision (D11):**
+1. On every **successful** auth validation (account `/api/auth/me` OK, player
+   `/player/session` OK) and on login/signup/verify, persist a minimal **session
+   snapshot** to localStorage: `{ user, validatedAt }` — identity fields only, no
+   token duplication.
+2. `restoreSession()` distinguishes **server rejection from network failure**:
+   - HTTP 401 (server reached, token rejected): existing fallback chain; if it also
+     fails → clear token + snapshot. Unchanged semantics.
+   - Fetch rejection (offline/unreachable): **never delete the token.** If a snapshot
+     exists with `validatedAt` within the trust window, restore `user` from it and mark
+     the session **offline-unvalidated**. No snapshot / too old → signed-out UI state,
+     token still kept for later revalidation.
+   - Unexpected 5xx: treated as network failure (token kept), not as rejection.
+3. **Trust window ⚖ = 48h**, deliberately reused from D6: offline identity never
+   outlives the offline data it unlocks. (Owner-tunable lever; changing it decouples
+   identity trust from snapshot retention.)
+4. **Revalidate on reconnect** (`online` event / app foreground): re-run validation; a
+   genuine 401 then clears token + snapshot and triggers the D5 wipe.
+5. The D5 sign-out wipe **extends to the snapshot**.
+
+**Security posture:** trusting a stored token + identity snapshot offline is the same
+threat model as device possession of a logged-in installed app; the 48h bound means
+nothing offline-visible outlives the window of the data it exposes (D6).
+
 ## 2. Settled technical facts (not forks)
 
 - **SSE is excluded and must never be cached.** `GET /tournaments/:id/events?token=<JWT>`
@@ -98,6 +134,9 @@ paths are deliberately **not** cached.
 - SW→app messaging channel for replay outcomes (success / needs-auth / rejected) and
   for the wipe command from `/signout`.
 - Offline banner + per-view "Updated HH:MM" on the four venue views (D4).
+- `useAuth`: offline session survival per amendment D11 — network-failure ≠ 401,
+  session snapshot, revalidate on reconnect. Without this, every other item on this
+  list is unreachable offline behind `ProtectedRoute`.
 - Update toast wired to `vite-plugin-pwa` prompt hooks (D9).
 - Re-enable/adapt `offline-flow` tests against the real built worker; per TDD, scenario
   docs + failing tests precede the implementation.
