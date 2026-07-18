@@ -39,9 +39,12 @@ installable (manifest + icons + CloudFront no-cache behaviors).
 
 ### 0.2 Non-negotiable design decisions (PWA_CACHING_DESIGN.md §1 — do not relitigate)
 
-- **D2 — cached reads are exactly the core four** (GET): `/player/tournaments`,
-  `/tournaments/:id/matches`, `/tournaments/:id/groups/:gid/standings`,
-  `/tournaments/:id/bracket`. Nothing else. Ever.
+- **D2 (endpoint mapping amended 2026-07-18) — cached reads are exactly two
+  endpoints**: `GET /player/tournaments` and `GET /tournaments/:id/bundle` — the
+  consolidation endpoint all four venue views actually consume via `useTournament()`.
+  The per-view getters the original D2 named (`fetchMatches`/`fetchStandings`/
+  `fetchBracket` in `api/client.ts`) are **dead code with zero production callers**:
+  do not cache their paths, do not delete them (CLAUDE.md §3). Nothing else. Ever.
 - **D3 — network-first** with a **3.5s timeout**, cache fallback only on failure; every
   network success refreshes the cache entry.
 - **D4 — fallback responses are stamped** (`sw-cache: fallback`, `sw-cached-at: <ISO>`);
@@ -72,7 +75,8 @@ installable (manifest + icons + CloudFront no-cache behaviors).
 | Dead SW to be rewritten (delete after S4) | `packages/frontend/src/workers/service-worker.ts` (+ its old test `src/workers/__tests__/service-worker.spec.ts` — superseded by sw-lib specs) |
 | SW registration to replace (S4) | `packages/frontend/src/main.tsx` lines 26–42 (hand-rolled `navigator.serviceWorker.register('/service-worker.js')`) |
 | Vite config (plugin + preview proxy go here) | `packages/frontend/vite.config.ts` (dev proxies `/api`, `/tournaments`, `/player` → :3001; mirror them under `preview.proxy` in S6) |
-| API fetch wrapper (header sniff in S5b) | `packages/frontend/src/api/client.ts` — `apiFetch()` ~line 21; `submitScore()` ~line 145 (POST group / `PATCH` knockout — **both hit `…/score`**); core-four getters at ~lines 90–136, 163 |
+| API fetch wrapper (header sniff in S5b) | `packages/frontend/src/api/client.ts` — `apiFetch()` ~line 21; `submitScore()` ~line 145 (POST group / `PATCH` knockout — **both hit `…/score`**); `fetchPlayerTournaments()` ~line 163 (the one real venue getter). **`fetchMatches`/`fetchStandings`/`fetchBracket` (~lines 116–136) are dead code** — zero production callers; never cached, never deleted (CLAUDE.md §3) |
+| Bundle fetch (second header-sniff point in S5b) | `packages/frontend/src/hooks/useTournament.ts` — `fetchTournamentBundle()` ~line 37: raw `fetch` with Bearer token in the **Authorization header** (not the URL — token-URL exclusion not triggered), **bypasses `apiFetch`**, so the S5b fallback sniff must be added here too |
 | Score submit hook (gets `queued` status) | `packages/frontend/src/hooks/useScoreSubmit.ts` — has its own 4-attempt retry loop; with the SW active an offline submit resolves instantly as 202, so the loop only ever sees server errors (unchanged behavior). First-visit-no-SW offline submit still walks the retry→failed path — acceptable, documented. |
 | Score form UI (pending badge) | `packages/frontend/src/components/ScoreSubmitForm.tsx` |
 | Venue views (timestamps in S5c) | `packages/frontend/src/pages/MyTournamentsHub.tsx`, `packages/frontend/src/pages/TournamentDetail/{Matches,Standings,Bracket}.tsx` |
@@ -120,7 +124,7 @@ arguments or the global scope available in **both** jsdom and the worker — nev
 | Class | Rule (path = `url.pathname`) | Handling |
 |---|---|---|
 | `'sse'` | path matches `^/tournaments/[^/]+/events$` **or** `url.searchParams.has('token')` | **Not intercepted** — return without `respondWith` |
-| `'venue-read'` | GET and path matches one of: `^/player/tournaments$` · `^/tournaments/[^/]+/matches$` · `^/tournaments/[^/]+/groups/[^/]+/standings$` · `^/tournaments/[^/]+/bracket$` | `venue-cache.networkFirst` (D3) |
+| `'venue-read'` | GET and path matches one of: `^/player/tournaments$` · `^/tournaments/[^/]+/bundle$` | `venue-cache.networkFirst` (D3) |
 | `'queueable-score'` | (POST or PATCH) and path matches `^/tournaments/[^/]+/(matches|knockout)/[^/]+/score$` | network; on **fetch rejection only** (never on an HTTP error response) → `sync-queue.enqueue` + synthesized 202 |
 | `'navigation'` | `request.mode === 'navigate'` (pass mode as a param) | precached shell, `offline.html` last resort (D10) |
 | `'passthrough'` | everything else — incl. all other API paths and methods | **Not intercepted** (Workbox precache routes handle hashed assets separately) |
@@ -293,8 +297,11 @@ on it).
 ## S1 — `sw-lib/routing.ts` + `sw-lib/messages.ts` (pure contracts)
 
 - **S1.1 [RED]** `src/workers/sw-lib/__tests__/routing.spec.ts` — table-driven per §0.5:
-  every venue-read pattern matches (and near-misses don't: `/tournaments/x/matches/y`,
-  `/tournaments/public`, trailing segments); SSE path and **any** `?token=` URL classify
+  both venue-read patterns match (and near-misses don't: `/tournaments/x/bundle/y`,
+  `/tournaments/public`, `/player/tournaments/x`); **the dead per-view paths
+  (`/tournaments/:id/matches`, `…/groups/:gid/standings`, `…/bracket`) classify
+  `'passthrough'`** — zero production callers, deliberately uncached (D2 amendment);
+  SSE path and **any** `?token=` URL classify
   `'sse'` regardless of other rules; score POST **and** PATCH (group + knockout) classify
   `'queueable-score'`; other writes (`/tournaments/:id/advance`,
   `…/partner-requests`, future `/api/billing/*`) classify `'passthrough'`;
@@ -387,13 +394,17 @@ Three RED/GREEN pairs — keep the commits separate:
   again". Commit.
 
 **S5b — offline banner + per-view timestamps (D4)**
-- **S5b.1 [RED]** Specs: `apiFetch` calls `notifyOfflineSnapshot(path, cachedAt)` when
-  `sw-cache: fallback` present (copy the `notify503` module-listener pattern);
+- **S5b.1 [RED]** Specs: **both fetch paths** call `notifyOfflineSnapshot(path, cachedAt)`
+  when `sw-cache: fallback` is present — `apiFetch` (covers `/player/tournaments`) **and**
+  `useTournament`'s `fetchTournamentBundle` (covers the bundle; it bypasses `apiFetch`,
+  §0.3) — copying the `notify503` module-listener pattern;
   `OfflineSnapshotContext` provider exposes per-path timestamps + an `isOffline` flag
   (`navigator.onLine` + fallback events, cleared on the next non-fallback response);
   `OfflineBanner` renders `data-testid="offline-banner"` when offline; venue views
   render `data-testid="snapshot-updated-at"` ("Updated HH:MM") when their data came
-  from fallback. Extend the existing page specs for the four venue views rather than
+  from fallback — the three `TournamentDetail` tabs share the bundle's single
+  cached-at, so the timestamp is identical across them (expected, per the D2
+  amendment). Extend the existing page specs for the four venue views rather than
   new files where natural.
 - **S5b.2** Red, commit. **S5b.3 [GREEN]** Implement; mount provider + banner in the
   app shell in `App.tsx` (inside the existing provider stack in `main.tsx`/`App.tsx` —

@@ -31,7 +31,7 @@ silently.
 | # | Fork | Decision | Rationale |
 |---|------|----------|-----------|
 | D1 | What is offline *for*? | **Venue mode**: read tournament data + queue score submits at a bad-signal court. Not app-shell-only; not a full offline mirror. | Matches the mobile-first, at-the-venue reality and the existing `sync-scores` intent. Full mirror deferred — not warranted before paid launch. |
-| D2 | Which API reads are cached? | **Core four**: `/player/tournaments`, `/tournaments/:id/matches`, `/tournaments/:id/groups/:gid/standings`, `/tournaments/:id/bracket`. | Exactly the court-side views. Registration-phase reads (partners, requests) are pre-tournament, done with signal, and go stale under you. SSE, messaging, coach, settings, stats, admin: network-only. |
+| D2 | Which API reads are cached? | **Venue reads** (endpoint mapping amended 2026-07-18 — see note below the table): `GET /player/tournaments` (tournament list) + `GET /tournaments/:id/bundle` (the consolidation endpoint all four venue views actually consume). | Exactly the court-side views. Registration-phase reads (partners, requests) are pre-tournament, done with signal, and go stale under you. SSE, messaging, coach, settings, stats, admin: network-only. |
 | D3 | Read policy for core four | **Network-first** (~3–4s timeout), cache fallback only on failure; every success refreshes the cache. | Online users always see truth. SW-level SWR/cache-first would duplicate React Query (in-session) and fight SSE (live pushes), and can paint an outdated bracket as current. |
 | D4 | Staleness UX | **Banner + timestamp**: global "Offline — showing saved data" banner (visual family of `ReconnectingIndicator`, distinct copy/color) + "Updated HH:MM" per venue view, driven by a cached-at header the SW stamps on fallback responses. | A player must be able to tell a 2-minute snapshot from a 2-hour one ("am I on court 3 next?"). Existing indicator is chat-scoped ("Reconnecting…") — wrong semantics to reuse. |
 | D5 | Sign-out hygiene | **Wipe on sign-out**: `/signout` messages the SW to delete the API data cache + IndexedDB queue before clearing the JWT; also wipe when a different account signs in. Static asset cache stays. | Core-four responses are player-scoped; Cache Storage survives logout. Shared/borrowed phones + paid accounts ⇒ privacy requirement. Per-player cache keys deferred until evidence of missed wipes. |
@@ -40,6 +40,27 @@ silently.
 | D8 | Queue UX + failure semantics | **Explicit pending state**: SW's `202 QUEUED` renders as "Saved offline — will send when connected" (never as success). On replay, SW messages the app: success → clear + refresh; 401 → keep queued, prompt "sign in to finish submitting"; other 4xx (e.g. already scored) → drop from queue + "Not applied — already recorded as X". Queue entries share the 48h TTL. | `useScoreSubmit` currently treats any 2xx as success — an offline submit would look submitted forever. Never blind-retry a 4xx; never let a days-old score land silently. |
 | D9 | Update flow | **Prompt to refresh**: new SW precaches, then waits; app shows "Update available — Refresh" toast (`vite-plugin-pwa` prompt mode); tap → `skipWaiting` + reload. Periodic update check while open. | Current `skipWaiting`+`clients.claim` seizes live tabs and breaks lazy-loaded hashed chunks mid-session — the one failure a court-side player can't recover from. Next-launch-only is too slow for urgent fixes during a live tournament (installed PWAs stay "open" for days). |
 | D10 | Offline navigation | **Precached app shell** is the navigation fallback (network-first → cached `index.html`); the real app boots offline and shows venue views + banner. **`offline.html` kept only as last resort** (Cache Storage eviction edge). | Without shell fallback, cached venue data exists but is unreachable — contradicts D1. offline.html already exists + tested; keeping it as final catch is ~free. |
+
+### Amendment 2026-07-18 — D2 endpoint mapping (implementation recon)
+
+The original D2 named four literal paths (`/tournaments/:id/matches`, `…/standings`,
+`…/bracket` alongside `/player/tournaments`), taken from the exported getters in
+`api/client.ts`. Implementation recon found that **three of those getters
+(`fetchMatches`, `fetchStandings`, `fetchBracket`) are dead code with zero production
+callers** — the Matches/Standings/Bracket/Details tabs all consume a single
+consolidated `GET /tournaments/:id/bundle` via `useTournament()` (predates this doc).
+Caching the literal original paths would have made offline venue mode a silent no-op.
+
+The **decision is unchanged** — the four venue views are cached, nothing else — only
+the endpoint mapping is corrected: allowlist = `/player/tournaments` + `/tournaments/:id/bundle`.
+Wherever this doc says "core four" it means the four venue *views*, served by these two
+endpoints. Implications: (a) the three `TournamentDetail` tabs share the bundle's single
+cached-at — one identical "Updated HH:MM" across tabs, which is fine for D4; (b) the
+bundle sends its Bearer token in the `Authorization` header, not the URL, so the
+token-URL exclusion (§2) is not triggered; (c) `useTournament` performs its own raw
+`fetch`, bypassing `apiFetch` — the D4 fallback-header sniff must live in both places;
+(d) the dead getters stay in place per CLAUDE.md §3 (mention, don't delete) and their
+paths are deliberately **not** cached.
 
 ## 2. Settled technical facts (not forks)
 
