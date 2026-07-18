@@ -209,3 +209,28 @@ scores, standings) always appear in the app in real time regardless of notificat
   close to a limit it lets you know, and if you hit it, it says so and you can try again later.
 - Nothing you say to 1:1 Coach is ever visible to your groups, and group Coach never sees your
   1:1 conversation or memories.
+
+## Installing the app & using it offline
+
+- On Android/desktop Chrome, an **install prompt** appears in the address bar or menu — tap
+  **Install** to add the app to your home screen or apps list, no app store needed. On iPhone/iPad,
+  open the site in Safari, tap **Share**, then **Add to Home Screen**.
+- Once installed, it opens full-screen with its own icon and name — no browser address bar.
+- **At a court with bad signal**, four views still work offline if you loaded them at least once
+  while you had signal: **Matches, Standings, Bracket, and Details**. Anything else (chat, Coach,
+  stats, settings, joining a new tournament) needs a connection.
+- When you're offline, a banner reads **"Offline — showing saved data"**, and each view shows
+  **"Updated HH:MM"** for when that snapshot was last refreshed. Saved snapshots are good for
+  **48 hours** — after that they're treated as stale.
+- **Submitting a score while offline** shows a **"Saved offline — will send when connected"**
+  badge instead of a success message. It sends automatically once you're back online — you don't
+  need to resubmit. If the match turns out to already be scored (your opponent submitted first),
+  you'll see a clear "not applied" message instead of it silently failing.
+- Other actions (like partner requests) don't work offline at all — they fail right away with a
+  normal error rather than pretending to save.
+- You'll stay signed in through an offline reload at a venue, even if the app can't reach the
+  server to check your session — it revalidates automatically once you're back online.
+- **Signing out clears all offline data** on that device — saved snapshots and anything still
+  waiting to send.
+- When an update to the app is available, you'll see an **"Update available"** toast — tap it to
+  refresh and apply the update on your own schedule (it never force-reloads a page you're using).

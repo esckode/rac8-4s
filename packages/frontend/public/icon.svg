@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background: --court-600 (tokens.css), matches vite.config.ts manifest.theme_color -->
+  <rect width="512" height="512" fill="#2E8AD4" />
+  <!-- LogoMark's crescent-C mark (src/components/shared/LogoMark.tsx), in its
+       pre-designed light-on-color palette (Logo.tsx tone="light": court-300/400).
+       LogoMark's own viewBox centers on the 100x100 box, not the crescent's visual
+       bounding box (it's designed to sit beside text) — translate.x is shifted so the
+       mark itself is centered in this square icon, with a safe maskable margin. -->
+  <g transform="translate(156 77) scale(3.58)">
+    <path
+      d="M 50 6
+         A 44 44 0 1 0 50 94
+         A 32 32 0 1 1 50 18
+         Z"
+      fill="#A8D5FF"
+    />
+    <path
+      d="M 50 24
+         A 26 26 0 1 0 50 76
+         A 14 14 0 1 1 50 32
+         Z"
+      fill="#7BC3FF"
+      opacity="0.85"
+    />
+  </g>
+</svg>
