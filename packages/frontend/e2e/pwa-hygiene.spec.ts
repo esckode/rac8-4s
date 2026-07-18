@@ -92,6 +92,10 @@ test.describe('Feature: PWA Venue Mode (Offline) — hygiene', () => {
     await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
+    // Wait for the bundle fetch to actually complete (and get cached) before
+    // going offline — otherwise it's still in flight when the next reload
+    // abandons it, leaving nothing for the fallback to serve.
+    await expect(page.getByTestId('submit-score-button').first()).toBeVisible()
 
     // Warm the venue cache and queue a score offline before signing out.
     await goOffline(page)
