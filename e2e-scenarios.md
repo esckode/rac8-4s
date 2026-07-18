@@ -1009,9 +1009,9 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 > `assets/planning/PWA_CACHING_IMPLEMENTATION.md`. Venue mode: a player at a court with bad
 > signal can view a timestamped offline snapshot of their tournament (list, matches,
 > standings, bracket) and queue score submits for replay on reconnect. Status markers below:
-> ⏳ planned (authored red in S0.5, turned green in S6).
+> ✅ built & verified (all 11 scenarios green on the `pwa` Playwright project — S6, 2026-07-18).
 
-### ⏳ Scenario: Venue views readable offline
+### ✅ Scenario: Venue views readable offline
 ```
 Given a player has loaded matches/standings/bracket for their tournament while online
 When they go offline and reload the page
@@ -1020,7 +1020,7 @@ Then each view still renders from the cached snapshot
   And each view shows "Updated HH:MM" for its snapshot
 ```
 
-### ⏳ Scenario: Offline score submit shows pending, not success
+### ✅ Scenario: Offline score submit shows pending, not success
 ```
 Given a player is offline on a match they can score
 When they submit a score
@@ -1029,7 +1029,7 @@ Then they see a "Saved offline — will send when connected" badge
   And the submission is recorded in the local sync queue
 ```
 
-### ⏳ Scenario: Reconnect replays the queue
+### ✅ Scenario: Reconnect replays the queue
 ```
 Given a player has a queued score submission from being offline
 When connectivity returns
@@ -1038,7 +1038,7 @@ Then the service worker replays the queue and the server accepts it
   And the match shows the submitted score
 ```
 
-### ⏳ Scenario: Replay rejection surfaces and drops
+### ✅ Scenario: Replay rejection surfaces and drops
 ```
 Given a player submitted a score offline for a match
   And their opponent scored the same match while the player was still offline
@@ -1048,7 +1048,7 @@ Then the player sees "Not applied — already recorded"
   And the queue entry is removed (no retry)
 ```
 
-### ⏳ Scenario: Non-queueable writes fail fast offline
+### ✅ Scenario: Non-queueable writes fail fast offline
 ```
 Given a player is offline
 When they attempt a non-score write (e.g. a partner request)
@@ -1057,7 +1057,7 @@ Then it fails immediately with a normal error
   And no fake 202/pending state is shown
 ```
 
-### ⏳ Scenario: Sign-out wipes offline data
+### ✅ Scenario: Sign-out wipes offline data
 ```
 Given a player has a cached venue snapshot and/or a queued score
 When they sign out
@@ -1066,14 +1066,14 @@ Then Cache Storage has no venue-data entries afterward
   And going offline immediately after shows "no saved data" (not the prior player's snapshot)
 ```
 
-### ⏳ Scenario: No token-bearing URL is ever cached
+### ✅ Scenario: No token-bearing URL is ever cached
 ```
 Given a full player session including live SSE updates
 When the session ends
 Then no Cache Storage key contains "/events" or "token=" for any entry
 ```
 
-### ⏳ Scenario: App shell boots offline (preview build only)
+### ✅ Scenario: App shell boots offline (preview build only)
 ```
 Given a player has visited the installed app online at least once
 When they go offline and hard-reload
@@ -1081,7 +1081,7 @@ Then the app shell boots (no browser error page)
   And the offline banner is shown
 ```
 
-### ⏳ Scenario: Installable
+### ✅ Scenario: Installable
 ```
 Given the production build is served
 When a client requests /manifest.webmanifest
@@ -1089,7 +1089,7 @@ Then it is served with the required PWA fields (name, icons, start_url, display)
   And navigator.serviceWorker.ready resolves with a controlling service worker
 ```
 
-### ⏳ Scenario: Offline reload keeps the session (D11 — scenario 1's hidden dependency)
+### ✅ Scenario: Offline reload keeps the session (D11 — scenario 1's hidden dependency)
 ```
 Given an authenticated player (covers both a registered-account JWT and a magic-link
   player session) has loaded a venue route while online
