@@ -13,6 +13,8 @@ import {
   createSinglesTournamentInGroupStage,
   waitForServiceWorkerReady,
   waitForControllingServiceWorker,
+  goOffline,
+  goOnline,
 } from './fixtures'
 import { API_CONFIG } from './config'
 
@@ -92,12 +94,12 @@ test.describe('Feature: PWA Venue Mode (Offline) — hygiene', () => {
     await waitForControllingServiceWorker(page)
 
     // Warm the venue cache and queue a score offline before signing out.
-    await page.context().setOffline(true)
+    await goOffline(page)
     await page.reload()
     await page.getByTestId('submit-score-button').first().click()
     await page.getByTestId('score-input').fill('11-9, 11-7')
     await page.getByTestId('score-submit').click()
-    await page.context().setOffline(false)
+    await goOnline(page)
 
     const before = await readVenueCacheAndQueueState(page)
     expect(before.venueCacheKeys.length).toBeGreaterThan(0)

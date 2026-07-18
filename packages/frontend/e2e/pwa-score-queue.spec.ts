@@ -19,6 +19,8 @@ import {
   createSinglesTournamentInGroupStage,
   waitForServiceWorkerReady,
   waitForControllingServiceWorker,
+  goOffline,
+  goOnline,
 } from './fixtures'
 import { API_CONFIG, SELECTORS } from './config'
 
@@ -90,8 +92,12 @@ test.describe('Feature: PWA Venue Mode (Offline) — score sync queue', () => {
     await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
+    // Wait for the bundle fetch to actually complete (and get cached) before
+    // going offline — otherwise it's still in flight when the next reload
+    // abandons it, leaving nothing for the fallback to serve.
+    await expect(page.getByTestId('submit-score-button').first()).toBeVisible()
 
-    await page.context().setOffline(true)
+    await goOffline(page)
     await page.reload()
 
     await page.getByTestId('submit-score-button').first().click()
@@ -102,7 +108,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — score sync queue', () => {
     await expect(page.locator(SELECTORS.SCORE_PENDING_BADGE)).toBeVisible()
     await expect(page.getByText('11-9, 11-7')).toHaveCount(0)
 
-    await page.context().setOffline(false)
+    await goOnline(page)
 
     // Reconnect triggers a queue replay; the badge clears and the real score shows.
     await expect(page.locator(SELECTORS.SCORE_PENDING_BADGE)).toBeHidden({ timeout: 10000 })
@@ -119,8 +125,11 @@ test.describe('Feature: PWA Venue Mode (Offline) — score sync queue', () => {
     await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
+    // Wait for the bundle fetch to actually complete (and get cached) before
+    // going offline — see the sibling test above for why.
+    await expect(page.getByTestId('submit-score-button').first()).toBeVisible()
 
-    await page.context().setOffline(true)
+    await goOffline(page)
     await page.reload()
 
     await page.getByTestId('submit-score-button').first().click()
@@ -137,7 +146,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — score sync queue', () => {
     )
     expect(oppRes.ok).toBe(true)
 
-    await page.context().setOffline(false)
+    await goOnline(page)
 
     // Replay is rejected (already scored) — surfaced, dropped, never retried.
     await expect(page.locator(SELECTORS.SCORE_REJECTED)).toBeVisible({ timeout: 10000 })
@@ -155,7 +164,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — score sync queue', () => {
     await page.reload()
     await waitForControllingServiceWorker(page)
 
-    await page.context().setOffline(true)
+    await goOffline(page)
 
     const result = await page.evaluate(
       async ({ tournamentId, token }: { tournamentId: string; token: string }) => {

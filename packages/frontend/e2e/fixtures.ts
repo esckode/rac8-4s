@@ -779,3 +779,25 @@ export async function waitForControllingServiceWorker(page: any, timeoutMs = 100
     { timeout: timeoutMs }
   )
 }
+
+/**
+ * Simulates offline for these tests. `context.setOffline(true)` alone is not
+ * enough: Chromium's network-condition emulation is scoped to the page's own
+ * fetches and does not reach fetches issued from *within* the service worker
+ * thread (verified directly — a plain `fetch()` inside the SW still resolves
+ * with a real 200 while `setOffline(true)` is active). Since venue-cache's
+ * network-first fallback only engages on an actual fetch rejection, the SW's
+ * own fetch must also fail — so every request is additionally aborted at the
+ * routing layer, which does apply context-wide, covering the SW's target too.
+ * `setOffline` is kept alongside it for the `navigator.onLine` state and the
+ * browser's native online/offline events (D11 revalidation listens for these).
+ */
+export async function goOffline(page: any): Promise<void> {
+  await page.context().setOffline(true)
+  await page.context().route('**/*', (route: any) => route.abort('internetdisconnected'))
+}
+
+export async function goOnline(page: any): Promise<void> {
+  await page.context().unroute('**/*')
+  await page.context().setOffline(false)
+}

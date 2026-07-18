@@ -14,6 +14,8 @@ import {
   createSinglesTournamentInGroupStage,
   waitForServiceWorkerReady,
   waitForControllingServiceWorker,
+  goOffline,
+  goOnline,
 } from './fixtures'
 import { API_CONFIG, SELECTORS } from './config'
 
@@ -56,7 +58,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — venue views + app shell', (
     await page.goto(`/tournament/${fixture.tournamentId}/matches`)
     await expect(page.locator(SELECTORS.BRACKET_MATCHES).first()).toBeVisible()
 
-    await page.context().setOffline(true)
+    await goOffline(page)
 
     // Matches
     await page.reload()
@@ -88,8 +90,12 @@ test.describe('Feature: PWA Venue Mode (Offline) — venue views + app shell', (
     await waitForServiceWorkerReady(page)
     await page.reload()
     await waitForControllingServiceWorker(page)
+    // Wait for the bundle fetch to actually complete (and get cached) before
+    // going offline — otherwise it's still in flight when the next reload
+    // abandons it, leaving nothing for the fallback to serve.
+    await expect(page.locator(SELECTORS.BRACKET_MATCHES).first()).toBeVisible()
 
-    await page.context().setOffline(true)
+    await goOffline(page)
 
     // Hard reload while offline — the precached app shell (not a browser error
     // page) must boot the SPA.
@@ -110,7 +116,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — venue views + app shell', (
     await waitForControllingServiceWorker(page)
     await expect(page.locator(SELECTORS.BRACKET_MATCHES).first()).toBeVisible()
 
-    await page.context().setOffline(true)
+    await goOffline(page)
     await page.reload()
 
     // Stays signed in offline — no redirect to /login — and the snapshot renders.
@@ -118,7 +124,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — venue views + app shell', (
     await expect(page.locator(SELECTORS.OFFLINE_BANNER)).toBeVisible()
     await expect(page.locator(SELECTORS.BRACKET_MATCHES).first()).toBeVisible()
 
-    await page.context().setOffline(false)
+    await goOnline(page)
     await page.reload()
 
     // Revalidates on reconnect — no re-login required.
@@ -137,13 +143,13 @@ test.describe('Feature: PWA Venue Mode (Offline) — venue views + app shell', (
     await waitForControllingServiceWorker(page)
     await expect(page).not.toHaveURL(/\/login/)
 
-    await page.context().setOffline(true)
+    await goOffline(page)
     await page.reload()
 
     // Stays signed in offline — no redirect to /login.
     await expect(page).not.toHaveURL(/\/login/)
 
-    await page.context().setOffline(false)
+    await goOnline(page)
     await page.reload()
 
     // Revalidates on reconnect — no re-login required.
