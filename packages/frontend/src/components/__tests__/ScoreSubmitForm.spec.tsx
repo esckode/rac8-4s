@@ -192,6 +192,8 @@ describe('ScoreSubmitForm', () => {
       await waitFor(() =>
         expect(screen.getByTestId('score-needs-auth')).toHaveTextContent(/sign in/i)
       )
+      // Still genuinely queued (D8 keeps a needs-auth entry) — both render.
+      expect(screen.getByTestId('score-pending-badge')).toBeInTheDocument()
     })
 
     it('shows a rejected notice (with detail) on REPLAY_RESULT rejected', async () => {
@@ -213,6 +215,9 @@ describe('ScoreSubmitForm', () => {
         expect(screen.getByTestId('score-rejected')).toHaveTextContent(/already recorded/i)
       )
       expect(screen.getByTestId('score-rejected')).toHaveTextContent('6-4, 6-3')
+      // D8: rejected means the entry was dropped from the queue — this is no
+      // longer "pending", so the pending badge must not still be shown.
+      expect(screen.queryByTestId('score-pending-badge')).not.toBeInTheDocument()
     })
 
     it('shows an expired notice on REPLAY_RESULT expired', async () => {
@@ -228,6 +233,8 @@ describe('ScoreSubmitForm', () => {
       await waitFor(() =>
         expect(screen.getByTestId('score-expired')).toHaveTextContent(/expired/i)
       )
+      // D8: expired means the entry was dropped without sending — no longer pending.
+      expect(screen.queryByTestId('score-pending-badge')).not.toBeInTheDocument()
     })
   })
 })
