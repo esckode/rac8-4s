@@ -13,6 +13,7 @@ import { tournamentStore, standingsStore, matchStore, playerCache } from '../sta
 import { playersFromBundleStandings, flattenBundleStandings } from '../utils/standings-players'
 import { useAuth } from './useAuth'
 import { useAnalytics } from './useAnalytics'
+import { useOfflineSnapshot, notifyOfflineSnapshot, clearOfflineSnapshot } from '../pwa/OfflineSnapshotContext'
 
 export interface TournamentBundle {
   tournament: Tournament | null
@@ -32,9 +33,13 @@ export interface TournamentHookState extends TournamentBundle {
   refetch: () => Promise<void>
   retryIn: number | null
   cancelAutoRetry: () => void
+  // "Updated HH:MM" driver (D4) — set only when the bundle came from the SW's
+  // offline fallback. Bypasses apiFetch (raw fetch with the Bearer token in
+  // the Authorization header, not the URL), so the sniff lives here too.
+  updatedAt: string | undefined
 }
 
-async function fetchTournamentBundle(
+export async function fetchTournamentBundle(
   tournamentId: string,
   token: string
 ): Promise<TournamentBundle> {
@@ -47,6 +52,13 @@ async function fetchTournamentBundle(
       'Authorization': `Bearer ${token}`,
     },
   })
+
+  const cachedAt = response.headers.get('sw-cached-at')
+  if (response.headers.get('sw-cache') === 'fallback' && cachedAt) {
+    notifyOfflineSnapshot(url.pathname, cachedAt)
+  } else {
+    clearOfflineSnapshot(url.pathname)
+  }
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({
@@ -63,6 +75,7 @@ export function useTournament(tournamentId: string): TournamentHookState {
   const authState = useAuth()
   const queryClient = useQueryClient()
   const { track } = useAnalytics()
+  const { updatedAtFor } = useOfflineSnapshot()
   const [retryIn, setRetryIn] = useState<number | null>(null)
   const retryIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -215,5 +228,6 @@ export function useTournament(tournamentId: string): TournamentHookState {
     },
     retryIn,
     cancelAutoRetry,
+    updatedAt: updatedAtFor(`/tournaments/${tournamentId}/bundle`),
   }
 }

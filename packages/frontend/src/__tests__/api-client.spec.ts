@@ -4,22 +4,29 @@ import {
   fetchStandings,
   fetchMatches,
   fetchBracket,
+  fetchPlayerTournaments,
   submitScore,
 } from '../api/client'
+import * as OfflineSnapshot from '../pwa/OfflineSnapshotContext'
 import type { ApiError, PublicTournamentListResponse, OrganizerTournamentListResponse, GroupStandingsResponse, PlayerMatchesResponse, BracketData } from '../types'
+
+jest.mock('../pwa/OfflineSnapshotContext', () => ({
+  notifyOfflineSnapshot: jest.fn(),
+  clearOfflineSnapshot: jest.fn(),
+}))
 
 // Polyfill Response for jsdom test environment
 if (typeof global.Response === 'undefined') {
   global.Response = class Response {
     body: string
     status: number
-    headers: Record<string, string>
+    headers: Map<string, string>
     ok: boolean
 
-    constructor(body: string, init?: { status?: number }) {
+    constructor(body: string, init?: { status?: number; headers?: Record<string, string> }) {
       this.body = body
       this.status = init?.status || 200
-      this.headers = {}
+      this.headers = new Map(Object.entries(init?.headers ?? {}))
       this.ok = this.status >= 200 && this.status < 300
     }
 
@@ -415,6 +422,36 @@ describe('API Client', () => {
       await expect(fetchBracket('tour_123')).rejects.toMatchObject({
         status: 404,
       })
+    })
+  })
+
+  describe('fetchPlayerTournaments — offline snapshot notification (D4)', () => {
+    it('calls notifyOfflineSnapshot with the cached-at header when sw-cache: fallback is present', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ tournaments: [] }), {
+          status: 200,
+          headers: { 'sw-cache': 'fallback', 'sw-cached-at': '2026-07-18T10:30:00.000Z' },
+        })
+      )
+
+      await fetchPlayerTournaments('token_abc')
+
+      expect(OfflineSnapshot.notifyOfflineSnapshot).toHaveBeenCalledWith(
+        '/player/tournaments',
+        '2026-07-18T10:30:00.000Z'
+      )
+      expect(OfflineSnapshot.clearOfflineSnapshot).not.toHaveBeenCalled()
+    })
+
+    it('calls clearOfflineSnapshot on a normal (non-fallback) response', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ tournaments: [] }), { status: 200 })
+      )
+
+      await fetchPlayerTournaments('token_abc')
+
+      expect(OfflineSnapshot.clearOfflineSnapshot).toHaveBeenCalledWith('/player/tournaments')
+      expect(OfflineSnapshot.notifyOfflineSnapshot).not.toHaveBeenCalled()
     })
   })
 

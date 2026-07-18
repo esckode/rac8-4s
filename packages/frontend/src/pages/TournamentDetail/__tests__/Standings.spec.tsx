@@ -196,4 +196,33 @@ describe('Standings', () => {
     expect(screen.getByText('Standings')).toBeInTheDocument()
     expect(screen.getByText('1 player registered')).toBeInTheDocument()
   })
+
+  it('shows "Updated HH:MM" when the data came from an offline snapshot (D4)', () => {
+    const updatedAtIso = new Date(2026, 6, 18, 10, 30).toISOString()
+    mockUseTournament.mockReturnValue({
+      tournament: null,
+      standings: [{ playerId: '1', rank: 1, wins: 5, losses: 1, setsWon: 10, setsLost: 3 }],
+      matches: { group: [], knockout: [] },
+      bracket: null,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+      updatedAt: updatedAtIso,
+    } as any)
+
+    mockUsePermissions.mockReturnValue({
+      playerRole: true,
+      organizerRole: false,
+      canEditScores: false,
+      canPublishBracket: false,
+      canManageGroups: false,
+      canViewAllStandings: false,
+    })
+
+    render(<Standings />)
+
+    expect(screen.getByTestId('snapshot-updated-at')).toHaveTextContent('Updated 10:30')
+  })
 })

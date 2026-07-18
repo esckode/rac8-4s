@@ -1,8 +1,9 @@
 /// <reference types="@testing-library/jest-dom" />
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { MyTournamentsHub } from '../MyTournamentsHub'
+import { OfflineSnapshotProvider, notifyOfflineSnapshot } from '../../pwa/OfflineSnapshotContext'
 
 const mockNavigate = jest.fn()
 jest.mock('react-router-dom', () => ({
@@ -76,5 +77,23 @@ describe('MyTournamentsHub (0/1/2+ redirect)', () => {
 
     expect(screen.getByText(/sign in/i)).toBeInTheDocument()
     expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('shows "Updated HH:MM" on the list when /player/tournaments came from an offline snapshot (D4)', async () => {
+    mockFetch.mockResolvedValue([t('t1', 'Alpha'), t('t2', 'Beta')] as any)
+    const updatedAtIso = new Date(2026, 6, 18, 10, 30).toISOString()
+
+    render(
+      <MemoryRouter>
+        <OfflineSnapshotProvider>
+          <MyTournamentsHub tab="standings" />
+        </OfflineSnapshotProvider>
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+
+    act(() => notifyOfflineSnapshot('/player/tournaments', updatedAtIso))
+
+    expect(await screen.findByTestId('snapshot-updated-at')).toHaveTextContent('Updated 10:30')
   })
 })

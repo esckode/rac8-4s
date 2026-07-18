@@ -273,4 +273,59 @@ describe('Matches', () => {
     expect(screen.getByText('Upcoming')).toBeInTheDocument()
     expect(screen.getByText('Completed')).toBeInTheDocument()
   })
+
+  it('shows "Updated HH:MM" when the data came from an offline snapshot (D4)', () => {
+    const updatedAtIso = new Date(2026, 6, 18, 10, 30).toISOString()
+    mockUseTournament.mockReturnValue({
+      tournament: null,
+      standings: [],
+      matches: { group: [createMockMatch({ id: 'm1', status: 'pending' })], knockout: [] },
+      bracket: null,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+      updatedAt: updatedAtIso,
+    } as any)
+    mockUsePermissions.mockReturnValue({
+      playerRole: true,
+      organizerRole: false,
+      canEditScores: false,
+      canPublishBracket: false,
+      canManageGroups: false,
+      canViewAllStandings: false,
+    })
+
+    render(<Matches />)
+
+    expect(screen.getByTestId('snapshot-updated-at')).toHaveTextContent('Updated 10:30')
+  })
+
+  it('does not show the snapshot timestamp when data came from the network', () => {
+    mockUseTournament.mockReturnValue({
+      tournament: null,
+      standings: [],
+      matches: { group: [createMockMatch({ id: 'm1', status: 'pending' })], knockout: [] },
+      bracket: null,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      retryIn: null,
+      cancelAutoRetry: jest.fn(),
+      updatedAt: undefined,
+    } as any)
+    mockUsePermissions.mockReturnValue({
+      playerRole: true,
+      organizerRole: false,
+      canEditScores: false,
+      canPublishBracket: false,
+      canManageGroups: false,
+      canViewAllStandings: false,
+    })
+
+    render(<Matches />)
+
+    expect(screen.queryByTestId('snapshot-updated-at')).not.toBeInTheDocument()
+  })
 })

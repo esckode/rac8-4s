@@ -164,4 +164,25 @@ describe('Bracket', () => {
     expect(submitScore).toHaveBeenCalledWith('t1', 'sf1', '11-9, 11-7', 'tok', 'knockout')
     localStorage.clear()
   })
+
+  it('shows "Updated HH:MM" on the pending-generation message when offline (D4)', () => {
+    const updatedAtIso = new Date(2026, 6, 18, 10, 30).toISOString()
+    mockTournament({ bracket: null, updatedAt: updatedAtIso })
+    asRole('player')
+
+    render(<Bracket />)
+
+    expect(screen.getByTestId('bracket-pending')).toBeInTheDocument()
+    expect(screen.getByTestId('snapshot-updated-at')).toHaveTextContent('Updated 10:30')
+  })
+
+  it('shows "Updated HH:MM" on the match list when offline (D4)', () => {
+    const updatedAtIso = new Date(2026, 6, 18, 10, 30).toISOString()
+    mockTournament({ bracket: { rounds, totalPlayers: 4, byeCount: 0 }, updatedAt: updatedAtIso })
+    asRole('player')
+
+    render(<Bracket />)
+
+    expect(screen.getByTestId('snapshot-updated-at')).toHaveTextContent('Updated 10:30')
+  })
 })
