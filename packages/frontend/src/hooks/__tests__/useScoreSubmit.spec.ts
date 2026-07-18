@@ -57,7 +57,7 @@ describe('useScoreSubmit', () => {
 
   describe('Successful submission', () => {
     it('should transition to submitting then success', async () => {
-      mockSubmitScore.mockResolvedValueOnce(undefined)
+      mockSubmitScore.mockResolvedValueOnce({ queued: false })
 
       const { result } = renderHook(() => useScoreSubmit(tournamentId, matchId))
 
@@ -87,7 +87,7 @@ describe('useScoreSubmit', () => {
     it('should transition to retrying after first failure', async () => {
       mockSubmitScore
         .mockRejectedValueOnce(new Error('Network error'))
-        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({ queued: false })
 
       const { result } = renderHook(() => useScoreSubmit(tournamentId, matchId))
 
@@ -125,7 +125,7 @@ describe('useScoreSubmit', () => {
         .mockRejectedValueOnce(new Error('Attempt 1 failed'))
         .mockRejectedValueOnce(new Error('Attempt 2 failed'))
         .mockRejectedValueOnce(new Error('Attempt 3 failed'))
-        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({ queued: false })
 
       const { result } = renderHook(() => useScoreSubmit(tournamentId, matchId))
 
@@ -217,7 +217,7 @@ describe('useScoreSubmit', () => {
     it('should clear pending retry and reset to idle', async () => {
       mockSubmitScore
         .mockRejectedValueOnce(new Error('Network error'))
-        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({ queued: false })
 
       const { result } = renderHook(() => useScoreSubmit(tournamentId, matchId))
 
@@ -252,7 +252,7 @@ describe('useScoreSubmit', () => {
     it('should reset count and restart from attempt 1 after manual retry', async () => {
       mockSubmitScore
         .mockRejectedValueOnce(new Error('Failed'))
-        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({ queued: false })
 
       const { result } = renderHook(() => useScoreSubmit(tournamentId, matchId))
 
@@ -294,6 +294,32 @@ describe('useScoreSubmit', () => {
     })
   })
 
+  describe('Queued (offline) submission', () => {
+    it('transitions to queued, not success, and never enters the retry loop', async () => {
+      mockSubmitScore.mockResolvedValueOnce({ queued: true })
+
+      const { result } = renderHook(() => useScoreSubmit(tournamentId, matchId))
+
+      act(() => {
+        result.current.submit('6-4')
+      })
+
+      await waitFor(() => {
+        expect(result.current.status).toBe('queued')
+      })
+
+      expect(result.current.error).toBeNull()
+      expect(mockSubmitScore).toHaveBeenCalledTimes(1)
+
+      // No retry timers should fire for a queued (202) result.
+      act(() => {
+        jest.advanceTimersByTime(10000)
+      })
+      expect(mockSubmitScore).toHaveBeenCalledTimes(1)
+      expect(result.current.status).toBe('queued')
+    })
+  })
+
   describe('No-op when not authenticated', () => {
     it('should not submit when user is null', () => {
       mockUseAuth.mockReturnValue({
@@ -317,7 +343,7 @@ describe('useScoreSubmit', () => {
 
   describe('Knockout match type', () => {
     it('should submit to knockout endpoint when matchType is knockout', async () => {
-      mockSubmitScore.mockResolvedValueOnce(undefined)
+      mockSubmitScore.mockResolvedValueOnce({ queued: false })
 
       const { result } = renderHook(() => useScoreSubmit(tournamentId, matchId, 'knockout'))
 

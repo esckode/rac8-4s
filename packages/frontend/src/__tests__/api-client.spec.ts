@@ -4,6 +4,7 @@ import {
   fetchStandings,
   fetchMatches,
   fetchBracket,
+  submitScore,
 } from '../api/client'
 import type { ApiError, PublicTournamentListResponse, OrganizerTournamentListResponse, GroupStandingsResponse, PlayerMatchesResponse, BracketData } from '../types'
 
@@ -414,6 +415,28 @@ describe('API Client', () => {
       await expect(fetchBracket('tour_123')).rejects.toMatchObject({
         status: 404,
       })
+    })
+  })
+
+  describe('submitScore', () => {
+    it('returns { queued: false } on a normal 200 success', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ message: 'ok' }), { status: 200 })
+      )
+
+      const result = await submitScore('tour_123', 'match_1', '11-9, 11-7', 'token_abc')
+
+      expect(result).toEqual({ queued: false })
+    })
+
+    it('returns { queued: true } on a 202 with code QUEUED (offline, SW-synthesized)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ code: 'QUEUED', id: 'q-1' }), { status: 202 })
+      )
+
+      const result = await submitScore('tour_123', 'match_1', '11-9, 11-7', 'token_abc')
+
+      expect(result).toEqual({ queued: true })
     })
   })
 })
