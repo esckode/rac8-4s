@@ -3,15 +3,42 @@ import { randomUUID } from 'crypto'
 import { enqueue, getAll, buildQueuedResponse, replayAll, clear } from '../sync-queue'
 import { VENUE_TTL_MS } from '../venue-cache'
 
-// jsdom's `crypto` has no randomUUID (verified: undefined in this project's
-// jest environment) — the module under test needs a real one.
+// jsdom's `crypto` has no randomUUID, and this jest jsdom environment has no
+// `structuredClone` at all (verified) — fake-indexeddb needs the latter
+// internally for its structured-clone algorithm.
 ;(globalThis as any).crypto.randomUUID = randomUUID
+;(globalThis as any).structuredClone = (value: unknown) => JSON.parse(JSON.stringify(value))
+
+// jsdom has no Response global (verified) — a minimal double matching the
+// real constructor shape, covering what buildQueuedResponse() and
+// replayAll's extractDetail() need (status/ok/clone/json).
+class MockResponse {
+  readonly status: number
+  readonly statusText: string
+  readonly ok: boolean
+  readonly headers: Headers
+  private readonly bodyText: string
+
+  constructor(body = '', init: { status?: number; statusText?: string; headers?: HeadersInit } = {}) {
+    this.bodyText = body
+    this.status = init.status ?? 200
+    this.statusText = init.statusText ?? ''
+    this.ok = this.status >= 200 && this.status < 300
+    this.headers = new Headers(init.headers)
+  }
+
+  clone(): MockResponse {
+    return new MockResponse(this.bodyText, { status: this.status, statusText: this.statusText, headers: this.headers })
+  }
+
+  async json(): Promise<unknown> {
+    return JSON.parse(this.bodyText)
+  }
+}
+(globalThis as any).Response = MockResponse
 
 function mockResponse(status: number, body: unknown = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return new MockResponse(JSON.stringify(body), { status }) as unknown as Response
 }
 
 const SCORE_URL = 'https://example.com/tournaments/t1/matches/m1/score'
@@ -107,6 +134,46 @@ describe('sync-queue', () => {
         tournamentId: 't1',
         matchId: 'm1',
         detail: 'already recorded',
+      })
+    })
+
+    it('removes the entry and notifies rejected with no detail when the body has no message', async () => {
+      await enqueueEntry()
+      const notify = jest.fn()
+      const fetchImpl = jest.fn().mockResolvedValue(mockResponse(409, { code: 'ALREADY_SCORED' }))
+
+      await replayAll(fetchImpl as unknown as typeof fetch, notify)
+
+      expect(notify).toHaveBeenCalledWith({
+        outcome: 'rejected',
+        tournamentId: 't1',
+        matchId: 'm1',
+        detail: undefined,
+      })
+    })
+
+    it('removes the entry and notifies rejected with no detail when the body is not JSON', async () => {
+      await enqueueEntry()
+      const notify = jest.fn()
+      const unparsable = {
+        status: 409,
+        ok: false,
+        clone() {
+          return this
+        },
+        async json() {
+          throw new Error('not json')
+        },
+      }
+      const fetchImpl = jest.fn().mockResolvedValue(unparsable as unknown as Response)
+
+      await replayAll(fetchImpl as unknown as typeof fetch, notify)
+
+      expect(notify).toHaveBeenCalledWith({
+        outcome: 'rejected',
+        tournamentId: 't1',
+        matchId: 'm1',
+        detail: undefined,
       })
     })
 
