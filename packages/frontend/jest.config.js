@@ -17,6 +17,18 @@ module.exports = {
       lines: 80,
       statements: 80,
     },
+    './src/workers/sw-lib/**/*.ts': {
+      branches: 85,
+      functions: 85,
+      lines: 85,
+      statements: 85,
+    },
+    './src/pwa/**/*.{ts,tsx}': {
+      branches: 85,
+      functions: 85,
+      lines: 85,
+      statements: 85,
+    },
   },
   moduleNameMapper: {
     '^@shared/(.*)$': '<rootDir>/../../shared/src/$1',
