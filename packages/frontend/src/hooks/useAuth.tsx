@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { wipePlayerData, notifyLogin } from '../pwa/sw-bridge'
+import { VENUE_TTL_MS } from '../workers/sw-lib/venue-cache'
 
 const API_BASE_URL = ''  // Use relative paths with Vite proxy (/api)
 const TOKEN_KEY = 'auth_token'
 const LAST_PLAYER_KEY = 'last_player_id'
+const SESSION_SNAPSHOT_KEY = 'auth_session_snapshot'
 
 export interface AuthUser {
   id: string
@@ -19,6 +21,9 @@ export interface AuthContextType {
   user: AuthUser | null
   isAuthenticated: boolean
   loading: boolean
+  // D11: true when `user` was restored from a local session snapshot after a
+  // network failure, not a real server validation — cleared on reconnect.
+  offlineUnvalidated: boolean
   login: (email: string, password: string) => Promise<void>
   signup: (email: string, name: string, password: string, token?: string, dobAttestation?: { dateOfBirth: string; policyVersion: string }) => Promise<void>
   forgotPassword: (email: string) => Promise<void>
@@ -49,17 +54,85 @@ interface MeResponse {
   playerId?: string | null
 }
 
+interface AuthSessionSnapshot {
+  user: AuthUser
+  validatedAt: string
+}
+
+// D11 — offline session survival. Written on every successful validation
+// (restore/login/signup); read only when restore hits a network failure or
+// an unexpected 5xx; trusted for VENUE_TTL_MS (48h, reused from D6 — offline
+// identity never outlives the offline data it unlocks). Magic-link tokens
+// are opaque, so this snapshot — not client-side token decoding — is how
+// identity survives being offline.
+function writeSessionSnapshot(user: AuthUser): void {
+  const snapshot: AuthSessionSnapshot = { user, validatedAt: new Date().toISOString() }
+  localStorage.setItem(SESSION_SNAPSHOT_KEY, JSON.stringify(snapshot))
+}
+
+function readTrustedSessionSnapshot(): AuthSessionSnapshot | null {
+  const raw = localStorage.getItem(SESSION_SNAPSHOT_KEY)
+  if (!raw) return null
+  try {
+    const snapshot = JSON.parse(raw) as AuthSessionSnapshot
+    const age = Date.now() - new Date(snapshot.validatedAt).getTime()
+    return age <= VENUE_TTL_MS ? snapshot : null
+  } catch {
+    return null
+  }
+}
+
+function clearSessionSnapshot(): void {
+  localStorage.removeItem(SESSION_SNAPSHOT_KEY)
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }): React.ReactElement {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [offlineUnvalidated, setOfflineUnvalidated] = useState(false)
 
-  useEffect(() => {
-    // Try a magic-link player session when the token is not an account JWT.
-    // Returns true if the token is a valid player session (user is set).
-    const restorePlayerSession = async (token: string): Promise<boolean> => {
-      const response = await fetch(`${API_BASE_URL}/player/session`, {
+  // D11: a network failure (or unexpected 5xx) during restore is not proof
+  // the token is invalid — only a real 401 is. On failure, restore identity
+  // from the trusted snapshot if one exists; never delete the token here.
+  const handleUnvalidatedFailure = useCallback((): void => {
+    const snapshot = readTrustedSessionSnapshot()
+    if (snapshot) {
+      setUser(snapshot.user)
+      setOfflineUnvalidated(true)
+    } else {
+      setUser(null)
+      setOfflineUnvalidated(false)
+    }
+  }, [])
+
+  // Try a magic-link player session when the token is not an account JWT.
+  // Returns true if the token is a valid player session (user is set).
+  const restorePlayerSession = useCallback(async (token: string): Promise<boolean> => {
+    const response = await fetch(`${API_BASE_URL}/player/session`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      return false
+    }
+
+    const data = (await response.json()) as { playerId: string; tournamentId: string }
+    const restoredUser: AuthUser = { id: data.playerId, email: '', role: 'player', playerId: data.playerId }
+    setUser(restoredUser)
+    setOfflineUnvalidated(false)
+    writeSessionSnapshot(restoredUser)
+    return true
+  }, [])
+
+  const restoreSession = useCallback(async (token: string): Promise<void> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -67,59 +140,70 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
         },
       })
 
-      if (!response.ok) {
-        return false
-      }
-
-      const data = (await response.json()) as { playerId: string; tournamentId: string }
-      setUser({ id: data.playerId, email: '', role: 'player', playerId: data.playerId })
-      return true
-    }
-
-    const restoreSession = async (token: string): Promise<void> => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        })
-
-        if (response.ok) {
-          const userData = (await response.json()) as MeResponse
-          setUser({
-            id: userData.id,
-            email: userData.email,
-            role: userData.role as AuthUser['role'],
-            playerId: userData.playerId ?? null,
-          })
-        } else if (response.status === 401) {
-          // Not an account JWT — fall back to a magic-link player session
-          const playerRestored = await restorePlayerSession(token)
-          if (!playerRestored) {
-            localStorage.removeItem(TOKEN_KEY)
-            setUser(null)
-          }
-        } else {
-          throw new Error(`Unexpected response status: ${response.status}`)
+      if (response.ok) {
+        const userData = (await response.json()) as MeResponse
+        const restoredUser: AuthUser = {
+          id: userData.id,
+          email: userData.email,
+          role: userData.role as AuthUser['role'],
+          playerId: userData.playerId ?? null,
         }
-      } catch (error) {
-        // Network error or other issue, clear token to be safe
-        localStorage.removeItem(TOKEN_KEY)
-        setUser(null)
-      } finally {
-        setLoading(false)
+        setUser(restoredUser)
+        setOfflineUnvalidated(false)
+        writeSessionSnapshot(restoredUser)
+        return
       }
-    }
 
+      if (response.status === 401) {
+        // Not an account JWT — fall back to a magic-link player session
+        const playerRestored = await restorePlayerSession(token)
+        if (!playerRestored) {
+          localStorage.removeItem(TOKEN_KEY)
+          clearSessionSnapshot()
+          setUser(null)
+          setOfflineUnvalidated(false)
+        }
+        return
+      }
+
+      // Unexpected non-401 status (e.g. 5xx): D11 treats this like a network
+      // failure, not a rejection — the server didn't actually reject the token.
+      handleUnvalidatedFailure()
+    } catch (error) {
+      // Network error (offline/unreachable) — D11: never delete the token.
+      handleUnvalidatedFailure()
+    } finally {
+      setLoading(false)
+    }
+  }, [restorePlayerSession, handleUnvalidatedFailure])
+
+  useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY)
     if (token) {
       restoreSession(token)
     } else {
       setLoading(false)
     }
-  }, [])
+  }, [restoreSession])
+
+  // D11: revalidate once connectivity returns while running on an
+  // offline-unvalidated snapshot. A genuine 401 here means the token really
+  // was invalid — clear it (+ snapshot) and extend the D5 wipe to this path.
+  useEffect(() => {
+    if (!offlineUnvalidated) return undefined
+
+    const handleOnline = async (): Promise<void> => {
+      const token = localStorage.getItem(TOKEN_KEY)
+      if (!token) return
+      await restoreSession(token)
+      if (!localStorage.getItem(TOKEN_KEY)) {
+        await wipePlayerData()
+      }
+    }
+
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
+  }, [offlineUnvalidated, restoreSession])
 
   const login = useCallback(async (email: string, password: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
@@ -154,6 +238,8 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
     localStorage.setItem(LAST_PLAYER_KEY, newPlayerKey)
 
     setUser(data.user)
+    setOfflineUnvalidated(false)
+    writeSessionSnapshot(data.user)
     notifyLogin()
   }, [])
 
@@ -183,6 +269,8 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
         const data = (await response.json()) as SignupResponse
         localStorage.setItem(TOKEN_KEY, data.token)
         setUser(data.user)
+        setOfflineUnvalidated(false)
+        writeSessionSnapshot(data.user)
       } finally {
         setLoading(false)
       }
@@ -237,7 +325,9 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
       }
     } finally {
       localStorage.removeItem(TOKEN_KEY)
+      clearSessionSnapshot()
       setUser(null)
+      setOfflineUnvalidated(false)
     }
   }, [])
 
@@ -245,6 +335,7 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
     user,
     isAuthenticated: !!user,
     loading,
+    offlineUnvalidated,
     login,
     signup,
     forgotPassword,

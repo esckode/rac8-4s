@@ -135,7 +135,7 @@ describe('useAuth', () => {
       expect(localStorage.getItem('auth_token')).toBeNull()
     })
 
-    it('clears token on network error during session restoration', async () => {
+    it('signs the UI out but keeps the token on network error (D11 — superseded "clear on any failure")', async () => {
       (global.fetch as jest.Mock).mockRejectedValueOnce(
         new Error('Network error')
       )
@@ -149,7 +149,9 @@ describe('useAuth', () => {
       })
 
       expect(result.current.user).toBeNull()
-      expect(localStorage.getItem('auth_token')).toBeNull()
+      // D11: a network failure is not proof the token is invalid — it's kept
+      // for offline restoration/revalidation, not deleted like an explicit 401.
+      expect(localStorage.getItem('auth_token')).toBe('some-token')
     })
 
     it('restores a magic-link player session when /me does not recognize the token', async () => {
