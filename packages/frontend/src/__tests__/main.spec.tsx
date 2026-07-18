@@ -16,6 +16,9 @@ jest.mock('@tanstack/react-query', () => ({
 jest.mock('../pwa/register', () => ({
   initPwa: jest.fn(),
 }))
+jest.mock('../pwa/sw-bridge', () => ({
+  initSwBridge: jest.fn(),
+}))
 
 describe('main entry point', () => {
   beforeEach(() => {
@@ -34,6 +37,13 @@ describe('main entry point', () => {
 
     expect(initPwa).toHaveBeenCalledTimes(1)
     expect(registerMock).not.toHaveBeenCalled()
+  })
+
+  it('wires up the SW bridge (initSwBridge) so replay results and reconnect triggers work', async () => {
+    await import('../main')
+    const { initSwBridge } = await import('../pwa/sw-bridge')
+
+    expect(initSwBridge).toHaveBeenCalledTimes(1)
   })
 
   it('throws if the root element is missing', async () => {
