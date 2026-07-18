@@ -26,14 +26,18 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       // pwa-*.spec.ts need a production build (injectManifest SW + module-SW support) —
       // they run only on the `pwa` project below, against `vite preview`.
-      testIgnore: '**/pwa-*.spec.ts',
+      // Project-level testIgnore replaces (does not merge with) the root config's, so
+      // the root exclusions must be repeated here too.
+      testIgnore: ['**/TEMPLATE.spec.ts', '**/multi-instance/**', '**/pwa-*.spec.ts'],
     },
     {
       name: 'firefox',
       use: { ...devices['Desktop Firefox'] },
       // Module service workers (devOptions type: 'module') don't run on Firefox dev;
       // the pwa project is chromium-only against the classic-built prod SW.
-      testIgnore: '**/pwa-*.spec.ts',
+      // Project-level testIgnore replaces (does not merge with) the root config's, so
+      // the root exclusions must be repeated here too.
+      testIgnore: ['**/TEMPLATE.spec.ts', '**/multi-instance/**', '**/pwa-*.spec.ts'],
     },
     {
       name: 'pwa',
