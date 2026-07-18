@@ -113,9 +113,11 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
         data-testid="score-submit-form"
         className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-4] space-y-[--s-3]"
       >
-        <p data-testid="score-pending-badge" className="text-sm font-medium text-[--ink-700]">
-          Saved offline — will send when connected
-        </p>
+        {(!replayOutcome || replayOutcome === 'needs-auth') && (
+          <p data-testid="score-pending-badge" className="text-sm font-medium text-[--ink-700]">
+            Saved offline — will send when connected
+          </p>
+        )}
 
         {replayOutcome && (
           <p
