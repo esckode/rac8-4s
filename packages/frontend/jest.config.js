@@ -21,6 +21,7 @@ module.exports = {
   moduleNameMapper: {
     '^@shared/(.*)$': '<rootDir>/../../shared/src/$1',
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
+    '^virtual:pwa-register$': '<rootDir>/src/__tests__/mocks/pwa-register.ts',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
