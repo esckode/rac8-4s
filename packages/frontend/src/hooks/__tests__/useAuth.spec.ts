@@ -849,6 +849,79 @@ describe('useAuth', () => {
       expect(result.current.user).toBeNull()
       expect(localStorage.getItem('auth_token')).toBeNull()
     })
+
+    it('does not resurrect the session snapshot when logout races an in-flight restore (account JWT)', async () => {
+      // Full page load of /signout: the provider mount kicks off restoreSession
+      // while the Signout page calls logout(). Logout finishes first (one fetch),
+      // then the late restore success must NOT re-write the snapshot it just wiped.
+      let resolveMe!: (value: unknown) => void
+      const mePromise = new Promise((resolve) => {
+        resolveMe = resolve
+      })
+      ;(global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/api/auth/me')) return mePromise
+        if (url.includes('/api/auth/logout')) {
+          return Promise.resolve({ ok: true, json: async () => ({}) })
+        }
+        return Promise.resolve({ ok: false, status: 404, json: async () => ({}) })
+      })
+
+      localStorage.setItem('auth_token', 'some-token')
+      const { result } = renderWithAuthProvider(() => useAuth())
+
+      await act(async () => {
+        await result.current.logout()
+      })
+      expect(localStorage.getItem('auth_session_snapshot')).toBeNull()
+
+      await act(async () => {
+        resolveMe({
+          ok: true,
+          json: async () => ({ id: 'user-123', email: 'late@example.com', role: 'player', playerId: 'p-1' }),
+        })
+      })
+
+      expect(localStorage.getItem('auth_session_snapshot')).toBeNull()
+      expect(result.current.user).toBeNull()
+      expect(localStorage.getItem('auth_token')).toBeNull()
+    })
+
+    it('does not resurrect the snapshot when logout races the magic-link fallback restore', async () => {
+      // Same race, player persona: /api/auth/me 401s immediately, the
+      // /player/session fallback is still in flight when logout completes.
+      let resolvePlayerSession!: (value: unknown) => void
+      const playerSessionPromise = new Promise((resolve) => {
+        resolvePlayerSession = resolve
+      })
+      ;(global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('/api/auth/me')) {
+          return Promise.resolve({ ok: false, status: 401, json: async () => ({}) })
+        }
+        if (url.includes('/player/session')) return playerSessionPromise
+        if (url.includes('/api/auth/logout')) {
+          return Promise.resolve({ ok: true, json: async () => ({}) })
+        }
+        return Promise.resolve({ ok: false, status: 404, json: async () => ({}) })
+      })
+
+      localStorage.setItem('auth_token', 'opaque-magic-link-token')
+      const { result } = renderWithAuthProvider(() => useAuth())
+
+      await act(async () => {
+        await result.current.logout()
+      })
+      expect(localStorage.getItem('auth_session_snapshot')).toBeNull()
+
+      await act(async () => {
+        resolvePlayerSession({
+          ok: true,
+          json: async () => ({ playerId: 'player-99', tournamentId: 't-1' }),
+        })
+      })
+
+      expect(localStorage.getItem('auth_session_snapshot')).toBeNull()
+      expect(result.current.user).toBeNull()
+    })
   })
 
   describe('forgotPassword', () => {

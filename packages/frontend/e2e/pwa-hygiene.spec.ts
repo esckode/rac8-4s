@@ -31,10 +31,12 @@ async function readVenueCacheAndQueueState(page: any): Promise<{
   venueCacheKeys: string[]
   queueCount: number
   taintedUrls: string[]
+  sessionSnapshot: string | null
 }> {
   return page.evaluate(async () => {
     const cacheNames = await caches.keys()
     const venueCacheKeys = cacheNames.filter((n) => n.includes('venue-data'))
+    const sessionSnapshot = localStorage.getItem('auth_session_snapshot')
 
     const taintedUrls: string[] = []
     for (const name of cacheNames) {
@@ -67,7 +69,7 @@ async function readVenueCacheAndQueueState(page: any): Promise<{
       }
     })
 
-    return { venueCacheKeys, queueCount, taintedUrls }
+    return { venueCacheKeys, queueCount, taintedUrls, sessionSnapshot }
   })
 }
 
@@ -107,6 +109,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — hygiene', () => {
 
     const before = await readVenueCacheAndQueueState(page)
     expect(before.venueCacheKeys.length).toBeGreaterThan(0)
+    expect(before.sessionSnapshot).not.toBeNull()
 
     await page.goto('/signout')
     await page.waitForURL('/')
@@ -114,6 +117,7 @@ test.describe('Feature: PWA Venue Mode (Offline) — hygiene', () => {
     const after = await readVenueCacheAndQueueState(page)
     expect(after.venueCacheKeys).toEqual([])
     expect(after.queueCount).toBe(0)
+    expect(after.sessionSnapshot).toBeNull()
   })
 
   test('Scenario: No token-bearing URL is ever cached', async ({ page }) => {
