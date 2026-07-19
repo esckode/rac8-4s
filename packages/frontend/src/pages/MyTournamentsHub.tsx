@@ -102,9 +102,17 @@ export const MyTournamentsHub: React.FC<{ tab: HubTab }> = ({ tab }) => {
       )}
 
       {!loading && !error && tournaments.length === 0 && (
-        <div className="text-center py-[--s-12] rounded-[--r-lg] border border-dashed border-[--border] bg-[--ink-50]">
+        <div
+          data-testid="empty-state"
+          className="text-center py-[--s-12] rounded-[--r-lg] border border-dashed border-[--border] bg-[--ink-50]"
+        >
           <p className="text-lg text-[--ink-600]">No tournaments yet</p>
-          <p className="text-sm text-[--ink-500] mt-[--s-2]">Browse available tournaments to register</p>
+          <Link
+            to="/browse"
+            className="inline-block mt-[--s-2] text-sm font-medium text-[--court-600] underline"
+          >
+            Browse available tournaments to register
+          </Link>
         </div>
       )}
 
