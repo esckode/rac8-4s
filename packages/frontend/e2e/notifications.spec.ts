@@ -101,14 +101,15 @@ test.describe('Feature: Notifications Center', () => {
     await loginFrontend(page, mentionedToken)
     await page.goto('http://localhost:5173/browse')
     await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveCount(0)
-    // useNotificationUnread's SSE connection (ReconnectingEventSource) needs a
-    // moment to actually open — sending the mention before it's connected
-    // means the message.created event has no listener to reach.
-    await page.waitForTimeout(1000)
 
     // Another member posts a message targeting them (an @mention) while they
-    // are on a different page — the badge must update without a reload.
+    // are on a different page. useNotificationUnread refetches on mount +
+    // window refocus (no persistent SSE connection — see the hook's comment:
+    // an app-wide connection broke Playwright's `networkidle` wait on every
+    // authenticated route), so returning to the app (a refocus) is what
+    // surfaces it, without a full page reload.
     await sendGroupMessage(ownerToken, groupId, `Hey @${mentioned.name} check this out`)
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
 
     await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toBeVisible({ timeout: 8000 })
     await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveText('1')
@@ -212,9 +213,9 @@ test.describe('Feature: Notifications Center', () => {
     // Owner @mentions the now-muted player.
     await sendGroupMessage(ownerToken, groupId, `Hey @${muted.name}, are you there?`)
 
-    // Give the (fire-and-forget) notification pipeline a moment, then confirm
-    // no notification landed — badge stays absent.
-    await page.waitForTimeout(1500)
+    // Force a refetch (see the badge-update scenario above) and confirm no
+    // notification landed — badge stays absent.
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
     await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveCount(0)
 
     await page.goto('http://localhost:5173/notifications')

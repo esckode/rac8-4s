@@ -1,77 +1,49 @@
-import { renderHook, waitFor, act } from '@testing-library/react'
+/**
+ * useNotificationUnread — fetch-on-mount + refocus (matches usePendingActions;
+ * see the hook's own comment for why this isn't SSE-backed).
+ */
+import { renderHook, waitFor } from '@testing-library/react'
 import { useNotificationUnread } from '../useNotificationUnread'
 import { notificationUnreadStore } from '../../state/notification-unread-state'
 
-let esListeners: Record<string, (event: unknown) => void> = {}
-const closeMock = jest.fn()
-
-jest.mock('reconnecting-eventsource', () => {
-  return jest.fn().mockImplementation(() => ({
-    addEventListener: jest.fn((event: string, cb: (event: unknown) => void) => {
-      esListeners[event] = cb
-    }),
-    close: closeMock,
-  }))
-})
+const mockFetch = jest.fn()
+global.fetch = mockFetch
 
 describe('useNotificationUnread', () => {
   beforeEach(() => {
-    esListeners = {}
-    closeMock.mockClear()
-    localStorage.setItem('auth_token', 'test-tok')
+    jest.clearAllMocks()
+    localStorage.clear()
     notificationUnreadStore.clear()
   })
 
-  afterEach(() => {
-    localStorage.clear()
-    delete (global as any).fetch
+  it('does nothing without a stored token', () => {
+    renderHook(() => useNotificationUnread())
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('seeds the count from GET /player/notifications/unread on mount', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ unread: 4 }),
-    } as Response)
+    localStorage.setItem('auth_token', 'test-tok')
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ unread: 4 }) })
 
     const { result } = renderHook(() => useNotificationUnread())
 
     await waitFor(() => expect(result.current).toBe(4))
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/player/notifications/unread',
+      expect.objectContaining({ headers: { Authorization: 'Bearer test-tok' } })
+    )
   })
 
-  it('increments on a message.created SSE event', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ unread: 0 }),
-    } as Response)
-
+  it('refetches on window focus', async () => {
+    localStorage.setItem('auth_token', 'test-tok')
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ unread: 0 }) })
     const { result } = renderHook(() => useNotificationUnread())
-    await waitFor(() => expect(result.current).toBe(0))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
 
-    act(() => {
-      esListeners['message.created']?.({})
-    })
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ unread: 2 }) })
+    window.dispatchEvent(new Event('focus'))
 
-    await waitFor(() => expect(result.current).toBe(1))
-  })
-
-  it('closes the SSE connection on unmount', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ unread: 0 }),
-    } as Response)
-
-    const { unmount } = renderHook(() => useNotificationUnread())
-    await waitFor(() => expect(closeMock).not.toHaveBeenCalled())
-    unmount()
-    expect(closeMock).toHaveBeenCalled()
-  })
-
-  it('does nothing without a stored token', () => {
-    localStorage.clear()
-    global.fetch = jest.fn()
-
-    renderHook(() => useNotificationUnread())
-
-    expect(global.fetch).not.toHaveBeenCalled()
+    await waitFor(() => expect(result.current).toBe(2))
+    expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 })

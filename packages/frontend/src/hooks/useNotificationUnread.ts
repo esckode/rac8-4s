@@ -2,13 +2,14 @@
  * useNotificationUnread — P2.3
  *
  * Returns the unread count for the player's personal notification thread.
- * Fetches once on mount to seed the count, then keeps it live via an SSE
- * connection to /player/notifications/events (mirrors useCoachMessages'
- * connection pattern) so the nav badge updates while the player is on any
- * other page — cleared by Notifications.tsx once the player marks read.
+ * Fetches on mount + window refocus (matching usePendingActions) — no
+ * persistent SSE connection. Unlike the group/coach chat SSE hooks, which
+ * only connect while their specific panel is open, this badge is mounted
+ * app-wide (ResponsiveLayout), so a permanent connection here never idles:
+ * it broke Playwright's `networkidle` wait on every authenticated route.
+ * Cleared by Notifications.tsx once the player marks read.
  */
-import { useEffect, useState } from 'react'
-import ReconnectingEventSource from 'reconnecting-eventsource'
+import { useCallback, useEffect, useState } from 'react'
 import { notificationUnreadStore } from '../state/notification-unread-state'
 
 export function useNotificationUnread(): number {
@@ -19,27 +20,23 @@ export function useNotificationUnread(): number {
     return unsub
   }, [])
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     const token = localStorage.getItem('auth_token')
-    if (!token) return undefined
+    if (!token) return
 
     fetch('/player/notifications/unread', {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(r => r.ok ? r.json() : { unread: 0 })
+      .then(r => (r.ok ? r.json() : { unread: 0 }))
       .then((data: { unread: number }) => notificationUnreadStore.set(data.unread))
       .catch(() => {})
-
-    const url = `/player/notifications/events?token=${encodeURIComponent(token)}`
-    const es = new ReconnectingEventSource(url, { maxReconnectionDelay: 8000 } as any)
-    es.addEventListener('message.created', () => {
-      notificationUnreadStore.increment()
-    })
-
-    return () => {
-      es.close()
-    }
   }, [])
+
+  useEffect(() => {
+    refetch()
+    window.addEventListener('focus', refetch)
+    return () => window.removeEventListener('focus', refetch)
+  }, [refetch])
 
   return unread
 }

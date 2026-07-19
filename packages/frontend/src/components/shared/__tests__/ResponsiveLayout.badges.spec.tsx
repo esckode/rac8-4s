@@ -12,15 +12,6 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '../../../hooks/useAuth'
 import { ResponsiveLayout } from '../ResponsiveLayout'
 
-// useNotificationUnread opens a live SSE connection (P2.3) — jsdom has no
-// native EventSource, so this must be mocked wherever ResponsiveLayout renders.
-jest.mock('reconnecting-eventsource', () => {
-  return jest.fn().mockImplementation(() => ({
-    addEventListener: jest.fn(),
-    close: jest.fn(),
-  }))
-})
-
 const mockFetch = jest.fn()
 global.fetch = mockFetch
 
