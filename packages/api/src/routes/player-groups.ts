@@ -316,7 +316,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         } catch (err) {
           if (err instanceof AgeAttestationRequiredError || err instanceof UnderAgeError) {
             return res.status(400).json({
-              code: err instanceof UnderAgeError ? 'UNDERAGE' : 'AGE_ATTESTATION_REQUIRED',
+              code: err instanceof UnderAgeError ? 'UNDER_AGE' : 'AGE_ATTESTATION_REQUIRED',
               message: err.message,
             })
           }

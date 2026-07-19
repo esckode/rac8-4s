@@ -1,6 +1,6 @@
 /**
  * Tests for the age-gate (P1.8) overlay wired into tournament registration.
- * Verifies: AGE_ATTESTATION_REQUIRED → DobScreen; UNDERAGE → terminal; re-submit.
+ * Verifies: AGE_ATTESTATION_REQUIRED → DobScreen; UNDER_AGE → terminal; re-submit.
  */
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -72,11 +72,17 @@ describe('TournamentBrowse age-gate (P1.8)', () => {
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(3)) // 1 GET + 2 POSTs
     const lastCall = (global.fetch as jest.Mock).mock.calls[2]
     const body = JSON.parse((lastCall[1] as RequestInit).body as string)
-    expect(body.dobAttestation).toMatchObject({ dateOfBirth: '2000-01-01' })
+    expect(body.dob_attestation).toMatchObject({ dateOfBirth: '2000-01-01' })
+
+    // A successful retry must dismiss the age gate — otherwise DobScreen's own
+    // render-order check (ageGatePhase === 'required') keeps winning forever,
+    // hiding the success message that doRegister already set behind it.
+    await waitFor(() => expect(screen.queryByTestId('dob-heading')).not.toBeInTheDocument())
+    expect(screen.getByText(/check your email/i)).toBeInTheDocument()
   })
 
-  it('shows terminal underage message on UNDERAGE', async () => {
-    setupFetch([{ ok: false, body: { code: 'UNDERAGE' } }])
+  it('shows terminal underage message on UNDER_AGE', async () => {
+    setupFetch([{ ok: false, body: { code: 'UNDER_AGE' } }])
     renderPage()
     await fillAndRegister()
     await waitFor(() =>

@@ -13,9 +13,9 @@ describe('useAgeGate', () => {
     expect(result.current.ageGatePhase).toBe('required')
   })
 
-  it('transitions to underage on UNDERAGE', () => {
+  it('transitions to underage on UNDER_AGE', () => {
     const { result } = renderHook(() => useAgeGate())
-    act(() => result.current.handleAgeCode('UNDERAGE'))
+    act(() => result.current.handleAgeCode('UNDER_AGE'))
     expect(result.current.ageGatePhase).toBe('underage')
   })
 

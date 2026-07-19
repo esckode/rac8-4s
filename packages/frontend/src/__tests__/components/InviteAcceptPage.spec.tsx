@@ -138,16 +138,16 @@ describe('InviteAcceptPage', () => {
     expect(secondBody.ageAttestation.policyVersion).toBe('v1')
   })
 
-  // ── UNDERAGE ──────────────────────────────────────────────────────────────
+  // ── UNDER_AGE ─────────────────────────────────────────────────────────────
 
-  it('shows terminal rejection on UNDERAGE response', async () => {
-    mockFetch(400, { code: 'UNDERAGE', message: 'You must be 18 or older' })
+  it('shows terminal rejection on UNDER_AGE response', async () => {
+    mockFetch(400, { code: 'UNDER_AGE', message: 'You must be 18 or older' })
     renderPage()
     await waitFor(() => expect(screen.getByTestId('invite-underage')).toBeInTheDocument())
   })
 
-  it('UNDERAGE state does not store a token or redirect', async () => {
-    mockFetch(400, { code: 'UNDERAGE', message: 'You must be 18 or older' })
+  it('UNDER_AGE state does not store a token or redirect', async () => {
+    mockFetch(400, { code: 'UNDER_AGE', message: 'You must be 18 or older' })
     renderPage()
     await waitFor(() => screen.getByTestId('invite-underage'))
     expect(localStorage.getItem('auth_token')).toBeNull()

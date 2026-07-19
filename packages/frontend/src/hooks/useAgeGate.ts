@@ -7,7 +7,7 @@ export function useAgeGate() {
 
   const handleAgeCode = (code: string) => {
     if (code === 'AGE_ATTESTATION_REQUIRED') setAgeGatePhase('required')
-    else if (code === 'UNDERAGE') setAgeGatePhase('underage')
+    else if (code === 'UNDER_AGE') setAgeGatePhase('underage')
   }
 
   const dismissAgeGate = () => setAgeGatePhase('none')

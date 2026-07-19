@@ -62,7 +62,7 @@ export const InviteAcceptPage: React.FC = () => {
         } else {
           const code = data.code ?? ''
           if (code === 'AGE_ATTESTATION_REQUIRED') setPhase('age_required')
-          else if (code === 'UNDERAGE') setPhase('underage')
+          else if (code === 'UNDER_AGE') setPhase('underage')
           else if (code === 'NOT_FOUND') setPhase('not_found')
           else setPhase('token_invalid')
         }

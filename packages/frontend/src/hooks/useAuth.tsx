@@ -253,36 +253,40 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
 
   const signup = useCallback(
     async (email: string, name: string, password: string, token?: string, dobAttestation?: { dateOfBirth: string; policyVersion: string }): Promise<void> => {
-      setLoading(true)
-      try {
-        const body: Record<string, unknown> = { email, name, password }
-        if (token !== undefined) body.token = token
-        if (dobAttestation) body.dobAttestation = dobAttestation
+      // Deliberately does not touch the shared `loading` flag: that flag gates
+      // PublicRoute/ProtectedRoute's one-time initial-session-restore check, and
+      // toggling it here swaps their rendered branch (spinner <-> children),
+      // unmounting Signup mid-submit and discarding its age-gate retry state
+      // (the AGE_ATTESTATION_REQUIRED -> DobScreen flow, verified live: the
+      // remount always reset ageGatePhase back to 'none' before it could
+      // render). Signup.tsx already tracks its own submit-in-progress state
+      // locally for the button's disabled/label UI.
+      const body: Record<string, unknown> = { email, name, password }
+      if (token !== undefined) body.token = token
+      // Snake_case — matches the backend's req.body.dob_attestation exactly.
+      if (dobAttestation) body.dob_attestation = dobAttestation
 
-        const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        })
+      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ message: 'Signup failed' }))
-          const err = new Error(errorData.message || `Signup failed with status ${response.status}`) as Error & { code?: string }
-          err.code = errorData.code
-          throw err
-        }
-
-        const data = (await response.json()) as SignupResponse
-        localStorage.setItem(TOKEN_KEY, data.token)
-        signedOutRef.current = false
-        setUser(data.user)
-        setOfflineUnvalidated(false)
-        writeSessionSnapshot(data.user)
-      } finally {
-        setLoading(false)
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Signup failed' }))
+        const err = new Error(errorData.message || `Signup failed with status ${response.status}`) as Error & { code?: string }
+        err.code = errorData.code
+        throw err
       }
+
+      const data = (await response.json()) as SignupResponse
+      localStorage.setItem(TOKEN_KEY, data.token)
+      signedOutRef.current = false
+      setUser(data.user)
+      setOfflineUnvalidated(false)
+      writeSessionSnapshot(data.user)
     },
     []
   )

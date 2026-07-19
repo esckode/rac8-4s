@@ -140,19 +140,14 @@ export default function authRouter(deps: AppDependencies) {
         })
       }
 
-      // Step 4: Hash password with bcryptjs (10 salt rounds)
-      const passwordHash = await hashPassword(password, 10)
-
-      // Step 5: Create account
-      const account = await accountRepo.create(email, 'player', 'active')
-
-      // Step 5b: Update password hash
-      await accountRepo.updatePasswordHash(account.id, passwordHash)
-
-      // Step 5c: Claim/create the durable player identity by email and link it.
-      // This makes a registered user act as one player across tournaments and
-      // claims any prior guest play under the same (normalized) email.
-      // On the creation path the 18+ gate is enforced here.
+      // Step 4: Claim/create the durable player identity by email. This makes a
+      // registered user act as one player across tournaments and claims any prior
+      // guest play under the same (normalized) email. On the creation path the
+      // 18+ gate is enforced here — checked BEFORE any account/password work so a
+      // rejection (first submit, no attestation yet) leaves no side effects. The
+      // designed retry (submit again with a DOB from DobScreen) previously hit
+      // this same email as an already-existing account and 409'd as DUPLICATE_EMAIL,
+      // because the account used to be created before this check.
       let player
       try {
         player = await playerRepo.findOrCreatePlayerByEmail(email, name, undefined, undefined, ageAttestation)
@@ -165,9 +160,20 @@ export default function authRouter(deps: AppDependencies) {
         }
         throw err
       }
+
+      // Step 5: Hash password with bcryptjs (10 salt rounds)
+      const passwordHash = await hashPassword(password, 10)
+
+      // Step 6: Create account
+      const account = await accountRepo.create(email, 'player', 'active')
+
+      // Step 6b: Update password hash
+      await accountRepo.updatePasswordHash(account.id, passwordHash)
+
+      // Step 6c: Link the account to the player claimed/created in Step 4.
       await accountRepo.linkPlayer(account.id, player.id)
 
-      // Step 6: Generate JWT session token (carries playerId so the account can
+      // Step 7: Generate JWT session token (carries playerId so the account can
       // act as the player on player-scoped endpoints)
       const sessionToken = issueSessionToken(
         {
@@ -180,7 +186,7 @@ export default function authRouter(deps: AppDependencies) {
         deps.jwtConfig.secret
       )
 
-      // Step 7: If magic link was used, log the tournament registration
+      // Step 8: If magic link was used, log the tournament registration
       if (magicPayload && magicPayload.tournamentId) {
         log.info('tournament.signup_magic_link', {
           accountId: account.id,
@@ -189,14 +195,14 @@ export default function authRouter(deps: AppDependencies) {
         })
       }
 
-      // Step 8: Log success
+      // Step 9: Log success
       log.info('account.created', {
         accountId: account.id,
         email: account.email,
         role: account.role
       })
 
-      // Step 9: Return 201 with user and token
+      // Step 10: Return 201 with user and token
       return res.status(201).json({
         user: {
           id: account.id,

@@ -64,20 +64,27 @@ export const TournamentBrowse: React.FC = () => {
     setSuccessMessage(null)
     try {
       const body: Record<string, unknown> = { email, name }
-      if (attestation) body.dobAttestation = attestation
+      // Snake_case — matches the backend's req.body.dob_attestation exactly.
+      if (attestation) body.dob_attestation = attestation
       const res = await fetch(`/tournaments/${tournamentId}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       if (res.ok) {
+        // A successful retry from DobScreen (ageGatePhase === 'required') must
+        // dismiss the gate too — otherwise the component keeps rendering
+        // DobScreen forever, since that check runs before the success message
+        // ever gets a chance to render (unlike Signup.tsx, which masks this by
+        // navigating away on success instead of showing an inline message).
+        dismissAgeGate()
         setSuccessMessage('Check your email to complete your registration.')
         return
       }
       let errorBody: { code?: string; message?: string } = {}
       try { errorBody = await res.json() } catch { /* ignore */ }
       const code = errorBody.code ?? ''
-      if (code === 'AGE_ATTESTATION_REQUIRED' || code === 'UNDERAGE') {
+      if (code === 'AGE_ATTESTATION_REQUIRED' || code === 'UNDER_AGE') {
         handleAgeCode(code)
         return
       }

@@ -148,7 +148,7 @@ export function Signup() {
       navigate('/browse');
     } catch (error) {
       const code = (error as { code?: string }).code;
-      if (code === 'AGE_ATTESTATION_REQUIRED' || code === 'UNDERAGE') {
+      if (code === 'AGE_ATTESTATION_REQUIRED' || code === 'UNDER_AGE') {
         handleAgeCode(code);
         setLoading(false);
         return;

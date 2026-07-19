@@ -1,6 +1,6 @@
 /**
  * Tests for the age-gate (P1.8) overlay wired into the Signup page.
- * Verifies: AGE_ATTESTATION_REQUIRED → DobScreen; UNDERAGE → terminal; re-submit with attestation.
+ * Verifies: AGE_ATTESTATION_REQUIRED → DobScreen; UNDER_AGE → terminal; re-submit with attestation.
  */
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -65,8 +65,8 @@ describe('Signup age-gate (P1.8)', () => {
     expect(attestation).toMatchObject({ dateOfBirth: '2000-01-01' })
   })
 
-  it('shows terminal underage message on UNDERAGE', async () => {
-    const err = Object.assign(new Error('Underage'), { code: 'UNDERAGE' })
+  it('shows terminal underage message on UNDER_AGE', async () => {
+    const err = Object.assign(new Error('Underage'), { code: 'UNDER_AGE' })
     mockSignup.mockRejectedValueOnce(err)
 
     renderSignup()
