@@ -26,6 +26,7 @@ import { InMemoryJobQueue } from '@worker/job-queue'
 import { generatePlayerSession } from '../../auth/magic-link'
 import { PlayerRepository } from '../../db'
 import { defaultAdultAttestation } from '../factories/player.factory'
+import { ConversationRepository } from '../../repositories/conversation-repository'
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -342,5 +343,121 @@ describe('G2.4 — group notify: sender excluded from notify jobs', () => {
     const otherJobs = newNotifyJobs.filter((j: any) => j.id.includes(other.id))
     expect(ownerJobs).toHaveLength(0)
     expect(otherJobs).toHaveLength(1)
+  })
+})
+
+// ── Suite E: @mention posts a Notifications Center entry (P2.4) ──────────────
+
+describe('G2.4 — @mention posts a personal-notification-center entry', () => {
+  let pool: Pool
+  let app: Express
+  let tokenStore: InMemoryTokenStore
+  let jobQueue: InMemoryJobQueue
+  let convRepo: ConversationRepository
+
+  beforeAll(async () => {
+    pool = await getTestPool()
+    await beginTransaction(pool)
+    jobQueue = new InMemoryJobQueue()
+    const deps = createTestApp(pool, { jobQueue })
+    app = deps.app
+    tokenStore = deps.tokenStore
+    convRepo = new ConversationRepository(pool)
+  })
+
+  afterAll(async () => {
+    await rollbackTransaction()
+  })
+
+  async function getPersonalMessages(playerId: string) {
+    const convId = await convRepo.resolvePersonalConversation(playerId)
+    const res = await pool.query(
+      `SELECT * FROM messaging.group_messages WHERE conversation_id = $1 ORDER BY created_at`,
+      [convId]
+    )
+    return res.rows
+  }
+
+  it('@mention of a "mentions_polls" member posts a personal notification with groupId metadata', async () => {
+    const owner = await createPlayer(pool)
+    const ownerToken = await playerToken(owner, tokenStore)
+    const group = await createGroupViaApi(app, ownerToken)
+
+    const repo = new PlayerRepository(pool)
+    const mentionedName = `MentionMe-${uid()}`
+    const mentioned = await repo.findOrCreatePlayerByEmail(
+      `gnotify-mentioned-${uid()}@test.local`,
+      mentionedName,
+      undefined,
+      undefined,
+      defaultAdultAttestation()
+    )
+    await addMemberWithLevel(pool, group.id, mentioned.id, 'mentions_polls')
+
+    const before = await getPersonalMessages(mentioned.id)
+
+    await request(app)
+      .post(`/player/groups/${group.id}/messages`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ body: `Hey @${mentionedName} check this out` })
+
+    // postAndBroadcastPersonalNotification is fire-and-forget — allow it to settle.
+    await new Promise(r => setTimeout(r, 100))
+
+    const after = await getPersonalMessages(mentioned.id)
+    expect(after.length).toBeGreaterThan(before.length)
+    const notif = after[after.length - 1]
+    expect(notif.type).toBe('system')
+    expect(notif.metadata).toMatchObject({ groupId: group.id })
+  })
+
+  it('@mention of a "muted" member does NOT post a personal notification', async () => {
+    const owner = await createPlayer(pool)
+    const ownerToken = await playerToken(owner, tokenStore)
+    const group = await createGroupViaApi(app, ownerToken)
+
+    const repo = new PlayerRepository(pool)
+    const mutedName = `MutedPlayer-${uid()}`
+    const mutedPlayer = await repo.findOrCreatePlayerByEmail(
+      `gnotify-muted-${uid()}@test.local`,
+      mutedName,
+      undefined,
+      undefined,
+      defaultAdultAttestation()
+    )
+    await addMemberWithLevel(pool, group.id, mutedPlayer.id, 'muted')
+
+    const before = await getPersonalMessages(mutedPlayer.id)
+
+    await request(app)
+      .post(`/player/groups/${group.id}/messages`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ body: `Hey @${mutedName} you cannot escape!` })
+
+    await new Promise(r => setTimeout(r, 100))
+
+    const after = await getPersonalMessages(mutedPlayer.id)
+    expect(after.length).toBe(before.length)
+  })
+
+  it('a non-mentioned "all" recipient does NOT get a personal notification (mentions only)', async () => {
+    const owner = await createPlayer(pool)
+    const ownerToken = await playerToken(owner, tokenStore)
+    const group = await createGroupViaApi(app, ownerToken)
+
+    const other = await createPlayer(pool)
+    await addMemberWithLevel(pool, group.id, other.id, 'all')
+
+    const before = await getPersonalMessages(other.id)
+
+    await request(app)
+      .post(`/player/groups/${group.id}/messages`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ body: 'Plain text, no mentions' })
+
+    await new Promise(r => setTimeout(r, 100))
+
+    const after = await getPersonalMessages(other.id)
+    expect(after.length).toBe(before.length)
   })
 })

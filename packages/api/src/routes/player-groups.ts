@@ -95,6 +95,29 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   const cardRepo = new AssistantCardRepository(deps.db as any)
   const tournamentGroupRepo = new TournamentGroupRepository(deps.db as any)
 
+  // P2.2/P2.4: post a personal-notification-center entry and broadcast it live
+  // over SSE (Notifications Center — mirrors the group message.created emit
+  // above). Fire-and-forget at call sites; errors are logged, never thrown.
+  async function postAndBroadcastPersonalNotification(
+    playerId: string,
+    body: string,
+    metadata?: Record<string, unknown>
+  ): Promise<void> {
+    const notif = await groupMsgRepo.postPersonalNotification(playerId, body, metadata)
+    if (deps.broadcastBus) {
+      deps.broadcastBus.emit(notif.conversationId, 'message.created', {
+        id: notif.id,
+        conversationId: notif.conversationId,
+        playerId: null,
+        senderName: 'system',
+        body,
+        type: 'system',
+        createdAt: notif.createdAt,
+        metadata: metadata ?? null,
+      })
+    }
+  }
+
   // GET /player/groups — list the caller's groups (G2.5)
   // §10: static GET registered before POST and /:groupId param routes
   router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -638,6 +661,21 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
               // Hyphen, not colon — BullMQ rejects custom job IDs containing ':'.
               { jobId: `notify-${conversationId}-${recipientId}` }
             )
+
+            // Notifications Center (P2.4) — @mentions only, matching "targeting
+            // them"; the shouldEnqueueNotify('mentions') gate above already
+            // covers the notifyMentions preference + quiet hours, and
+            // recipientIds itself already excludes muted members
+            // (group-notify-selector.ts).
+            if (eventType === 'mentions') {
+              postAndBroadcastPersonalNotification(
+                recipientId,
+                `${message.senderName} mentioned you in a group message`,
+                { groupId }
+              ).catch((e: Error) => {
+                log.warn('personal.notification.failed', { playerId: recipientId, error: e.message })
+              })
+            }
           }
         }
 
@@ -1076,7 +1114,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         })
 
         // P2.2: personal notification to the promoted player
-        groupMsgRepo.postPersonalNotification(playerId, `You've been promoted to owner in a group`).catch((e: Error) => {
+        postAndBroadcastPersonalNotification(playerId, `You've been promoted to owner in a group`, { groupId }).catch((e: Error) => {
           log.warn('personal.notification.failed', { playerId, error: e.message })
         })
 
@@ -1109,7 +1147,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         })
 
         // P2.2: personal notification to the demoted player
-        groupMsgRepo.postPersonalNotification(playerId, `You've been changed to a member in a group`).catch((e: Error) => {
+        postAndBroadcastPersonalNotification(playerId, `You've been changed to a member in a group`, { groupId }).catch((e: Error) => {
           log.warn('personal.notification.failed', { playerId, error: e.message })
         })
 
@@ -1201,7 +1239,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
 
         // P2.2: personal notification to the auto-transferred new owner
         if (autoTransferredTo) {
-          groupMsgRepo.postPersonalNotification(autoTransferredTo, `You've been made an owner of a group`).catch((e: Error) => {
+          postAndBroadcastPersonalNotification(autoTransferredTo, `You've been made an owner of a group`, { groupId }).catch((e: Error) => {
             log.warn('personal.notification.failed', { playerId: autoTransferredTo, error: e.message })
           })
         }
@@ -1261,7 +1299,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         await groupRepo.kickMember(groupId, session.playerId, playerId)
 
         // P2.2: personal notification to the kicked player (no group chat message)
-        groupMsgRepo.postPersonalNotification(playerId, `You've been removed from a group`).catch((e: Error) => {
+        postAndBroadcastPersonalNotification(playerId, `You've been removed from a group`, { groupId }).catch((e: Error) => {
           log.warn('personal.notification.failed', { playerId, error: e.message })
         })
 

@@ -357,10 +357,16 @@ export class GroupMessageRepository {
 
   /**
    * Post a system notification into a player's personal conversation thread.
-   * Used for private events: kick, promote, demote, auto-transfer.
+   * Used for private events: kick, promote, demote, auto-transfer, @mentions.
    * Writes a recipient row so the unread badge and digest processor can act on it.
+   * `metadata` carries deep-link payloads (e.g. { groupId } — P3.5's JSONB column,
+   * same convention as nudge messages); returns enough to broadcast over SSE.
    */
-  async postPersonalNotification(playerId: string, body: string): Promise<void> {
+  async postPersonalNotification(
+    playerId: string,
+    body: string,
+    metadata?: Record<string, unknown>
+  ): Promise<{ id: string; conversationId: string; createdAt: string }> {
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
@@ -386,12 +392,13 @@ export class GroupMessageRepository {
 
       const msgResult = await client.query(
         `INSERT INTO messaging.group_messages
-           (conversation_id, player_id, sender_name_snapshot, body, type)
-         VALUES ($1, NULL, 'system', $2, 'system')
-         RETURNING id`,
-        [conversationId, body]
+           (conversation_id, player_id, sender_name_snapshot, body, type, metadata)
+         VALUES ($1, NULL, 'system', $2, 'system', $3)
+         RETURNING id, created_at`,
+        [conversationId, body, metadata ? JSON.stringify(metadata) : null]
       )
       const messageId = msgResult.rows[0].id as string
+      const createdAt = msgResult.rows[0].created_at as string
 
       // Write recipient row for unread + digest tracking
       await client.query(
@@ -404,6 +411,8 @@ export class GroupMessageRepository {
       await client.query('COMMIT')
 
       log.info('personal.notification.posted', { playerId, conversationId, body })
+
+      return { id: messageId, conversationId, createdAt }
     } catch (err) {
       await client.query('ROLLBACK')
       throw err

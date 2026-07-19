@@ -3,12 +3,14 @@ import { AppDependencies } from '../app'
 import { PlayerRepository } from '../db'
 import { requirePlayerSessionAuth, requireOrganizerAuth } from '../auth'
 import { getLogger } from '../logger'
+import { ConversationRepository } from '../repositories/conversation-repository'
 
 const log = getLogger('player')
 
 export default function playerRouter(deps: AppDependencies) {
   const router = Router()
   const playerRepo = new PlayerRepository(deps.db)
+  const conversationRepo = new ConversationRepository(deps.db as any)
 
   // Resolve the acting player's id from either a magic-link player session or a
   // registered player's account JWT (role 'player', carries playerId). Used by
@@ -157,11 +159,11 @@ export default function playerRouter(deps: AppDependencies) {
       const limit = req.query.limit ? Math.min(parseInt(req.query.limit as string), 100) : 50
 
       const result = await deps.db.query(
-        `SELECT gm.id, gm.body, gm.type, gm.created_at
+        `SELECT gm.id, gm.body, gm.type, gm.created_at, gm.metadata
          FROM messaging.group_messages gm
          JOIN messaging.conversations c ON c.id = gm.conversation_id
          WHERE c.type = 'personal' AND c.player_id = $1
-         ORDER BY gm.created_at ASC
+         ORDER BY gm.created_at DESC
          LIMIT $2`,
         [playerId, limit]
       )
@@ -172,6 +174,7 @@ export default function playerRouter(deps: AppDependencies) {
           body: r.body,
           type: r.type,
           createdAt: r.created_at,
+          metadata: r.metadata,
         })),
       })
     } catch (err) {
@@ -223,6 +226,45 @@ export default function playerRouter(deps: AppDependencies) {
       )
 
       res.json({ unread: Number(result.rows[0].n) })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /player/notifications/events — SSE stream for the personal notification
+  // thread, so the nav badge updates live while the player is on another page.
+  // Mirrors /player/coach/events (coach.ts): resolve the player's own
+  // conversation, subscribe to the broadcast bus scoped to just that id.
+  router.get('/notifications/events', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!deps.broadcastBus) {
+        return res.status(503).json({ code: 'SERVICE_UNAVAILABLE', message: 'SSE not available' })
+      }
+
+      // Support both Authorization header and query param token (EventSource compat).
+      let authHeader = req.headers.authorization
+      if (!authHeader && req.query.token) {
+        const token = Array.isArray(req.query.token) ? req.query.token[0] : req.query.token
+        authHeader = `Bearer ${token}`
+      }
+
+      const playerId = await resolvePlayerId(authHeader)
+      const conversationId = await conversationRepo.resolvePersonalConversation(playerId)
+
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+      res.flushHeaders()
+
+      const unsubscribe = deps.broadcastBus.subscribe(conversationId, (event, data) => {
+        if (!res.writableEnded) {
+          res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+        }
+      })
+
+      req.on('close', () => {
+        unsubscribe()
+      })
     } catch (err) {
       next(err)
     }
