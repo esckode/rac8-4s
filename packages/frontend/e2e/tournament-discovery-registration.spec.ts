@@ -11,6 +11,7 @@ import {
   createTestUser,
   createTestTournament,
   createTournamentWithOpenRegistration,
+  defaultAgeAttestation,
 } from './fixtures'
 
 // ============================================================================
@@ -36,6 +37,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
         email: user.email,
         name: user.name,
         password: user.password,
+        dob_attestation: defaultAgeAttestation(),
       })
       expect(signupResponse.ok).toBeTruthy()
 
@@ -75,6 +77,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
         email: user.email,
         name: user.name,
         password: user.password,
+        dob_attestation: defaultAgeAttestation(),
       })
 
       await page.goto(ROUTES.LOGIN)
@@ -115,6 +118,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
         email: user.email,
         name: user.name,
         password: user.password,
+        dob_attestation: defaultAgeAttestation(),
       })
 
       await page.goto(ROUTES.LOGIN)
@@ -156,6 +160,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
         email: user.email,
         name: user.name,
         password: user.password,
+        dob_attestation: defaultAgeAttestation(),
       })
 
       await page.goto(ROUTES.LOGIN)
@@ -354,6 +359,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
         {
           email: registrationUser.email,
           name: registrationUser.name,
+          dob_attestation: defaultAgeAttestation(),
         }
       )
 
@@ -439,6 +445,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
           email: registrationUser.email,
           name: registrationUser.name,
           partnerSelection: { type: 'invite', value: 'partner@example.com' },
+          dob_attestation: defaultAgeAttestation(),
         }
       )
 

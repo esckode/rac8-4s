@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { API_ENDPOINTS } from './config'
-import { apiCall, getTokenFromPage, clearAuthState, createTestUser } from './fixtures'
+import {
+  getTokenFromPage,
+  clearAuthState,
+  createTestUser,
+  signupViaApi,
+  completeAgeGateIfPresent,
+} from './fixtures'
 
 test.describe('Authentication E2E', () => {
   // Clear localStorage before each test
@@ -24,6 +30,7 @@ test.describe('Authentication E2E', () => {
 
       // And: I click the "Create Account" button
       await page.click('button:has-text("Create Account")')
+      await completeAgeGateIfPresent(page)
 
       // Then: I should be redirected to /browse or /dashboard
       await expect(page).toHaveURL(/\/browse|\/dashboard/)
@@ -42,11 +49,7 @@ test.describe('Authentication E2E', () => {
       const user = createTestUser()
 
       // Given: an account with this email already exists
-      const signupResponse = await apiCall('/api/auth/signup', 'POST', {
-        email: user.email,
-        name: user.name,
-        password: user.password,
-      })
+      const signupResponse = await signupViaApi(user)
       expect(signupResponse.ok).toBeTruthy()
 
       // And: I am on the signup page
@@ -132,11 +135,7 @@ test.describe('Authentication E2E', () => {
       const user = createTestUser()
 
       // Given: I have created an account with email and password
-      const signupResponse = await apiCall('/api/auth/signup', 'POST', {
-        email: user.email,
-        name: user.name,
-        password: user.password,
-      })
+      const signupResponse = await signupViaApi(user)
       expect(signupResponse.ok).toBeTruthy()
 
       // And: I am on the login page
@@ -184,11 +183,7 @@ test.describe('Authentication E2E', () => {
       const user = createTestUser()
 
       // Given: I have created an account with email and password
-      const signupResponse = await apiCall('/api/auth/signup', 'POST', {
-        email: user.email,
-        name: user.name,
-        password: user.password,
-      })
+      const signupResponse = await signupViaApi(user)
       expect(signupResponse.ok).toBeTruthy()
 
       // And: I am on the login page
@@ -264,11 +259,7 @@ test.describe('Authentication E2E', () => {
       const user = createTestUser()
 
       // Given: I have created an account
-      const signupResponse = await apiCall('/api/auth/signup', 'POST', {
-        email: user.email,
-        name: user.name,
-        password: user.password,
-      })
+      const signupResponse = await signupViaApi(user)
       expect(signupResponse.ok).toBeTruthy()
 
       // And: I am on the /forgot-password page
@@ -433,6 +424,7 @@ test.describe('Authentication E2E', () => {
       await page.locator('input[type="password"]').first().fill(user.password)
       await page.locator('input[type="password"]').last().fill(user.password)
       await page.click('button:has-text("Create Account")')
+      await completeAgeGateIfPresent(page)
 
       // Wait for redirect to protected route
       await expect(page).toHaveURL(/\/browse|\/dashboard/)
@@ -465,11 +457,7 @@ test.describe('Authentication E2E', () => {
       const user = createTestUser()
 
       // Given: I have successfully logged in
-      const signupResponse = await apiCall('/api/auth/signup', 'POST', {
-        email: user.email,
-        name: user.name,
-        password: user.password,
-      })
+      const signupResponse = await signupViaApi(user)
       expect(signupResponse.ok).toBeTruthy()
 
       // And: I navigate to /login in a browser
@@ -501,6 +489,7 @@ test.describe('Authentication E2E', () => {
       await page.locator('input[type="password"]').first().fill(user.password)
       await page.locator('input[type="password"]').last().fill(user.password)
       await page.click('button:has-text("Create Account")')
+      await completeAgeGateIfPresent(page)
 
       // Wait for redirect to /browse
       await expect(page).toHaveURL(/\/browse|\/dashboard/)
@@ -532,6 +521,7 @@ test.describe('Authentication E2E', () => {
       await page.locator('input[type="password"]').first().fill(user.password)
       await page.locator('input[type="password"]').last().fill(user.password)
       await page.click('button:has-text("Create Account")')
+      await completeAgeGateIfPresent(page)
 
       // Wait for redirect to browse/dashboard
       await expect(page).toHaveURL(/\/browse|\/dashboard/)
@@ -563,11 +553,7 @@ test.describe('Authentication E2E', () => {
       const user = createTestUser()
 
       // Given: I am logged in
-      const signupResponse = await apiCall('/api/auth/signup', 'POST', {
-        email: user.email,
-        name: user.name,
-        password: user.password,
-      })
+      const signupResponse = await signupViaApi(user)
       expect(signupResponse.ok).toBeTruthy()
 
       // Navigate to login and set up session
@@ -701,6 +687,7 @@ test.describe('Authentication E2E', () => {
       await page.locator('input[type="password"]').first().fill(user.password)
       await page.locator('input[type="password"]').last().fill(user.password)
       await page.click('button:has-text("Create Account")')
+      await completeAgeGateIfPresent(page)
 
       await expect(page).toHaveURL(/\/browse|\/dashboard/)
 
@@ -728,11 +715,7 @@ test.describe('Authentication E2E', () => {
       const user = createTestUser()
 
       // Given: I am logged in
-      const signupResponse = await apiCall('/api/auth/signup', 'POST', {
-        email: user.email,
-        name: user.name,
-        password: user.password,
-      })
+      const signupResponse = await signupViaApi(user)
       expect(signupResponse.ok).toBeTruthy()
 
       await page.goto('/login')

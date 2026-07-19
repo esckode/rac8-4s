@@ -91,6 +91,64 @@ export function createTestUser() {
 }
 
 /**
+ * The 18+ age gate (packages/api/src/db.ts PlayerRepository.findOrCreatePlayerByEmail)
+ * requires this on the FIRST request that creates a durable player row for an email —
+ * account signup (/api/auth/signup) and tournament registration (/tournaments/:id/register)
+ * both go through it. Existing emails are exempt (find path, not gated).
+ *
+ * Usage:
+ *   await apiCall('/api/auth/signup', 'POST', { ...user, dob_attestation: defaultAgeAttestation() })
+ */
+export function defaultAgeAttestation(): { dateOfBirth: string; policyVersion: string } {
+  const dob = new Date()
+  dob.setFullYear(dob.getFullYear() - 25)
+  return { dateOfBirth: dob.toISOString().slice(0, 10), policyVersion: 'v1' }
+}
+
+/**
+ * Signs up a new account via the API, satisfying the age gate. Throws on failure.
+ *
+ * Usage:
+ *   const user = createTestUser()
+ *   await signupViaApi(user)
+ */
+export async function signupViaApi(user: { email: string; name: string; password: string }): Promise<Response> {
+  const res = await apiCall('/api/auth/signup', 'POST', {
+    email: user.email,
+    name: user.name,
+    password: user.password,
+    dob_attestation: defaultAgeAttestation(),
+  })
+  if (!res.ok) throw new Error(`signup failed: ${res.status} ${await res.text()}`)
+  return res
+}
+
+/**
+ * After submitting the signup form, the backend may reject a first-time signup with
+ * AGE_ATTESTATION_REQUIRED — the page then renders DobScreen instead of completing.
+ * Call this right after clicking "Create Account" and before asserting the post-signup
+ * redirect; it's a no-op if the age gate doesn't appear (e.g. the email already has a
+ * durable player row).
+ *
+ * Usage:
+ *   await page.click('button:has-text("Create Account")')
+ *   await completeAgeGateIfPresent(page)
+ *   await expect(page).toHaveURL(/\/browse|\/dashboard/)
+ */
+export async function completeAgeGateIfPresent(page: any): Promise<void> {
+  const dobInput = page.locator('[data-testid="dob-input"]')
+  try {
+    await dobInput.waitFor({ state: 'visible', timeout: 3000 })
+  } catch {
+    return
+  }
+  const dob = new Date()
+  dob.setFullYear(dob.getFullYear() - 25)
+  await dobInput.fill(dob.toISOString().slice(0, 10))
+  await page.click('[data-testid="dob-submit"]')
+}
+
+/**
  * Create a unique tournament with default settings
  *
  * Usage:
@@ -242,7 +300,7 @@ export async function createTournamentWithGroups(
       const regResponse = await apiCall(
         `/tournaments/${tournamentId}/register`,
         'POST',
-        { email: user.email, name: user.name }
+        { email: user.email, name: user.name, dob_attestation: defaultAgeAttestation() }
       )
 
       if (!regResponse.ok) {
@@ -257,7 +315,7 @@ export async function createTournamentWithGroups(
       const regResponse = await apiCall(
         `/tournaments/${tournamentId}/register`,
         'POST',
-        { email: user.email, name: user.name }
+        { email: user.email, name: user.name, dob_attestation: defaultAgeAttestation() }
       )
 
       if (!regResponse.ok) {

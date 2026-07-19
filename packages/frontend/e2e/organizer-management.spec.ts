@@ -5,6 +5,7 @@ import {
   createTestTournament,
   createTestUser,
   createDoublesTournamentWithSoloRegistrants,
+  defaultAgeAttestation,
 } from './fixtures'
 import { API_ENDPOINTS } from './config'
 
@@ -48,7 +49,11 @@ test.describe('Organizer Tournament Management', () => {
     // Register 4 solo players while registration is open
     for (let i = 0; i < 4; i++) {
       const u = createTestUser()
-      const r = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', { email: u.email, name: u.name })
+      const r = await apiCall(`/tournaments/${tournamentId}/register`, 'POST', {
+        email: u.email,
+        name: u.name,
+        dob_attestation: defaultAgeAttestation(),
+      })
       expect(r.ok).toBeTruthy()
     }
 

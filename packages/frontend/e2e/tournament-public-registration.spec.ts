@@ -1,6 +1,13 @@
 import { test, expect } from '@playwright/test'
 import { ROUTES, SELECTORS, UI_TEXT } from './config'
-import { apiCall, getOrganizerToken, createTournamentWithOpenRegistration, createTestTournament } from './fixtures'
+import {
+  apiCall,
+  getOrganizerToken,
+  createTournamentWithOpenRegistration,
+  createTestTournament,
+  defaultAgeAttestation,
+  completeAgeGateIfPresent,
+} from './fixtures'
 
 /**
  * Public guest registration (per rac8-4s-HL.md "Tournament Discovery & Registration Flow").
@@ -49,6 +56,9 @@ test.describe('Public Tournament Registration (guest)', () => {
     await page.fill(SELECTORS.EMAIL_INPUT, email)
     await page.fill(SELECTORS.NAME_INPUT, 'Guest Player')
     await page.click('button:has-text("Register")')
+    // First-time email: the age gate requires a one-time DOB attestation before
+    // the registration actually completes (DobScreen, same flow as Signup.tsx).
+    await completeAgeGateIfPresent(page)
 
     // Then: a success / check-your-email confirmation is shown (magic link sent)
     await expect(page.locator('text=/check your email/i').first()).toBeVisible()
@@ -57,7 +67,11 @@ test.describe('Public Tournament Registration (guest)', () => {
   test('Scenario: Registering an already-registered email shows a clear error', async ({ page }) => {
     const email = `dupe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
     // First registration via API (public endpoint)
-    await apiCall(`/tournaments/${tournament.id}/register`, 'POST', { email, name: 'Dupe Player' })
+    await apiCall(`/tournaments/${tournament.id}/register`, 'POST', {
+      email,
+      name: 'Dupe Player',
+      dob_attestation: defaultAgeAttestation(),
+    })
 
     // Second registration via the UI should surface a conflict, not crash
     await page.fill(SELECTORS.EMAIL_INPUT, email)
