@@ -44,7 +44,7 @@ async function handleNavigation(request: Request): Promise<Response> {
   } catch {
     const shell = await matchPrecache('index.html')
     if (shell) return shell
-    const offline = await caches.match('/offline.html')
+    const offline = await matchPrecache('offline.html')
     return offline ?? new Response('Offline', { status: 503, statusText: 'Service Unavailable' })
   }
 }

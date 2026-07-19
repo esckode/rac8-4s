@@ -36,7 +36,9 @@ export function isSwMessage(value: unknown): value is SwMessage {
     if (typeof value.outcome !== 'string' || !REPLAY_OUTCOMES.includes(value.outcome as ReplayOutcome)) {
       return false
     }
-    if ('detail' in value && typeof value.detail !== 'string') return false
+    // detail is optional — replayAll sends {detail: undefined} when a 4xx body
+    // had no string message, and structured clone preserves the key.
+    if ('detail' in value && value.detail !== undefined && typeof value.detail !== 'string') return false
     return true
   }
 

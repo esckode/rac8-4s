@@ -64,13 +64,18 @@ export function wipePlayerData(): Promise<void> {
 
     const handler = (event: MessageEvent) => {
       if (isSwMessage(event.data) && event.data.type === 'WIPE_DONE') {
-        navigator.serviceWorker.removeEventListener('message', handler)
-        finish()
+        cleanupAndFinish()
       }
+    }
+    let timer: ReturnType<typeof setTimeout>
+    const cleanupAndFinish = () => {
+      clearTimeout(timer)
+      navigator.serviceWorker.removeEventListener('message', handler)
+      finish()
     }
     navigator.serviceWorker.addEventListener('message', handler)
     controller.postMessage({ type: 'WIPE_PLAYER_DATA' } satisfies AppMessage)
 
-    setTimeout(finish, 1500)
+    timer = setTimeout(cleanupAndFinish, 1500)
   })
 }
