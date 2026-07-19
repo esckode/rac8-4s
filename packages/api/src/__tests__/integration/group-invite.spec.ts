@@ -575,7 +575,7 @@ describe('G1.3 — Group invite flow', () => {
       expect(res.body.code).toBe('TOKEN_INVALID')
     })
 
-    it('NEGATIVE: UNDERAGE → 400 (unchanged)', async () => {
+    it('NEGATIVE: UNDER_AGE → 400', async () => {
       const owner = await createPlayer(pool)
       const ownerTok = await playerToken(owner, tokenStore)
       const group = await createGroup(ownerTok)
@@ -602,7 +602,7 @@ describe('G1.3 — Group invite flow', () => {
         })
 
       expect(res.status).toBe(400)
-      expect(res.body.code).toBe('UNDERAGE')
+      expect(res.body.code).toBe('UNDER_AGE')
     })
 
     it('NEGATIVE: AGE_ATTESTATION_REQUIRED → 400 (unchanged)', async () => {
