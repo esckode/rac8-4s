@@ -314,6 +314,31 @@ describe('MessageThreadPanel', () => {
     })
   })
 
+  describe('Mark-as-read (active panel)', () => {
+    it('marks an unread message as read once the async history fetch resolves it in', async () => {
+      const unread = makeMessage({ id: 'ann_unread', body: 'Read me', recipientPlayerId: null, read_at: null })
+      mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('/read')) {
+          return Promise.resolve({ ok: true, json: async () => ({}) })
+        }
+        // History fetch — resolves on a later tick than mount, same as the real
+        // network round trip; the mark-as-read effect must not only fire once
+        // against the still-empty initial `messages` array.
+        return Promise.resolve({ ok: true, json: async () => ({ messages: [unread] }) })
+      })
+
+      render(<MessageThreadPanel tournamentId="tourn_1" active />)
+
+      await waitFor(() => {
+        const readCalls = mockFetch.mock.calls.filter(([url]: [string]) => url.includes('/read'))
+        expect(readCalls.length).toBeGreaterThan(0)
+      })
+      const [readUrl, readInit] = mockFetch.mock.calls.find(([url]: [string]) => url.includes('/read'))!
+      expect(readUrl).toContain('/messages/ann_unread/read')
+      expect((readInit as RequestInit).method).toBe('POST')
+    })
+  })
+
   describe('No arbitrary DM affordance', () => {
     it('does not offer a "New DM" button anywhere', () => {
       render(
