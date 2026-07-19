@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { wipePlayerData, notifyLogin } from '../pwa/sw-bridge'
 import { VENUE_TTL_MS } from '../workers/sw-lib/venue-cache'
 
@@ -92,11 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [offlineUnvalidated, setOfflineUnvalidated] = useState(false)
+  // A full page load of /signout races the mount-time restoreSession against
+  // logout(): once logout has run, a late restore success must not setUser or
+  // re-write the snapshot logout just cleared. Reset on login/signup.
+  const signedOutRef = useRef(false)
 
   // D11: a network failure (or unexpected 5xx) during restore is not proof
   // the token is invalid — only a real 401 is. On failure, restore identity
   // from the trusted snapshot if one exists; never delete the token here.
   const handleUnvalidatedFailure = useCallback((): void => {
+    if (signedOutRef.current) return
     const snapshot = readTrustedSessionSnapshot()
     if (snapshot) {
       setUser(snapshot.user)
@@ -123,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
     }
 
     const data = (await response.json()) as { playerId: string; tournamentId: string }
+    if (signedOutRef.current) return true
     const restoredUser: AuthUser = { id: data.playerId, email: '', role: 'player', playerId: data.playerId }
     setUser(restoredUser)
     setOfflineUnvalidated(false)
@@ -142,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
 
       if (response.ok) {
         const userData = (await response.json()) as MeResponse
+        if (signedOutRef.current) return
         const restoredUser: AuthUser = {
           id: userData.id,
           email: userData.email,
@@ -237,6 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
     }
     localStorage.setItem(LAST_PLAYER_KEY, newPlayerKey)
 
+    signedOutRef.current = false
     setUser(data.user)
     setOfflineUnvalidated(false)
     writeSessionSnapshot(data.user)
@@ -268,6 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
 
         const data = (await response.json()) as SignupResponse
         localStorage.setItem(TOKEN_KEY, data.token)
+        signedOutRef.current = false
         setUser(data.user)
         setOfflineUnvalidated(false)
         writeSessionSnapshot(data.user)
@@ -312,6 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
   )
 
   const logout = useCallback(async (): Promise<void> => {
+    signedOutRef.current = true
     const token = localStorage.getItem(TOKEN_KEY)
     try {
       if (token) {
