@@ -41,6 +41,17 @@ function checkProcess(port) {
   }
 }
 
+// The worker has no HTTP port to probe — it's a pure BullMQ consumer — so
+// detect it by process name instead.
+function checkWorkerProcess() {
+  try {
+    const result = execSync('pgrep -f "worker-entrypoint.ts" 2>/dev/null || true', { encoding: 'utf8' })
+    return result.trim().length > 0
+  } catch {
+    return false
+  }
+}
+
 async function startServer(workspaceName, port, displayName) {
   return new Promise((resolve, reject) => {
     log(`\n🚀 Starting ${displayName}...`, 'blue')
@@ -160,8 +171,47 @@ async function main() {
     }
   }
 
+  // Check/start the background worker (assistant/coach replies, nudge/recap/digest
+  // sweeps — anything JOB_QUEUE=bullmq routes through a queue consumer instead of
+  // an inline in-process call). Silently missing, these specs fail with confusing
+  // errors ("Custom Id cannot contain :", "not wired (JOB_QUEUE=bullmq mode?)", or
+  // an assistant reply that never appears) rather than an obvious "not running".
+  log('\n4️⃣  Checking background worker (assistant/coach, nudge/recap/digest sweeps)...', 'blue')
+  let workerRunning = checkWorkerProcess()
+
+  if (workerRunning) {
+    log('✅ Worker is running', 'green')
+  } else {
+    log('❌ Worker not running', 'red')
+    const autoStart = process.argv.includes('--auto-start')
+
+    if (autoStart) {
+      try {
+        log('   Starting worker...', 'yellow')
+        const proc = spawn('npm', ['run', 'dev:worker', '--workspace=packages/api'], {
+          cwd: process.cwd(),
+          stdio: 'inherit',
+        })
+        proc.unref()
+        await new Promise(r => setTimeout(r, 5000))
+        workerRunning = checkWorkerProcess()
+        if (workerRunning) {
+          log('✅ Worker started successfully', 'green')
+        }
+      } catch (err) {
+        log(`❌ Failed to start worker: ${err.message}`, 'red')
+        log('   Run manually: npm run dev:worker --workspace=packages/api', 'yellow')
+      }
+    } else {
+      log('   Only needed if JOB_QUEUE=bullmq (this repo\'s dev/e2e default) and you\'re', 'yellow')
+      log('   running assistant/coach/nudge/recap/digest specs.', 'yellow')
+      log('   Run manually: npm run dev:worker --workspace=packages/api', 'yellow')
+      log('   Or use: node scripts/e2e-setup.js --auto-start', 'yellow')
+    }
+  }
+
   // Validate browser
-  log('\n4️⃣  Validating frontend with persistent browser...', 'blue')
+  log('\n5️⃣  Validating frontend with persistent browser...', 'blue')
   if (frontendRunning) {
     try {
       const result = execSync('node scripts/browser.js', { encoding: 'utf8', stdio: 'inherit' })
@@ -179,9 +229,13 @@ async function main() {
   log(`  PostgreSQL: ${pgRunning ? '✅' : '❌'}`, 'blue')
   log(`  API Server (3001): ${apiRunning ? '✅' : '❌'}`, 'blue')
   log(`  Frontend Server (5173): ${frontendRunning ? '✅' : '❌'}`, 'blue')
+  log(`  Worker: ${workerRunning ? '✅' : '❌ (only needed for assistant/coach/sweep specs)'}`, 'blue')
 
   if (apiRunning && frontendRunning) {
-    log('\n✅ All prerequisites met! Ready to run E2E tests.', 'green')
+    log('\n✅ Core prerequisites met! Ready to run E2E tests.', 'green')
+    if (!workerRunning) {
+      log('⚠️  Worker not running — assistant/coach/nudge/recap/digest specs will fail.', 'yellow')
+    }
     log('\nNext steps:', 'green')
     log('  npm run test:e2e              # Headless mode', 'green')
     log('  npm run test:e2e:ui           # Interactive UI mode', 'green')

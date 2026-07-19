@@ -151,6 +151,15 @@ The skill workflow:
 **Important:** E2E tests require both servers running:
 - Backend API on port 3001 (requires PostgreSQL)
 - Frontend dev server on port 5173
+- **`npm run dev:worker --workspace=packages/api`** — required in addition to the
+  above for any assistant/coach/nudge/recap/digest spec (`assistant*.spec.ts`,
+  `coach.spec.ts`, `personalization-availability.spec.ts`,
+  `personalization-quiet-hours.spec.ts`). This repo's dev/e2e default is
+  `JOB_QUEUE=bullmq`, which routes @coach replies and the Phase C sweeps through a
+  queue consumer instead of an inline in-process call — without the worker running,
+  these specs fail with confusing errors (a reply that never appears, or a
+  `/test/*-sweep` trigger 500ing) rather than an obvious "not running". Checked
+  automatically by `scripts/e2e-setup.js`.
 
 **E2E conventions** (details in `packages/frontend/e2e/README.md`):
 - **Seed your own data** via the fixtures (`createTournamentWithOpenRegistration`, `getOrganizerToken`, …) — never depend on ambient DB state.
