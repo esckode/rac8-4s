@@ -27,6 +27,15 @@ describe('isSwMessage', () => {
     expect(isSwMessage({ type: 'WIPE_DONE' })).toBe(true)
   })
 
+  it('accepts REPLAY_RESULT with the optional detail key present but undefined', () => {
+    // replayAll sends {detail: undefined} for a rejected replay whose 4xx body
+    // had no string message; structured clone preserves the undefined-valued
+    // key, and dropping the message here would strand the pending badge.
+    expect(
+      isSwMessage({ type: 'REPLAY_RESULT', outcome: 'rejected', tournamentId: 't1', matchId: 'm1', detail: undefined })
+    ).toBe(true)
+  })
+
   it.each(['success', 'needs-auth', 'rejected', 'expired'] as const)(
     'accepts a well-formed REPLAY_RESULT with outcome %s',
     (outcome) => {

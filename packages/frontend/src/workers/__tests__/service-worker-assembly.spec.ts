@@ -153,12 +153,15 @@ describe('service-worker assembly', () => {
       expect(matchPrecache).toHaveBeenCalledWith('index.html')
     })
 
-    it('falls back to /offline.html when the network fetch fails and there is no precached shell', async () => {
+    it('falls back to the precached offline.html when there is no precached shell (D10 last resort)', async () => {
       (classifyRequest as jest.Mock).mockReturnValue('navigation')
       ;(globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('offline'))
-      ;(matchPrecache as jest.Mock).mockResolvedValue(undefined)
       const offlineResponse = fakeResponse()
-      ;(globalThis as any).caches = { match: jest.fn().mockResolvedValue(offlineResponse) }
+      // offline.html lives in the revision-keyed Workbox precache — a plain
+      // caches.match('/offline.html') can never hit it; matchPrecache must be used.
+      ;(matchPrecache as jest.Mock).mockImplementation((key: string) =>
+        Promise.resolve(key === 'offline.html' ? offlineResponse : undefined)
+      )
       const { handleFetch } = await import('../service-worker')
       const event = fakeFetchEvent({ url: 'https://example.com/tournament/t1/matches' })
 
@@ -166,7 +169,7 @@ describe('service-worker assembly', () => {
 
       expect(event.respondWith).toHaveBeenCalledTimes(1)
       await expect(event.respondWith.mock.calls[0][0]).resolves.toBe(offlineResponse)
-      expect((globalThis as any).caches.match).toHaveBeenCalledWith('/offline.html')
+      expect(matchPrecache).toHaveBeenCalledWith('offline.html')
     })
   })
 

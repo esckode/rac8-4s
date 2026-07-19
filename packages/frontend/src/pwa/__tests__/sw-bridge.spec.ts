@@ -139,6 +139,17 @@ describe('sw-bridge', () => {
       await expect(promise).resolves.toBeUndefined()
     })
 
+    it('removes its message listener when the timeout wins (no leak on unresponsive SW)', async () => {
+      jest.useFakeTimers()
+      const { container } = installServiceWorkerContainer()
+
+      const promise = wipePlayerData()
+      await jest.advanceTimersByTimeAsync(1500)
+      await promise
+
+      expect(container.removeEventListener).toHaveBeenCalledWith('message', expect.any(Function))
+    })
+
     it('resolves immediately when there is no controller (no SW yet)', async () => {
       installServiceWorkerContainer(null)
 
