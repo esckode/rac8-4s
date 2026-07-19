@@ -48,6 +48,20 @@ per-feature entitlement checks are needed — subscription status *is* the entit
 | 9 v1 scope ⚖ | Ship existing features only, or build stats first? | **Build the personal stats dashboard before launch** so the advertised bundle is complete day one. Recommendation was existing-features-only for speed; owner chose the stronger day-one value story. Stats dashboard needs its own scope pass (§4) |
 | 10 Retention levers *(2026-07-16)* | What makes staying subscribed valuable (beyond utility)? | Principle: staying **accrues** value; leaving never has value destroyed that we secretly still hold (the rejected stats-window lesson, STATS_DASHBOARD_DESIGN §3 #4). Four adopted: (a) **continuous-subscriber price lock** — rate never rises while continuously subscribed; lapse >90d → rejoin at current list price (Stripe grandfathers by default; this is a written commitment, zero build); (b) **coach memory framed as the benefit** — memory continuity + the #6b 90-day grace presented in product/privacy copy as "your coach keeps knowing your game", no new build; (c) **pause-instead-of-cancel at launch** — Stripe subscription pause offered in the cancel flow (seasonal sport, off-season churn); (d) **tenure data depth → v1.1 roadmap** — exempt active subscribers from the 90-day snapshot purge so career rank-trend arcs accrue with tenure (STATS_DASHBOARD_DESIGN §6). Not adopted (existing triggers stand): coach goals (COACH_1TO1 §5.1-B), P13 rating history |
 
+### Amendment 2026-07-19 — launch flag (build requirement, owner-approved)
+
+Billing ships behind a **single server-authoritative switch**: `BILLING_ENABLED`
+(env, read at boot, **default off**), surfaced to the frontend via an existing
+bootstrap/config response — never a build-time constant — so flipping it requires no
+client redeploy. Enforcement is server-side on the billing/registration-upgrade
+endpoints; the UI only reflects the flag. Flag off = exactly today's free behavior.
+Rationale: the app is proven out free-first (§4 already gates launch on the stats
+dashboard); the flag is the mechanical expression of that ordering and doubles as a
+rollback lever post-launch. Corollary: **do not build billing dormant-but-reachable** —
+no live Stripe endpoints hidden only in the UI; the gate and the endpoints land
+together in the implementation plan. (SW interaction already safe: `/api/billing/*`
+classifies `passthrough` — never cached, never replay-queued; PWA_CACHING_DESIGN.md D7.)
+
 ## 3. The two tiers
 
 | | Guest (magic-link) — **free forever** | Registered player — **$10/mo** |
