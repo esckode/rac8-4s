@@ -635,7 +635,8 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             await deps.jobQueue.add(
               'messaging.notify',
               { conversationId, groupId },
-              { jobId: `notify:${conversationId}:${recipientId}` }
+              // Hyphen, not colon — BullMQ rejects custom job IDs containing ':'.
+              { jobId: `notify-${conversationId}-${recipientId}` }
             )
           }
         }

@@ -277,11 +277,12 @@ describe('processNudgeSweep', () => {
     await processNudgeSweep({ pool, jobQueue })
 
     const notifyJobs = jobQueue.getByName('messaging.notify')
-    const marker = `deadline48:${tournamentId}`
-    expect(await jobQueue.getJob(`notify:${marker}:${owner.id}`)).not.toBeNull()
-    expect(await jobQueue.getJob(`notify:${marker}:${opponent.id}`)).not.toBeNull()
-    expect(await jobQueue.getJob(`notify:${marker}:${unaffected.id}`)).toBeNull()
-    expect(await jobQueue.getJob(`notify:${marker}:${muted.id}`)).toBeNull()
+    // Hyphen, not colon — BullMQ rejects custom job IDs containing ':'.
+    const jobIdFor = (playerId: string) => `notify-deadline48-${tournamentId}-${playerId}`
+    expect(await jobQueue.getJob(jobIdFor(owner.id))).not.toBeNull()
+    expect(await jobQueue.getJob(jobIdFor(opponent.id))).not.toBeNull()
+    expect(await jobQueue.getJob(jobIdFor(unaffected.id))).toBeNull()
+    expect(await jobQueue.getJob(jobIdFor(muted.id))).toBeNull()
     expect(notifyJobs.length).toBe(2)
   })
 

@@ -90,30 +90,35 @@ async function main() {
     }
 
     // Assistant (@coach): in BullMQ mode the worker tier consumes
-    // assistant.reply; the in-memory queue has no consumer, so wire the
-    // inline processor for single-process dev/e2e.
+    // assistant.reply/coach.turn; the in-memory queue has no consumer, so those two
+    // inline processors are memory-mode-only (single-process dev/e2e). The client +
+    // rate limiter themselves, and processRecapSweep, are built unconditionally —
+    // the worker's own /test/recap-sweep-equivalent (§C sweep) already runs
+    // regardless of queue mode, and the test-only /test/recap-sweep HTTP trigger
+    // (app.ts) needs the same direct, synchronous escape hatch in BullMQ mode too
+    // (it previously 500'd there with "not wired (JOB_QUEUE=bullmq mode?)").
+    const assistantDeps = {
+      pool,
+      groupMessageRepo: new GroupMessageRepository(pool),
+      client: selectAssistantClient(config),
+      rateLimiter: new AssistantRateLimiter(selectRateLimitStore(), {
+        ...ASSISTANT_HOURLY_LIMITS,
+        dailyBudgetUsd: config.assistant.dailyBudgetUsd,
+      }),
+      broadcastBus,
+    }
+    const processRecapSweep = () =>
+      runRecapSweep({
+        pool,
+        client: assistantDeps.client,
+        rateLimiter: assistantDeps.rateLimiter,
+        broadcastBus: assistantDeps.broadcastBus,
+      })
+
     let processAssistantJob: ((payload: AssistantJobPayload) => Promise<void>) | undefined
-    let processRecapSweep: (() => Promise<void>) | undefined
     let processCoachJob: ((payload: CoachJobPayload) => Promise<void>) | undefined
     if (config.redis.jobQueue !== 'bullmq') {
-      const assistantDeps = {
-        pool,
-        groupMessageRepo: new GroupMessageRepository(pool),
-        client: selectAssistantClient(config),
-        rateLimiter: new AssistantRateLimiter(selectRateLimitStore(), {
-          ...ASSISTANT_HOURLY_LIMITS,
-          dailyBudgetUsd: config.assistant.dailyBudgetUsd,
-        }),
-        broadcastBus,
-      }
       processAssistantJob = payload => processAssistantReply(payload, assistantDeps)
-      processRecapSweep = () =>
-        runRecapSweep({
-          pool,
-          client: assistantDeps.client,
-          rateLimiter: assistantDeps.rateLimiter,
-          broadcastBus: assistantDeps.broadcastBus,
-        })
 
       // 1:1 Coach shares the assistant rate limiter's budget kill-switch/store (design §7 #2).
       const coachDeps = {

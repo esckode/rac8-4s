@@ -127,7 +127,8 @@ export async function createPoll(deps: PollServiceDeps, input: CreatePollInput):
       await jobQueue.add(
         'messaging.notify',
         { conversationId, groupId },
-        { jobId: `notify:${conversationId}:${recipientId}` }
+        // Hyphen, not colon — BullMQ rejects custom job IDs containing ':'.
+        { jobId: `notify-${conversationId}-${recipientId}` }
       )
     }
   }

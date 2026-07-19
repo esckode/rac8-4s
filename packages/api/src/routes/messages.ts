@@ -95,7 +95,8 @@ export default function messagesRouter(deps: AppDependencies) {
           await deps.jobQueue.add(
             'messaging.notify',
             { conversationId, tournamentId },
-            { jobId: `notify:${conversationId}:${recipientId}` }
+            // Hyphen, not colon — BullMQ rejects custom job IDs containing ':'.
+            { jobId: `notify-${conversationId}-${recipientId}` }
           )
         }
       }
@@ -296,7 +297,8 @@ export default function messagesRouter(deps: AppDependencies) {
         await deps.jobQueue.add(
           'messaging.notify',
           { conversationId, tournamentId },
-          { jobId: `notify:${conversationId}:${effectiveRecipient}` }
+          // Hyphen, not colon — BullMQ rejects custom job IDs containing ':'.
+          { jobId: `notify-${conversationId}-${effectiveRecipient}` }
         )
       }
 

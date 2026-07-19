@@ -218,7 +218,10 @@ export async function processNudgeSweep(deps: NudgeSweepDeps): Promise<void> {
           await jobQueue.add(
             'messaging.notify',
             { conversationId, groupId },
-            { jobId: `notify:${marker}:${playerId}` }
+            // Hyphen, not colon — BullMQ rejects custom job IDs containing ':'.
+            // (`marker` itself contains one, e.g. "deadline48:<tournamentId>",
+            // so build this from the raw parts rather than wrapping `marker`.)
+            { jobId: `notify-${milestone.markerPrefix}-${tournamentId}-${playerId}` }
           )
         }
       }
