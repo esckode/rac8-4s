@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react'
 import { LoadingState, EmptyState, ErrorState } from '../components/shared'
 import { NotificationCard, type NotificationMessage } from '../components/NotificationCard'
+import { notificationUnreadStore } from '../state/notification-unread-state'
 
 export const Notifications: React.FC = () => {
   const [messages, setMessages] = useState<NotificationMessage[]>([])
@@ -30,7 +31,11 @@ export const Notifications: React.FC = () => {
         fetch('/player/notifications/read', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...headers },
-        }).catch(() => {})
+        })
+          .then(r => {
+            if (r.ok) notificationUnreadStore.clear()
+          })
+          .catch(() => {})
       })
       .catch((e: Error) => {
         setError(e.message)

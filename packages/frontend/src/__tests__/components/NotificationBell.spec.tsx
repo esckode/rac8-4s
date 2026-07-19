@@ -13,6 +13,15 @@ import * as useAuthHook from '../../hooks/useAuth'
 // We test via the ResponsiveLayout since the bell lives in the header/nav
 import { ResponsiveLayout } from '../../components/shared/ResponsiveLayout'
 
+// useNotificationUnread opens a live SSE connection (P2.3) — jsdom has no
+// native EventSource, so this must be mocked wherever ResponsiveLayout renders.
+jest.mock('reconnecting-eventsource', () => {
+  return jest.fn().mockImplementation(() => ({
+    addEventListener: jest.fn(),
+    close: jest.fn(),
+  }))
+})
+
 function mockAuth(authenticated: boolean) {
   jest.spyOn(useAuthHook, 'useAuth').mockReturnValue({
     user: authenticated

@@ -259,6 +259,10 @@ export const SELECTORS = {
   STANDINGS_WINS: '[data-testid="standings-wins"]',
   BRACKET_MATCHES: '[data-testid="match-card"], .match-card',
 
+  // My Tournaments Hub — multi-tournament depth
+  MY_TOURNAMENTS: '[data-testid="my-tournaments"]',
+  TOURNAMENT_ROW: '[data-testid="tournament-row"]',
+
   // Bracket (knockout)
   BRACKET_TREE: '[data-testid="bracket-tree"]',
   BRACKET_ROUND: '[data-testid="bracket-round"]',
@@ -282,6 +286,12 @@ export const SELECTORS = {
   ANNOUNCE_INPUT: '[data-testid="announce-input"]',
   UNREAD_BADGE: '[data-testid="messages-unread-badge"]',
   MESSAGES_TAB: '[data-testid="tab-messages"]',
+
+  // Notifications Center — P2.3/P2.4
+  NAV_NOTIFICATIONS: '[data-testid="nav-notifications"]',
+  NOTIFICATION_UNREAD_BADGE: '[data-testid="notification-unread-badge"]',
+  NOTIFICATIONS_PAGE: '[data-testid="notifications-page"]',
+  NOTIFICATION_CARD: '[data-testid="notification-card"]',
 
   // Shared state components — P1.1
   EMPTY_STATE: '[data-testid="empty-state"]',
