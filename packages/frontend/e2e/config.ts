@@ -274,7 +274,7 @@ export const SELECTORS = {
   CONFIRM_ERROR: '[data-testid="confirm-error"]',
 
   // Messaging
-  MESSAGE_PANEL: '[data-testid="message-panel"]',
+  MESSAGE_PANEL: '[data-testid="message-thread-panel"]',
   MESSAGE_ITEM: '[data-testid="message-item"]',
   MESSAGE_INPUT: '[data-testid="message-input"]',
   MESSAGE_SEND_BUTTON: '[data-testid="message-send-button"]',

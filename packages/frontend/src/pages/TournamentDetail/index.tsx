@@ -5,7 +5,8 @@ import { useAuth } from '../../hooks/useAuth'
 import { useSSE } from '../../hooks/useSSE'
 import { useTournament } from '../../hooks/useTournament'
 import { useMessages } from '../../hooks/useMessages'
-import { MessagePanel, UnreadBadge } from '../../components/MessagePanel'
+import { UnreadBadge } from '../../components/MessagePanel'
+import { MessageThreadPanel } from '../../components/MessageThreadPanel'
 import { Standings } from './Standings'
 import { SkeletonLoader } from '../../components/shared/SkeletonLoader'
 import '../../styles/globals.css'
@@ -111,7 +112,7 @@ export const TournamentDetail: React.FC = () => {
           </Suspense>
         )
       case 'messages':
-        return <MessagePanel tournamentId={tournamentId} active />
+        return <MessageThreadPanel tournamentId={tournamentId} active />
       default:
         return <Standings />
     }

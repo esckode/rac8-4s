@@ -71,7 +71,15 @@ test.describe('Feature: Player Messaging', () => {
   // ---------------------------------------------------------------------------
   // Scenario: Player sends a coordination message to their match opponent
   // ---------------------------------------------------------------------------
-  test('Player sends a coordination message to their match opponent', async ({ page }) => {
+  // Superseded by messaging-threads.spec.ts's "Message opponent DM reaches only the
+  // opponent" (e2e-scenarios.md "Feature: Player Messaging"). This test's premise —
+  // a default compose box on the messages tab that sends an implicitly match-scoped
+  // message — matches the pre-V5.2 flat panel (MessagePanel), which the page no
+  // longer renders. The V5.2 threaded panel (MessageThreadPanel) has no default
+  // compose entry point on the Announcements channel (read-only for players); a
+  // DM/match thread must be selected first, reached via "Message opponent" on a
+  // MatchCard, and there is deliberately no arbitrary-DM affordance.
+  test.skip('Player sends a coordination message to their match opponent', async ({ page }) => {
     // Given: two players in the same tournament
     const fx = await createSinglesTournamentInGroupStage(organizerToken, 2)
 

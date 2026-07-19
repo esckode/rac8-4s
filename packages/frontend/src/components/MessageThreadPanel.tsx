@@ -49,7 +49,10 @@ export const MessageThreadPanel: React.FC<Props> = ({
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
-  // Mark all unread as read when active
+  // Mark all unread as read when active. Depends on `messages` (not just
+  // `active`) — the history fetch resolves after mount, so a mount-only effect
+  // would run once against the still-empty initial array and never re-fire
+  // once the real messages actually arrive.
   useEffect(() => {
     if (!active) return
     messages.forEach(m => {
@@ -57,7 +60,7 @@ export const MessageThreadPanel: React.FC<Props> = ({
         markRead(m.id).catch(() => {})
       }
     })
-  }, [active]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, messages, markRead])
 
   // Scroll to bottom on new messages
   useEffect(() => {
