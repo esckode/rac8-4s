@@ -59,6 +59,21 @@ describe('app.ts request middleware and error handling', () => {
       expect(res.headers['x-request-id']).toBeDefined()
       expect(typeof res.headers['x-request-id']).toBe('string')
     })
+
+    it('should resolve req.ip to the real client through the two-hop CloudFront→ALB chain', async () => {
+      // Topology is client -> CloudFront -> ALB -> Node (two proxy hops), so the
+      // X-Forwarded-For chain Node receives is "<real-client>, <cloudfront-edge>" —
+      // not a single-hop chain.
+      app.get('/test-client-ip', (req, res) => {
+        res.status(200).json({ ip: req.ip })
+      })
+
+      const res = await request(app)
+        .get('/test-client-ip')
+        .set('X-Forwarded-For', '203.0.113.7, 198.51.100.20')
+
+      expect(res.body.ip).toBe('203.0.113.7')
+    })
   })
 
   describe('HTTP response logging by status code', () => {
