@@ -151,6 +151,11 @@ export interface AppDependencies {
 export function createApp(deps: AppDependencies): Express {
   const app = express()
 
+  // Trust exactly the two verified proxy hops (CloudFront -> ALB -> Node), not
+  // blanket `true` — that would also trust an attacker-supplied X-Forwarded-For
+  // on any hop count.
+  app.set('trust proxy', 2)
+
   // Wrap queue with monitor for anomaly detection
   const monitoredQueue = deps.jobQueue ? new QueueMonitor(deps.jobQueue, deps.config) : undefined
   const appDeps = { ...deps, jobQueue: monitoredQueue }
