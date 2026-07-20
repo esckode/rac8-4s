@@ -255,8 +255,16 @@ test.describe('G2.5 — Player Groups', () => {
   test('Unread badge appears on My Groups nav tab when there are unseen messages', async ({ page }) => {
     // G2.5: "Unread badge on My Groups nav tab"
     // Navigate away from groups, trigger a new message, then check the badge is shown.
-    // The unread badge requires the SSE bus to push a notification while the player
-    // is NOT on the group page.
+    // P0.4: the badge is driven by useGroupUnread polling GET /player/groups on
+    // mount + window refocus (matching useNotificationUnread/usePendingActions) —
+    // deliberately not a persistent app-wide SSE connection, which broke
+    // Playwright's networkidle wait when tried for the notifications badge
+    // (see useNotificationUnread.ts). Dispatching a focus event below simulates
+    // a real tester returning to the app/tab, the mechanism's actual trigger.
+    // The badge lives in the mobile bottom nav (hidden at >=640px) — set a
+    // mobile viewport, matching this file's other nav-tab tests.
+    await page.setViewportSize({ width: 390, height: 844 })
+
     const user = createTestUser()
     const { token } = await signupAndGetToken(user)
     const groupId = await createGroup(token, `Badge Group ${Date.now()}`)
@@ -269,8 +277,10 @@ test.describe('G2.5 — Player Groups', () => {
     await page.goto('http://localhost:5173/matches')
 
     // Another actor sends a message (owner sends to their own group — the token is for this user)
-    // The SSE should update the badge even when off the group page
     await sendGroupMessage(token, groupId, `unread-${Date.now()}`)
+
+    // Simulate returning to the app (the poll's actual trigger)
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
 
     const badge = page.locator('[data-testid="groups-unread-badge"]')
     await expect(badge).toBeVisible({ timeout: 5000 })

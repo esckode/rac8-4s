@@ -14,7 +14,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import ReconnectingEventSource from 'reconnecting-eventsource'
 import { GroupMessageStore } from '../state/group-message-state'
 import type { GroupMessageRecord, PollTally } from '../state/group-message-state'
-import { groupUnreadStore } from '../state/group-unread-state'
+import { groupUnreadStore, markGroupSeen } from '../state/group-unread-state'
 
 export type { GroupMessageRecord, PollTally }
 
@@ -180,12 +180,17 @@ export function useGroupMessages(groupId: string, active = false): UseGroupMessa
     }
   }, [groupId, store])
 
-  // Clear global unread for this group when the panel becomes active (user is viewing)
+  // Clear global unread for this group while the panel is active (user is
+  // viewing), and record the current count as "seen" so the next
+  // useGroupUnread poll doesn't immediately re-flag it. Depends on `messages`
+  // (not just `active`) so a late-arriving history fetch or a message
+  // received while actively viewing both re-mark the latest count as seen.
   useEffect(() => {
     if (active) {
       groupUnreadStore.clearGroupUnread(groupId)
+      markGroupSeen(groupId, messages.filter(m => m.type !== 'system').length)
     }
-  }, [active, groupId])
+  }, [active, groupId, messages])
 
   // V1: count of text/announcement messages (no per-message read tracking for groups)
   const unreadCount = messages.filter(m => m.type !== 'system').length
