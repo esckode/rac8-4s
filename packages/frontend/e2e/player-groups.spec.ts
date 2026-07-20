@@ -255,8 +255,8 @@ test.describe('G2.5 — Player Groups', () => {
   test('Unread badge appears on My Groups nav tab when there are unseen messages', async ({ page }) => {
     // G2.5: "Unread badge on My Groups nav tab"
     // Navigate away from groups, trigger a new message, then check the badge is shown.
-    // NOTE: The unread badge requires the SSE bus to push a notification while the player
-    // is NOT on the group page. If the badge is not yet implemented the test skips.
+    // The unread badge requires the SSE bus to push a notification while the player
+    // is NOT on the group page.
     const user = createTestUser()
     const { token } = await signupAndGetToken(user)
     const groupId = await createGroup(token, `Badge Group ${Date.now()}`)
@@ -273,12 +273,11 @@ test.describe('G2.5 — Player Groups', () => {
     await sendGroupMessage(token, groupId, `unread-${Date.now()}`)
 
     const badge = page.locator('[data-testid="groups-unread-badge"]')
-    const badgeVisible = await badge.isVisible({ timeout: 5000 }).catch(() => false)
-    if (!badgeVisible) {
-      // Unread badge not yet implemented — skip visual assertion
-      test.skip()
-    } else {
-      await expect(badge).toBeVisible()
-    }
+    await expect(badge).toBeVisible({ timeout: 5000 })
+
+    // Opening the group resets the unread count
+    await page.goto(`http://localhost:5173/groups/${groupId}`)
+    await expect(page.locator('[data-testid="group-chat-panel"]')).toBeVisible({ timeout: 5000 })
+    await expect(badge).not.toBeVisible()
   })
 })
