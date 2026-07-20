@@ -1,3 +1,4 @@
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
 import { getLogger } from '../logger'
 
 const log = getLogger('email-service')
@@ -117,28 +118,16 @@ export class SendGridEmailService implements IEmailService {
 
 /**
  * AWS SES email service for production use.
- * Sends emails via AWS SES API.
- * Note: This is a placeholder implementation. For production use,
- * install @aws-sdk/client-ses and update the send method.
+ * Sends emails via AWS SES (SESv2) API.
+ * Credentials come from the SDK's default credential chain (e.g. an EC2
+ * instance role) — this class never accepts or stores a static key/secret.
  */
 export class AwsSesEmailService implements IEmailService {
-  private accessKeyId: string
-  private secretAccessKey: string
-  private region: string
+  private client: SESv2Client
   private fromAddress: string
 
-  constructor(
-    accessKeyId: string,
-    secretAccessKey: string,
-    region: string = 'us-east-1',
-    fromAddress: string = 'noreply@rac8-4s.local'
-  ) {
-    if (!accessKeyId || !secretAccessKey) {
-      throw new Error('AWS access key ID and secret access key are required')
-    }
-    this.accessKeyId = accessKeyId
-    this.secretAccessKey = secretAccessKey
-    this.region = region
+  constructor(region: string = 'us-east-1', fromAddress: string = 'noreply@rac8-4s.local') {
+    this.client = new SESv2Client({ region })
     this.fromAddress = fromAddress
   }
 
@@ -150,16 +139,26 @@ export class AwsSesEmailService implements IEmailService {
     const from = options.from || this.fromAddress
 
     try {
-      // Placeholder implementation - logs success without actually sending
-      // In production, integrate with @aws-sdk/client-ses or similar
-      log.info('email.service.sent', {
-        recipient: options.to,
-        service: 'aws_ses',
-        subject: options.subject,
-      })
+      await this.client.send(
+        new SendEmailCommand({
+          FromEmailAddress: from,
+          Destination: { ToAddresses: [options.to] },
+          Content: {
+            Simple: {
+              Subject: { Data: options.subject },
+              Body: {
+                Html: { Data: options.html },
+                ...(options.text && { Text: { Data: options.text } }),
+              },
+            },
+          },
+        })
+      )
+
+      // P0.9: no recipient, no subject — see CLAUDE.md §6 (PII beyond IDs).
+      log.info('email.service.sent', { service: 'aws_ses' })
     } catch (error) {
       log.error('email.service.failed', {
-        recipient: options.to,
         service: 'aws_ses',
         error: error instanceof Error ? error.message : String(error),
       })
@@ -197,17 +196,9 @@ export function createEmailService(
 
     case 'aws_ses':
       {
-        const accessKeyId = config?.awsAccessKeyId || process.env.AWS_ACCESS_KEY_ID
-        const secretAccessKey = config?.awsSecretAccessKey || process.env.AWS_SECRET_ACCESS_KEY
         const region = config?.awsRegion || process.env.AWS_REGION || 'us-east-1'
 
-        if (!accessKeyId || !secretAccessKey) {
-          throw new Error(
-            'AWS credentials are required. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables or provide via config.'
-          )
-        }
-
-        return new AwsSesEmailService(accessKeyId, secretAccessKey, region, fromAddress)
+        return new AwsSesEmailService(region, fromAddress)
       }
 
     default:

@@ -17,7 +17,7 @@ health_check_timeout             = 5
 health_check_healthy_threshold   = 2
 health_check_unhealthy_threshold = 3
 
-email_service      = "mock"
+email_service      = "aws_ses"
 email_from_address = "noreply@uat.example.com"
 
 enable_cloudtrail      = true

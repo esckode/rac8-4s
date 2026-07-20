@@ -44,6 +44,7 @@ TOKEN_STORE=redis
 JOB_QUEUE=bullmq
 PORT=${api_port}
 LOG_LEVEL=info
+AWS_REGION=${aws_region}
 ENVFILE
 SCRIPT
 chmod +x /usr/local/bin/tournament-refresh-env

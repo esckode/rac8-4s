@@ -30,7 +30,7 @@ import { BullMQJobQueue } from '@worker/bullmq-queue'
 import { PartitionManager } from './services/partition-manager'
 import { ServiceEmailAdapter } from './email-service-adapter'
 import { createEmailService } from './services/email-service'
-import { DEFAULT_APP_CONFIG, getAppConfig } from './config'
+import { getAppConfig } from './config'
 import { GroupMessageRepository } from './repositories/group-message-repository'
 import { selectAssistantClient } from './assistant/assistant-client-factory'
 import { selectCoachClient } from './assistant/coach-client-factory'
@@ -89,18 +89,23 @@ async function main() {
     })
   }
 
+  // getAppConfig() (not DEFAULT_APP_CONFIG) so this respects EMAIL_SERVICE,
+  // matching server.ts:53 — otherwise the worker's notify-email path always
+  // uses the hardcoded 'mock' default regardless of the deployed config.
+  const appConfig = getAppConfig()
+
   // ── Email adapter for the notify worker ────────────────────────────────────
   let emailAdapter: ServiceEmailAdapter | undefined
   try {
-    const emailService = createEmailService(DEFAULT_APP_CONFIG.email.service, {
-      fromAddress: DEFAULT_APP_CONFIG.email.fromAddress,
+    const emailService = createEmailService(appConfig.email.service, {
+      fromAddress: appConfig.email.fromAddress,
       sendgridApiKey: process.env.SENDGRID_API_KEY || undefined,
       awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || undefined,
       awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || undefined,
       awsRegion: process.env.AWS_REGION || undefined,
     })
-    emailAdapter = new ServiceEmailAdapter(emailService, DEFAULT_APP_CONFIG.email.fromAddress)
-    log.info('email.service.initialized', { service: DEFAULT_APP_CONFIG.email.service })
+    emailAdapter = new ServiceEmailAdapter(emailService, appConfig.email.fromAddress)
+    log.info('email.service.initialized', { service: appConfig.email.service })
   } catch (err) {
     log.warn('email.service.initialization_failed', {
       message: err instanceof Error ? err.message : String(err),
@@ -111,7 +116,6 @@ async function main() {
   // Adapter defaults to mock (no network) until ASSISTANT_ADAPTER is set (A9.2).
   // The bus must be Redis-backed (SSE_BUS=redis) for replies to reach API
   // instances' SSE connections from the worker tier.
-  const appConfig = getAppConfig()
   const assistantDeps = {
     pool,
     groupMessageRepo: new GroupMessageRepository(pool),

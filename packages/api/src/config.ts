@@ -333,7 +333,8 @@ export interface EmailConfig {
    * Usage: Choose which email service to use for sending emails.
    * - "mock": Development/testing mode - logs emails to console
    * - "sendgrid": Production - sends via SendGrid API (requires SENDGRID_API_KEY env var)
-   * - "aws_ses": Production - sends via AWS SES (requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY)
+   * - "aws_ses": Production - sends via AWS SES (credentials from the SDK's
+   *   default credential chain, e.g. an EC2 instance role — no static keys)
    * - Override via EMAIL_SERVICE env var
    */
   service: 'mock' | 'sendgrid' | 'aws_ses'
@@ -538,9 +539,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
  *   EMAIL_FROM_ADDRESS=noreply@example.com
  *   FRONTEND_URL=https://app.example.com
  *   SENDGRID_API_KEY=your-key (for EMAIL_SERVICE=sendgrid)
- *   AWS_ACCESS_KEY_ID=your-key (for EMAIL_SERVICE=aws_ses)
- *   AWS_SECRET_ACCESS_KEY=your-secret (for EMAIL_SERVICE=aws_ses)
- *   AWS_REGION=us-east-1 (for EMAIL_SERVICE=aws_ses)
+ *   AWS_REGION=us-east-1 (for EMAIL_SERVICE=aws_ses; credentials come from
+ *     the SDK's default credential chain, e.g. an EC2 instance role)
  */
 export function getAppConfig(): AppConfig {
   return {
