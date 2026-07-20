@@ -397,9 +397,17 @@ wrong region is the classic first failure):**
    (vs a domain) *must* be a real inbox precisely because verification arrives there. To
    verify before a full apply, `aws sesv2 create-email-identity` then
    `tofu import 'aws_sesv2_email_identity.sender[0]' <addr>`.
-   *Accepted trade-off:* sending *from* a `gmail.com` address won't DMARC-align, so mail
-   may land in testers' spam. Fine for UAT; the domain path (§2's custom domain) is the
-   real fix later.
+   **⚠️ Confirmed 2026-07-20 (live smoke test): mail from the `gmail.com` sender lands in
+   Gmail spam** — DKIM signs as `amazonses.com`, so DMARC can't align to `gmail.com`
+   (a domain you don't own; no SES setting fixes it). **Owner accepted this for this
+   round** rather than standing up a domain. Two consequences to carry:
+   - **Tester instructions MUST say "check spam, and mark the first email 'not spam'"** —
+     marking not-spam improves later delivery to that same recipient. Without this, the
+     registration magic-link lands in spam and the tester hits the very dead-end P0.6
+     exists to remove.
+   - The real fix remains the §2 custom domain (verify domain → DKIM CNAMEs → DMARC
+     passes → inbox). Deferred, not cancelled; revisit before opening UAT beyond a small
+     trusted group.
 2. **Sandbox — verify each recipient too.** Staying in sandbox (sufficient for a dozen
    known testers; 200/day, 1/sec, no support request). The catch: sandbox delivers only
    to *verified* recipients, and testers are **not** Terraform-managed — verify each by
