@@ -26,6 +26,8 @@ import { processNudgeSweep } from './workers/nudge-processor'
 import { processRecapSweep } from './workers/recap-processor'
 import { processDigestSweep } from './workers/digest-processor'
 import { registerAssistantSweepJobs } from './assistant/sweep-scheduler'
+import { registerAutoCloseSweepJob } from './workers/auto-close-scheduler'
+import { processAutoCloseSweep } from './workers/auto-close-processor'
 import { BullMQJobQueue } from '@worker/bullmq-queue'
 import { PartitionManager } from './services/partition-manager'
 import { ServiceEmailAdapter } from './email-service-adapter'
@@ -85,6 +87,16 @@ async function main() {
     log.info('assistant.sweep.scheduler.registered', {})
   } catch (err) {
     log.error('assistant.sweep.scheduler.registration.failed', {
+      message: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  // ── Register the poll auto-close sweep job (idempotent) ───────────────────
+  try {
+    await registerAutoCloseSweepJob({ redisUrl: REDIS_URL! })
+    log.info('auto_close.sweep.scheduler.registered', {})
+  } catch (err) {
+    log.error('auto_close.sweep.scheduler.registration.failed', {
       message: err instanceof Error ? err.message : String(err),
     })
   }
@@ -227,6 +239,14 @@ async function main() {
       redisUrl: REDIS_URL!,
       processor: async () => {
         await processDigestSweep({ pool, broadcastBus: assistantDeps.broadcastBus })
+      },
+    }),
+
+    createWorker({
+      queueName: 'poll.auto_close.sweep',
+      redisUrl: REDIS_URL!,
+      processor: async () => {
+        await processAutoCloseSweep({ pool })
       },
     }),
   ]
