@@ -168,9 +168,32 @@ describe('Rate Limiting', () => {
       expect(res.body).toEqual({
         code: 'RATE_LIMITED',
         message: 'Too many attempts. Try again later.',
+        retryAfterSeconds: 15 * 60,
       })
       expect(res.body).not.toHaveProperty('user')
       expect(res.body).not.toHaveProperty('token')
+    })
+
+    it('includes retryAfterSeconds equal to the configured login window', async () => {
+      const email = uniqueEmail('retry-after')
+      const password = 'correctpassword'
+
+      const account = await accountRepo.create(email, 'player')
+      const passwordHash = await bcryptjs.hash(password, 10)
+      await accountRepo.updatePasswordHash(account.id, passwordHash)
+
+      for (let i = 0; i < 4; i++) {
+        await request(app)
+          .post('/api/auth/login')
+          .send({ email, password: 'wrongpassword' })
+      }
+
+      const res = await request(app)
+        .post('/api/auth/login')
+        .send({ email, password: 'wrongpassword' })
+
+      expect(res.status).toBe(429)
+      expect(res.body.retryAfterSeconds).toBe(15 * 60)
     })
 
     it('tracks by email and IP combination', async () => {
@@ -348,6 +371,7 @@ describe('Rate Limiting', () => {
       expect(res.body).toEqual({
         code: 'RATE_LIMITED',
         message: 'Too many attempts. Try again later.',
+        retryAfterSeconds: 15 * 60,
       })
     })
 
