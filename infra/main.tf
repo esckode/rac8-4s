@@ -18,6 +18,17 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
+# SES sender identity (UAT: single verified address, sandbox mode). Creating this
+# triggers AWS to email a verification link to the address — it cannot send until
+# that link is clicked, so an email-address identity (vs a domain) MUST be a real
+# inbox. Region comes from the provider (var.aws_region). Only created when SES is
+# the selected provider; mock deployments skip it. In sandbox, recipients must be
+# verified too — see assets/planning/UAT_PWA_LAUNCH.md P0.6-SES.
+resource "aws_sesv2_email_identity" "sender" {
+  count          = var.email_service == "aws_ses" ? 1 : 0
+  email_identity = var.email_from_address
+}
+
 module "networking" {
   source = "./modules/networking"
 

@@ -17,8 +17,11 @@ health_check_timeout             = 5
 health_check_healthy_threshold   = 2
 health_check_unhealthy_threshold = 3
 
-email_service      = "aws_ses"
-email_from_address = "noreply@uat.example.com"
+email_service = "aws_ses"
+# email_from_address is NOT set here — it's a real inbox (PII), kept out of git.
+# Supply it via infra/secrets.auto.tfvars (git-ignored, auto-loaded). See
+# infra/secrets.auto.tfvars.example. A fresh clone without that file will prompt
+# for it at apply. Sandbox SES verifies the sender by emailing a link there.
 
 enable_cloudtrail      = true
 enable_cloudwatch_logs = false

@@ -95,3 +95,6 @@ test-results/
 infra/.terraform/
 *.tfstate
 *.tfstate.*
+# Local-only tofu vars — PII/secrets kept out of git. Auto-loaded by tofu at apply
+# (no command change). The committed *.example shows the shape. See uat.tfvars.
+infra/*.auto.tfvars
