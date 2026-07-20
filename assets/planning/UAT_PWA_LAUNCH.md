@@ -76,6 +76,78 @@ live check against the deployed stack, spelled out per item. Do not invent a tes
 greps the `.tpl` file for a string — that asserts the fix's own text, not its effect,
 and CLAUDE.md §2 rules it out.
 
+---
+
+## 3a. Execution plan
+
+Each item below is self-contained and specified to `file:line`; this section exists only
+to sequence them. **Read the item itself before building it** — the ordering here does
+not restate the findings, the guardrails, or the "do NOT do X" notes, several of which
+exist because the obvious implementation is the wrong one.
+
+### Day 0 — owner actions, start before any code
+
+These have real latency and nothing else can compress it. Both are P0.6-SES prerequisites.
+
+- [ ] **Verify an SES sender identity in `us-east-2`** — and settle the FROM address
+      (`uat.tfvars:21` is a placeholder domain that SES will refuse). Domain vs single
+      address is also the custom-domain decision from §2.
+- [ ] **Decide SES sandbox vs production access.** Sandbox + individually-verified
+      testers is likely sufficient and skips the ~24h support request entirely.
+
+### Build order
+
+Dependency-ordered. Items with the same number are independent of each other.
+
+| # | Item | Branch | Commits | Depends on | Status |
+|---|---|---|---|---|---|
+| 1 | **P0.7** `LOG_LEVEL` | `uat-p07-log-level` | 1 (no red test) | — | ☐ |
+| 2 | **P0.5** age-gate fixtures | `uat-p05-age-gate-fixtures` | 1 (baseline, no red test) | — | ☐ |
+| 3 | **P0.1** trust proxy | `uat-p01-trust-proxy` | RED + GREEN | — | ☐ |
+| 3 | **P0.2** login 429 UI | `uat-p02-login-429` | RED+GREEN ×2 (backend, then frontend) | P0.1 | ☐ |
+| 4 | **P0.6-SES** SES provider | `uat-p06-ses-provider` | RED + GREEN | Day 0 | ☐ |
+| 5 | **P0.6** magic-link email | `uat-p06-magic-link-email` | RED + GREEN | P0.6-SES | ☐ |
+| 6 | **P0.9** no PII in logs | `uat-p09-log-pii` | RED + GREEN | P0.6-SES | ☐ |
+| 7 | **P0.8** CloudWatch shipping | `uat-p08-cloudwatch` | 1 (no red test) | P0.7, **P0.9** | ☐ |
+| 8 | **P0.3** poll auto-close *(conditional)* | `uat-p03-auto-close-sweep` | RED + GREEN | — | ☐ |
+| 8 | **P0.4** groups unread badge *(conditional)* | `uat-p04-groups-badge` | RED + GREEN | — | ☐ |
+
+**⚠️ P0.9 must land before P0.8, not after.** Each item's own "Required if" line frames
+P0.9 as conditional *on* doing P0.8, which reads as P0.8-then-P0.9 — **that order is
+wrong.** P0.8 is what makes logs durable in CloudWatch; shipping first and sanitizing
+second means every tester email address in that window is retained for
+`log_retention_days`, and deleting it afterwards is a manual log-group surgery nobody
+wants to do. Sanitize first, then turn on shipping.
+
+**Why P0.7 and P0.5 come first.** P0.7 is one line and every later item is easier to
+debug once the deployed stack logs anything at all — and it must be in the template
+before the first `apply`, since the env file is only written at instance start. P0.5
+establishes the regression baseline: until the ~116 age-gate failures are cleared, a
+full-suite run can't tell you whether P0.1–P0.4 broke something.
+
+**Why P0.6-SES gates P0.9.** P0.6-SES edit 2 writes the new SES logging calls, and P0.9
+defines what shape they must take (`service` only — no `recipient`, no `subject`).
+Building SES first means writing them correctly once instead of having P0.9 rewrite them.
+
+**Conditional items.** P0.3 and P0.4 are gated on what your UAT script actually
+exercises — availability polls / casual tournaments for P0.3, group chat with tab
+switching for P0.4. Skip both if the round is scored purely on tournament + PWA/offline
+behavior. P0.4 needs no test authoring: the red test already exists and self-skips at
+`player-groups.spec.ts:279`.
+
+**Per CLAUDE.md §11:** branch off `main` for each item, commit red tests separately from
+implementation, run the relevant suite before merging, prefer fast-forward merges. The
+`(no red test)` rows are infra-only or baseline-capture work — see the TDD note above for
+why, and don't invent a grep-the-template test to fill the gap.
+
+### Minimum sets
+
+- **Solo/technical pass (§4):** P0.7 only.
+- **Multi-user round:** P0.7, P0.5, P0.1, P0.2, P0.6-SES, P0.6, P0.9, P0.8 — plus P0.3
+  and/or P0.4 if the script exercises them.
+
+---
+
 ### P0.1 — `trust proxy` behind the load balancer (BACKLOG.md PR-1)
 
 **Required:** always, before any multi-user round. **Type:** correctness/observability
@@ -491,7 +563,8 @@ runtime — see P0.9's RED step.)
 reconstruct a defect *after* a redeploy. **Skip for** a single solo pass where
 `journalctl`-over-`send-command` (P0.7's verify block) is enough. **Type:** infra,
 ~40–50 lines across four files. **Depends on P0.7** — shipping an empty log stream
-accomplishes nothing, so do P0.7 first.
+accomplishes nothing — **and on P0.9**, which must land first so this doesn't durably
+store the PII P0.9 exists to remove. This is the **last** item in the §3a build order.
 
 **Finding (verified 2026-07-20):** `grep -rn "cloudwatch\|log_group\|awslogs" infra/
 --include=*.tf` returns **only variable declarations** — there is no CloudWatch
@@ -597,7 +670,10 @@ work; the name audit below came back almost clean.
 **Required if:** you are doing P0.8 (durable log shipping) **and** the round involves
 anyone other than you. Solo with journald-only, the blast radius is a RAM-backed buffer
 on a box you own; with P0.8 it's tester PII sitting in CloudWatch for
-`log_retention_days`. **Type:** code, 13 field deletions/substitutions across 8 files
+`log_retention_days`. **⚠️ Ordering: build this *before* P0.8, not after** — "conditional
+on P0.8" describes the gate, not the sequence. Shipping logs first and sanitizing second
+retains every address logged in that window for the full retention period, recoverable
+only by manual log-group surgery. See §3a. **Type:** code, 13 field deletions/substitutions across 8 files
 plus one new spec — **logging only; no email delivery behavior changes and no change to
 `MockEmailService`** (see "Blast radius" below), and no interface or signature changes
 (see the design decision below).
