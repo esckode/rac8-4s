@@ -7,6 +7,7 @@ import { TournamentFactory, OrganizerFactory, PlayerFactory } from '../factories
 import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository } from '../../db'
 import { generatePlayerSession } from '../../auth/magic-link'
 import { InMemoryTokenStore } from '../../auth/token-store'
+import { InMemoryEmailAdapter } from '../../email-adapter'
 import { generateBracket } from '@core/index'
 import { defaultAdultAttestation } from '../factories/player.factory'
 
@@ -19,6 +20,7 @@ describe('Tournaments API', () => {
   let app: Express
   let jwtConfig: JwtConfig
   let tokenStore: InMemoryTokenStore
+  let emailAdapter: InMemoryEmailAdapter
 
   beforeAll(async () => {
     pool = await getTestPool()
@@ -27,6 +29,7 @@ describe('Tournaments API', () => {
     app = deps.app
     jwtConfig = deps.jwtConfig
     tokenStore = deps.tokenStore
+    emailAdapter = deps.emailAdapter
   })
 
   afterAll(async () => {
@@ -1490,6 +1493,28 @@ describe('Tournaments API', () => {
       expect(res.body.message).toContain('Registration email sent')
       expect(res.body.magicLinkToken).toBeDefined()
       expect(res.body.magicLinkExpires).toBeGreaterThan(0)
+    })
+
+    it('sends a real magic-link email to the registering player', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament.id, 'registration_open')
+
+      const email = 'emailed-player@test.local'
+      const res = await request(app)
+        .post(`/tournaments/${tournament.id}/register`)
+        .send({
+          email,
+          name: 'Emailed Player',
+          dob_attestation: ADULT_ATTESTATION,
+        })
+
+      expect(res.status).toBe(202)
+
+      const sent = emailAdapter.getSentTo(email)
+      expect(sent).toHaveLength(1)
+      expect(sent[0].body).toContain(res.body.magicLinkToken)
     })
 
     it('requires email field', async () => {
