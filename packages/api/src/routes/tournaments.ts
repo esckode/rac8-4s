@@ -21,6 +21,7 @@ import { isSinglesMatch, isDoublesMatch, getMatchParticipantIds, validateMatchFo
 import { processStandingsRecalculate } from '../workers/standings-processor'
 import { ConversationRepository } from '../repositories/conversation-repository'
 import { getLogger } from '../logger'
+import { sendMagicLinkEmail } from '../email-adapter'
 import { generateRoundPairings } from '../mixer-scheduler'
 import { submitScore, SCORE_ERROR_HTTP_STATUS } from '../services/score-service'
 
@@ -1287,6 +1288,17 @@ export default function tournamentsRouter(deps: AppDependencies) {
         deps.config.auth.magicLinkTtlSeconds,
         deps.tokenStore
       )
+
+      if (deps.emailAdapter) {
+        await sendMagicLinkEmail(
+          deps.emailAdapter,
+          deps.config.email,
+          player.email,
+          magicLink.token,
+          tournamentId,
+          tournament.name
+        )
+      }
 
       log.info('player.registered', { tournamentId, playerId: player.id, format: tournament.match_format })
 

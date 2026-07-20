@@ -75,3 +75,51 @@ export async function sendPasswordResetEmail(
     // Don't throw - allow endpoint to continue
   }
 }
+
+/**
+ * Send the magic-link registration email for a tournament.
+ * Logs success or failure but does not throw to allow the register
+ * endpoint to continue (the response body still carries the token).
+ *
+ * @param emailAdapter - The email adapter to use for sending
+ * @param config - Email configuration with fromAddress and frontendUrl
+ * @param email - Recipient (registering player's) email address
+ * @param token - The magic-link token
+ * @param tournamentId - The tournament being registered for (log context only)
+ * @param tournamentName - Tournament name, shown in the email
+ */
+export async function sendMagicLinkEmail(
+  emailAdapter: EmailAdapter,
+  config: EmailConfig,
+  email: string,
+  token: string,
+  tournamentId: string,
+  tournamentName: string
+): Promise<void> {
+  try {
+    const registrationLink = `${config.frontendUrl}/signup?token=${encodeURIComponent(token)}`
+
+    const subject = `Complete your registration for ${tournamentName}`
+
+    const html = `
+      <h1>You're registered!</h1>
+      <p>Hi,</p>
+      <p>Click the link below to complete your registration for <strong>${tournamentName}</strong>:</p>
+      <p><a href="${registrationLink}" style="display: inline-block; background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Complete registration</a></p>
+      <p>Or copy this URL: ${registrationLink}</p>
+    `
+
+    // Send via email adapter
+    await emailAdapter.send(email, subject, html)
+
+    // No recipient in logs, per CLAUDE.md §6 (PII beyond IDs) — see P0.9.
+    log.info('email.sent', { tournamentId, type: 'magic_link' })
+  } catch (error) {
+    log.error('email.send_failed', {
+      tournamentId,
+      type: 'magic_link',
+      error: error instanceof Error ? error.message : String(error),
+    })
+    // Don't throw - allow endpoint to continue
+  }
+}
