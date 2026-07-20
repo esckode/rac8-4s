@@ -228,7 +228,10 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
         throw new Error('Invalid email or password')
       }
       const errorMessage = errorData.message || `Login failed with status ${response.status}`
-      throw new Error(errorMessage)
+      const err = new Error(errorMessage) as Error & { status?: number; retryAfterSeconds?: number }
+      err.status = response.status
+      if (errorData.retryAfterSeconds !== undefined) err.retryAfterSeconds = errorData.retryAfterSeconds
+      throw err
     }
 
     const data = (await response.json()) as LoginResponse

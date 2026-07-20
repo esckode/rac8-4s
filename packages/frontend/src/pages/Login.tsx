@@ -14,6 +14,12 @@ const validateEmail = (email: string): boolean => {
   return emailRegex.test(email)
 }
 
+const formatCountdown = (seconds: number): string => {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 export const Login: React.FC = () => {
   const navigate = useNavigate()
   const { login: authLogin } = useAuth()
@@ -22,9 +28,20 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [apiError, setApiError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null)
   const emailInputRef = useRef<HTMLInputElement>(null)
 
-
+  // P0.2 — ticks the 429 retry countdown down once per second, re-enabling
+  // the form at zero.
+  useEffect(() => {
+    if (retryAfterSeconds === null) return undefined
+    if (retryAfterSeconds <= 0) {
+      setRetryAfterSeconds(null)
+      return undefined
+    }
+    const timer = setTimeout(() => setRetryAfterSeconds(retryAfterSeconds - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [retryAfterSeconds])
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {}
@@ -58,6 +75,7 @@ export const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setApiError('')
+    setRetryAfterSeconds(null)
 
     if (!validateForm()) {
       return
@@ -71,9 +89,14 @@ export const Login: React.FC = () => {
       setFormData({ email: '', password: '' })
       navigate('/browse')
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Something went wrong. Please try again.'
+      const rateLimitErr = err as Error & { status?: number; retryAfterSeconds?: number }
       setLoading(false)
-      setApiError(errorMessage)
+      if (rateLimitErr.status === 429) {
+        setApiError('Too many attempts.')
+        setRetryAfterSeconds(rateLimitErr.retryAfterSeconds ?? null)
+      } else {
+        setApiError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      }
     }
   }
 
@@ -83,6 +106,7 @@ export const Login: React.FC = () => {
     }
   }
 
+  const isRateLimited = retryAfterSeconds !== null
   const isFormValid = formData.email && formData.password && !errors.email && !errors.password
 
   return (
@@ -204,6 +228,7 @@ export const Login: React.FC = () => {
         {apiError && (
           <div
             role="alert"
+            data-testid={isRateLimited ? 'login-rate-limit-error' : undefined}
             style={{
               marginTop: 22,
               display: 'flex',
@@ -224,6 +249,11 @@ export const Login: React.FC = () => {
             </svg>
             <div style={{ flex: 1 }}>
               <strong style={{ color: 'var(--auth-glass-text)' }}>{apiError}</strong>
+              {isRateLimited && (
+                <div data-testid="login-retry-countdown" style={{ marginTop: 4 }}>
+                  Try again in {formatCountdown(retryAfterSeconds as number)}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -255,6 +285,7 @@ export const Login: React.FC = () => {
               onBlur={handleEmailBlur}
               onKeyPress={handleKeyPress}
               placeholder="Enter your email"
+              disabled={isRateLimited}
               style={{
                 width: '100%',
                 height: 52,
@@ -345,6 +376,7 @@ export const Login: React.FC = () => {
                 onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                 onKeyPress={handleKeyPress}
                 placeholder="Enter your password"
+                disabled={isRateLimited}
                 style={{
                   flex: 1,
                   fontSize: 15,
@@ -419,12 +451,12 @@ export const Login: React.FC = () => {
           <Button
             variant="primary"
             size="lg"
-            disabled={loading || !isFormValid}
+            disabled={loading || !isFormValid || isRateLimited}
             onClick={handleSubmit}
             style={{
               width: '100%',
-              opacity: loading || !isFormValid ? 0.5 : 1,
-              cursor: loading || !isFormValid ? 'not-allowed' : 'pointer',
+              opacity: loading || !isFormValid || isRateLimited ? 0.5 : 1,
+              cursor: loading || !isFormValid || isRateLimited ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

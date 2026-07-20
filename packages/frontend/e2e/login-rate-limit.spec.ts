@@ -4,7 +4,7 @@ import { clearAuthState, createTestUser, signupViaApi } from './fixtures'
 
 test.describe('Feature: Offline Support & Error Handling', () => {
   test.describe('Scenario: Rate limit error shows countdown', () => {
-    test('login is rate limited after 5 failed attempts and shows a ticking countdown', async ({ page }) => {
+    test('login is rate limited on the 5th failed attempt and shows a ticking countdown', async ({ page }) => {
       const user = createTestUser()
 
       // Given: I have an account
@@ -15,15 +15,16 @@ test.describe('Feature: Offline Support & Error Handling', () => {
       await clearAuthState(page)
       await page.goto('/login')
 
-      // And: I have attempted login 5 times unsuccessfully
-      for (let i = 0; i < 5; i++) {
+      // And: I have attempted login 4 times unsuccessfully (still under the
+      // maxAttempts=5 limit — the 5th failed attempt is the one that blocks)
+      for (let i = 0; i < 4; i++) {
         await page.fill('input[type="email"]', user.email)
         await page.fill('input[type="password"]', 'WrongPassword123')
         await page.click('button:has-text("Sign In")')
         await page.waitForTimeout(500)
       }
 
-      // When: I attempt login a 6th time
+      // When: I attempt login a 5th time
       await page.fill('input[type="email"]', user.email)
       await page.fill('input[type="password"]', 'WrongPassword123')
       await page.click('button:has-text("Sign In")')
