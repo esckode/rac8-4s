@@ -92,11 +92,13 @@ exist because the obvious implementation is the wrong one.
 
 These have real latency and nothing else can compress it. Both are P0.6-SES prerequisites.
 
-- [ ] **Verify an SES sender identity in `us-east-2`** — and settle the FROM address
-      (`uat.tfvars:21` is a placeholder domain that SES will refuse). Domain vs single
-      address is also the custom-domain decision from §2.
-- [ ] **Decide SES sandbox vs production access.** Sandbox + individually-verified
-      testers is likely sufficient and skips the ~24h support request entirely.
+- [ ] **Verify the SES sender address in `us-east-2`** — `email_from_address` is set in
+      the git-ignored `infra/secrets.auto.tfvars`; `tofu apply` creates the identity and
+      SES emails a verify link there. **Click it.** (Decision resolved: single address,
+      not a domain — see P0.6-SES.)
+- [ ] **Verify each tester as a recipient** — required by sandbox mode (chosen over
+      production access): `aws sesv2 create-email-identity --email-identity <tester>
+      --region us-east-2`, then they click their link.
 
 ### Build order
 
@@ -380,21 +382,30 @@ provider. Do P0.6-SES first, then the RED/GREEN below.
 infra edits + 2 owner-run AWS account actions. **Sequence matters** — the account
 actions have a lead time nothing else can compress, so start them first.
 
-**Start these two immediately — they gate everything else (owner, AWS console):**
-1. **Verify a sender identity.** `uat.tfvars:21` is `email_from_address =
-   "noreply@uat.example.com"` — a placeholder domain you don't own, which SES will
-   refuse. Either verify a single email address you control (fast, but sending *from* an
-   `@gmail.com`-style address fails DMARC alignment and lands in testers' spam), or
-   verify a real domain via DKIM records (correct, and §2 already wants a custom domain
-   so installed PWAs survive a `destroy`/`apply` — **two reasons now point at buying one
-   sooner**). Whichever you pick, `email_from_address` must be updated to match.
-2. **Decide sandbox vs production access.** New SES accounts are sandboxed: send only to
-   *verified* recipients, 200/day, 1/sec. Production access is a support request,
-   typically ~24h but not guaranteed. **For a dozen known testers the sandbox is
-   genuinely sufficient** — verify each tester's address individually (they click a
-   confirmation link) and skip the wait entirely. Request production access only if the
-   tester list is open-ended. Do this in **`us-east-2`** — SES identities and sandbox
-   status are per-region, and verifying in the wrong region is the classic first failure.
+**Chosen path (owner, 2026-07-20): single verified email address, sandbox mode.** The
+code and infra edits below are **BUILT** (commits `f6e007a`…`e91e6d8`, and `80c5d7b` for
+the identity resource); what remains is the owner-run AWS account actions.
+
+**Owner AWS actions — do in `us-east-2` (identities and sandbox status are per-region;
+wrong region is the classic first failure):**
+1. **Verify the sender address.** `email_from_address` is set in the **git-ignored**
+   `infra/secrets.auto.tfvars` (real inbox = PII, kept out of git; auto-loaded by tofu —
+   see `secrets.auto.tfvars.example` and the pointer comment in `uat.tfvars`). The
+   `aws_sesv2_email_identity.sender` resource (`infra/main.tf`, gated on
+   `email_service == "aws_ses"`) creates the identity on `tofu apply`, which triggers a
+   verification email to that inbox — **click the link**. A single email-address identity
+   (vs a domain) *must* be a real inbox precisely because verification arrives there. To
+   verify before a full apply, `aws sesv2 create-email-identity` then
+   `tofu import 'aws_sesv2_email_identity.sender[0]' <addr>`.
+   *Accepted trade-off:* sending *from* a `gmail.com` address won't DMARC-align, so mail
+   may land in testers' spam. Fine for UAT; the domain path (§2's custom domain) is the
+   real fix later.
+2. **Sandbox — verify each recipient too.** Staying in sandbox (sufficient for a dozen
+   known testers; 200/day, 1/sec, no support request). The catch: sandbox delivers only
+   to *verified* recipients, and testers are **not** Terraform-managed — verify each by
+   hand: `aws sesv2 create-email-identity --email-identity <tester> --region us-east-2`,
+   then they click their link. Only pursue production access (a ~24h support request) if
+   the tester list becomes open-ended.
 
 **Code (4 edits):**
 1. **Add `@aws-sdk/client-sesv2`** to `packages/api/package.json`. Not currently a
@@ -434,10 +445,11 @@ actions have a lead time nothing else can compress, so start them first.
    is unset, while the whole stack is `us-east-2`, so sends would fail against a region
    where your identity isn't verified. (Secondary benefit: `assistant-client.ts:180`
    documents needing `AWS_REGION` too, so this closes a second latent gap.)
-7. **SES identity in Terraform (optional, recommended).** No SES resource exists in
-   `infra/` at all. Once the identity is chosen, an `aws_sesv2_email_identity` resource
-   makes it reproducible rather than console-only drift. Skip if verifying a personal
-   address by hand for a one-off round.
+7. **SES identity in Terraform — BUILT (`80c5d7b`).** `aws_sesv2_email_identity.sender`
+   in `infra/main.tf`, gated on `email_service == "aws_ses"`, reads
+   `var.email_from_address` (supplied by the git-ignored `secrets.auto.tfvars`). Makes
+   the sender reproducible rather than console drift; recipients stay manual (see Owner
+   action 2).
 
 **No IAM change needed** — `infra/modules/api/main.tf:37-40` already grants
 `ses:SendEmail` / `ses:SendRawEmail` on the instance role. **No SSM parameter and no
