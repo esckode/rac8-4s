@@ -1,11 +1,14 @@
 # UAT PWA Launch — phone testing on AWS
 
 **Date:** 2026-07-19 (Phase 0 prerequisites added 2026-07-20; observability items
-P0.7–P0.8 added 2026-07-20)
-**Status:** 📋 Runbook — **solo/technical pass** (§4) needs **P0.7** first (without it
-the deployed API emits no logs at all, so a failed pass leaves nothing to diagnose);
-otherwise blocked only on AWS credentials. **Multi-user UAT** (inviting other testers)
-additionally requires Phase 0 (§3) done first — see scope note below.
+P0.7–P0.8 added 2026-07-20; all 10 §3a build-order items built + merged to `main`
+2026-07-20 — see the Build order table's Status column for per-item verification detail)
+**Status:** 📋 Runbook — all of §3 (Phase 0) is now code-complete on `main`, including the
+conditional P0.3/P0.4. **Every item's live-deploy verification step is blocked** in this
+environment (no AWS credentials configured, no deployed stack, and the Day 0 SES owner
+actions haven't happened) — local tests, `tofu validate`/`fmt`, and (for P0.3) a live
+`dev:worker` boot-log check all pass. §4's runbook (stand up the stack, deploy, phone-test)
+remains the next step once AWS credentials are available.
 **Purpose:** Stand up the UAT stack, deploy the PWA (merged to `main` 2026-07-19,
 `c150447..35c2c94`), and phone-test it on real devices. Executing §4–§6 also closes the
 three DoD items deferred from the PWA merge
@@ -101,16 +104,16 @@ Dependency-ordered. Items with the same number are independent of each other.
 
 | # | Item | Branch | Commits | Depends on | Status |
 |---|---|---|---|---|---|
-| 1 | **P0.7** `LOG_LEVEL` | `uat-p07-log-level` | 1 (no red test) | — | ☐ |
-| 2 | **P0.5** age-gate fixtures | `uat-p05-age-gate-fixtures` | 1 (baseline, no red test) | — | ☐ |
-| 3 | **P0.1** trust proxy | `uat-p01-trust-proxy` | RED + GREEN | — | ☐ |
-| 3 | **P0.2** login 429 UI | `uat-p02-login-429` | RED+GREEN ×2 (backend, then frontend) | P0.1 | ☐ |
-| 4 | **P0.6-SES** SES provider | `uat-p06-ses-provider` | RED + GREEN | Day 0 | ☐ |
-| 5 | **P0.6** magic-link email | `uat-p06-magic-link-email` | RED + GREEN | P0.6-SES | ☐ |
-| 6 | **P0.9** no PII in logs | `uat-p09-log-pii` | RED + GREEN | P0.6-SES | ☐ |
-| 7 | **P0.8** CloudWatch shipping | `uat-p08-cloudwatch` | 1 (no red test) | P0.7, **P0.9** | ☐ |
-| 8 | **P0.3** poll auto-close *(conditional)* | `uat-p03-auto-close-sweep` | RED + GREEN | — | ☐ |
-| 8 | **P0.4** groups unread badge *(conditional)* | `uat-p04-groups-badge` | RED + GREEN | — | ☐ |
+| 1 | **P0.7** `LOG_LEVEL` | `uat-p07-log-level` | 1 (no red test) | — | ☑ merged; live verify blocked (no AWS creds/deployed stack) |
+| 2 | **P0.5** age-gate fixtures | `uat-p05-age-gate-fixtures` | 1 (baseline, no red test) | — | ☑ baseline captured; fix was **already merged** (commit `82c2b70`, predates this doc) — 0 age-gate failures, no branch needed |
+| 3 | **P0.1** trust proxy | `uat-p01-trust-proxy` | RED + GREEN | — | ☑ merged; full suite green |
+| 3 | **P0.2** login 429 UI | `uat-p02-login-429` | RED+GREEN ×2 (backend, then frontend) | P0.1 | ☑ merged; full suite + e2e green |
+| 4 | **P0.6-SES** SES provider | `uat-p06-ses-provider` | RED + GREEN | Day 0 | ☑ merged; unit tests + `tofu validate` green; live send blocked (no AWS creds, Day-0 not done) |
+| 5 | **P0.6** magic-link email | `uat-p06-magic-link-email` | RED + GREEN | P0.6-SES | ☑ merged; integration test + e2e green; live email delivery blocked (no deployed stack) |
+| 6 | **P0.9** no PII in logs | `uat-p09-log-pii` | RED + GREEN | P0.6-SES | ☑ merged; fully verified (full suite green) |
+| 7 | **P0.8** CloudWatch shipping | `uat-p08-cloudwatch` | 1 (no red test) | P0.7, **P0.9** | ☑ merged; `tofu validate` green; live shipping blocked (no AWS creds/deployed stack) |
+| 8 | **P0.3** poll auto-close *(conditional)* | `uat-p03-auto-close-sweep` | RED + GREEN | — | ☑ merged; fully verified (test green + live boot-log check) |
+| 8 | **P0.4** groups unread badge *(conditional)* | `uat-p04-groups-badge` | RED + GREEN | — | ☑ merged; fully verified (full suite + e2e green) |
 
 **⚠️ P0.9 must land before P0.8, not after.** Each item's own "Required if" line frames
 P0.9 as conditional *on* doing P0.8, which reads as P0.8-then-P0.9 — **that order is

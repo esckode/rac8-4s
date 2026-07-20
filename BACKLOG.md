@@ -148,34 +148,30 @@ here.
 > Small, standalone implementation gaps found while writing Playwright specs. No design grilling needed —
 > the desired behaviour is clear from the existing scenario docs and API contracts.
 
-- **FE-GAP-1 — Login 429 rate-limit UI.** `Login.tsx` doesn't handle a `429 RATE_LIMITED` response from
-  `POST /api/auth/login`. The API correctly returns `{ code: 'RATE_LIMITED', message: 'Too many attempts.
-  Try again later.' }` after 5 failed attempts (verified in `offline.spec.ts`), but the login form shows
-  nothing (no error message, no disabled state). Target behaviour (per `e2e-scenarios.md`): display "Too
-  many attempts" text, disable the form fields, show a retry countdown. Compare with `ResetPassword.tsx`
-  which already handles `status === 429`. The e2e test (`offline.spec.ts` — "Rate limit countdown UI") is
-  written and self-skips until this is built.
+- *(done)* ~~**FE-GAP-1 — Login 429 rate-limit UI.**~~ — **✅ Built** (`UAT_PWA_LAUNCH.md` P0.2,
+  2026-07-20). `rate-limit.ts`'s 429 body now includes `retryAfterSeconds`; `Login.tsx` shows "Too many
+  attempts", a ticking countdown, and disables the form until it re-enables at zero.
+  `offline.spec.ts` (the file named in this row) had actually been **deleted** on the PWA branch,
+  superseded by `pwa-*.spec.ts` — its Gherkin scenario ("Rate limit error shows countdown") survived in
+  `e2e-scenarios.md` but the test did not; re-authored as `login-rate-limit.spec.ts`.
 
-- **FE-GAP-2 — Groups unread badge not SSE-driven.** `MyGroupsUnreadBadge` and the `groupsUnread` state
-  variable are wired into `ResponsiveLayout.tsx`, but the count is never incremented via SSE while the user
-  is away from the group page. The SSE bus emits `message.created` events; a listener in the auth/groups
-  context needs to increment the badge counter when a new message arrives for a group the user isn't
-  currently viewing, and reset it to zero when they open that group. Distinct from **P1.11**
-  (refetch-on-reconnect), which is about history refresh, not the nav badge. The e2e test
-  (`player-groups.spec.ts` — "Unread badge appears on My Groups nav tab") is written and self-skips until
-  this is built.
+- *(done)* ~~**FE-GAP-2 — Groups unread badge not SSE-driven.**~~ — **✅ Built** (`UAT_PWA_LAUNCH.md`
+  P0.4, 2026-07-20) — **not** via SSE. A persistent app-wide SSE connection was already tried for the
+  sibling notifications badge and reverted for breaking Playwright's `networkidle` wait
+  (`useNotificationUnread.ts`); wiring one here would reintroduce that bug. Built instead as a
+  `GET /player/groups`-poll (mount + window refocus, matching every other app-wide badge in this
+  codebase) diffed against a localStorage last-seen watermark, backed by a new `messageCount` field
+  per group. `player-groups.spec.ts`'s self-skip at line 279 was removed and is now a hard assertion.
 
 ### 🔍 Backend gaps (surfaced by the Phase C proactive assistant build, 2026-07-13)
 > Grounding findings from `LLM_ASSISTANT_IMPLEMENTATION.md` §C0/C6 — pre-existing, out of assistant scope.
 > No design grilling needed; noted so the next person touching either area doesn't assume the wiring exists.
 
-- **BE-GAP-1 — `processAutoCloseSweep` has no production caller.** The poll auto-close sweep
-  (`auto-close-processor.ts`) is fully built and unit/integration-tested, but nothing registers it as a
-  BullMQ repeatable job or calls it from any route — only tests invoke it directly. The only *wired*
-  recurring mechanism in this codebase is the BullMQ repeatable-cron pattern in
-  `@worker/partition-scheduler` (`registerPartitionJobs`). Fix: register `auto-close.sweep` alongside the
-  Phase-C `registerAssistantSweepJobs` pattern (`assistant/sweep-scheduler.ts`) the next time someone
-  touches poll auto-close.
+- *(done)* ~~**BE-GAP-1 — `processAutoCloseSweep` has no production caller.**~~ — **✅ Built**
+  (`UAT_PWA_LAUNCH.md` P0.3, 2026-07-20). `registerAutoCloseSweepJob`
+  (`workers/auto-close-scheduler.ts`) follows the exact `registerAssistantSweepJobs` pattern, registered
+  at worker boot alongside the partition/assistant-sweep jobs; runs every 5 minutes. Verified live via
+  the worker's boot log (`auto_close.sweep.scheduler.registered`).
 - **BE-GAP-2 — no production route drives a SCHEDULED tournament to `tournament_complete`.**
   `'tournament_complete'` is a reachable `TournamentRepository.updateStatus` value (in the valid-status
   list, and the Phase-C recap sweep watches for it), but no route ever calls it — the only status-terminal
@@ -204,39 +200,104 @@ here.
   `team_id`-keyed snapshot table, or resolve each team to its two underlying player rows and store two
   per-player snapshot rows with a shared team-rank value.
 
+### 🔍 P0.5 age-gate fixture baseline (`UAT_PWA_LAUNCH.md`, 2026-07-20)
+> Not a gap — noted because the doc's own finding was stale by the time it was executed.
+
+- **The age-gate fixture rot this item describes was already fixed**, by commit `82c2b70`
+  ("fix(e2e): satisfy the 18+ age gate in signup/registration fixtures", 2026-07-19) —
+  one day *before* `UAT_PWA_LAUNCH.md`'s P0.5 section was written (2026-07-20). Verified
+  by grep: every registration/signup call site across the whole `e2e/` suite already
+  carries `dob_attestation`. A clean full-suite baseline run (8.9 min) confirmed **zero**
+  `AGE_ATTESTATION_REQUIRED` failures — 381 passed, 16 failed (all pre-existing, unrelated
+  to age-gate — see next item), 4 flaky (documented SSE/timing flakes), 18 skipped. No
+  fixture code change was needed.
+- **A pre-existing e2e failure mode the doc didn't account for:** all 16 hard failures in
+  that clean run are in the `pwa` Playwright project (`pwa-*.spec.ts`), which requires a
+  separate `vite preview` server on port 4173 (`playwright.config.ts:43-45`) that neither
+  the root `webServer` config nor the `/e2e-testing` skill starts automatically — a
+  local-testing-infra gap, unrelated to any P0.x work, left unfixed as out of scope here.
+
+### 🔍 Observability gaps (surfaced by the UAT logging/monitoring readiness audit, 2026-07-20)
+> `UAT_PWA_LAUNCH.md` P0.7–P0.9 fixed deployed-stack logging (LOG_LEVEL, CloudWatch shipping, PII
+> sanitization) but surfaced several adjacent gaps that were deliberately left alone — noted so the next
+> person touching observability doesn't assume any of this exists.
+
+- **Dead `enable_cloudtrail` / `enable_cloudwatch_logs` variables.** `infra/variables.tf:105-116`
+  declares both and `environments/uat.tfvars:23-24` sets them, but no resource in `infra/` (verified by
+  grep across `main.tf` and all modules) references either — they're pure dead configuration. Note
+  `enable_cloudwatch_logs`'s own description ("Send CloudTrail logs to CloudWatch") is a *different*
+  feature from the application-log shipping P0.8 built; don't repurpose the variable for that.
+- **No alarms, metrics, or SNS anywhere in the stack.** P0.8 buys durable, greppable application logs and
+  nothing else — no metric filters, CloudWatch alarms, or notification topic exists. A tester-reported
+  outage produces no page; someone has to know to go look. Alerting is a separate, small recurring cost
+  (~$0.10/alarm-month + $0.30/metric-filter-month) and its own decision (what conditions page whom).
+- **`uat.tfvars:7-8` opens SSH to `0.0.0.0/0` on an instance with no `key_name`.** Port 22 is open to the
+  entire internet, but the EC2 instance resource has no `key_name` set — there's no key to actually use
+  it. Harmless today only because there's no way in; worth closing (`allowed_ssh_cidr` to a real range, or
+  drop `enable_ssh` entirely given SSM Session Manager already covers shell access) before this stops
+  being accidentally safe.
+- **`packages/api/SECURITY.md:601` conflicts with CLAUDE.md §6.** It advises a production `LOG_LEVEL` of
+  `warn`/`error`; P0.7 sets `info` and CLAUDE.md §6 mandates logging every state-changing event at `info`.
+  Following SECURITY.md's advice as written would silently discard the entire structured-logging audit
+  trail (`tournament.created`, `score.submitted`, …) that guidance predates. The two docs need
+  reconciling before a real production launch.
+- **🐛 `dotenv.config()` never takes effect in local dev — found while live-verifying P0.3.** Root
+  `package.json` has `"type": "module"` (native ESM), and both `server.ts` and `worker-entrypoint.ts` call
+  `dotenv.config({ path: '../.env' })` as a plain statement positioned *between* `import` declarations.
+  ES module `import`s are hoisted and fully evaluated before any plain statement in the file runs,
+  regardless of textual order — so `logger.ts` (imported transitively) reads `process.env.LOG_LEVEL` and
+  computes its module-level `baseline` *before* `.env` is ever loaded. Verified directly: `npm run dev`
+  and `npm run dev:worker` emitted **zero** JSON log lines all session despite `.env`'s `LOG_LEVEL=debug`;
+  restarting either process with `LOG_LEVEL=debug` exported at the shell level (bypassing dotenv
+  entirely) immediately produced full structured output. This is distinct from P0.7 (the *deployed*
+  systemd env file lacking `LOG_LEVEL` at all) — this is local `npm run dev`/`dev:worker` silently
+  logging nothing, for a different reason, this whole time. Fix: move the `dotenv.config()` call so it
+  runs first regardless of hoisting — e.g. a separate tiny entry script that calls it before dynamically
+  `import()`-ing the real entrypoint, or load env via `node --env-file` instead of the `dotenv` package.
+
 ### 🚀 Production readiness (before multi-instance prod cutover)
 > Cross-cutting gaps surfaced during the messaging V2 build — **not** blocking the build (V1–V6 done), but
 > they block a real multi-instance prod rollout. Full detail in
 > [PRODUCTION_READINESS.md](assets/planning/PRODUCTION_READINESS.md).
-- **PR-1 🔴 `trust proxy` behind the LB** *(platform-wide; do first).* `req.ip` = LB IP for proxied traffic
-  → rate-limit keys + IP logging collapse to one value. Fix: `app.set('trust proxy', …)`. Small, TDD-able.
+- *(done)* ~~**PR-1 🔴 `trust proxy` behind the LB**~~ — **✅ Built** (`UAT_PWA_LAUNCH.md` P0.1,
+  2026-07-20). `app.set('trust proxy', 2)` in `app.ts`, sized to the verified two-hop
+  CloudFront→ALB→Node topology (not blanket `true`). The earlier "rate-limit collision"
+  framing was itself corrected during P0.1 — the login limiter already keys on email, not
+  just IP — so this was really about `req.ip` correctness for future IP-based logging/limiters,
+  not an active collision bug.
 - **PR-2 🟠 SSE catch-up on reconnect** *(messaging).* At-most-once pub/sub → reconnect to another instance
   can miss gap messages. Add `Last-Event-ID` / backfill.
 - **PR-3 🟠 Prod cutover** *(platform/infra; touches `IaC-*.md`).* ElastiCache(multi-AZ)/ASG/ALB
   provisioning, rolling-deploy mixed-mode, live-session migration. Add a closing phase.
 
 ### 🗒️ Open design threads (not yet grilled/decided)
-- **Amazon SES production email** *(surfaced 2026-07-20 during the UAT_PWA_LAUNCH.md
-  email/notification readiness audit — see `assets/planning/UAT_PWA_LAUNCH.md` P0.6).*
-  `AwsSesEmailService` (`packages/api/src/services/email-service.ts`) is an explicit
-  placeholder — logs success without sending (no `@aws-sdk/client-ses` call, dependency
-  not installed); IAM permissions are already provisioned
-  (`infra/modules/api/main.tf:38`) but no SES resource exists. SendGrid is the only
-  real provider today (used to unblock UAT's P0.6 magic-link email fix) — SES is the
-  better long-term fit given the app is already all-in on AWS (cheaper, one vendor),
-  but has real forks worth grilling before building: **bounce/complaint handling**
-  (SNS topic + handler — needed to exit the sandbox, and a real product decision: does
-  a bounced tester email silently lock them out, prompt re-verification, or something
-  else?), **sender domain strategy** (SES wants a verified domain for a professional
-  `noreply@` address; no custom domain exists yet — this pulls forward the domain
-  decision currently parked in `PWA_CACHING_IMPLEMENTATION.md`'s "production-launch
-  grill" note), **send-failure semantics** (should a failed send block the registration
-  response, retry, queue, or fail silently — the exact class of gap P0.6 itself found),
-  and **provider consolidation** (keep SendGrid+SES both config-switchable, as today,
-  or fully migrate). Adapter code itself is small (~half a day, TDD-able); the AWS
-  sandbox-exit approval and domain/DNS setup are the real lead-time items, outside
-  engineering control. **Grill →** `SES_EMAIL_DESIGN.md` (or fold into a short combined
-  design+implementation doc given the scope).
+- *(mostly done)* ~~**Amazon SES production email**~~ — the adapter itself **✅ Built**
+  (`UAT_PWA_LAUNCH.md` P0.6-SES + P0.6, 2026-07-20): `AwsSesEmailService` now sends via
+  `SESv2Client` using the SDK's default credential chain (no static keys — an EC2 instance
+  role in UAT), the factory no longer requires `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`,
+  `uat.tfvars` selects `aws_ses`, and registration now sends a real magic-link email
+  (`sendMagicLinkEmail`, mirroring `sendPasswordResetEmail`) alongside the existing
+  `magicLinkToken` response field. Found + fixed along the way:
+  `worker-entrypoint.ts:95` built its email service from the hardcoded
+  `DEFAULT_APP_CONFIG.email.service` ('mock') instead of `getAppConfig()`, so the worker's
+  notify-email path ignored `EMAIL_SERVICE` entirely — previously logged as "moot since
+  `uat.tfvars` is mock anyway," but going SES from day 1 made it load-bearing (the API would
+  send real mail while the worker silently stayed on mock). SendGrid remains
+  config-switchable and untouched. **Still open, blocking any external tester round:**
+  the Day-0 owner actions (verify a real SES sender identity in `us-east-2`, decide
+  sandbox vs. production access) haven't happened yet, so live send (`tofu apply` +
+  password-reset smoke test) is unverified — `email_from_address` in `uat.tfvars:21` is
+  still the placeholder `noreply@uat.example.com`, which SES will refuse. **Also found but
+  out of scope for P0.6:** clicking the magic-link email lands on `/signup?token=...`,
+  the only frontend route that reads a magic-link token at all (grep for `playerToken`
+  in `packages/frontend/src` returns zero matches) — it pre-fills email for full account
+  signup, not a lightweight "continue as guest" path; a guest wanting to view their
+  tournament without creating a password still has no route. Remaining, ungrilled:
+  **bounce/complaint handling** (SNS topic + handler, needed to exit the sandbox — does a
+  bounced tester email silently lock them out, prompt re-verification, or something else?),
+  **sender domain strategy** (a verified domain vs. a single address — also the
+  custom-domain decision parked in `PWA_CACHING_IMPLEMENTATION.md`'s "production-launch
+  grill" note, since a `destroy`/`apply` cycle also breaks installed PWAs without one).
 - **Group challenges** ([GROUP_CHALLENGE_STRATEGY.md](assets/planning/GROUP_CHALLENGE_STRATEGY.md) §6):
   inter-group casual tournaments via owner handshake → dual auto-polls → merged roster tagged
   `origin_group_id` → derived rivalry stats. Strategy drafted 2026-07-16 (subgroup-tag model = owner's
