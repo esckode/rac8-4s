@@ -1,6 +1,16 @@
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+resource "aws_cloudwatch_log_group" "api" {
+  name              = "/${var.environment}/api"
+  retention_in_days = var.log_retention_days
+
+  tags = {
+    Name        = "${var.environment}-api-logs"
+    Environment = var.environment
+  }
+}
+
 resource "aws_iam_role" "api" {
   name = "${var.environment}-api-role"
 
@@ -37,6 +47,11 @@ resource "aws_iam_role_policy" "api" {
         Effect   = "Allow"
         Action   = ["ses:SendEmail", "ses:SendRawEmail"]
         Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"]
+        Resource = ["${aws_cloudwatch_log_group.api.arn}", "${aws_cloudwatch_log_group.api.arn}:*"]
       }
     ]
   })
@@ -71,12 +86,13 @@ resource "aws_instance" "api" {
   iam_instance_profile   = aws_iam_instance_profile.api.name
 
   user_data = templatefile("${path.module}/user_data.sh.tpl", {
-    environment  = var.environment
-    aws_region   = data.aws_region.current.name
-    api_port     = var.api_port
-    app_repo     = var.app_repo
-    app_branch   = var.app_branch
-    seed_on_boot = var.seed_on_boot
+    environment    = var.environment
+    aws_region     = data.aws_region.current.name
+    api_port       = var.api_port
+    app_repo       = var.app_repo
+    app_branch     = var.app_branch
+    seed_on_boot   = var.seed_on_boot
+    log_group_name = aws_cloudwatch_log_group.api.name
   })
   # Replacement IS the deploy (Step 5 decision) — a user_data change must
   # recreate the instance, not stop/start it.

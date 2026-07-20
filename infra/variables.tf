@@ -121,7 +121,7 @@ variable "enable_mfa_delete" {
 }
 
 variable "log_retention_days" {
-  description = "Days to keep audit logs (0 = forever)"
+  description = "Days to keep audit logs and the API/worker CloudWatch application logs (0 = forever)"
   type        = number
   default     = 90
 }

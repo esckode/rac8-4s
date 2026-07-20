@@ -10,7 +10,7 @@ echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
 # --- packages: Node 20 (NodeSource), git, psql for debugging ---
 curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
-dnf install -y nodejs git postgresql16
+dnf install -y nodejs git postgresql16 amazon-cloudwatch-agent
 
 mkdir -p /etc/tournament-app
 
@@ -86,6 +86,8 @@ EnvironmentFile=/etc/tournament-app/env
 ExecStart=/usr/bin/npx tsx packages/api/src/server.ts
 Restart=always
 RestartSec=5
+StandardOutput=append:/var/log/tournament-api.log
+StandardError=append:/var/log/tournament-api.log
 
 [Install]
 WantedBy=multi-user.target
@@ -105,6 +107,8 @@ EnvironmentFile=/etc/tournament-app/env
 ExecStart=/usr/bin/npx tsx packages/api/src/worker-entrypoint.ts
 Restart=always
 RestartSec=5
+StandardOutput=append:/var/log/tournament-worker.log
+StandardError=append:/var/log/tournament-worker.log
 
 [Install]
 WantedBy=multi-user.target
@@ -117,6 +121,33 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable --now tournament-api tournament-worker
+
+# --- CloudWatch agent: ship the two app log files to the log group Terraform owns ---
+mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
+cat > /opt/aws/amazon-cloudwatch-agent/etc/config.json << CWCONFIG
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/tournament-api.log",
+            "log_group_name": "${log_group_name}",
+            "log_stream_name": "{instance_id}-api"
+          },
+          {
+            "file_path": "/var/log/tournament-worker.log",
+            "log_group_name": "${log_group_name}",
+            "log_stream_name": "{instance_id}-worker"
+          }
+        ]
+      }
+    }
+  }
+}
+CWCONFIG
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/config.json
 
 %{ if seed_on_boot }
 # --- boot-time seed (UAT only; production hard-blocked by variable validation) ---

@@ -72,3 +72,8 @@ variable "app_branch" {
   type        = string
   default     = "main"
 }
+
+variable "log_retention_days" {
+  description = "Days to keep the API's CloudWatch log group (0 = forever)"
+  type        = number
+}

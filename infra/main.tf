@@ -75,6 +75,8 @@ module "api" {
   health_check_healthy_threshold   = var.health_check_healthy_threshold
   health_check_unhealthy_threshold = var.health_check_unhealthy_threshold
 
+  log_retention_days = var.log_retention_days
+
   # The instance reads /${environment}/api/* at first boot. module.secrets must
   # NOT be in depends_on — secrets.frontend_url consumes the CloudFront domain,
   # which consumes this module's ALB DNS (6d cycle). The boot script's get_param
