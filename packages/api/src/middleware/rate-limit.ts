@@ -147,6 +147,7 @@ export function createRateLimitMiddleware(
               originalJson({
                 code: 'RATE_LIMITED',
                 message: 'Too many attempts. Try again later.',
+                retryAfterSeconds: windowSeconds,
               })
               return
             }
