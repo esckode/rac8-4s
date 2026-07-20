@@ -35,6 +35,7 @@
   "dependencies": {
     "@anthropic-ai/aws-sdk": "^0.6.0",
     "@anthropic-ai/sdk": "^0.111.0",
+    "@aws-sdk/client-sesv2": "^3.1091.0",
     "bcryptjs": "^3.0.3",
     "express": "^5.2.1",
     "ioredis": "^5.11.1",

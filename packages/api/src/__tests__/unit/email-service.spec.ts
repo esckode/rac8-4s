@@ -1,4 +1,16 @@
-import { MockEmailService, SendGridEmailService, createEmailService, type EmailSendOptions } from '../../services/email-service'
+const mockSesSend = jest.fn()
+jest.mock('@aws-sdk/client-sesv2', () => ({
+  SESv2Client: jest.fn().mockImplementation(() => ({ send: mockSesSend })),
+  SendEmailCommand: jest.fn().mockImplementation((input: unknown) => ({ input })),
+}))
+
+import {
+  MockEmailService,
+  SendGridEmailService,
+  AwsSesEmailService,
+  createEmailService,
+  type EmailSendOptions,
+} from '../../services/email-service'
 
 describe('MockEmailService', () => {
   let service: MockEmailService
@@ -364,6 +376,45 @@ describe('SendGridEmailService', () => {
   })
 })
 
+describe('AwsSesEmailService', () => {
+  beforeEach(() => {
+    mockSesSend.mockReset()
+  })
+
+  describe('send', () => {
+    it('issues a real SESv2 send with no static credentials on the instance', async () => {
+      mockSesSend.mockResolvedValueOnce({ MessageId: 'abc123' })
+      const service = new AwsSesEmailService('us-east-2', 'sender@example.com')
+
+      await service.send({
+        to: 'test@example.com',
+        subject: 'Test Subject',
+        html: '<p>Test body</p>',
+      })
+
+      expect(mockSesSend).toHaveBeenCalledTimes(1)
+    })
+
+    it('throws on invalid email address without calling SES', async () => {
+      const service = new AwsSesEmailService('us-east-2', 'sender@example.com')
+
+      await expect(
+        service.send({ to: 'invalid-email', subject: 'Test Subject', html: '<p>Test body</p>' })
+      ).rejects.toThrow('Invalid email address')
+      expect(mockSesSend).not.toHaveBeenCalled()
+    })
+
+    it('propagates SES send failures', async () => {
+      mockSesSend.mockRejectedValueOnce(new Error('SES unavailable'))
+      const service = new AwsSesEmailService('us-east-2', 'sender@example.com')
+
+      await expect(
+        service.send({ to: 'test@example.com', subject: 'Test Subject', html: '<p>Test body</p>' })
+      ).rejects.toThrow('SES unavailable')
+    })
+  })
+})
+
 describe('createEmailService', () => {
   const originalEnv = process.env
 
@@ -410,10 +461,10 @@ describe('createEmailService', () => {
     expect(service).toBeDefined()
   })
 
-  it('throws when AWS credentials are missing', () => {
+  it('succeeds with no static credentials in the environment (SDK default credential chain)', () => {
     delete process.env.AWS_ACCESS_KEY_ID
     delete process.env.AWS_SECRET_ACCESS_KEY
-    expect(() => createEmailService('aws_ses')).toThrow('AWS credentials are required')
+    expect(() => createEmailService('aws_ses')).not.toThrow()
   })
 
   it('throws on unknown service type', () => {
