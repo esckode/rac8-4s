@@ -216,6 +216,27 @@ here.
   provisioning, rolling-deploy mixed-mode, live-session migration. Add a closing phase.
 
 ### 🗒️ Open design threads (not yet grilled/decided)
+- **Amazon SES production email** *(surfaced 2026-07-20 during the UAT_PWA_LAUNCH.md
+  email/notification readiness audit — see `assets/planning/UAT_PWA_LAUNCH.md` P0.6).*
+  `AwsSesEmailService` (`packages/api/src/services/email-service.ts`) is an explicit
+  placeholder — logs success without sending (no `@aws-sdk/client-ses` call, dependency
+  not installed); IAM permissions are already provisioned
+  (`infra/modules/api/main.tf:38`) but no SES resource exists. SendGrid is the only
+  real provider today (used to unblock UAT's P0.6 magic-link email fix) — SES is the
+  better long-term fit given the app is already all-in on AWS (cheaper, one vendor),
+  but has real forks worth grilling before building: **bounce/complaint handling**
+  (SNS topic + handler — needed to exit the sandbox, and a real product decision: does
+  a bounced tester email silently lock them out, prompt re-verification, or something
+  else?), **sender domain strategy** (SES wants a verified domain for a professional
+  `noreply@` address; no custom domain exists yet — this pulls forward the domain
+  decision currently parked in `PWA_CACHING_IMPLEMENTATION.md`'s "production-launch
+  grill" note), **send-failure semantics** (should a failed send block the registration
+  response, retry, queue, or fail silently — the exact class of gap P0.6 itself found),
+  and **provider consolidation** (keep SendGrid+SES both config-switchable, as today,
+  or fully migrate). Adapter code itself is small (~half a day, TDD-able); the AWS
+  sandbox-exit approval and domain/DNS setup are the real lead-time items, outside
+  engineering control. **Grill →** `SES_EMAIL_DESIGN.md` (or fold into a short combined
+  design+implementation doc given the scope).
 - **Group challenges** ([GROUP_CHALLENGE_STRATEGY.md](assets/planning/GROUP_CHALLENGE_STRATEGY.md) §6):
   inter-group casual tournaments via owner handshake → dual auto-polls → merged roster tagged
   `origin_group_id` → derived rivalry stats. Strategy drafted 2026-07-16 (subgroup-tag model = owner's
