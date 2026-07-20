@@ -43,6 +43,7 @@ REDIS_URL=$(get_param redis_url)
 TOKEN_STORE=redis
 JOB_QUEUE=bullmq
 PORT=${api_port}
+LOG_LEVEL=info
 ENVFILE
 SCRIPT
 chmod +x /usr/local/bin/tournament-refresh-env
