@@ -1271,7 +1271,6 @@ export default function tournamentsRouter(deps: AppDependencies) {
           log.info('team.created', {
             tournamentId,
             playerId: player.id,
-            partnerEmail: value,
             registrationType: 'invite',
           })
         }
@@ -1368,7 +1367,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         throw err
       }
 
-      log.debug('magic_link.validated', { tournamentId: magicPayload.tournamentId, email: magicPayload.email })
+      log.debug('magic_link.validated', { tournamentId: magicPayload.tournamentId, playerId: magicPayload.playerId })
 
       res.status(200).json({
         email: magicPayload.email,

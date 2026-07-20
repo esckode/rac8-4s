@@ -100,14 +100,9 @@ export class SendGridEmailService implements IEmailService {
         throw new Error(`SendGrid API error: ${response.status} ${errorBody}`)
       }
 
-      log.info('email.service.sent', {
-        recipient: options.to,
-        service: 'sendgrid',
-        subject: options.subject,
-      })
+      log.info('email.service.sent', { service: 'sendgrid' })
     } catch (error) {
       log.error('email.service.failed', {
-        recipient: options.to,
         service: 'sendgrid',
         error: error instanceof Error ? error.message : String(error),
       })

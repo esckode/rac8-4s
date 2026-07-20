@@ -616,9 +616,7 @@ export default function authRouter(deps: AppDependencies) {
       }
 
       // Always return 202 (don't reveal if email exists)
-      log.info('forgot_password.requested', {
-        email: normalizedEmail,
-      })
+      log.info('forgot_password.requested', {})
 
       return res.status(202).json({
         message: 'If an account exists for this email, a reset code has been sent',
@@ -803,8 +801,7 @@ export default function authRouter(deps: AppDependencies) {
 
       // Log success
       log.info('password.reset', {
-        accountId: account.id,
-        email: account.email
+        accountId: account.id
       })
 
       return res.status(200).json({

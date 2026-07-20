@@ -28,14 +28,14 @@ export function adminRouter(deps: AppDependencies): Router {
       if (type === 'export') {
         const result = await svc.export(email)
         if (result.status === 'not_found') return res.status(404).json({ code: 'NOT_FOUND' })
-        log.info('dsr.export.requested', { email })
+        log.info('dsr.export.requested', {})
         return res.json(result.data)
       }
 
       // type === 'erase'
       const result = await svc.erase(email)
       if (result.status === 'not_found') return res.status(404).json({ code: 'NOT_FOUND' })
-      log.info('dsr.erase.requested', { email })
+      log.info('dsr.erase.requested', {})
       return res.json({ status: 'erased' })
     } catch (err) {
       next(err)

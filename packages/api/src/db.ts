@@ -1544,7 +1544,7 @@ export class AccountRepository {
     const id = `account_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const now = new Date().toISOString()
 
-    log.debug('account.query', { method: 'create', email })
+    log.debug('account.query', { method: 'create', accountId: id })
 
     try {
       await this.pool.query(

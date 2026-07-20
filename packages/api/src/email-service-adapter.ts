@@ -21,7 +21,6 @@ export class ServiceEmailAdapter implements EmailAdapter {
       })
     } catch (error) {
       log.error('email.adapter.send_failed', {
-        recipient: to,
         error: error instanceof Error ? error.message : String(error),
       })
       throw error

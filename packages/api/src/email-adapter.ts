@@ -66,10 +66,10 @@ export async function sendPasswordResetEmail(
     // Send via email adapter
     await emailAdapter.send(email, subject, html)
 
-    log.info('email.sent', { recipient: email, type: 'password_reset' })
+    log.info('email.sent', { type: 'password_reset' })
   } catch (error) {
     log.error('email.send_failed', {
-      recipient: email,
+      type: 'password_reset',
       error: error instanceof Error ? error.message : String(error),
     })
     // Don't throw - allow endpoint to continue
