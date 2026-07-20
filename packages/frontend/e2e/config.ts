@@ -452,6 +452,10 @@ export const SELECTORS = {
   COACH_CLEAR: '[data-testid="coach-clear"]',
   COACH_CLEAR_CONFIRM: '[data-testid="coach-clear-confirm"]',
   PRIVACY_POLICY_PAGE: '[data-testid="privacy-policy-page"]',
+
+  // Login rate-limit UI (P0.2)
+  LOGIN_RATE_LIMIT_ERROR: '[data-testid="login-rate-limit-error"]',
+  LOGIN_RETRY_COUNTDOWN: '[data-testid="login-retry-countdown"]',
 }
 
 // ============================================================================
