@@ -47,6 +47,9 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
 - Some tournaments require the organizer to confirm your registration. You'll get an email
   either way.
 - You can't register twice for the same tournament.
+- Already signed in? Registering is one click — no need to re-type your email or name.
+- Registering for a **doubles** tournament lets you invite a partner by email; they get their own
+  invite to confirm.
 
 ## Tournament flow (scheduled tournaments)
 

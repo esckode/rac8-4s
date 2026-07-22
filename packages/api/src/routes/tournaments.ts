@@ -1654,6 +1654,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
     if (!tournament || tournament.deleted_at) {
       return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
     }
+    const registeredCount = await playerRepo.countRegistrationsForTournament(id)
     res.json({
       id: tournament.id,
       name: tournament.name,
@@ -1662,6 +1663,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
       maxPlayers: tournament.max_players,
       registrationDeadline: tournament.registration_deadline,
       status: tournament.status,
+      description: tournament.description ?? null,
+      registeredCount,
     })
   })
 
