@@ -221,3 +221,22 @@ npx jest path/to/foo.test.ts > "$SCRATCH/run.log" 2>&1; \
 
 **Partition long multi-item work.** For a queue of issues, don't carry all of them in one context — issue 14 pays for issues 1–13. After each item, append a short status block (files touched, tests added, state) to the tracking doc and treat that file as the handoff. A fresh context then costs one `Read` instead of the entire history.
 
+## 13. Coverage Floors
+
+**The numbers in `packages/*/jest.config.js` are measured actuals, not aspirations.** Each `coverageThreshold` records what the suite genuinely covered on the date in the comment above it. They exist to catch regressions, so they are **raise-only**.
+
+**Thresholds are only enforced per-workspace.** `coverageThreshold` is a Jest *global-only* option — it is silently dropped from project configs in a `projects:` setup. A root-level `npx jest --coverage` therefore enforces **nothing**. `npm run test:coverage` delegates to the workspaces for exactly this reason; don't "simplify" it back into a single root run.
+
+**Don't change `coverageProvider`.** The floors are `babel` numbers. v8 reports differently, so switching providers invalidates every floor at once — re-measure the whole repo if you ever do.
+
+**Raising them:**
+```bash
+node scripts/ratchet-coverage.mjs           # dry run — shows what could be raised
+node scripts/ratchet-coverage.mjs --write   # applies it
+```
+Run it after work that meaningfully improves coverage, and commit the bump with that work. It re-runs each suite with thresholds pinned to 100 and reads Jest's own reported actuals, then floors them and backs off one point.
+
+**Coverage here is not perfectly deterministic.** Repeat runs of an unchanged tree have produced different numbers — `src/workers/sw-lib/sync-queue.ts` has been seen at both 93.75% and 100% branch coverage. That is why the ratchet keeps a margin: without one, a lucky run sets a floor that the next ordinary run fails. **Treat a metric that swings by more than a point as a flaky test to fix, not a threshold to loosen.** If you widen the margin instead, the gate stops meaning anything.
+
+**Lowering a floor is allowed but never silent.** Deleting well-covered code drops the percentage through no fault of the change. When that happens, lower the number and say why in the commit message. A floor that drops without explanation is a regression that someone edited the gate to hide.
+

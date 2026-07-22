@@ -10,24 +10,39 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
   ],
+  coverageReporters: ['text-summary', 'lcov'],
+  // Floors: measured actuals 2026-07-22 (babel provider). Raise-only — CLAUDE.md §13.
+  // `global` lowered from 80 (it was never enforced — see CLAUDE.md §13); actual was
+  // 81.71 stmts / 71.16 branches / 74.52 funcs / 83.4 lines. Note these are the
+  // global-pool numbers, which exclude every file matched by the two keys below —
+  // that pool is why they differ from the "All files" row in the coverage table.
+  //
+  // The two glob keys are applied by Jest PER MATCHING FILE, not to the group, so
+  // these are the worst file in each set. 100 means every file in the set is fully
+  // covered today and a new partially-covered file will fail the gate — that is
+  // intentional for PWA/service-worker code, which is hard to debug in the field.
   coverageThreshold: {
     global: {
-      branches: 80,
-      functions: 80,
-      lines: 80,
-      statements: 80,
+      branches: 71,
+      functions: 74,
+      lines: 83,
+      statements: 81,
     },
+    // branches is 93 rather than the 100 two of three runs report: sync-queue.ts has
+    // a branch that is covered non-deterministically (observed 93.75 and 100 across
+    // repeat runs of an unchanged tree). 93 is the observed minimum. That flakiness
+    // is a test defect, not a tuning problem — fix it and this can go back to 100.
     './src/workers/sw-lib/**/*.ts': {
-      branches: 85,
-      functions: 85,
-      lines: 85,
-      statements: 85,
+      branches: 93,
+      functions: 91,
+      lines: 100,
+      statements: 97,
     },
     './src/pwa/**/*.{ts,tsx}': {
-      branches: 85,
-      functions: 85,
-      lines: 85,
-      statements: 85,
+      branches: 88,
+      functions: 100,
+      lines: 100,
+      statements: 97,
     },
   },
   moduleNameMapper: {

@@ -14,12 +14,16 @@ module.exports = {
     '!src/partition-scheduler.ts',
     '!src/index.ts',
   ],
+  coverageReporters: ['text-summary', 'lcov'],
+  // Floors: measured actuals 2026-07-22 (babel provider). Raise-only — CLAUDE.md §13.
+  // Raised from 90; actual was 98.24 stmts / 94.73 branches / 100 funcs / 100 lines.
+  // Measured with REDIS_URL unset, i.e. with the Redis-gated specs above skipped.
   coverageThreshold: {
     global: {
-      branches: 90,
-      functions: 90,
-      lines: 90,
-      statements: 90,
+      branches: 94,
+      functions: 100,
+      lines: 100,
+      statements: 98,
     },
   },
   moduleNameMapper: {

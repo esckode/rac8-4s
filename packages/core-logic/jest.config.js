@@ -9,12 +9,17 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/**/__tests__/**',
   ],
+  coverageReporters: ['text-summary', 'lcov'],
+  // Floors: measured actuals 2026-07-22 (babel provider). Raise-only — CLAUDE.md §13.
+  // Lowered from a declared 100 that had never been enforced: coverageThreshold is a
+  // Jest global-only option, so it was silently dropped by the root projects: config.
+  // Actual was 94.06 stmts / 85.86 branches / 93.75 funcs / 95 lines.
   coverageThreshold: {
     global: {
-      branches: 100,
-      functions: 100,
-      lines: 100,
-      statements: 100,
+      branches: 85,
+      functions: 93,
+      lines: 95,
+      statements: 94,
     },
   },
   moduleNameMapper: {
