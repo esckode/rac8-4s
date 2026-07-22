@@ -79,6 +79,35 @@ describe('MyTournamentsHub (0/1/2+ redirect)', () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
+  it('shows the guest "create a password" upgrade CTA on /matches for a guest session (ISSUE-14)', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'p1', email: '', role: 'player', playerId: 'p1', isGuest: true },
+      isAuthenticated: true,
+      isGuest: true,
+      loading: false,
+    })
+    mockFetch.mockResolvedValue([t('t1', 'Alpha'), t('t2', 'Beta')] as any)
+    renderHub('matches')
+
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    expect(screen.getByTestId('guest-upgrade-cta')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /create a password/i })).toHaveAttribute('href', '/signup')
+  })
+
+  it('does not show the guest upgrade CTA for a registered account (ISSUE-14)', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'p1', email: 'p@x.com', role: 'player' },
+      isAuthenticated: true,
+      isGuest: false,
+      loading: false,
+    })
+    mockFetch.mockResolvedValue([t('t1', 'Alpha'), t('t2', 'Beta')] as any)
+    renderHub('matches')
+
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    expect(screen.queryByTestId('guest-upgrade-cta')).not.toBeInTheDocument()
+  })
+
   it('shows "Updated HH:MM" on the list when /player/tournaments came from an offline snapshot (D4)', async () => {
     mockFetch.mockResolvedValue([t('t1', 'Alpha'), t('t2', 'Beta')] as any)
     const updatedAtIso = new Date(2026, 6, 18, 10, 30).toISOString()
