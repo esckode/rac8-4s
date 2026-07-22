@@ -7,6 +7,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { TournamentBrowse } from '../TournamentBrowse'
 
+jest.mock('../../hooks/useAuth', () => ({
+  useAuth: () => ({ isAuthenticated: false, user: null }),
+}))
+
 const TOURNAMENT = {
   id: 'tid_1',
   name: 'Test Open',
@@ -42,7 +46,7 @@ function renderPage() {
 
 async function fillAndRegister() {
   await screen.findByText(TOURNAMENT.name)
-  fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'alice@example.com' } })
+  fireEvent.change(screen.getByLabelText(/^email/i), { target: { value: 'alice@example.com' } })
   fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Alice' } })
   fireEvent.click(screen.getByRole('button', { name: /register/i }))
 }

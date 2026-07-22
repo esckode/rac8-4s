@@ -12,6 +12,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { TournamentBrowse } from '../TournamentBrowse'
 
+jest.mock('../../hooks/useAuth', () => ({
+  useAuth: () => ({ isAuthenticated: false, user: null }),
+}))
+
 const TOURNAMENT = {
   id: 'tournament_test_1',
   name: 'Sunset Pickleball Open',
@@ -19,7 +23,7 @@ const TOURNAMENT = {
   matchFormat: 'doubles',
   maxPlayers: 16,
   status: 'registration_open',
-  registrationDeadline: '2026-07-01T17:00:00.000Z',
+  registrationDeadline: '2027-07-01T17:00:00.000Z',
 }
 
 function renderPage() {
@@ -67,14 +71,14 @@ describe('TournamentBrowse (public details + guest registration)', () => {
     mockFetch()
     renderPage()
     expect(await screen.findByText(TOURNAMENT.name)).toBeInTheDocument()
-    expect(screen.getByText(/registration open/i)).toBeInTheDocument()
+    expect(screen.getByText('Reg Open')).toBeInTheDocument()
   })
 
   it('shows a guest registration form and a sign-in affordance', async () => {
     mockFetch()
     renderPage()
     await screen.findByText(TOURNAMENT.name)
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^email/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/name/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /register/i })).toBeInTheDocument()
     expect(screen.getByText(/sign in/i)).toBeInTheDocument()
@@ -85,7 +89,7 @@ describe('TournamentBrowse (public details + guest registration)', () => {
     renderPage()
     await screen.findByText(TOURNAMENT.name)
 
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'guest@example.com' } })
+    fireEvent.change(screen.getByLabelText(/^email/i), { target: { value: 'guest@example.com' } })
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Guest Player' } })
     fireEvent.click(screen.getByRole('button', { name: /register/i }))
 
@@ -103,7 +107,7 @@ describe('TournamentBrowse (public details + guest registration)', () => {
     renderPage()
     await screen.findByText(TOURNAMENT.name)
 
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'dupe@example.com' } })
+    fireEvent.change(screen.getByLabelText(/^email/i), { target: { value: 'dupe@example.com' } })
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Dupe Player' } })
     fireEvent.click(screen.getByRole('button', { name: /register/i }))
 

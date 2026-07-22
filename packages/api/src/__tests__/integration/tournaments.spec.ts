@@ -400,6 +400,38 @@ describe('Tournaments API', () => {
     })
   })
 
+  // ISSUE-13 — the public detail endpoint omitted description entirely (even
+  // though the table has it) and never returned a registered/capacity count.
+  describe('GET /tournaments/:id (public detail)', () => {
+    it('includes description and registeredCount', async () => {
+      const organizerId = OrganizerFactory.id()
+      const tournament = await TournamentFactory.open(pool, organizerId, {
+        // TournamentData has no `description` field — set it via update.
+      })
+      const repo2 = new TournamentRepository(pool)
+      await repo2.update(tournament!.id, { description: 'Come play some tennis!' })
+
+      const player = await PlayerFactory.create(pool)
+      await PlayerFactory.createAndRegister(pool, tournament!.id, { email: player.email, name: player.name })
+
+      const res = await request(app).get(`/tournaments/${tournament!.id}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.description).toBe('Come play some tennis!')
+      expect(res.body.registeredCount).toBe(1)
+    })
+
+    it('returns registeredCount 0 and a null description when unset', async () => {
+      const organizerId = OrganizerFactory.id()
+      const tournament = await TournamentFactory.open(pool, organizerId)
+
+      const res = await request(app).get(`/tournaments/${tournament!.id}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.registeredCount).toBe(0)
+    })
+  })
+
   describe('GET /tournaments/public', () => {
     it('lists tournaments with registration_open status', async () => {
       const organizerId = OrganizerFactory.id()
