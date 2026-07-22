@@ -10,6 +10,7 @@ import { InMemoryTokenStore } from '../../auth/token-store'
 import { InMemoryEmailAdapter } from '../../email-adapter'
 import { generateBracket } from '@core/index'
 import { defaultAdultAttestation } from '../factories/player.factory'
+import { clearRateLimitStore } from '../../middleware/rate-limit'
 
 const ADULT_ATTESTATION = defaultAdultAttestation()
 
@@ -34,6 +35,13 @@ describe('Tournaments API', () => {
 
   afterAll(async () => {
     await rollbackTransaction()
+  })
+
+  // ISSUE-11 added rate limiting to POST /:tournamentId/register; this suite
+  // repeatedly registers the same literal email across many unrelated tests,
+  // which would otherwise bleed into the new per-email/per-IP counters.
+  beforeEach(() => {
+    clearRateLimitStore()
   })
 
   describe('POST /tournaments', () => {

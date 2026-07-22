@@ -34,6 +34,10 @@ const testConfig: AppConfig = {
       loginWindowMs: 15 * 60 * 1000,
       forgotPasswordMaxAttempts: 5,
       forgotPasswordWindowMs: 15 * 60 * 1000,
+      registerPerEmailMaxAttempts: 3,
+      registerPerEmailWindowMs: 15 * 60 * 1000,
+      registerPerIpMaxAttempts: 25,
+      registerPerIpWindowMs: 15 * 60 * 1000,
     },
     paginationDefaults: {
       tournaments: 20,
