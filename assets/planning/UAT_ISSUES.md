@@ -9,26 +9,33 @@ several fixes have a "do NOT" note because the obvious approach is wrong.**
 
 Severity: 🔴 blocks a user-facing feature · 🟠 real defect, limited blast radius · 🟡 robustness.
 
-| # | Severity | Title | Area |
-|---|---|---|---|
-| [ISSUE-1](#issue-1) | 🔴 | Registered-account users locked out of Groups (dual-auth gap) | api + frontend |
-| [ISSUE-2](#issue-2) | 🟠 | `teardown-uat.sh` silently deletes the SES sender identity | scripts |
-| [ISSUE-3](#issue-3) | 🟡 | `deploy-uat.sh` SES re-adopt guard uses the same fragile pattern | scripts |
-| [ISSUE-4](#issue-4) | 🟡 | `deploy-uat.sh` frontend build runs from the wrong cwd | scripts |
-| [ISSUE-5](#issue-5) | 🟠 | Fake iOS status bar (hardcoded `9:41` + fake signal/wifi/battery) shipped on the auth pages | frontend |
-| [ISSUE-6](#issue-6) | 🟠 | Auth "back" buttons hardcode `navigate('/')` instead of true history-back | frontend |
-| [ISSUE-7](#issue-7) | 🟠 | Guest bottom nav leaks auth-gated Standings/Matches tabs (dead-end → login) | frontend |
-| [ISSUE-8](#issue-8) | 🟠 | Bottom nav has no safe-area-inset handling; viewport lacks `viewport-fit=cover` | frontend |
-| [ISSUE-9](#issue-9) | 🟠 | Browse (discovery board) shows raw status enums + lists expired-`registration_open` as "Reg Open" | frontend + api |
-| [ISSUE-10](#issue-10) | 🟡 | Featured is positional `[0]`, not curated — make it a "Register soon" set (open + has-spots, most-registered, max 3) | frontend + api |
-| [ISSUE-11](#issue-11) | 🟠 | `POST /:id/register` is a public, unauthenticated, **unthrottled** email-send trigger (email-bombing / SES-reputation vector) | api · security |
-| [ISSUE-12](#issue-12) | 🟠 | Guest-registration UX: ambiguous app-vs-tournament framing, no auth-aware one-click, doubles partner unsurfaced, email-typo safety | frontend + api |
-| [ISSUE-13](#issue-13) | 🟠 | Tournament detail page (`TournamentBrowse`) — no design parity + missing description/deadline/capacity | frontend + api |
-| [ISSUE-14](#issue-14) | 🟠 | Emailed magic link forces account creation — wire it to the existing guest-session exchange ("continue as guest") | frontend + api |
+| # | Status | Severity | Title | Area |
+|---|---|---|---|---|
+| [ISSUE-1](#issue-1) | ✅ Resolved | 🔴 | Registered-account users locked out of Groups (dual-auth gap) | api + frontend |
+| [ISSUE-2](#issue-2) | ✅ Resolved | 🟠 | `teardown-uat.sh` silently deletes the SES sender identity | scripts |
+| [ISSUE-3](#issue-3) | ✅ Resolved | 🟡 | `deploy-uat.sh` SES re-adopt guard uses the same fragile pattern | scripts |
+| [ISSUE-4](#issue-4) | ✅ Resolved | 🟡 | `deploy-uat.sh` frontend build runs from the wrong cwd | scripts |
+| [ISSUE-5](#issue-5) | ✅ Resolved | 🟠 | Fake iOS status bar (hardcoded `9:41` + fake signal/wifi/battery) shipped on the auth pages | frontend |
+| [ISSUE-6](#issue-6) | ✅ Resolved | 🟠 | Auth "back" buttons hardcode `navigate('/')` instead of true history-back | frontend |
+| [ISSUE-7](#issue-7) | ✅ Resolved | 🟠 | Guest bottom nav leaks auth-gated Standings/Matches tabs (dead-end → login) | frontend |
+| [ISSUE-8](#issue-8) | ✅ Resolved | 🟠 | Bottom nav has no safe-area-inset handling; viewport lacks `viewport-fit=cover` | frontend |
+| [ISSUE-9](#issue-9) | ✅ Resolved | 🟠 | Browse (discovery board) shows raw status enums + lists expired-`registration_open` as "Reg Open" | frontend + api |
+| [ISSUE-10](#issue-10) | ✅ Resolved | 🟡 | Featured is positional `[0]`, not curated — make it a "Register soon" set (open + has-spots, most-registered, max 3) | frontend + api |
+| [ISSUE-11](#issue-11) | ✅ Resolved | 🟠 | `POST /:id/register` is a public, unauthenticated, **unthrottled** email-send trigger (email-bombing / SES-reputation vector) | api · security |
+| [ISSUE-12](#issue-12) | ✅ Resolved | 🟠 | Guest-registration UX: ambiguous app-vs-tournament framing, no auth-aware one-click, doubles partner unsurfaced, email-typo safety | frontend + api |
+| [ISSUE-13](#issue-13) | ✅ Resolved | 🟠 | Tournament detail page (`TournamentBrowse`) — no design parity + missing description/deadline/capacity | frontend + api |
+| [ISSUE-14](#issue-14) | ✅ Resolved | 🟠 | Emailed magic link forces account creation — wire it to the existing guest-session exchange ("continue as guest") | frontend + api |
 
 ---
 
 ## ISSUE-1 — Registered-account users locked out of Groups (dual-auth gap) 🔴 {#issue-1}
+
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): added a `resolvePlayerSession` dual-auth
+shim to `player-groups.ts` (mirrors `routes/player.ts`'s `resolvePlayerId`), replacing all 24
+direct `requirePlayerSessionAuth` call sites. Frontend: `useGroupList`/`MyGroups` now
+distinguish a 401 (re-auth prompt) from a genuine load failure, and the empty-groups state
+has a "Create your first group" CTA. Audit of other routes recorded under "Not yet triaged"
+below (not fixed here, out of scope).
 
 **Symptom (found in the deployed UAT app):** the Groups view shows a coach button and,
 below it, **"Failed to load groups."** Reproduced from CloudWatch (`/uat/api` log group):
@@ -148,6 +155,10 @@ this commit** (keep ISSUE-1 to groups).
 
 ## ISSUE-2 — `teardown-uat.sh` silently deletes the SES sender identity 🟠 {#issue-2}
 
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): replaced the `state list | grep` guard
+with an unconditional `tofu state rm ... 2>/dev/null || true`. Live verification on the next
+real teardown is still recommended per the original note.
+
 **Symptom (confirmed on the live teardown 2026-07-21):** the SES **sender** identity
 (the address in the git-ignored `infra/secrets.auto.tfvars` → `email_from_address`) was
 **deleted** during teardown (`get-email-identity` → `NotFoundException`), despite the
@@ -203,6 +214,9 @@ once.
 
 ## ISSUE-3 — `deploy-uat.sh` SES re-adopt guard uses the same fragile pattern 🟡 {#issue-3}
 
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): capture `tofu state list` to a variable
+once and match with a pipe-free `[[ ... ]]` test, matching the fix pattern in ISSUE-2.
+
 **Context:** `scripts/deploy-uat.sh` re-adopts the SES identity with the same
 read-and-guard shape that failed in ISSUE-2:
 ```bash
@@ -233,6 +247,9 @@ fi
 
 ## ISSUE-4 — `deploy-uat.sh` frontend build runs from the wrong cwd 🟡 {#issue-4}
 
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): the build line now runs inside
+`(cd "$REPO_ROOT" && npm run build ...)`, matching the adjacent `npm ci`.
+
 **Context:** `scripts/deploy-uat.sh:78` runs `npm run build --workspace=packages/frontend`
 from whatever the caller's cwd is. The adjacent `npm ci` at line 76 correctly wraps in
 `(cd "$REPO_ROOT" && npm ci)`, but the build does not. It works when the script is invoked
@@ -250,6 +267,10 @@ absolute path, so only the build line needs the cwd fix.
 ---
 
 ## ISSUE-5 — Fake iOS status bar shipped on the auth pages 🟠 {#issue-5}
+
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): removed all six status-bar blocks from
+Login/Signup/ForgotPassword/ResetPassword (both render branches on the latter two). Design-mockup
+files (`DesignSpec.tsx`, `ui/section-*.jsx`) left untouched, as instructed.
 
 *(Found 2026-07-21 during a local manual walkthrough — clicking **Continue with email** →
 the "Welcome back." Login screen.)*
@@ -322,6 +343,12 @@ files are the ones to fix.)
 
 ## ISSUE-6 — Auth "back" buttons hardcode `navigate('/')` instead of true history-back 🟠 {#issue-6}
 
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): added `useBack(fallback)` (true
+`navigate(-1)` with a parent fallback on a cold load) and wired it into the Login, Signup,
+ForgotPassword (form state), and ResetPassword (both states) chevrons. ForgotPassword's
+success-state chevron (resets local state, not a route) and ResetPassword's "Sign in now" CTA
+were deliberately left as-is — neither is a back affordance.
+
 *(Found 2026-07-21 during the manual walkthrough, discussing back-navigation on a PWA.)*
 
 **Symptom:** the top-left "back" chevron on the auth screens is not a real back button — it
@@ -382,6 +409,10 @@ can't even see iOS). One shared component, correct in all three contexts.
 
 ## ISSUE-7 — Guest bottom nav leaks auth-gated Standings/Matches tabs 🟠 {#issue-7}
 
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): Option B implemented — `BottomNav` hides
+Standings/Matches for a guest and shows a `nav-signin` item instead; the desktop `TopNav` gets
+the same treatment for Groups/Standings/Matches.
+
 *(Found 2026-07-21 during the manual walkthrough, as an unauthenticated user on `/browse`.)*
 
 **Symptom:** an **unauthenticated** user on `/browse` sees a bottom nav with **Tournaments ·
@@ -436,6 +467,11 @@ the guest has an obvious next step.
 
 ## ISSUE-8 — Bottom nav has no safe-area-inset handling; viewport lacks `viewport-fit=cover` 🟠 {#issue-8}
 
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): applied the trio together —
+`viewport-fit=cover`, nav height/padding grow by `env(safe-area-inset-bottom)`, and
+`.responsive-main`'s bottom padding grows to match. Verified via production build; final
+confirmation on a real notched device/emulator remains, per the original note.
+
 *(Found 2026-07-21 during the manual walkthrough, investigating fixed-bottom-nav behavior on phones.)*
 
 **Symptom (real devices, not the test harness):** on notched iPhones (X+) and gesture-nav
@@ -484,6 +520,11 @@ The standard trio (do all three together — they're coupled):
 ---
 
 ## ISSUE-9 — Browse discovery board shows raw status enums + lists expired tournaments as "Reg Open" 🟠 {#issue-9}
+
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): added a shared `statusBadge(status,
+registrationDeadline)` helper (never renders the raw enum; past-deadline `registration_open`
+badges "Closed"), used on both the featured and list cards. Backend `publishedStatuses` now
+includes `registration_closed`/`knockout_complete`, closing the discovery gap.
 
 *(Found 2026-07-21 during the manual walkthrough, asking whether Browse is "ongoing" vs
 "available to register".)*
@@ -568,6 +609,10 @@ organizer/lifecycle transition (deadline sweep or organizer action), tracked sep
 
 ## ISSUE-10 — Featured section: replace positional `[0]` with a curated "Register soon" set 🟡 {#issue-10}
 
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): `listPublic` now returns `registeredCount`
+via a single-query subquery; `selectFeatured()` (client-side, option (a)) filters/sorts/caps at
+3; section relabeled "Register soon"; featured ids excluded from "All Tournaments".
+
 *(Found 2026-07-21 during the manual walkthrough — asking how Featured tournaments are chosen;
 owner then specified the desired behavior. Enhancement, not a bug — the current code "works",
 it just isn't curated. Pairs with ISSUE-9: same page + `listPublic`.)*
@@ -631,6 +676,11 @@ from Featured automatically.
 
 ## ISSUE-11 — `POST /:id/register` is a public, unthrottled email-send trigger 🟠 {#issue-11}
 
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): applied `createRateLimitMiddleware` twice
+— per-email (3/15min, sharp) and per-IP (25/15min, generous), both env-overridable. Also added
+`clearRateLimitStore()` isolation to `tournaments.spec.ts`, which reuses one literal email
+across many unrelated tests.
+
 *(Found 2026-07-21 during the manual walkthrough, examining the guest-registration flow.)*
 
 **Decision (owner, 2026-07-21): keep open, self-service guest registration** (matches "discovery
@@ -688,6 +738,12 @@ So the fix is applying an existing, merged pattern — no new infrastructure.
 
 ## ISSUE-12 — Guest-registration UX: ambiguous framing, no auth-aware one-click, doubles partner unsurfaced, email-typo safety 🟠 {#issue-12}
 
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): plain guest copy added; signed-in visitors
+get a one-click register (no backend change needed — email/name come from `useAuth`'s `user`);
+doubles tournaments get a partner-invite-by-email field (the "select existing partner" variant
+is a follow-up, invite-by-email covers the primary gap); confirmation echoes the entered email
+with a "Wrong email? Edit" path.
+
 *(Found 2026-07-21 during the manual walkthrough of the guest-registration flow. Access model =
 open self-service, kept — see ISSUE-11. This is about making that flow clear + complete.)*
 
@@ -736,6 +792,11 @@ present, doubles shows a partner field, confirmation echoes the email. Update
 
 ## ISSUE-13 — Tournament detail page has no design parity + missing description/deadline/capacity 🟠 {#issue-13}
 
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): `GET /tournaments/:id` now returns
+`description` + `registeredCount`; `TournamentBrowse` restyled to the app's surface/card/Button
+tokens, reuses the ISSUE-9 `statusBadge` helper, and renders description/deadline/capacity. Back
+link now uses `useBack()` (ISSUE-6) instead of a fixed `Link`.
+
 *(Found 2026-07-21 during the manual walkthrough — the detail page reads as unstyled black-and-white
 next to the browse list.)*
 
@@ -774,6 +835,13 @@ separate commits (§11).
 ---
 
 ## ISSUE-14 — Emailed magic link forces account creation; wire it to the existing guest-session exchange 🟠 {#issue-14}
+
+**✅ Resolved** (2026-07-22, branch `fix/uat-issues`): new public `/tournament/:tournamentId/join`
+route exchanges the token via the existing `GET /:tournamentId/auth/verify`, stores the
+`playerToken`, strips the token from the URL, and redirects to `/matches`. Emailed link repointed
+from `/signup?token=` (relabeled "View your tournament"); `/signup?token=` still works unchanged
+as an optional upgrade. Found + fixed a real React StrictMode double-invoke race against the
+single-use verify token along the way (caught via live e2e, not just unit tests).
 
 *(Found 2026-07-21 during the manual walkthrough. Owner decided 2026-07-21 to honor the original
 intent: click link → guest session → your tournament, with account creation as an **optional
