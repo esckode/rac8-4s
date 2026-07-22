@@ -429,6 +429,50 @@ describe('Tournaments API', () => {
       expect(Array.isArray(res.body.tournaments)).toBe(true)
       expect(res.body.pagination).toBeDefined()
     })
+
+    // ISSUE-9 — registration_closed and knockout_complete were excluded from
+    // publishedStatuses, so a tournament briefly vanished from Browse between
+    // registration closing and the group stage starting (a discovery gap).
+    it('includes registration_closed tournaments (no discovery gap between registration closing and group stage starting)', async () => {
+      const organizerId = OrganizerFactory.id()
+      const tournament = await TournamentFactory.open(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament!.id, 'registration_closed')
+
+      const res = await request(app).get('/tournaments/public')
+
+      expect(res.status).toBe(200)
+      const ids = res.body.tournaments.map((t: any) => t.id)
+      expect(ids).toContain(tournament!.id)
+    })
+
+    it('includes knockout_complete tournaments', async () => {
+      const organizerId = OrganizerFactory.id()
+      const tournament = await TournamentFactory.open(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(tournament!.id, 'knockout_complete')
+
+      const res = await request(app).get('/tournaments/public')
+
+      expect(res.status).toBe(200)
+      const ids = res.body.tournaments.map((t: any) => t.id)
+      expect(ids).toContain(tournament!.id)
+    })
+
+    it('still excludes terminal statuses (completed/abandoned) from the public list', async () => {
+      const organizerId = OrganizerFactory.id()
+      const completed = await TournamentFactory.open(pool, organizerId)
+      const abandoned = await TournamentFactory.open(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+      await repo.updateStatus(completed!.id, 'completed')
+      await repo.updateStatus(abandoned!.id, 'abandoned')
+
+      const res = await request(app).get('/tournaments/public')
+
+      const ids = res.body.tournaments.map((t: any) => t.id)
+      expect(ids).not.toContain(completed!.id)
+      expect(ids).not.toContain(abandoned!.id)
+    })
   })
 
   describe('GET /tournaments/organizer', () => {
