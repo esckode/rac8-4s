@@ -76,7 +76,7 @@ done
 # --- build & deploy the frontend (Step 7a) ---
 [ -d "$REPO_ROOT/node_modules" ] || { echo "==> installing deps (npm ci)"; (cd "$REPO_ROOT" && npm ci); }
 echo "==> building frontend"
-npm run build --workspace=packages/frontend
+(cd "$REPO_ROOT" && npm run build --workspace=packages/frontend)
 
 BUCKET="$(tofu -chdir="$INFRA" output -raw frontend_bucket_name)"
 echo "==> syncing dist -> s3://$BUCKET"
