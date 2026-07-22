@@ -205,25 +205,6 @@ export function Signup() {
         position: 'relative',
       }}
     >
-      {/* Status Bar Simulation */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          paddingTop: '8px',
-          paddingBottom: '16px',
-          fontSize: '12px',
-          color: 'var(--auth-glass-text)',
-        }}
-      >
-        <span>9:41</span>
-        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-          <span>📶</span>
-          <span>🔋</span>
-        </div>
-      </div>
-
       {/* Back Button */}
       <button
         onClick={() => navigate('/')}

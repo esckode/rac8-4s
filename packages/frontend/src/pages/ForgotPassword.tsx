@@ -122,34 +122,6 @@ export const ForgotPassword: React.FC = () => {
           </svg>
         </div>
 
-        {/* Status bar */}
-        <div
-          style={{
-            height: 44,
-            padding: '0 24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexShrink: 0,
-            position: 'relative',
-            zIndex: 1,
-          }}
-        >
-          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--auth-glass-text)' }}>9:41</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="16" height="10" viewBox="0 0 16 10">
-              <path d="M0 8h2v2H0zM4 6h2v4H4zM8 3h2v7H8zM12 0h2v10h-2z" fill="var(--auth-glass-text)" />
-            </svg>
-            <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
-              <path d="M1 4a8 8 0 0 1 12 0M3 6a5 5 0 0 1 8 0M5 8a2 2 0 0 1 4 0" stroke="var(--auth-glass-text)" strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
-            <svg width="22" height="10" viewBox="0 0 22 10">
-              <rect x="0.5" y="0.5" width="18" height="9" rx="2" fill="none" stroke="var(--auth-glass-text)" strokeOpacity=".5" />
-              <rect x="2" y="2" width="14" height="6" rx="1" fill="var(--auth-glass-text)" />
-            </svg>
-          </div>
-        </div>
-
         {/* Header with back button and logo */}
         <div
           style={{
@@ -310,34 +282,6 @@ export const ForgotPassword: React.FC = () => {
           <circle cx="320" cy="120" r="180" fill="var(--court-400)" opacity="0.5" />
           <circle cx="60" cy="500" r="200" fill="var(--lavender-400)" opacity="0.4" />
         </svg>
-      </div>
-
-      {/* Status bar */}
-      <div
-        style={{
-          height: 44,
-          padding: '0 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexShrink: 0,
-          position: 'relative',
-          zIndex: 1,
-        }}
-      >
-        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--auth-glass-text)' }}>9:41</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <svg width="16" height="10" viewBox="0 0 16 10">
-            <path d="M0 8h2v2H0zM4 6h2v4H4zM8 3h2v7H8zM12 0h2v10h-2z" fill="var(--auth-glass-text)" />
-          </svg>
-          <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
-            <path d="M1 4a8 8 0 0 1 12 0M3 6a5 5 0 0 1 8 0M5 8a2 2 0 0 1 4 0" stroke="var(--auth-glass-text)" strokeWidth="1.3" strokeLinecap="round" />
-          </svg>
-          <svg width="22" height="10" viewBox="0 0 22 10">
-            <rect x="0.5" y="0.5" width="18" height="9" rx="2" fill="none" stroke="var(--auth-glass-text)" strokeOpacity=".5" />
-            <rect x="2" y="2" width="14" height="6" rx="1" fill="var(--auth-glass-text)" />
-          </svg>
-        </div>
       </div>
 
       {/* Header with back button and logo */}
