@@ -137,7 +137,7 @@ describe('GroupList', () => {
   })
 
   it('shows error state when fetch fails', async () => {
-    mockFetch.mockResolvedValue({ ok: false, json: async () => ({ message: 'Unauthorized' }) })
+    mockFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({ message: 'Server error' }) })
 
     render(
       <MemoryRouter>
@@ -147,6 +147,65 @@ describe('GroupList', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('group-list-error')).toBeInTheDocument()
+    })
+  })
+
+  it('shows a re-auth prompt (not a load-failure) on 401, distinct from group-list-error', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 401, json: async () => ({ message: 'Token is invalid or has expired' }) })
+
+    render(
+      <MemoryRouter>
+        <GroupList />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('group-list-unauthorized')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('group-list-error')).not.toBeInTheDocument()
+  })
+
+  it('shows a "Create your first group" CTA on the empty state', async () => {
+    render(
+      <MemoryRouter>
+        <GroupList />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('group-list-empty')).toBeInTheDocument()
+      expect(screen.getByTestId('create-group-cta')).toBeInTheDocument()
+    })
+  })
+
+  it('creates a group from the empty-state CTA and refetches the list', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ groups: [] }) }) // initial list
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 'grp_new', name: 'New Crew' }) }) // create
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ groups: [makeGroup({ id: 'grp_new', name: 'New Crew' })] }) }) // refetch
+
+    render(
+      <MemoryRouter>
+        <GroupList />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => expect(screen.getByTestId('create-group-cta')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('create-group-cta'))
+
+    const input = await screen.findByTestId('create-group-name-input')
+    fireEvent.change(input, { target: { value: 'New Crew' } })
+    fireEvent.click(screen.getByTestId('create-group-submit'))
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/player/groups',
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('New Crew')).toBeInTheDocument()
     })
   })
 })
