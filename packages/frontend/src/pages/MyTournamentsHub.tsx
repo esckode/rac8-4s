@@ -32,7 +32,7 @@ const COPY: Record<HubTab, { title: string; subtitle: string }> = {
  * Real data via GET /player/tournaments (magic-link or registered players).
  */
 export const MyTournamentsHub: React.FC<{ tab: HubTab }> = ({ tab }) => {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isGuest } = useAuth()
   const navigate = useNavigate()
   const { updatedAtFor } = useOfflineSnapshot()
   const [tournaments, setTournaments] = useState<PlayerTournamentSummary[]>([])
@@ -92,6 +92,17 @@ export const MyTournamentsHub: React.FC<{ tab: HubTab }> = ({ tab }) => {
         <p className="text-[--ink-600]">{copy.subtitle}</p>
         <SnapshotUpdatedAt updatedAt={updatedAtFor('/player/tournaments')} />
       </div>
+
+      {tab === 'matches' && isGuest && (
+        <div
+          data-testid="guest-upgrade-cta"
+          className="p-[--s-4] bg-[--ink-50] border border-[--border] rounded-[--r-lg]"
+        >
+          <Link to="/signup" className="text-sm font-medium text-[--court-600] underline">
+            Create a password to save your account
+          </Link>
+        </div>
+      )}
 
       {loading && <p className="text-[--ink-600]">Loading your tournaments...</p>}
 

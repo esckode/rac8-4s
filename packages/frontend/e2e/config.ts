@@ -303,6 +303,10 @@ export const SELECTORS = {
   // for an unauthenticated user and shows this instead
   NAV_SIGNIN: '[data-testid="nav-signin"]',
 
+  // Guest upgrade CTA (ISSUE-14) — offers /signup on /matches to a
+  // magic-link guest session, not a registered account
+  GUEST_UPGRADE_CTA: '[data-testid="guest-upgrade-cta"]',
+
   // Groups — G2.5
   NAV_GROUPS: '[data-testid="nav-groups"]',
   GROUPS_UNREAD_BADGE: '[data-testid="groups-unread-badge"]',

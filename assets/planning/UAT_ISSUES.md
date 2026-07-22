@@ -841,7 +841,9 @@ route exchanges the token via the existing `GET /:tournamentId/auth/verify`, sto
 `playerToken`, strips the token from the URL, and redirects to `/matches`. Emailed link repointed
 from `/signup?token=` (relabeled "View your tournament"); `/signup?token=` still works unchanged
 as an optional upgrade. Found + fixed a real React StrictMode double-invoke race against the
-single-use verify token along the way (caught via live e2e, not just unit tests).
+single-use verify token along the way (caught via live e2e, not just unit tests). The
+optional-upgrade CTA ("Create a password to save your account") now renders on `/matches` for
+guest sessions only, routing to the existing `/signup` flow.
 
 *(Found 2026-07-21 during the manual walkthrough. Owner decided 2026-07-21 to honor the original
 intent: click link → guest session → your tournament, with account creation as an **optional

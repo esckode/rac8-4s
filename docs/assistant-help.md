@@ -13,7 +13,9 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   register.
 - Clicking the magic link signs you in as a guest and takes you straight to your tournament — no
   password needed. Creating a full account (with a password) is an optional upgrade you can do
-  later; it's not required to view or play in the tournament you registered for.
+  later; it's not required to view or play in the tournament you registered for. While signed in
+  as a guest, you'll see a "Create a password to save your account" prompt on your Matches page —
+  it routes to the same signup page.
 - If you'd rather create a full account right away, use the signup page instead — once you have
   an account, you log in with email + password.
 - Your identity is tied to your email address. If you use the same email everywhere, all your

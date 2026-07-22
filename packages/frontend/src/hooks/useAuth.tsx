@@ -15,12 +15,17 @@ export interface AuthUser {
   // Linked durable player identity, if any. Presence = participation capability
   // (an organizer with a playerId can also play). null/undefined = organize-only.
   playerId?: string | null
+  // Magic-link guest session (restorePlayerSession), as opposed to a registered
+  // account (restoreSession/login/signup). Lets the UI offer the ISSUE-14
+  // "create a password to save your account" upgrade CTA.
+  isGuest?: boolean
 }
 
 export interface AuthContextType {
   user: AuthUser | null
   isAuthenticated: boolean
   loading: boolean
+  isGuest: boolean
   // D11: true when `user` was restored from a local session snapshot after a
   // network failure, not a real server validation — cleared on reconnect.
   offlineUnvalidated: boolean
@@ -129,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
 
     const data = (await response.json()) as { playerId: string; tournamentId: string }
     if (signedOutRef.current) return true
-    const restoredUser: AuthUser = { id: data.playerId, email: '', role: 'player', playerId: data.playerId }
+    const restoredUser: AuthUser = { id: data.playerId, email: '', role: 'player', playerId: data.playerId, isGuest: true }
     setUser(restoredUser)
     setOfflineUnvalidated(false)
     writeSessionSnapshot(restoredUser)
@@ -352,6 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
     user,
     isAuthenticated: !!user,
     loading,
+    isGuest: !!user?.isGuest,
     offlineUnvalidated,
     login,
     signup,
