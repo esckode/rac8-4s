@@ -40,10 +40,10 @@ fi
 # --- preserve SES identity: drop it from state so destroy leaves it in AWS ---
 # NOTE: this preservation only works when tearing down THROUGH this script. A raw
 # `tofu destroy` with the identity still in state WOULD delete it (re-verify next time).
-if tofu -chdir="$INFRA" state list 2>/dev/null | grep -q "sesv2_email_identity.sender"; then
-  echo "==> removing SES identity from state (kept alive in AWS)"
-  tofu -chdir="$INFRA" state rm "$SES_RESOURCE"
-fi
+# Unconditional + tolerant — no fragile state-list/grep guard (see UAT_ISSUES.md
+# ISSUE-2: the guard once skipped and destroy deleted the identity).
+echo "==> preserving SES identity (removing from state if managed)"
+tofu -chdir="$INFRA" state rm "$SES_RESOURCE" 2>/dev/null || true
 
 echo "==> tofu destroy"
 if [ -n "$AUTO_APPROVE" ]; then
