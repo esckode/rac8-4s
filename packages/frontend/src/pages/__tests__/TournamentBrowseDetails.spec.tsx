@@ -184,5 +184,21 @@ describe('ISSUE-12/13 — TournamentBrowse', () => {
       })
       expect(await screen.findByText(/me@example\.com/)).toBeInTheDocument()
     })
+
+    it('shows a partner-invite field for doubles and sends it on one-click register', async () => {
+      const fetchSpy = mockFetch(DOUBLES)
+      renderPage(DOUBLES.id)
+      await screen.findByText(DOUBLES.name)
+
+      fireEvent.change(screen.getByLabelText(/partner/i), { target: { value: 'partner@example.com' } })
+      fireEvent.click(screen.getByRole('button', { name: /register/i }))
+
+      await waitFor(() => {
+        const call = fetchSpy.mock.calls.find(c => (c[1] as RequestInit)?.method === 'POST')
+        expect(call).toBeDefined()
+        const body = JSON.parse((call![1] as RequestInit).body as string)
+        expect(body.partnerSelection).toEqual({ type: 'invite', value: 'partner@example.com' })
+      })
+    })
   })
 })
