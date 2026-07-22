@@ -19,11 +19,11 @@ const PAST = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
 
 function makeTournament(overrides: Partial<{
   id: string; name: string; sport: string; matchFormat: string; maxPlayers: number
-  registrationDeadline: string; status: string
+  registrationDeadline: string; status: string; registeredCount: number
 }> = {}) {
   return {
     id: 't1', name: 'Tournament', sport: 'tennis', matchFormat: 'singles', maxPlayers: 16,
-    registrationDeadline: FUTURE, status: 'registration_open',
+    registrationDeadline: FUTURE, status: 'registration_open', registeredCount: 0,
     ...overrides,
   }
 }

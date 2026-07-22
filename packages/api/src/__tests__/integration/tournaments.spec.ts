@@ -459,6 +459,34 @@ describe('Tournaments API', () => {
       expect(ids).toContain(tournament!.id)
     })
 
+    // ISSUE-10 — registeredCount feeds the "Register soon" featured selection
+    // (most-registered, has-spots). Must be a single-query subquery, not N+1.
+    it('includes registeredCount per tournament', async () => {
+      const organizerId = OrganizerFactory.id()
+      const tournament = await TournamentFactory.open(pool, organizerId)
+      const player1 = await PlayerFactory.create(pool)
+      const player2 = await PlayerFactory.create(pool)
+      await PlayerFactory.createAndRegister(pool, tournament!.id, { email: player1.email, name: player1.name })
+      await PlayerFactory.createAndRegister(pool, tournament!.id, { email: player2.email, name: player2.name })
+
+      const res = await request(app).get('/tournaments/public')
+
+      expect(res.status).toBe(200)
+      const found = res.body.tournaments.find((t: any) => t.id === tournament!.id)
+      expect(found).toBeDefined()
+      expect(found.registeredCount).toBe(2)
+    })
+
+    it('returns registeredCount 0 for a tournament with no registrations', async () => {
+      const organizerId = OrganizerFactory.id()
+      const tournament = await TournamentFactory.open(pool, organizerId)
+
+      const res = await request(app).get('/tournaments/public')
+
+      const found = res.body.tournaments.find((t: any) => t.id === tournament!.id)
+      expect(found.registeredCount).toBe(0)
+    })
+
     it('still excludes terminal statuses (completed/abandoned) from the public list', async () => {
       const organizerId = OrganizerFactory.id()
       const completed = await TournamentFactory.open(pool, organizerId)
