@@ -42,7 +42,8 @@ tofu -chdir="$INFRA" init -input=false >/dev/null
 EMAIL_SVC="$(sed -nE 's/^[[:space:]]*email_service[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$INFRA/$VAR_FILE" || true)"
 if [ "$EMAIL_SVC" = "aws_ses" ]; then
   FROM_ADDR="$(sed -nE 's/^[[:space:]]*email_from_address[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$INFRA/secrets.auto.tfvars" 2>/dev/null || true)"
-  if [ -n "$FROM_ADDR" ] && ! tofu -chdir="$INFRA" state list 2>/dev/null | grep -q "sesv2_email_identity.sender"; then
+  STATE_LIST="$(tofu -chdir="$INFRA" state list 2>/dev/null || true)"
+  if [ -n "$FROM_ADDR" ] && [[ "$STATE_LIST" != *"sesv2_email_identity.sender"* ]]; then
     if aws sesv2 get-email-identity --email-identity "$FROM_ADDR" --region "$REGION" >/dev/null 2>&1; then
       echo "==> re-adopting existing SES identity $FROM_ADDR into state"
       tofu -chdir="$INFRA" import -var-file="$VAR_FILE" "$SES_RESOURCE" "$FROM_ADDR"
