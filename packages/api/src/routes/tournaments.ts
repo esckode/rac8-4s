@@ -24,6 +24,7 @@ import { getLogger } from '../logger'
 import { sendMagicLinkEmail } from '../email-adapter'
 import { generateRoundPairings } from '../mixer-scheduler'
 import { submitScore, SCORE_ERROR_HTTP_STATUS } from '../services/score-service'
+import { createRateLimitMiddleware } from '../middleware/rate-limit'
 
 const log = getLogger('tournaments')
 
@@ -1136,8 +1137,34 @@ export default function tournamentsRouter(deps: AppDependencies) {
     })
   })
 
-  // POST /:tournamentId/register - player registration
-  router.post('/:tournamentId/register', async (req: Request, res: Response, next: NextFunction) => {
+  // POST /:tournamentId/register - player registration (public, unauthenticated).
+  // ISSUE-11: rate-limited on two independent keys — per-email is the sharp
+  // anti-bombing defense (a legit user registers an address ~once); per-IP
+  // is a generous cap on a runaway cannon from one source (kept loose: a
+  // venue's shared Wi-Fi is one NAT'd IP, and a captain may register several
+  // people from one phone). A single combined key would let an attacker
+  // rotating victim addresses from one IP dodge the per-email limit.
+  const registerEmailKey = (req: Request): string => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+    return `register:email:${email}`
+  }
+  const registerIpKey = (req: Request): string => `register:ip:${req.ip}`
+
+  router.post(
+    '/:tournamentId/register',
+    createRateLimitMiddleware(registerEmailKey, {
+      maxAttempts: deps.config.limits.rateLimit.registerPerEmailMaxAttempts,
+      windowMs: deps.config.limits.rateLimit.registerPerEmailWindowMs,
+      prefix: 'register-email',
+      countMode: 'all',
+    }),
+    createRateLimitMiddleware(registerIpKey, {
+      maxAttempts: deps.config.limits.rateLimit.registerPerIpMaxAttempts,
+      windowMs: deps.config.limits.rateLimit.registerPerIpWindowMs,
+      prefix: 'register-ip',
+      countMode: 'all',
+    }),
+    async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tournamentId = req.params.tournamentId as string
 
