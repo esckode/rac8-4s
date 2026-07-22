@@ -240,12 +240,20 @@ describe('P3.5 — Deep-link metadata on launch system messages', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(200)
 
-    await new Promise<void>(resolve => setImmediate(resolve))
-
-    const conversationRes = await pool.query(
+    // The promote route posts its system message fire-and-forget (see
+    // routes/player-groups.ts), which lazily creates the conversation row. A single
+    // tick isn't reliably enough time under full-suite parallel load, so poll for it.
+    let conversationRes = await pool.query(
       `SELECT id FROM messaging.conversations WHERE group_id = $1`,
       [groupId],
     )
+    for (let i = 0; i < 50 && conversationRes.rows.length === 0; i++) {
+      await new Promise<void>(resolve => setTimeout(resolve, 20))
+      conversationRes = await pool.query(
+        `SELECT id FROM messaging.conversations WHERE group_id = $1`,
+        [groupId],
+      )
+    }
     const conversationId = conversationRes.rows[0].id as string
 
     const roleMsgRes = await pool.query(
