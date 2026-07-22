@@ -58,14 +58,102 @@ const CoachEntryLink: React.FC = () => (
   </Link>
 )
 
+const CreateGroupCta: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed || submitting) return
+    setSubmitting(true)
+    setCreateError(null)
+    try {
+      const token = localStorage.getItem('auth_token')
+      const res = await fetch('/player/groups', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ name: trimmed }),
+      })
+      if (!res.ok) {
+        setCreateError('Could not create group')
+        return
+      }
+      setName('')
+      setOpen(false)
+      onCreated()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        data-testid="create-group-cta"
+        onClick={() => setOpen(true)}
+        className="w-full text-center text-sm font-medium text-[--court-600] hover:text-[--court-800] py-2 rounded-lg hover:bg-[--court-50] transition-colors"
+      >
+        Create your first group
+      </button>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex gap-2 items-center">
+      <label htmlFor="create-group-name-input" className="sr-only">Group name</label>
+      <input
+        id="create-group-name-input"
+        data-testid="create-group-name-input"
+        type="text"
+        autoFocus
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Group name"
+        className="flex-1 text-sm border border-[--border] rounded-lg px-3 py-2 text-[--ink-900] bg-[--surface] focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+      />
+      <button
+        data-testid="create-group-submit"
+        type="submit"
+        disabled={submitting || !name.trim()}
+        className="text-sm font-medium text-white bg-[--court-600] hover:bg-[--court-800] px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+      >
+        {submitting ? 'Creating…' : 'Create'}
+      </button>
+      {createError && (
+        <p className="text-xs text-[--rose-700]">{createError}</p>
+      )}
+    </form>
+  )
+}
+
 export const GroupList: React.FC = () => {
-  const { groups, loading, error } = useGroupList()
+  const { groups, loading, error, unauthorized, refetch } = useGroupList()
 
   if (loading) {
     return (
       <div className="p-4 space-y-[--s-3]">
         <CoachEntryLink />
         <p className="text-[--ink-600]">Loading your groups…</p>
+      </div>
+    )
+  }
+
+  if (unauthorized) {
+    return (
+      <div className="p-4 space-y-[--s-3]">
+        <CoachEntryLink />
+        <p data-testid="group-list-unauthorized" className="text-[--rose-700]">
+          You need to sign in again.
+        </p>
+        <Link to="/login" className="text-sm font-medium text-[--court-600] hover:text-[--court-800]">
+          Sign in
+        </Link>
       </div>
     )
   }
@@ -86,9 +174,12 @@ export const GroupList: React.FC = () => {
       <CoachEntryLink />
 
       {groups.length === 0 && (
-        <p data-testid="group-list-empty" className="text-center text-[--ink-500] pt-2">
-          No groups yet. Ask a group owner to invite you.
-        </p>
+        <div className="text-center pt-2 space-y-2">
+          <p data-testid="group-list-empty" className="text-[--ink-500]">
+            No groups yet. Ask a group owner to invite you, or start your own.
+          </p>
+          <CreateGroupCta onCreated={refetch} />
+        </div>
       )}
 
       {groups.map(g => (

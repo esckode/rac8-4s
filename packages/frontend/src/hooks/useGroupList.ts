@@ -19,19 +19,24 @@ export interface UseGroupListResult {
   groups: GroupSummary[]
   loading: boolean
   error: string | null
+  unauthorized: boolean
   refetch: () => void
 }
+
+const UNAUTHORIZED_MARKER = 'unauthorized'
 
 export function useGroupList(): UseGroupListResult {
   const [groups, setGroups] = useState<GroupSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [unauthorized, setUnauthorized] = useState(false)
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
+    setUnauthorized(false)
 
     const token = localStorage.getItem('auth_token')
     fetch('/player/groups', {
@@ -41,6 +46,10 @@ export function useGroupList(): UseGroupListResult {
       },
     })
       .then(res => {
+        if (res.status === 401) {
+          if (!cancelled) setUnauthorized(true)
+          throw new Error(UNAUTHORIZED_MARKER)
+        }
         if (!res.ok) throw new Error('Failed to load groups')
         return res.json()
       })
@@ -49,8 +58,9 @@ export function useGroupList(): UseGroupListResult {
           setGroups(data.groups)
         }
       })
-      .catch(() => {
-        if (!cancelled) setError('Failed to load groups')
+      .catch((err: Error) => {
+        if (cancelled || err.message === UNAUTHORIZED_MARKER) return
+        setError('Failed to load groups')
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -65,6 +75,7 @@ export function useGroupList(): UseGroupListResult {
     groups,
     loading,
     error,
+    unauthorized,
     refetch: () => setTick(t => t + 1),
   }
 }

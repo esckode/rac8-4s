@@ -22,7 +22,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
-import { requirePlayerSessionAuth } from '../auth'
+import { requirePlayerSessionAuth, requireOrganizerAuth } from '../auth'
 import { ForbiddenError, TokenInvalidError } from '../auth/errors'
 import { GroupRepository, LastOwnerError } from '../repositories/group-repository'
 import { PlayerRepository, AgeAttestationRequiredError, UnderAgeError } from '../db'
@@ -95,6 +95,27 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   const cardRepo = new AssistantCardRepository(deps.db as any)
   const tournamentGroupRepo = new TournamentGroupRepository(deps.db as any)
 
+  // Dual-auth: accept either a guest magic-link player session or a
+  // registered account's JWT carrying a linked playerId (same shim as
+  // routes/player.ts's resolvePlayerId — see ISSUE-1 in UAT_ISSUES.md).
+  async function resolvePlayerSession(authHeader: string | undefined): Promise<{ playerId: string }> {
+    try {
+      const session = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
+      return { playerId: session.playerId }
+    } catch (sessionErr) {
+      let account
+      try {
+        account = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
+      } catch {
+        throw sessionErr
+      }
+      if (account.playerId) {
+        return { playerId: account.playerId }
+      }
+      throw sessionErr
+    }
+  }
+
   // P2.2/P2.4: post a personal-notification-center entry (Notifications
   // Center). Fire-and-forget at call sites; errors are logged, never thrown.
   // No live broadcast: the unread badge is fetch-on-mount/refocus (see
@@ -114,7 +135,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   // §10: static GET registered before POST and /:groupId param routes
   router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const session = await resolvePlayerSession(req.headers.authorization)
       const groups = await groupRepo.getGroupsForPlayer(session.playerId)
       return res.status(200).json({ groups })
     } catch (err) {
@@ -126,7 +147,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   // §10: registered before /:groupId param routes
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const session = await resolvePlayerSession(req.headers.authorization)
       const { name, defaultMatchFormat } = req.body
 
       if (!name || typeof name !== 'string' || !name.trim()) {
@@ -165,7 +186,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   // PATCH /player/groups/:groupId — owner updates group name and/or default_match_format (P1.6)
   router.patch('/:groupId', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      const session = await resolvePlayerSession(req.headers.authorization)
       const groupId = req.params.groupId as string
       const { name, defaultMatchFormat, assistantEnabled, digestEnabled, groupTimezone } = req.body as {
         name?: unknown
@@ -380,7 +401,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/invites',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const { email } = req.body
 
@@ -441,7 +462,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/leaderboard/individual',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
 
         // Authz: caller must be a member
@@ -463,7 +484,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/leaderboard/pairs',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
 
         // Authz: caller must be a member
@@ -488,7 +509,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/members',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
 
         // Authz: caller must be a member
@@ -531,7 +552,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           authHeader = `Bearer ${token}`
         }
 
-        const session = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
+        const session = await resolvePlayerSession(authHeader)
 
         // Authz: caller must be a member
         const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
@@ -570,7 +591,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/messages',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
 
         // Authz: caller must be a member (owner or member)
@@ -737,7 +758,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/messages',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
 
         // Authz: caller must be a member
@@ -796,7 +817,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/messages/:messageId',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const messageId = req.params.messageId as string
 
@@ -826,7 +847,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/polls',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
 
         // Authz: caller must be a member (owner or member)
@@ -865,7 +886,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/polls/:messageId/launch',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const messageId = req.params.messageId as string
 
@@ -961,7 +982,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/polls/:messageId/close',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const messageId = req.params.messageId as string
 
@@ -1018,7 +1039,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/polls/:pollId/votes',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const pollId = req.params.pollId as string
 
@@ -1054,7 +1075,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/polls/:pollId/votes',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const pollId = req.params.pollId as string
 
@@ -1089,7 +1110,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/members/:playerId/promote',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const playerId = req.params.playerId as string
 
@@ -1122,7 +1143,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/members/:playerId/demote',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const playerId = req.params.playerId as string
 
@@ -1156,7 +1177,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/members/:playerId/notify-level',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const playerId = req.params.playerId as string
 
@@ -1199,7 +1220,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/members/:playerId/leave',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const playerId = req.params.playerId as string
 
@@ -1249,7 +1270,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/members/:playerId',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const playerId = req.params.playerId as string
 
@@ -1312,7 +1333,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/assistant-cards/:cardId/confirm',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const cardId = req.params.cardId as string
 
@@ -1432,7 +1453,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/assistant-cards/:cardId/cancel',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const cardId = req.params.cardId as string
 
@@ -1481,7 +1502,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     '/:groupId/assistant-cards/:cardId/complete',
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const session = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+        const session = await resolvePlayerSession(req.headers.authorization)
         const groupId = req.params.groupId as string
         const cardId = req.params.cardId as string
 
