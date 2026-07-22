@@ -2,10 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useAgeGate } from '../hooks/useAgeGate';
+import { useBack } from '../hooks/useBack';
 import { DobScreen, type AgeAttestation } from './DobScreen';
 
 export function Signup() {
   const navigate = useNavigate();
+  const back = useBack('/');
   const { signup: authSignup } = useAuth();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -207,7 +209,8 @@ export function Signup() {
     >
       {/* Back Button */}
       <button
-        onClick={() => navigate('/')}
+        onClick={back}
+        data-testid="back-button"
         tabIndex={-1}
         style={{
           background: 'none',

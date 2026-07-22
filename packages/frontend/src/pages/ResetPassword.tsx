@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useBack } from '../hooks/useBack'
 import { Button } from '../components/shared/Button'
 import { LogoMark } from '../components/shared/LogoMark'
 
@@ -28,6 +29,7 @@ const extractCode = (formatted: string): string => {
 
 export const ResetPassword: React.FC = () => {
   const navigate = useNavigate()
+  const back = useBack('/login')
   const [formData, setFormData] = useState({
     email: '',
     code: '',
@@ -252,7 +254,8 @@ export const ResetPassword: React.FC = () => {
           }}
         >
           <button
-            onClick={() => navigate('/login')}
+            onClick={back}
+            data-testid="back-button"
             style={{
               width: 40,
               height: 40,
@@ -381,7 +384,8 @@ export const ResetPassword: React.FC = () => {
         }}
       >
         <button
-          onClick={() => navigate('/login')}
+          onClick={back}
+          data-testid="back-button"
           style={{
             width: 40,
             height: 40,

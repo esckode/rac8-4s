@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useBack } from '../hooks/useBack'
 import { Button } from '../components/shared/Button'
 import { LogoMark } from '../components/shared/LogoMark'
 
@@ -14,6 +15,7 @@ const validateEmail = (email: string): boolean => {
 
 export const ForgotPassword: React.FC = () => {
   const navigate = useNavigate()
+  const back = useBack('/')
   const [formData, setFormData] = useState({ email: '' })
   const [errors, setErrors] = useState<FormErrors>({})
   const [loading, setLoading] = useState(false)
@@ -296,7 +298,8 @@ export const ForgotPassword: React.FC = () => {
         }}
       >
         <button
-          onClick={() => navigate('/')}
+          onClick={back}
+          data-testid="back-button"
           style={{
             width: 40,
             height: 40,

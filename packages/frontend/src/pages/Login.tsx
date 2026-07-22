@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useBack } from '../hooks/useBack'
 import { Button } from '../components/shared/Button'
 import { LogoMark } from '../components/shared/LogoMark'
 
@@ -22,6 +23,7 @@ const formatCountdown = (seconds: number): string => {
 
 export const Login: React.FC = () => {
   const navigate = useNavigate()
+  const back = useBack('/')
   const { login: authLogin } = useAuth()
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [errors, setErrors] = useState<FormErrors>({})
@@ -144,7 +146,8 @@ export const Login: React.FC = () => {
         }}
       >
         <button
-          onClick={() => navigate('/')}
+          onClick={back}
+          data-testid="back-button"
           tabIndex={-1}
           style={{
             width: 40,
