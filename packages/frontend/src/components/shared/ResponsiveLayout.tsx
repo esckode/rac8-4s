@@ -137,6 +137,8 @@ const BottomNav = () => {
 
   const tabs = [
     { path: '/browse', label: 'Tournaments', icon: '🏆', testId: 'nav-browse' },
+  ]
+  const authOnlyTabs = [
     { path: '/standings', label: 'Standings', icon: '📊', testId: 'nav-standings' },
     { path: '/matches', label: 'Matches', icon: '🎾', testId: 'nav-matches' },
   ]
@@ -154,13 +156,38 @@ const BottomNav = () => {
           >
             <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
               {tab.icon}
-              {tab.testId === 'nav-matches' && isAuthenticated && (
+            </span>
+            <span>{tab.label}</span>
+          </a>
+        ))}
+        {isAuthenticated && authOnlyTabs.map((tab) => (
+          <a
+            key={tab.path}
+            href={tab.path}
+            data-testid={tab.testId}
+            className={`responsive-bottom-nav-item ${isActive(tab.path) ? 'active' : ''}`}
+            aria-current={isActive(tab.path) ? 'page' : undefined}
+          >
+            <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
+              {tab.icon}
+              {tab.testId === 'nav-matches' && (
                 <NavCountBadge count={pendingActions.unscoredMatches.length} testId="nav-badge-matches" />
               )}
             </span>
             <span>{tab.label}</span>
           </a>
         ))}
+        {!isAuthenticated && (
+          <a
+            href="/login"
+            data-testid="nav-signin"
+            className={`responsive-bottom-nav-item ${isActive('/login') ? 'active' : ''}`}
+            aria-current={isActive('/login') ? 'page' : undefined}
+          >
+            <span aria-hidden="true">🔑</span>
+            <span>Sign in / Register</span>
+          </a>
+        )}
         {isAuthenticated && (
           <a
             href="/groups"
@@ -221,12 +248,16 @@ const BottomNav = () => {
 
 const TopNav = () => {
   const location = useLocation()
+  const { isAuthenticated } = useAuth()
   const isActive = (path: string) => location.pathname.startsWith(path)
 
-  const links = [
+  const authOnlyLinks = [
     { path: '/groups', label: 'Groups' },
     { path: '/standings', label: 'Standings' },
     { path: '/matches', label: 'Matches' },
+  ]
+  const links = [
+    ...(isAuthenticated ? authOnlyLinks : []),
     { path: '/bracket', label: 'Bracket' },
     { path: '/more', label: 'More' },
   ]
@@ -245,6 +276,16 @@ const TopNav = () => {
             {link.label}
           </a>
         ))}
+        {!isAuthenticated && (
+          <a
+            href="/login"
+            data-testid="nav-signin-desktop"
+            className={`responsive-top-nav-link ${isActive('/login') ? 'active' : ''}`}
+            aria-current={isActive('/login') ? 'page' : undefined}
+          >
+            Sign In
+          </a>
+        )}
       </div>
     </nav>
   )

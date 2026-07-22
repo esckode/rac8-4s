@@ -299,6 +299,10 @@ export const SELECTORS = {
   ERROR_STATE: '[data-testid="error-state"]',
   RECONNECTING_INDICATOR: '[data-testid="reconnecting-indicator"]',
 
+  // Guest nav (ISSUE-7) — hides auth-gated Standings/Matches/Groups tabs
+  // for an unauthenticated user and shows this instead
+  NAV_SIGNIN: '[data-testid="nav-signin"]',
+
   // Groups — G2.5
   NAV_GROUPS: '[data-testid="nav-groups"]',
   GROUPS_UNREAD_BADGE: '[data-testid="groups-unread-badge"]',
