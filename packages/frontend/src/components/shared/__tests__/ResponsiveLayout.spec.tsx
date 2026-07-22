@@ -1,11 +1,29 @@
 /// <reference types="@testing-library/jest-dom" />
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '../../../hooks/useAuth'
 import { ResponsiveLayout } from '../ResponsiveLayout'
 
+const mockFetch = jest.fn()
+global.fetch = mockFetch
+
+function meResponse() {
+  return {
+    ok: true,
+    json: async () => ({
+      id: 'account_1', email: 'p@e.com', role: 'player', playerId: 'player_1',
+      settings: { timezone: null, timezoneManual: false, tableDensity: 'comfortable' },
+    }),
+  }
+}
+
 describe('ResponsiveLayout', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    localStorage.clear()
+  })
+
   const renderWithRouter = (component: React.ReactElement) => {
     return render(
       <BrowserRouter>
@@ -14,6 +32,20 @@ describe('ResponsiveLayout', () => {
         </AuthProvider>
       </BrowserRouter>
     )
+  }
+
+  // Standings/Matches/Groups are auth-gated tabs (ISSUE-1 §Nav — a guest
+  // gets nav-signin instead, see ResponsiveLayout.guestNav.spec.tsx), so
+  // tests that assert their presence need an authenticated user.
+  const renderAuthenticated = async (component: React.ReactElement) => {
+    localStorage.setItem('auth_token', 'test-token')
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/api/auth/me')) return Promise.resolve(meResponse())
+      return Promise.resolve({ ok: false, json: async () => ({}) })
+    })
+    const result = renderWithRouter(component)
+    await waitFor(() => expect(screen.getAllByText('Standings').length).toBeGreaterThan(0))
+    return result
   }
 
   it('renders children content', () => {
@@ -46,8 +78,8 @@ describe('ResponsiveLayout', () => {
     expect(screen.queryByText('C.U.At.Court')).not.toBeInTheDocument()
   })
 
-  it('renders navigation tabs when showNav is true', () => {
-    renderWithRouter(
+  it('renders navigation tabs when showNav is true', async () => {
+    await renderAuthenticated(
       <ResponsiveLayout showNav>
         <div>Content</div>
       </ResponsiveLayout>
@@ -67,8 +99,8 @@ describe('ResponsiveLayout', () => {
     expect(screen.queryByText('Standings')).not.toBeInTheDocument()
   })
 
-  it('renders a Groups link in the desktop TopNav (P1.10)', () => {
-    renderWithRouter(
+  it('renders a Groups link in the desktop TopNav for an authenticated user (P1.10)', async () => {
+    await renderAuthenticated(
       <ResponsiveLayout showNav>
         <div>Content</div>
       </ResponsiveLayout>
