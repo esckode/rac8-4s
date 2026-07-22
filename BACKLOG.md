@@ -306,6 +306,19 @@ here.
   2 groups by invite, N-ary entity from day one; member-side free-forever, **owner-side gating routed
   to the parked organizer/owner-tier grill** (§5 — symmetric paywall ruled out; v2 directory = natural
   paid owner surface).
+- **Location-based tournament discovery ("nearest tournaments")** *(growth/discovery; surfaced 2026-07-21
+  during the UAT walkthrough).* No mechanism exists today and the data model doesn't support one: the
+  frontend never reads the device location (no `navigator.geolocation`), **tournaments carry no location
+  data at all** (`TournamentRow`, `db.ts:29` — no venue/`location_id`/lat-lng), and Browse sorts
+  `created_at DESC`. There **is** dormant venue scaffolding — a `public.locations` table (lat/long) +
+  `public.courts` + a `findNearby(lat,lng,radiusKm)` helper (`db.ts:1442`) — but it's **venue-scoped,
+  not linked to tournaments, exposed by no route, and dead code** (zero callers; a crude lat/long
+  bounding-box defaulting to **25 m** — a venue geofence, not a discovery radius). **To grill:** where
+  tournament location lives (link tournaments → `locations`, vs. coords on the tournament); device
+  geolocation UX (consent prompt + graceful denied-permission fallback like manual city/postal search);
+  a proper distance query (haversine / PostGIS `earthdistance` with a spatial index — the bbox helper is
+  the wrong shape); a Browse "Near me" sort/filter + distance-on-card; and privacy (consent, non-storage
+  of precise location). 📐 **Design needed — not yet grilled** → `LOCATION_DISCOVERY_DESIGN.md`.
 - **🔴 Legal hold not enforced by the DSR erasure cascade** *(compliance; platform-wide; grill in the DSR
   track, PLAYER_GROUPS_DESIGN §12).* A legal hold / litigation-preservation obligation **overrides** a DSR
   erasure for the data in scope (GDPR Art. 17(3) / CCPA "retain to meet a legal obligation or defend
