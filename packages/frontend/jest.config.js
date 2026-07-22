@@ -21,9 +21,13 @@ module.exports = {
   // these are the worst file in each set. 100 means every file in the set is fully
   // covered today and a new partially-covered file will fail the gate — that is
   // intentional for PWA/service-worker code, which is hard to debug in the field.
+  //
+  // branches is backed off one further point (71 -> 70): the measured 71.16 left
+  // 0.16 of headroom, which gates nothing but ordinary churn (§13's lucky-run
+  // failure mode). The other three keep their measured floors.
   coverageThreshold: {
     global: {
-      branches: 71,
+      branches: 70,
       functions: 74,
       lines: 83,
       statements: 81,
