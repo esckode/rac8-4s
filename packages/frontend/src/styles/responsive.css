@@ -18,7 +18,8 @@
   background-color: white;
   border-top: 1px solid var(--border);
   z-index: 40;
-  height: 72px;
+  height: calc(72px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
   align-items: center;
   justify-content: space-around;
 }
@@ -162,7 +163,7 @@
   padding-left: var(--s-4);
   padding-right: var(--s-4);
   padding-top: var(--s-4);
-  padding-bottom: 88px; /* Account for fixed bottom nav */
+  padding-bottom: calc(88px + env(safe-area-inset-bottom)); /* Account for fixed bottom nav */
 }
 
 .responsive-container {
