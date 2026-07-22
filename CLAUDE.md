@@ -62,6 +62,8 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 **Tests come first (TDD).** For features and behavior changes, write/update the tests — unit *and* e2e — and the scenario docs (`e2e-scenarios.md`) before implementing. Confirm they fail for the right reason, then make them pass. Commit the failing tests separately from the implementation (see §11).
 
+**"For the right reason" means reading the actual failure.** In the red phase, keep the assertion message and stack in view — a pass/fail summary is not enough to tell a correct red from a typo, a bad import, or a suite that never ran. The output-filtering rules in §12 are deliberately relaxed for this one step; tighten them again once the test is green.
+
 ## 5. Skill organization
 
 Skills are organized into bucket folders under `skills/`:
@@ -132,16 +134,21 @@ The skill workflow:
 1. **Validates prerequisites** — checks if backend API and frontend dev servers are accessible
 2. **Starts missing servers** — optionally auto-starts API or frontend if not running
 3. **Validates frontend** — uses `node scripts/browser.js` to verify the webapp loads with persistent browser state
-4. **Runs tests** — provides commands for headless, UI, or debug modes
-5. **Reviews results** — guides analysis of test failures and HTML reports
+4. **Runs tests** — headless and targeted; see the command table below
+5. **Reviews results** — reads the line-reporter output, then failure screenshots/video
 6. **Debugs failures** — documents troubleshooting steps for common issues
 
 **Quick commands (use after `/e2e-testing` workflow):**
 - Check prerequisites: `node scripts/e2e-setup.js`
 - Auto-start missing servers: `node scripts/e2e-setup.js --auto-start`
-- Run tests headless: `npm run test:e2e`
-- Run tests with UI: `npm run test:e2e:ui` (recommended for debugging)
-- Run tests in debug mode: `npm run test:e2e:debug`
+- **Default run (one spec, one browser):**
+  `npx playwright test <spec>.spec.ts --project=chromium --reporter=line --max-failures=1`
+- Full sweep, both browsers — **final verification only**: `npm run test:e2e -- --reporter=line`
+- Named specs already wired: `test:e2e:auth`, `test:e2e:tournament`, `test:e2e:chromium`
+
+**Always pass `--reporter=line`.** `playwright.config.ts` sets `reporter: 'html'`, which writes a report directory instead of readable stdout and will try to serve it on failure — that blocks a non-interactive run. On failure, `screenshot: 'only-on-failure'` and `video: 'retain-on-failure'` are already captured in `test-results/`; `trace: 'on-first-retry'` means a trace only exists if the run retried.
+
+**`test:e2e:ui` and `test:e2e:debug` are human-only.** `--ui` opens a GUI and `--debug` opens the Inspector paused on the first line; both hang forever when invoked non-interactively. Never run them from an agent session — suggest them to the user instead.
 
 **Test file locations:**
 - E2E tests: `packages/frontend/e2e/auth.spec.ts`
@@ -186,6 +193,31 @@ Express matches routes in registration order. **Register literal/static paths be
 - Commit **only when asked**. If on the default branch (`main`), **create a branch first**.
 - **One logical change per commit** — don't mix verified fixes with new or intentionally-failing work.
 - **TDD history:** commit failing tests as their own commit, then the implementation as the next.
-- **Run the relevant test suite before merging**; prefer fast-forward merges.
+- **Run the relevant test suite before merging** — the specs covering the change, not the whole suite; save the full run for the final pass. Prefer fast-forward merges.
 - End commit messages with the `Co-Authored-By` trailer.
+
+## 12. Context & Output Discipline
+
+**The whole conversation is re-sent on every turn.** A 15k-token test dump isn't a one-off cost — it stays in the window for every remaining turn and pulls the session toward compaction. So the goal is not "read output efficiently", it's **keep output out of context in the first place**.
+
+**Redirect, then filter.** Write full output to the scratchpad and query it; the detail stays on disk if it's needed later.
+```bash
+npx jest path/to/foo.test.ts > "$SCRATCH/run.log" 2>&1; \
+  grep -E "Tests:|Suites:|✕" "$SCRATCH/run.log" | head -40
+```
+**`2>&1` is required** — jest writes to stderr, so a bare `| grep` or `| tail` silently passes everything through unfiltered. Same idiom as the §6 logging verification. (`$SCRATCH` = the session scratchpad directory, or any path outside the repo — don't litter the working tree.)
+
+**Filter by TDD phase (see §4):**
+- **Red** — need the reason it failed: `grep -B2 -A15 "●" "$SCRATCH/run.log"`
+- **Green / regression** — need only the verdict: `grep -E "Tests:|Suites:"`
+
+**Scope every run to the change.** One spec file per iteration; `--project=chromium` for e2e; full suite once at the end (§11). Prefer `--bail` / `--max-failures=1` — failure #1 is actionable, failures #2–30 are usually the same root cause reprinted.
+
+**Reading files:**
+- `Grep` with `-C 3` to find a symbol; `Read` with `offset`/`limit` for a known region. Whole-file reads are a last resort.
+- **Never re-read a file to verify an edit** — `Edit` errors if it fails, so the read is pure cost.
+- Batch independent tool calls into one block; fewer turns means fewer full-context re-sends.
+- Background slow or noisy commands (server starts, e2e sweeps) and inspect only the tail.
+
+**Partition long multi-item work.** For a queue of issues, don't carry all of them in one context — issue 14 pays for issues 1–13. After each item, append a short status block (files touched, tests added, state) to the tracking doc and treat that file as the handoff. A fresh context then costs one `Read` instead of the entire history.
 
