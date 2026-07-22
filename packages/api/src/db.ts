@@ -286,7 +286,19 @@ export class TournamentRepository {
   ): Promise<{ rows: TournamentRow[]; total: number }> {
     const offset = opts.offset || 0
     const limit = opts.limit || 10
-    const publishedStatuses = ['registration_open', 'group_stage_active', 'group_stage_complete', 'knockout_active']
+    // ISSUE-9: registration_closed and knockout_complete are included so a
+    // tournament doesn't vanish from Browse between registration closing and
+    // the group stage starting (or after the knockout stage finishes).
+    // Terminal states (tournament_complete/completed/abandoned/draft) stay
+    // excluded — completed/past tournaments must not appear.
+    const publishedStatuses = [
+      'registration_open',
+      'registration_closed',
+      'group_stage_active',
+      'group_stage_complete',
+      'knockout_active',
+      'knockout_complete',
+    ]
 
     const params = [...publishedStatuses]
     const placeholders = publishedStatuses.map((_, i) => `$${i + 1}`).join(',')

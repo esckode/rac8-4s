@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { usePendingActions } from '../hooks/usePendingActions'
 import { UpNextStrip } from '../components/shared/UpNextStrip'
+import { statusBadge } from '../utils/tournamentStatus'
 
 interface Tournament {
   id: string
@@ -173,6 +174,9 @@ export const BrowseTournaments: React.FC = () => {
                     <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>{filteredTournaments[0].name}</h3>
                     <div style={{ fontSize: 11, color: 'var(--ink-500)', marginTop: 2 }}>{filteredTournaments[0].sport}</div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                      <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>
+                        {statusBadge(filteredTournaments[0].status, filteredTournaments[0].registrationDeadline)}
+                      </span>
                       <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
                         🎾 {filteredTournaments[0].sport}
                       </span>
@@ -206,8 +210,8 @@ export const BrowseTournaments: React.FC = () => {
                         <h4 style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 600, color: 'var(--ink-900)', letterSpacing: '-0.01em' }}>{tournament.name}</h4>
                         <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 8 }}>{tournament.sport}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
-                            {tournament.status === 'registration_open' ? 'Reg Open' : tournament.status}
+                          <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>
+                            {statusBadge(tournament.status, tournament.registrationDeadline)}
                           </span>
                           <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
                             {tournament.matchFormat}
