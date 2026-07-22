@@ -415,6 +415,77 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       }
     })
 
+    // ISSUE-14 — the emailed link now lands on /tournament/:id/join, exchanging
+    // the token for a guest session (no password) instead of forcing signup.
+    test('Scenario: Completes guest join via magic link — no password prompt', async ({ page }) => {
+      // Given: I have a magic link token from tournament registration
+      const organizerEmail = 'organizer@test.com'
+      const organizerPassword = 'testpass123'
+      const loginResponse = await apiCall(API_ENDPOINTS.AUTH.LOGIN, 'POST', {
+        email: organizerEmail,
+        password: organizerPassword,
+      })
+      if (!loginResponse.ok) {
+        throw new Error('Failed to login as organizer')
+      }
+      const { token: organizerToken } = await loginResponse.json()
+
+      const tournament = { ...createTestTournament(), matchFormat: 'singles' }
+      const { id: tournamentId } = await createTournamentWithOpenRegistration(tournament, organizerToken)
+
+      const registrationUser = createTestUser()
+      const registrationResponse = await apiCall(
+        `/tournaments/${tournamentId}/register`,
+        'POST',
+        {
+          email: registrationUser.email,
+          name: registrationUser.name,
+          dob_attestation: defaultAgeAttestation(),
+        }
+      )
+      if (!registrationResponse.ok) {
+        throw new Error(`Failed to register for tournament: ${registrationResponse.status}`)
+      }
+      const { magicLinkToken } = await registrationResponse.json()
+
+      // When: I click the emailed link (lands on the guest-join route, then
+      // immediately redirects to /matches once the guest session is minted —
+      // 'networkidle' isn't used here since that follow-up navigation would
+      // otherwise race Playwright's idle detection for the initial load).
+      await page.goto(`/tournament/${tournamentId}/join?token=${magicLinkToken}`)
+
+      // Then: I land signed in as a guest — no password prompt anywhere
+      await expect(page).toHaveURL(/\/matches/, { timeout: TIMEOUTS.PAGE_LOAD })
+      expect(await page.locator(SELECTORS.PASSWORD_INPUT).count()).toBe(0)
+
+      const token = await getTokenFromPage(page)
+      expect(token).toBeTruthy()
+    })
+
+    test('Scenario: Guest join shows a re-registration path on an invalid token', async ({ page }) => {
+      const organizerEmail = 'organizer@test.com'
+      const organizerPassword = 'testpass123'
+      const loginResponse = await apiCall(API_ENDPOINTS.AUTH.LOGIN, 'POST', {
+        email: organizerEmail,
+        password: organizerPassword,
+      })
+      if (!loginResponse.ok) {
+        throw new Error('Failed to login as organizer')
+      }
+      const { token: organizerToken } = await loginResponse.json()
+
+      const tournament = { ...createTestTournament(), matchFormat: 'singles' }
+      const { id: tournamentId } = await createTournamentWithOpenRegistration(tournament, organizerToken)
+
+      await page.goto(`/tournament/${tournamentId}/join?token=not-a-real-token`, { waitUntil: 'networkidle' })
+
+      await expect(page.getByRole('alert')).toBeVisible({ timeout: TIMEOUTS.PAGE_LOAD })
+      await expect(page.getByRole('link', { name: /register again/i })).toHaveAttribute(
+        'href',
+        `/tournament/${tournamentId}/browse`
+      )
+    })
+
     test('Scenario: Completes signup via magic link for doubles tournament', async ({ page }) => {
       // Given: I have a magic link token from a doubles tournament registration
       // Use seeded organizer account to create a tournament

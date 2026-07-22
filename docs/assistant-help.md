@@ -11,8 +11,11 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
 - **Registering for a tournament** only needs your email and name. After you register, you get a
   **magic link** by email — click it within 24 hours to confirm. No password is needed to
   register.
-- Clicking the magic link takes you to a signup page where you can set a password and create a
-  full account. Once you have an account, you log in with email + password.
+- Clicking the magic link signs you in as a guest and takes you straight to your tournament — no
+  password needed. Creating a full account (with a password) is an optional upgrade you can do
+  later; it's not required to view or play in the tournament you registered for.
+- If you'd rather create a full account right away, use the signup page instead — once you have
+  an account, you log in with email + password.
 - Your identity is tied to your email address. If you use the same email everywhere, all your
   tournaments and groups show up under one profile.
 - Forgot your password? Use "Forgot password" on the login page — you'll get a reset code by

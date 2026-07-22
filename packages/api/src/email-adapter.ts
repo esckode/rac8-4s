@@ -97,15 +97,19 @@ export async function sendMagicLinkEmail(
   tournamentName: string
 ): Promise<void> {
   try {
-    const registrationLink = `${config.frontendUrl}/signup?token=${encodeURIComponent(token)}`
+    // ISSUE-14: points at the guest-landing route (exchanges the token for a
+    // passwordless guest session via GET /:tournamentId/auth/verify), not
+    // /signup — account creation is an optional upgrade offered afterward,
+    // not a requirement to view the tournament.
+    const registrationLink = `${config.frontendUrl}/tournament/${tournamentId}/join?token=${encodeURIComponent(token)}`
 
-    const subject = `Complete your registration for ${tournamentName}`
+    const subject = `You're registered for ${tournamentName}`
 
     const html = `
       <h1>You're registered!</h1>
       <p>Hi,</p>
-      <p>Click the link below to complete your registration for <strong>${tournamentName}</strong>:</p>
-      <p><a href="${registrationLink}" style="display: inline-block; background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Complete registration</a></p>
+      <p>Click the link below to view <strong>${tournamentName}</strong> — no password needed:</p>
+      <p><a href="${registrationLink}" style="display: inline-block; background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View your tournament</a></p>
       <p>Or copy this URL: ${registrationLink}</p>
     `
 

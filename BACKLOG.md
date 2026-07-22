@@ -287,12 +287,13 @@ here.
   the Day-0 owner actions (verify a real SES sender identity in `us-east-2`, decide
   sandbox vs. production access) haven't happened yet, so live send (`tofu apply` +
   password-reset smoke test) is unverified — `email_from_address` in `uat.tfvars:21` is
-  still the placeholder `noreply@uat.example.com`, which SES will refuse. **Also found but
-  out of scope for P0.6:** clicking the magic-link email lands on `/signup?token=...`,
-  the only frontend route that reads a magic-link token at all (grep for `playerToken`
-  in `packages/frontend/src` returns zero matches) — it pre-fills email for full account
-  signup, not a lightweight "continue as guest" path; a guest wanting to view their
-  tournament without creating a password still has no route. Remaining, ungrilled:
+  still the placeholder `noreply@uat.example.com`, which SES will refuse. **Update
+  (ISSUE-14, built 2026-07-22):** the magic-link email now lands on
+  `/tournament/:tournamentId/join?token=...`, a guest-landing route that exchanges the
+  token for a passwordless guest session via the existing `GET /:tournamentId/auth/verify`
+  (which already minted a `playerToken` — the frontend just never called it). Account
+  creation via `/signup?token=...` remains available as an optional upgrade, not a
+  requirement. Remaining, ungrilled:
   **bounce/complaint handling** (SNS topic + handler, needed to exit the sandbox — does a
   bounced tester email silently lock them out, prompt re-verification, or something else?),
   **sender domain strategy** (a verified domain vs. a single address — also the
