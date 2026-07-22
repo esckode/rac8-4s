@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { usePendingActions } from '../hooks/usePendingActions'
 import { UpNextStrip } from '../components/shared/UpNextStrip'
 import { statusBadge } from '../utils/tournamentStatus'
+import { selectFeatured } from '../utils/featuredSelection'
 
 interface Tournament {
   id: string
@@ -11,6 +12,7 @@ interface Tournament {
   maxPlayers: number
   registrationDeadline: string
   status: string
+  registeredCount: number
 }
 
 const coverColors: Record<string, string> = {
@@ -64,6 +66,13 @@ export const BrowseTournaments: React.FC = () => {
     if (filterActive === 'Doubles') return tournament.matchFormat === 'doubles'
     return true
   })
+
+  // ISSUE-10: curated "Register soon" set (open + future deadline + has
+  // spots, most-registered first) — replaces the old positional [0].
+  // Excluded from "All Tournaments" below so no card duplicates.
+  const featuredTournaments = selectFeatured(filteredTournaments)
+  const featuredIds = new Set(featuredTournaments.map(t => t.id))
+  const remainingTournaments = filteredTournaments.filter(t => !featuredIds.has(t.id))
 
   const getColorForTournament = (index: number) => {
     const colors = ['court', 'lavender', 'mint', 'peach', 'gold']
@@ -162,50 +171,59 @@ export const BrowseTournaments: React.FC = () => {
 
         {!loading && filteredTournaments.length > 0 && (
           <>
-            {/* Featured */}
-            {filteredTournaments.length > 0 && (
+            {/* Featured — curated "Register soon" set (ISSUE-10) */}
+            {featuredTournaments.length > 0 && (
               <>
                 <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--court-600)', letterSpacing: '0.12em', marginBottom: 10 }}>
-                  FEATURED
+                  Register soon
                 </div>
-                <div data-testid="tournament-list tournament-card" style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', marginBottom: 20, display: 'flex', gap: 14, cursor: 'pointer' }} onClick={() => window.location.href = `/tournament/${filteredTournaments[0].id}/browse`}>
-                  <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[getColorForTournament(0)], flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>{filteredTournaments[0].name}</h3>
-                    <div style={{ fontSize: 11, color: 'var(--ink-500)', marginTop: 2 }}>{filteredTournaments[0].sport}</div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                      <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>
-                        {statusBadge(filteredTournaments[0].status, filteredTournaments[0].registrationDeadline)}
-                      </span>
-                      <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
-                        🎾 {filteredTournaments[0].sport}
-                      </span>
-                      <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
-                        {filteredTournaments[0].matchFormat}
-                      </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+                  {featuredTournaments.map((tournament, index) => (
+                    <div
+                      key={tournament.id}
+                      data-testid="tournament-list tournament-card"
+                      style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', display: 'flex', gap: 14, cursor: 'pointer' }}
+                      onClick={() => window.location.href = `/tournament/${tournament.id}/browse`}
+                    >
+                      <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[getColorForTournament(index)], flexShrink: 0 }} />
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>{tournament.name}</h3>
+                        <div style={{ fontSize: 11, color: 'var(--ink-500)', marginTop: 2 }}>{tournament.sport}</div>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                          <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)' }}>
+                            {statusBadge(tournament.status, tournament.registrationDeadline)}
+                          </span>
+                          <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
+                            🎾 {tournament.sport}
+                          </span>
+                          <span style={{ padding: '4px 8px', background: 'var(--ink-50)', borderRadius: 4, fontSize: 11, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
+                            {tournament.matchFormat}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
               </>
             )}
 
-            {/* All tournaments */}
-            {filteredTournaments.length > 1 && (
+            {/* All tournaments — excludes anything already shown in Featured */}
+            {remainingTournaments.length > 0 && (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
                   <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>All Tournaments</h3>
-                  <span style={{ fontSize: 12, color: 'var(--ink-500)', fontWeight: 600 }}>{filteredTournaments.length} results</span>
+                  <span style={{ fontSize: 12, color: 'var(--ink-500)', fontWeight: 600 }}>{remainingTournaments.length} results</span>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {filteredTournaments.slice(1).map((tournament, index) => (
+                  {remainingTournaments.map((tournament, index) => (
                     <div
                       key={tournament.id}
                       data-testid="tournament-card"
                       style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--border-soft)', borderRadius: 'var(--r-xl)', display: 'flex', gap: 14, alignItems: 'flex-start', cursor: 'pointer' }}
                       onClick={() => window.location.href = `/tournament/${tournament.id}/browse`}
                     >
-                      <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[getColorForTournament(index + 1)], flexShrink: 0 }} />
+                      <div style={{ width: 56, height: 56, borderRadius: 'var(--r-md)', background: coverColors[getColorForTournament(index)], flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <h4 style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 600, color: 'var(--ink-900)', letterSpacing: '-0.01em' }}>{tournament.name}</h4>
                         <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 8 }}>{tournament.sport}</div>

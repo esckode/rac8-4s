@@ -45,6 +45,9 @@ export interface TournamentRow {
   mode: string
   visibility: string
   group_id?: string | null
+  // Only populated by listPublic's registered_count subquery (ISSUE-10).
+  // COUNT(*) comes back from pg as a numeric string, not a number.
+  registered_count?: string
 }
 
 export interface PlayerRow {
@@ -302,22 +305,22 @@ export class TournamentRepository {
 
     const params = [...publishedStatuses]
     const placeholders = publishedStatuses.map((_, i) => `$${i + 1}`).join(',')
-    let query = `SELECT * FROM public.tournaments WHERE status IN (${placeholders}) AND visibility = 'public' AND deleted_at IS NULL`
+    let whereClause = `FROM public.tournaments t WHERE t.status IN (${placeholders}) AND t.visibility = 'public' AND t.deleted_at IS NULL`
 
     if (opts.sport) {
       params.push(opts.sport)
-      query += ` AND sport = $${params.length}`
+      whereClause += ` AND t.sport = $${params.length}`
     }
 
     const countParams = [...params]
-    const countResult = await this.pool.query(
-      query.replace('SELECT *', 'SELECT COUNT(*) as count'),
-      countParams
-    )
+    const countResult = await this.pool.query(`SELECT COUNT(*) as count ${whereClause}`, countParams)
     const total = parseInt((countResult.rows[0] as { count: string }).count)
 
+    // ISSUE-10: registered_count via a single-query subquery, not N+1 — feeds
+    // the "Register soon" featured selection (most-registered, has spots).
+    let query = `SELECT t.*, (SELECT COUNT(*) FROM public.player_registrations pr WHERE pr.tournament_id = t.id) AS registered_count ${whereClause}`
     params.push(String(limit), String(offset))
-    query += ` ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`
+    query += ` ORDER BY t.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`
 
     const result = await this.pool.query(query, params)
     const rows = result.rows as TournamentRow[]

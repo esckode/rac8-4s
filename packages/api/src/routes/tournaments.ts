@@ -1125,6 +1125,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         maxPlayers: row.max_players,
         registrationDeadline: row.registration_deadline,
         status: row.status,
+        registeredCount: parseInt(row.registered_count ?? '0'),
       })),
       pagination: {
         offset,
