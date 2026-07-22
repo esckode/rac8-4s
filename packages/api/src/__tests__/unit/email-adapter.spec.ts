@@ -1,4 +1,4 @@
-import { InMemoryEmailAdapter, sendPasswordResetEmail, EmailConfig } from '../../email-adapter'
+import { InMemoryEmailAdapter, sendPasswordResetEmail, sendMagicLinkEmail, EmailConfig } from '../../email-adapter'
 
 describe('InMemoryEmailAdapter', () => {
   let adapter: InMemoryEmailAdapter
@@ -424,5 +424,45 @@ describe('sendPasswordResetEmail', () => {
       await sendPasswordResetEmail(adapter, config, 'test@example.com', '123456', 15)
       expect(adapter.sent[0].body).toContain('https://app.example.com:8443/reset-password')
     })
+  })
+})
+
+// ISSUE-14 — the emailed link used to force full account creation
+// (/signup?token=), funneling even guest registrants into password setup.
+// It must point at the guest-landing route instead, wired to the existing
+// GET /:tournamentId/auth/verify guest-session exchange.
+describe('sendMagicLinkEmail', () => {
+  let adapter: InMemoryEmailAdapter
+  let config: EmailConfig
+
+  beforeEach(() => {
+    adapter = new InMemoryEmailAdapter()
+    config = {
+      fromAddress: 'noreply@test.local',
+      frontendUrl: 'https://app.test.local',
+    }
+  })
+
+  it('links to the tournament-scoped guest-landing route, not /signup', async () => {
+    await sendMagicLinkEmail(adapter, config, 'player@example.com', 'tok123', 'tournament_1', 'Summer Slam')
+
+    const sent = adapter.sent[0]
+    expect(sent.body).toContain('https://app.test.local/tournament/tournament_1/join?token=tok123')
+    expect(sent.body).not.toContain('/signup?token=')
+  })
+
+  it('relabels the button "View your tournament"', async () => {
+    await sendMagicLinkEmail(adapter, config, 'player@example.com', 'tok123', 'tournament_1', 'Summer Slam')
+
+    const sent = adapter.sent[0]
+    expect(sent.body).toContain('View your tournament')
+    expect(sent.body).not.toContain('Complete registration')
+  })
+
+  it('URL-encodes the token', async () => {
+    await sendMagicLinkEmail(adapter, config, 'player@example.com', 'tok with spaces', 'tournament_1', 'Summer Slam')
+
+    const sent = adapter.sent[0]
+    expect(sent.body).toContain(encodeURIComponent('tok with spaces'))
   })
 })
