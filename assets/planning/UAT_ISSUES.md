@@ -848,6 +848,23 @@ that route is this issue.
 
 - Any routes ISSUE-1's audit turns up with the same strict-auth-where-dual-intended gap
   (add rows here, fix separately).
+  - **`analytics.ts:23`** (`POST /events`) — direct `requirePlayerSessionAuth`, no
+    dual-auth fallback. Same class as ISSUE-1: a registered-account JWT with a linked
+    playerId would 401 here today. Low severity (analytics ingestion, not user-facing
+    blocking UX) but same root cause — needs the same `resolvePlayerId`-style shim.
+  - **`messages.ts`** — mixed: several routes already call both
+    `requirePlayerSessionAuth` *and* `requireOrganizerAuth` (lines ~44/53, 127/136,
+    173/182, 329/338), suggesting dual-auth was hand-rolled per-route rather than via a
+    shared helper — worth confirming each actually falls back correctly (not just
+    calls both for different purposes). Two bare `requirePlayerSessionAuth` calls with
+    no organizer fallback at lines ~217, 234 — needs a closer read to tell whether
+    those are intentionally guest-only.
+  - **`tournaments.ts`** — has its own dual-auth helper (`resolveTournamentPlayer`,
+    ~line 100) used in most player-scoped routes, but several routes still call
+    `requirePlayerSessionAuth` directly with no fallback (lines ~367, 930, 1800, 1845,
+    1924, 2015). Needs a case-by-case read: some may be intentionally guest-session-only
+    (e.g. a magic-link-specific verify step), others may be the same missed-adoption gap.
+  - `player.ts` and `auth.ts` already have their own dual-auth resolvers — no gap found.
 - **Tournament lifecycle has no automatic status transitions** (surfaced by ISSUE-9): nothing
   moves a normal tournament off `registration_open` at its `registration_deadline`, or to
   `completed` when finished — the only auto-close sweep is for polls. So tournaments linger in
