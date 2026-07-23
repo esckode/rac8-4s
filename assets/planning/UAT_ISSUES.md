@@ -189,6 +189,22 @@ the pattern is `resolveTournamentPlayer(authHeader, registration.tournament_id)`
   `registration_open` indefinitely and stale-open ones keep appearing in Browse (ISSUE-9 only
   fixes the *label*). Durable fix = a deadline/lifecycle sweep or organizer-driven transition;
   needs its own design + issue.
+- **The full e2e sweep (§11's merge gate) cannot pass as configured** — observed 2026-07-23:
+  `npm run test:e2e` produced **142 failures / 267 passed**, overwhelmingly
+  `RATE_LIMITED` raised by the fixtures' own `POST /:id/register` calls. ISSUE-11's
+  per-IP cap is 25 registrations / 15 min (`registerPerIpMaxAttempts`), and a 427-test
+  both-browser sweep from one IP blows through it within the first few multi-player
+  fixtures; everything after that fails to seed, which also explains the
+  `action-card` / `assistant-message` "element not found" failures downstream. Confirmed
+  environmental, not a code defect: with the API restarted (in-memory limiter cleared),
+  `partner-requests.spec.ts` passes 3/3 and `tournament-discovery-registration.spec.ts`
+  13/13, while re-running a batch large enough to exhaust the cap fails again. No
+  override exists anywhere — not in `.env`, `.env.example`, `scripts/e2e-setup.js`, or
+  `playwright.config.ts`. Fix is a test-environment override (e.g.
+  `APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS` raised for dev/e2e, ideally set by
+  `e2e-setup.js` so it can't be forgotten) — **not** loosening the production default,
+  which is the ISSUE-11 defence. Until then §11's "full run before merging" is not a
+  meaningful gate and per-spec runs are the real signal.
 - Deliverability: UAT SES mail lands in Gmail **spam** (DMARC can't align from a
   `gmail.com` sender) — a known, owner-accepted trade-off, tracked in
   `UAT_PWA_LAUNCH.md` P0.6-SES, not a bug. The real fix is a verified domain (§2).
