@@ -29,103 +29,136 @@ full index: resolved rows link into the archive, open rows link to a section in 
 | [ISSUE-12](COMPLETED_UAT_ISSUES.md#issue-12) | ✅ Resolved | 🟠 | Guest-registration UX: ambiguous app-vs-tournament framing, no auth-aware one-click, doubles partner unsurfaced, email-typo safety | frontend + api |
 | [ISSUE-13](COMPLETED_UAT_ISSUES.md#issue-13) | ✅ Resolved | 🟠 | Tournament detail page (`TournamentBrowse`) — no design parity + missing description/deadline/capacity | frontend + api |
 | [ISSUE-14](COMPLETED_UAT_ISSUES.md#issue-14) | ✅ Resolved | 🟠 | Emailed magic link forces account creation — wire it to the existing guest-session exchange ("continue as guest") | frontend + api |
-| [ISSUE-15](#issue-15) | 🔲 Open | 🟠 | Doubles partner: three competing mechanisms, the one wired to the UI is a no-op — consolidate on an email-based invite | api + frontend |
+| [ISSUE-15](COMPLETED_UAT_ISSUES.md#issue-15) | ✅ Resolved | 🟠 | Doubles partner: three competing mechanisms, the one wired to the UI is a no-op — consolidate on an email-based invite | api + frontend |
+| [ISSUE-16](#issue-16) | 🔲 Open | 🔴 | Partner pairing is first-*inviter*-wins and has no accept-time guard — one player can hold two confirmed teams | api + frontend |
 
 ---
 
-## ISSUE-15 — Doubles partner: three competing mechanisms; the one wired to the UI is a no-op 🟠 {#issue-15}
+## ISSUE-16 — Partner pairing is first-*inviter*-wins, and confirming has no accept-time guard 🔴 {#issue-16}
 
-**🔲 Open** (raised 2026-07-22 while verifying ISSUE-12's "select existing partner" deferral —
-the deferral turned out to be the smaller half of the problem.)
+**🔲 Open** (raised 2026-07-23 while verifying ISSUE-15; owner decision below taken the same day.)
 
-**Symptom:** on `/tournament/:id/browse` a doubles registrant types their partner's email into the
-field ISSUE-12 added, gets no error, and **nothing happens** — no team, no pending state, no email
-to the partner. Meanwhile a full partner request/accept subsystem already exists in the API and is
-reachable from no UI at all.
+**Two defects with one root cause: no single place decides who X's partner is.**
 
-**Root cause (verified by reading the code):** there are **three** partner mechanisms, and the
-frontend is wired to the only one that does nothing.
+**(1) Data corruption — a player can end up on two confirmed teams.** Verified by probe against the
+running API:
 
-1. **`register` → `partnerSelection: { type: 'invite' }` — a no-op stub.**
-   `tournaments.ts:1291-1304`. Validates the email at `:1204-1210` (format + the "Cannot partner
-   with yourself" guard), then the branch body **never uses `value`**: it registers the requester
-   and logs `team.created`. The comment says it outright — *"Store invitation info (will be linked
-   when partner signs up) / For now, we just create the registration."* No partner is stored, and
-   the only mail sent is the magic link to the **requester** (`:1313-1320`).
-   **This is what the UI calls** — `TournamentBrowse.tsx:83-84` always sends `{ type: 'invite',
-   value: partnerEmail }`.
-2. **`register` → `partnerSelection: { type: 'select' }` — works, unreachable.**
-   `tournaments.ts:1258-1290`. Takes `value` = a **player ID**, creates paired registrations both
-   directions via `updateRegistrationWithPartner`, which sets `status = 'pending_partner_confirm'`
-   (`db.ts:588`). Nothing in the frontend ever sends `type: 'select'`.
-3. **A dedicated partner-request subsystem — complete, unreachable.**
-   - `GET  /:id/available-partners`  (`tournaments.ts:1750`) — roster of solo registrants, already
-     auth-scoped via `resolveTournamentPlayer` (**not** public, so no anonymous-roster exposure)
-   - `GET  /:id/partner-requests`    (`:1762`) — incoming requests for the caller
-   - `POST /:id/partner-requests`    (`:1774`) — request a partner by `targetPlayerId`; requires
-     doubles + `registration_open` + **both parties already registered** (`:1808-1810`) + neither
-     already partnered (`:1811-1816`); sets `pending_partner_confirm`
-   - `PATCH /registrations/:registrationId/confirm` (`:1829`) — the target accepts; `db.ts:601,615`
-     flips `partner_confirmed` and links both sides
-   - `DELETE /registrations/:registrationId` (`:1874`) — withdraw
-   - `GET /:tournamentId/players` already returns `partnerConfirmed` (`:1733`), so "awaiting
-     acceptance" is renderable **today** with no schema work.
-
-**The schema already models the whole state machine** (`db.ts:114-116`) — don't add to it:
-```ts
-partner_id?: string
-partner_confirmed: boolean
-status: 'registered' | 'pending_partner_confirm' | 'withdrawn' | 'withdrawal_pending' | 'unpaired'
+```
+A requests X = 201,  B requests X = 201        (both pending, correctly allowed)
+X confirms A = 200,  X confirms B = 200        ← both succeed
+final:  A.partner_id = X,  partner_confirmed = true
+final:  B.partner_id = X,  partner_confirmed = true
+final:  X.partner_id = B                       ← last write wins
 ```
 
-**Decision (owner, 2026-07-22): one email-based entry point, no picker.** The requester supplies the
-partner's **email address** — email is already the durable player identity here
-(`findOrCreatePlayerByEmail`, `tournaments.ts:1217`). The backend resolves it:
-- **email belongs to a registered account** → in-app **notification to accept**
-  (`postPersonalNotification`, used at `player-groups.ts:131`)
-- **otherwise** → **magic link** emailed to the partner (`generateMagicLinkToken` +
-  `sendMagicLinkEmail`, already used on this route)
-- either way the requester sees **"awaiting acceptance"** until the partner confirms.
+A believes they have a confirmed team with X. X points at B. Nothing reconciles them, and group/team
+generation reads these rows. **This is reachable today from the shipped `PartnerFinder` UI** via the
+pre-existing `partner-requests` flow — it does not require any ISSUE-15 code path.
 
-A picker is not required. `available-partners` may stay as a convenience, but it must not be the
-only path — it can't reach a partner who hasn't registered yet.
+**(2) Inconsistent invite semantics across the three branches** of `POST /:tournamentId/register`:
 
-**The four sub-decisions (owner-confirmed 2026-07-22):**
-1. **A pending invite holds a capacity slot, with an expiry.** Otherwise the partner accepts and
-   finds the tournament full, breaking a team both people believed was formed. Without the expiry,
-   invites to dead addresses squat spots indefinitely.
-2. **Rate-limit the partner address.** ISSUE-11's sharp per-email key is
-   `register:email:${req.body.email}` (`tournaments.ts:1148-1151`) — the **requester's** address. A
-   partner invite mails an arbitrary third party, so it would ride only the deliberately generous
-   per-IP cap (25 / 15 min). Rotating requester emails then yields an unthrottled send path to any
-   victim — **reopening exactly what ISSUE-11 closed.** The per-email limiter must cover the partner
-   address too (or add a second limiter keyed on it).
-3. **Accepting after the registration deadline is allowed** when the invite was sent before it — the
-   requester acted in time. This is a deliberate exception: `POST /:id/partner-requests` currently
-   requires `status === 'registration_open'` (`:1794`).
-4. **Reuse the existing conflict guards** for an already-registered or already-partnered invitee
-   (409, `:1811-1816`). Silently overwriting an existing partner is worse than refusing.
+```
+Branch B (X has an existing player row):  first inviter 202, second inviter 409 INVALID_STATE
+Branch C (X is a brand-new email):        both 202; accept #1 200, accept #2 409
+```
+
+Branch C is right; branch B refuses the second inviter outright, so the winner is whoever asked
+first rather than whoever X chose.
+
+**Owner decision (2026-07-23):** *A inviting X must never stop B inviting X. Whichever pairing X
+accepts becomes final; the rest fail at accept time.* Invite/decline spam is explicitly **out of
+scope** — under the model below an invite X ignores costs X nothing, so there is nothing to abuse.
+
+### Root cause (verified by reading the code)
+
+The three mechanisms disagree about where a pending invite lives:
+
+- **Branch C** (`tournaments.ts:1354-1372`) keeps the invite entirely in the emailed token and
+  writes **nothing** to X. Correct — this is the target model.
+- **Mechanism 3** (`POST /:id/partner-requests`, `tournaments.ts:1950`) writes only the
+  **requester's** row. Also correct, and it already permits concurrent pending requests — which is
+  exactly how defect (1) becomes reachable, because nothing then guards the *accept*.
+- **Branches A/B** (`tournaments.ts:1344-1351`) mirror-write the pairing onto **X's** registration
+  (`updateRegistrationWithPartner` on both rows) and auto-create X's registration at `:1347` if they
+  had none. That occupies `X.partner_id` at invite time, so the guard at `:1344` refuses the next
+  inviter.
+- **`PATCH /registrations/:id/confirm`** (`tournaments.ts:1926`) checks that the caller is the
+  registration's `partner_id` and that the row is still pending — but **never checks whether the
+  caller is already partnered**. That single missing check is defect (1).
+
+The schema needs no change: `partner_id` + `partner_confirmed` + `status` already model this. The
+requester's own row is the invite record; the token is the invite record for a brand-new email.
+
+### Required behaviour
+
+1. **An invite writes only the requester's row.** Branches A/B must stop calling
+   `updateRegistrationWithPartner` on X's registration and must stop auto-creating one
+   (`:1347`, `:1351`). X's registration is created at accept time, as branch C already does.
+2. **First accept wins — enforce it at accept time.** Both `PATCH .../confirm` and
+   `POST /:tournamentId/partner-invites/accept` must refuse when the accepting player already has a
+   confirmed partner in that tournament (409 `INVALID_STATE`). **This is the fix for defect (1) and
+   is required whether or not the rest of this issue is done.**
+3. **Narrow the invite-time 409** at `:1344` to *confirmed* pairings only. Refusing to invite
+   someone already on a team stays correct; refusing because someone else invited them first does
+   not.
+4. **Widen the capacity hold.** `countPendingPartnerInviteHolds` (`db.ts:616`) currently matches
+   `status = 'pending_partner_confirm' AND partner_id IS NULL`. Under (1) an A/B pending pair has
+   `partner_id` set but no row for X, so the hold must match "pending, unconfirmed, and the partner
+   has no registration in this tournament". Keep the existing TTL clause — the 24h expiry is what
+   cleans up the invites X never accepted.
+5. **Losing invites need no explicit cleanup.** They lapse via the hold TTL. Notifying the losing
+   requesters is desirable but optional; if added, reuse `postPersonalNotification` (the same helper
+   the invite notification uses).
+
+### Do NOT
+
+- **Do not add a schema column or an `invites` table.** The requester's row and the invite token
+  already carry everything; a third store is how this got inconsistent in the first place.
+- **Do not reintroduce a write to X's registration to "reserve" them.** That is the bug.
+- **Do not revert the ISSUE-15 follow-up fixes** in the same files: the dual-auth
+  `resolveTournamentPlayer` on confirm, the `partnerConfirmWindowOpen` helper, the hold TTL, and the
+  `DELETE /registrations/:id/partner-invite` cancel route all stay.
+- **Do not "fix" defect (1) by making `confirmPartner` clear the loser's row.** The loser's
+  registration must stay valid and solo; only their claim on X goes away.
 
 ### Fix (TDD §4)
 
-- **[RED]** Integration tests on the new entry point: (a) partner email = registered account →
-  pending state + notification, no magic-link mail; (b) partner email = unknown → pending state +
-  magic link sent to the partner; (c) requester sees `pending_partner_confirm` until
-  `PATCH …/confirm`; (d) invite to an already-partnered player → 409; (e) partner-address rate limit
-  trips (mirror the ISSUE-11 tests, use `clearRateLimitStore()`); (f) accept after deadline succeeds
-  when the invite predates it. Frontend unit test: the doubles field shows "awaiting acceptance"
-  after submit.
-- **[GREEN]** Add the email→player resolution + the two delivery branches; wire
-  `TournamentBrowse.tsx` to it; render pending/confirmed state from `partnerConfirmed`.
-- **Cleanup (same branch, separate commit):** delete the `select` branch (`:1258-1290`) and the
-  `invite` stub (`:1291-1304`) from `register`, and the now-dead validation at `:1193-1212`. Three
-  partner mechanisms must not survive this change. Check `findAvailablePartners` /
-  `findIncomingPartnerRequests` callers before removing anything else.
-- **Docs:** `docs/assistant-help.md` (§9 — user-visible flow change); new `data-testid`s to
-  `e2e/config.ts` (§8).
-- **Verify:** a doubles guest invites a partner by email and sees "awaiting acceptance"; the partner
-  gets a notification (account) or a magic link (new); accepting forms the team both directions; a
-  burst of invites to different addresses from one IP is throttled.
+- **[RED]** Integration: (a) A and B both invite the same existing player → both 202; (b) X confirms
+  A → 200, X confirms B → 409, and A's row is untouched and still confirmed; (c) same for two
+  branch-C invites where X accepts the second token first; (d) X's registration is *not* created or
+  modified by an invite they haven't accepted; (e) two pending invites against one remaining slot
+  hold capacity correctly; (f) an invite to a player with a **confirmed** partner still 409s.
+  Frontend: `PartnerFinder` still lists X as available while invites on X are outstanding.
+- **[GREEN]** Apply the five required behaviours above.
+- **Regression:** `partner-invite-by-email.spec.ts` (24 tests) asserts the current branch-A/B
+  mirror-write in several places — those assertions change shape. Read them before editing; a test
+  that asserts X's row went `pending_partner_confirm` at invite time is asserting the bug.
+- **Docs:** `docs/assistant-help.md` (§9 — "you can be invited by more than one person; whoever you
+  accept is your team"), `e2e-scenarios.md` scenario + selection-map row (§8).
+
+### Knock-on: this makes a decline path optional
+
+The reason a decline endpoint looked necessary was that branches A/B mutate X's registration, so an
+unwanted invite left X in `pending_partner_confirm` — or registered in a tournament they never chose
+— with only "confirm" or "withdraw entirely" as exits. Under requirement (1) an ignored invite
+touches nothing of X's, so **decline becomes UX only** (dismiss the notification), and the
+"was this registration created by the invite?" question that needed a schema decision disappears.
+Do not build a decline endpoint as part of this issue.
+
+**Related, needed by the same users:** `DELETE /registrations/:registrationId`
+(`tournaments.ts:2168`) still uses `requirePlayerSessionAuth` directly, so a registered-account
+holder cannot withdraw at all — the same dual-auth gap ISSUE-1 and the ISSUE-15 follow-up fixed
+elsewhere. It is already on the untriaged list below. Fixing it here is in scope if convenient;
+the pattern is `resolveTournamentPlayer(authHeader, registration.tournament_id)`.
+
+### Verify
+
+- Two players invite the same third player by email; both succeed, both see "awaiting acceptance".
+- The invitee accepts one; that team forms both directions, and the other requester's registration
+  is still a valid solo registration.
+- The invitee cannot then accept the second invite (409), and their own registration points at
+  exactly one partner.
+- A player who was never invited-and-accepted has no registration row they didn't create.
 
 ---
 
