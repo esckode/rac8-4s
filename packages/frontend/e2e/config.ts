@@ -220,10 +220,6 @@ export const TEST_DATA = {
     generateName: () => `Test Tournament ${Date.now()}`,
   },
 
-  REGISTRATION: {
-    DEFAULT_PARTNER_TYPE_INVITE: 'invite',
-    DEFAULT_PARTNER_TYPE_SELECT: 'select',
-  },
 }
 
 // ============================================================================
@@ -274,6 +270,20 @@ export const SELECTORS = {
   REQUEST_PARTNER_BUTTON: '[data-testid="request-partner-button"]',
   PARTNER_ERROR: '[data-testid="partner-error"]',
   CONFIRM_PARTNERSHIP_BUTTON: '[data-testid="confirm-partnership-button"]',
+
+  // Age gate (18+ attestation), shown on first registration from a device
+  DOB_INPUT: '[data-testid="dob-input"]',
+  DOB_SUBMIT: '[data-testid="dob-submit"]',
+
+  // ISSUE-15 — invite a doubles partner by email
+  PARTNER_INVITE_PENDING: '[data-testid="partner-invite-pending"]',
+  CANCEL_PARTNER_INVITE_BUTTON: '[data-testid="cancel-partner-invite-button"]',
+  PARTNER_INVITE_ACCEPT_PAGE: '[data-testid="partner-invite-accept-page"]',
+  PARTNER_INVITE_AGE_GATE: '[data-testid="partner-invite-age-gate"]',
+  PARTNER_INVITE_SUCCESS: '[data-testid="partner-invite-success"]',
+  PARTNER_INVITE_INVALID: '[data-testid="partner-invite-invalid"]',
+  PARTNER_INVITE_NOT_FOUND: '[data-testid="partner-invite-not-found"]',
+  PARTNER_INVITE_UNDERAGE: '[data-testid="partner-invite-underage"]',
   CONFIRM_SUCCESS: '[data-testid="confirm-success"]',
   CONFIRM_ERROR: '[data-testid="confirm-error"]',
 

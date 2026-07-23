@@ -127,3 +127,54 @@ export async function sendMagicLinkEmail(
     // Don't throw - allow endpoint to continue
   }
 }
+
+/**
+ * Send a doubles partner-invite email (ISSUE-15) — for a partner email with
+ * no existing player row. Unlike sendMagicLinkEmail, the link carries a
+ * PartnerInvitePayload (no playerId yet) and lands the invitee on the public
+ * registration flow to complete their own attestation before the pairing
+ * is finalized.
+ *
+ * @param emailAdapter - The email adapter to use for sending
+ * @param config - Email configuration with fromAddress and frontendUrl
+ * @param email - Recipient (invited partner's) email address
+ * @param token - The partner-invite token
+ * @param tournamentId - The tournament being invited into (log context only)
+ * @param tournamentName - Tournament name, shown in the email
+ * @param requesterName - The inviting player's name, shown in the email
+ */
+export async function sendPartnerInviteEmail(
+  emailAdapter: EmailAdapter,
+  config: EmailConfig,
+  email: string,
+  token: string,
+  tournamentId: string,
+  tournamentName: string,
+  requesterName: string
+): Promise<void> {
+  try {
+    const acceptLink = `${config.frontendUrl}/tournament/${tournamentId}/partner-invite?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
+
+    const subject = `${requesterName} invited you to be their doubles partner`
+
+    const html = `
+      <h1>You've been invited to a doubles team!</h1>
+      <p><strong>${requesterName}</strong> invited you to be their partner for <strong>${tournamentName}</strong>.</p>
+      <p><a href="${acceptLink}" style="display: inline-block; background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Accept invite</a></p>
+      <p>This link is single-use and can only be used by this email address.</p>
+      <p>Or copy this URL: ${acceptLink}</p>
+    `
+
+    await emailAdapter.send(email, subject, html)
+
+    // No recipient/name in logs, per CLAUDE.md §6 (PII beyond IDs).
+    log.info('email.sent', { tournamentId, type: 'partner_invite' })
+  } catch (error) {
+    log.error('email.send_failed', {
+      tournamentId,
+      type: 'partner_invite',
+      error: error instanceof Error ? error.message : String(error),
+    })
+    // Don't throw - allow endpoint to continue
+  }
+}

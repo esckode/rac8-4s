@@ -24,6 +24,22 @@ export interface GroupInvitePayload {
   createdAt: number
 }
 
+/**
+ * Doubles partner-invite token payload (ISSUE-15).
+ * Used only when the invited partner has no existing player row — there is
+ * no playerId yet, so this cannot reuse MagicLinkPayload. Email-bound and
+ * single-use, same shape/guarantees as GroupInvitePayload. Carries the
+ * requester's registration id so accept can link both sides without any
+ * new player_registrations column.
+ */
+export interface PartnerInvitePayload {
+  type: 'partner-invite'
+  tournamentId: string
+  requesterRegistrationId: string
+  email: string
+  createdAt: number
+}
+
 export interface GeneratedMagicLink {
   token: string
   expiresAt: number
@@ -149,6 +165,76 @@ export async function validatePlayerSession(
   } catch {
     throw new TokenInvalidError('Token value is corrupted')
   }
+}
+
+export interface GeneratedPartnerInvite {
+  token: string
+  expiresAt: number
+  payload: PartnerInvitePayload
+}
+
+/**
+ * Mint a single-use, email-bound doubles partner-invite token.
+ */
+export async function generatePartnerInviteToken(
+  payload: PartnerInvitePayload,
+  ttlSeconds: number,
+  store: TokenStore
+): Promise<GeneratedPartnerInvite> {
+  const token = crypto.randomBytes(TOKEN_BYTE_LENGTH).toString('hex')
+  const key = `${KEY_PREFIX}${token}`
+  const value = JSON.stringify(payload)
+  await store.set(key, value, ttlSeconds)
+
+  return {
+    token,
+    expiresAt: Date.now() + ttlSeconds * 1000,
+    payload,
+  }
+}
+
+/**
+ * Validate a doubles partner-invite token.
+ *
+ * - Consumes the token (single-use).
+ * - Enforces email binding: the presented email must match the stored email
+ *   (case-insensitive). A wrong-email attempt does NOT consume the token.
+ * - Enforces type=partner-invite to prevent token-type confusion.
+ */
+export async function validatePartnerInviteToken(
+  token: string,
+  presentedEmail: string,
+  store: TokenStore
+): Promise<PartnerInvitePayload> {
+  if (!token) {
+    throw new TokenInvalidError('Token cannot be empty')
+  }
+
+  const key = `${KEY_PREFIX}${token}`
+  const value = await store.get(key)
+
+  if (!value) {
+    throw new TokenInvalidError('Token is invalid or has expired')
+  }
+
+  let payload: PartnerInvitePayload
+  try {
+    payload = JSON.parse(value) as PartnerInvitePayload
+  } catch {
+    throw new TokenInvalidError('Token value is corrupted')
+  }
+
+  if (payload.type !== 'partner-invite') {
+    throw new TokenInvalidError('Token is not a partner invite')
+  }
+
+  if (!payload.email || payload.email.toLowerCase() !== presentedEmail.toLowerCase()) {
+    throw new TokenInvalidError('Email does not match the invited address')
+  }
+
+  await store.del(key)
+
+  return payload
 }
 
 export interface GeneratedGroupInvite {

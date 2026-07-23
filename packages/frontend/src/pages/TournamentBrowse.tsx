@@ -42,6 +42,7 @@ export const TournamentBrowse: React.FC = () => {
   const [submitting, setSubmitting] = useState(false)
   const [successEmail, setSuccessEmail] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [partnerStatus, setPartnerStatus] = useState<string | null>(null)
   const lastAttempt = useRef<{ email: string; name: string }>({ email: '', name: '' })
 
   const { ageGatePhase, handleAgeCode, dismissAgeGate } = useAgeGate()
@@ -81,7 +82,7 @@ export const TournamentBrowse: React.FC = () => {
       // Snake_case — matches the backend's req.body.dob_attestation exactly.
       if (attestation) body.dob_attestation = attestation
       if (tournament?.matchFormat === 'doubles' && partnerEmail.trim()) {
-        body.partnerSelection = { type: 'invite', value: partnerEmail.trim() }
+        body.partnerEmail = partnerEmail.trim()
       }
       const res = await fetch(`/tournaments/${tournamentId}/register`, {
         method: 'POST',
@@ -89,6 +90,8 @@ export const TournamentBrowse: React.FC = () => {
         body: JSON.stringify(body),
       })
       if (res.ok) {
+        let data: { partner?: { status?: string } } = {}
+        try { data = await res.json() } catch { /* ignore */ }
         // A successful retry from DobScreen (ageGatePhase === 'required') must
         // dismiss the gate too — otherwise the component keeps rendering
         // DobScreen forever, since that check runs before the success message
@@ -96,6 +99,7 @@ export const TournamentBrowse: React.FC = () => {
         // navigating away on success instead of showing an inline message).
         dismissAgeGate()
         setSuccessEmail(registerEmail)
+        setPartnerStatus(data.partner?.status ?? null)
         return
       }
       let errorBody: { code?: string; message?: string } = {}
@@ -136,6 +140,7 @@ export const TournamentBrowse: React.FC = () => {
   const handleEditEmail = () => {
     setSuccessEmail(null)
     setSubmitError(null)
+    setPartnerStatus(null)
   }
 
   if (ageGatePhase === 'required') {
@@ -206,6 +211,11 @@ export const TournamentBrowse: React.FC = () => {
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-500)' }}>
                   We've sent a link to <strong>{successEmail}</strong>.
                 </p>
+                {partnerStatus === 'pending_partner_confirm' && (
+                  <p data-testid="partner-invite-pending" style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--ink-500)' }}>
+                    Your partner invite is <strong>awaiting acceptance</strong>.
+                  </p>
+                )}
                 <button
                   onClick={handleEditEmail}
                   style={{ marginTop: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--court-600)' }}

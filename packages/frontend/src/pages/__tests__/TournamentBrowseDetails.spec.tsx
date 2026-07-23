@@ -23,7 +23,7 @@ const SINGLES = {
 }
 const DOUBLES = { ...SINGLES, id: 't_doubles', matchFormat: 'doubles' }
 
-function mockFetch(tournament: unknown, registerStatus = 202) {
+function mockFetch(tournament: unknown, registerStatus = 202, registerBody: unknown = { message: 'ok' }) {
   const fn = jest.fn((input: unknown, init?: unknown) => {
     const url = typeof input === 'string' ? input : (input as Request).url
     const method = ((init as RequestInit)?.method ?? 'GET').toUpperCase()
@@ -31,7 +31,7 @@ function mockFetch(tournament: unknown, registerStatus = 202) {
       return Promise.resolve({
         ok: registerStatus < 400,
         status: registerStatus,
-        json: async () => ({ message: 'ok' }),
+        json: async () => registerBody,
       } as Response)
     }
     return Promise.resolve({ ok: true, status: 200, json: async () => tournament } as Response)
@@ -122,8 +122,21 @@ describe('ISSUE-12/13 — TournamentBrowse', () => {
         const call = fetchSpy.mock.calls.find(c => (c[1] as RequestInit)?.method === 'POST')
         expect(call).toBeDefined()
         const body = JSON.parse((call![1] as RequestInit).body as string)
-        expect(body.partnerSelection).toEqual({ type: 'invite', value: 'partner@example.com' })
+        expect(body.partnerEmail).toBe('partner@example.com')
       })
+    })
+
+    it('shows "awaiting acceptance" for the partner invite after submit (ISSUE-15)', async () => {
+      mockFetch(DOUBLES, 202, { message: 'ok', partner: { status: 'pending_partner_confirm' } })
+      renderPage(DOUBLES.id)
+      await screen.findByText(DOUBLES.name)
+
+      fireEvent.change(screen.getByLabelText(/^email/i), { target: { value: 'guest@example.com' } })
+      fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'Guest Player' } })
+      fireEvent.change(screen.getByLabelText(/partner/i), { target: { value: 'partner@example.com' } })
+      fireEvent.click(screen.getByRole('button', { name: /register/i }))
+
+      await waitFor(() => expect(screen.getByTestId('partner-invite-pending')).toHaveTextContent(/awaiting acceptance/i))
     })
 
     it('echoes the entered email on confirmation with an edit path', async () => {
@@ -182,7 +195,11 @@ describe('ISSUE-12/13 — TournamentBrowse', () => {
         expect(body.email).toBe('me@example.com')
         expect(body.name).toBe('Me')
       })
-      expect(await screen.findByText(/me@example\.com/)).toBeInTheDocument()
+      // getByText (re-queried fresh on every retry) rather than findByText
+      // (a single stable node handle) — the success view swaps in via a
+      // second render shortly after the first, which can strand a handle
+      // captured too early.
+      await waitFor(() => expect(screen.getByText(/me@example\.com/)).toBeInTheDocument())
     })
 
     it('shows a partner-invite field for doubles and sends it on one-click register', async () => {
@@ -197,7 +214,7 @@ describe('ISSUE-12/13 — TournamentBrowse', () => {
         const call = fetchSpy.mock.calls.find(c => (c[1] as RequestInit)?.method === 'POST')
         expect(call).toBeDefined()
         const body = JSON.parse((call![1] as RequestInit).body as string)
-        expect(body.partnerSelection).toEqual({ type: 'invite', value: 'partner@example.com' })
+        expect(body.partnerEmail).toBe('partner@example.com')
       })
     })
   })

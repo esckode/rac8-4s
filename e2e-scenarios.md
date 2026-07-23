@@ -156,26 +156,74 @@ npm run test:e2e:debug        # Run all tests in debug mode
 
 ### Test Organization
 
-Tests are organized by feature groups matching this document:
+Tests are organized by feature groups matching this document.
+
+**This table is the e2e selection map** — when implementing a change, use it to pick
+which spec(s) to run rather than recalling them. It is only useful if it stays
+accurate: **adding an e2e spec means adding its row in the same change.** Run
+commands take the §8 default flags (`--project=chromium --reporter=line
+--max-failures=1`) while iterating; the counts are `test(...)` blocks per file, not
+tests executed (each runs once per browser project).
+
+If nothing here obviously matches, grep for the route or selector you touched —
+39 of the 42 specs pull their selectors from `e2e/config.ts`, so the string is a
+usable probe:
+
+```bash
+grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
+```
 
 | Feature Group | Scenarios | Test File | Command |
 |---|---|---|---|
-| **Authentication & Authorization** | 27 | `auth.spec.ts` | `npm run test:e2e:auth` |
-| **Tournament Discovery & Registration** | 9 | `tournament-discovery-registration.spec.ts` | `npm run test:e2e:tournament` |
-| **My tournaments hubs (/standings, /matches)** | 2 | `my-tournaments-hub.spec.ts` | `npx playwright test my-tournaments-hub` |
-| **Group Stage - Singles** | 10 | `group-stage-singles.spec.ts` | `npx playwright test --grep "Group Stage Singles"` |
+| **Authentication & Authorization** | 33 | `auth.spec.ts` | `npm run test:e2e:auth` |
+| **Login rate limiting** | 1 | `login-rate-limit.spec.ts` | `npx playwright test login-rate-limit` |
+| **Tournament Discovery & Registration** | 13 | `tournament-discovery-registration.spec.ts` | `npm run test:e2e:tournament` |
+| **Public registration (guest, no account)** | 4 | `tournament-public-registration.spec.ts` | `npx playwright test tournament-public-registration` |
+| **Browse tournaments (public discovery)** | 8 | `browse-tournaments.spec.ts` | `npx playwright test browse-tournaments` |
+| **My tournaments hubs (/standings, /matches)** | 6 | `my-tournaments-hub.spec.ts` | `npx playwright test my-tournaments-hub` |
+| **Group Stage - Singles** | 4 | `group-stage-singles.spec.ts` | `npx playwright test group-stage-singles.spec` |
 | **Group Stage - Singles (Player view)** | 2 | `group-stage-singles-player.spec.ts` | `npx playwright test group-stage-singles-player` |
 | **Group Stage - Singles (Score submission)** | 4 | `group-stage-singles-score.spec.ts` | `npx playwright test group-stage-singles-score` |
-| **Group Stage - Doubles** | 4 | `group-stage-doubles.spec.ts` | `npx playwright test --grep "Group Stage Doubles"` |
+| **Group Stage - Doubles** | 4 | `group-stage-doubles.spec.ts` | `npx playwright test group-stage-doubles.spec` |
 | **Group Stage - Doubles (Score submission)** | 2 | `group-stage-doubles-score.spec.ts` | `npx playwright test group-stage-doubles-score` |
-| **Partner Confirmation** | 5 | `partner-requests.spec.ts` | `npx playwright test partner-requests` |
+| **Partner Confirmation** | 3 | `partner-requests.spec.ts` | `npx playwright test partner-requests` |
+| **Bracket - Singles** | 3 | `bracket-singles.spec.ts` | `npx playwright test bracket-singles` |
+| **Bracket - Doubles** | 2 | `bracket-doubles.spec.ts` | `npx playwright test bracket-doubles` |
+| **Casual tournaments (round-robin / social mixer)** | 8 | `casual-tournament.spec.ts` | `npx playwright test casual-tournament` |
 | **Organizer Tournament Management** | 3 | `organizer-management.spec.ts` | `npx playwright test organizer-management` |
 | **Organizer Home** | 1 | `organizer-home.spec.ts` | `npx playwright test organizer-home` |
-| **Bracket - Singles** | 3 | `bracket-singles.spec.ts` | `npx playwright test --grep "Bracket Singles"` |
-| **Bracket - Doubles** | 2 | `bracket-doubles.spec.ts` | `npx playwright test --grep "Bracket Doubles"` |
-| **Real-Time Updates** | 4 | `real-time-updates.spec.ts` | `npx playwright test --grep "Real-Time Updates"` |
-| **Offline & Error Handling** | 4 | `offline-error.spec.ts` | `npx playwright test --grep "Offline"` |
-| **Mobile & Responsive** | 4 | `mobile-responsive.spec.ts` | `npx playwright test --grep "Mobile"` |
+| **Real-Time Updates** | 4 | `real-time-updates.spec.ts` | `npx playwright test real-time-updates` |
+| **Notifications** | 6 | `notifications.spec.ts` | `npx playwright test notifications` |
+| **Poll cards** | 10 | `poll-cards.spec.ts` | `npx playwright test poll-cards` |
+| **Messaging (group feed)** | 5 | `messaging.spec.ts` | `npx playwright test messaging.spec` |
+| **Messaging (threads)** | 5 | `messaging-threads.spec.ts` | `npx playwright test messaging-threads` |
+| **Player groups** | 10 | `player-groups.spec.ts` | `npx playwright test player-groups` |
+| **Group settings** | 7 | `group-settings.spec.ts` | `npx playwright test group-settings` |
+| **Group owner management** | 14 | `group-owner-management.spec.ts` | `npx playwright test group-owner-management` |
+| **Invite acceptance** | 6 | `invite-accept.spec.ts` | `npx playwright test invite-accept` |
+| **@coach assistant (core)** | 9 | `assistant.spec.ts` | `npx playwright test assistant.spec` |
+| **@coach assistant (actions)** | 8 | `assistant-actions.spec.ts` | `npx playwright test assistant-actions` |
+| **@coach assistant (proactive: nudges/recap/digest)** | 16 | `assistant-proactive.spec.ts` | `npx playwright test assistant-proactive` |
+| **1:1 coach conversations** | 9 | `coach.spec.ts` | `npx playwright test coach` |
+| **Personalization (UI)** | 4 | `personalization-ui.spec.ts` | `npx playwright test personalization-ui` |
+| **Personalization (availability)** | 2 | `personalization-availability.spec.ts` | `npx playwright test personalization-availability` |
+| **Personalization (quiet hours)** | 2 | `personalization-quiet-hours.spec.ts` | `npx playwright test personalization-quiet-hours` |
+| **Personalization (pending actions)** | 4 | `personalization-pending-actions.spec.ts` | `npx playwright test personalization-pending-actions` |
+| **Personalization (digest movement)** | 2 | `personalization-digest-movement.spec.ts` | `npx playwright test personalization-digest-movement` |
+| **Player profile** | 3 | `profile.spec.ts` | `npx playwright test profile` |
+| **PWA install** | 2 | `pwa-install.spec.ts` | `npx playwright test pwa-install` |
+| **PWA hygiene (no stale caches)** | 2 | `pwa-hygiene.spec.ts` | `npx playwright test pwa-hygiene` |
+| **PWA offline (venue mode)** | 4 | `pwa-offline-venue.spec.ts` | `npx playwright test pwa-offline-venue` |
+| **PWA score queue** | 3 | `pwa-score-queue.spec.ts` | `npx playwright test pwa-score-queue` |
+| **Mobile & Responsive** | 5 | `mobile.spec.ts` | `npx playwright test mobile.spec` |
+| **Accessibility** | 3 | `accessibility.spec.ts` | `npx playwright test accessibility` |
+
+**Total: 245 `test(...)` blocks across 42 specs.** `TEMPLATE.spec.ts` is a scaffold,
+excluded via `testIgnore`.
+
+**Specs requiring the worker** (`npm run dev:worker --workspace=packages/api`, see
+§8 of CLAUDE.md): `assistant*.spec.ts`, `coach.spec.ts`,
+`personalization-availability.spec.ts`, `personalization-quiet-hours.spec.ts`.
 
 ### Development Workflow
 
@@ -627,6 +675,32 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 - **And** I click "Register for Tournament"
 - **Then** I should see success message
 - **And** I should receive an email with a magic link
+
+### Scenario: User invites a doubles partner by email (ISSUE-15)
+- **Type:** Happy path
+- **Given** I am registering for a doubles tournament
+- **When** I fill in email, name, and my partner's email
+- **And** I click "Register for Tournament"
+- **Then** I should see success message
+- **And** I should see "awaiting acceptance" for my partner invite
+- **And** if my partner's email belongs to a registered account, they get an in-app
+  notification (no email) linking to the confirm page
+- **And** if not, my partner gets an email — a magic link if they already have a
+  player row, or a partner-invite accept link (with its own 18+ attestation) if
+  they've never used the app before
+- **And** once my partner accepts, both of our registrations link up and show
+  "registered"
+
+### Scenario: User cancels a pending partner invite (ISSUE-15)
+- **Type:** Happy path
+- **Given** I invited a partner by email and they haven't accepted yet
+- **When** I open the tournament and look at the partner section
+- **Then** I should see that I'm waiting for my partner to accept
+- **And** I should be able to cancel the invite
+- **And** cancelling releases the capacity slot the invite was holding
+- **And** I can then invite a different address, or pick a partner from the list
+- **And** an invite left unaccepted expires on its own after 24 hours, freeing the
+  slot without anyone having to cancel it
 
 ### Scenario: User cannot register after deadline
 - **Type:** Error path

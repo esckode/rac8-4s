@@ -4,7 +4,9 @@
  * Renders a single personal notification message (system event). When the
  * message carries { metadata: { groupId } } (deep-link payload — P3.5's
  * group_messages.metadata column, same convention as nudge messages), the
- * card links to that group's chat.
+ * card links to that group's chat. ISSUE-15: a doubles partner invite
+ * carries { registrationId } instead, linking to the existing partner
+ * confirm page.
  */
 import React from 'react'
 import { Link } from 'react-router-dom'
@@ -14,11 +16,12 @@ export interface NotificationMessage {
   body: string
   type: string
   createdAt: string
-  metadata?: { groupId?: string } | null
+  metadata?: { groupId?: string; registrationId?: string } | null
 }
 
 export const NotificationCard: React.FC<{ message: NotificationMessage }> = ({ message }) => {
   const groupId = message.metadata?.groupId
+  const registrationId = message.metadata?.registrationId
   const className = 'block rounded-lg p-3 text-sm bg-[--ink-50] border border-[--border]'
 
   const content = (
@@ -30,9 +33,11 @@ export const NotificationCard: React.FC<{ message: NotificationMessage }> = ({ m
     </>
   )
 
-  if (groupId) {
+  const linkTo = groupId ? `/groups/${groupId}` : registrationId ? `/registrations/${registrationId}/confirm` : null
+
+  if (linkTo) {
     return (
-      <Link to={`/groups/${groupId}`} data-testid="notification-card" className={`${className} hover:shadow-md transition-shadow`}>
+      <Link to={linkTo} data-testid="notification-card" className={`${className} hover:shadow-md transition-shadow`}>
         {content}
       </Link>
     )

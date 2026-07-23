@@ -11,7 +11,10 @@ import {
   generatePlayerSession,
   requirePlayerSessionAuth,
   assertPlayerInTournament,
+  extractBearerToken,
   TokenInvalidError,
+  generatePartnerInviteToken,
+  validatePartnerInviteToken,
 } from '../auth'
 import { ForbiddenError } from '../auth/errors'
 import { TournamentStateMachine, type TournamentState, type TransitionAction } from '@core/state-machine'
@@ -20,8 +23,9 @@ import { parseScore, type SportFormat } from '@core/score-parser'
 import { isSinglesMatch, isDoublesMatch, getMatchParticipantIds, validateMatchFormatConsistency } from '../utils/match-format'
 import { processStandingsRecalculate } from '../workers/standings-processor'
 import { ConversationRepository } from '../repositories/conversation-repository'
+import { GroupMessageRepository } from '../repositories/group-message-repository'
 import { getLogger } from '../logger'
-import { sendMagicLinkEmail } from '../email-adapter'
+import { sendMagicLinkEmail, sendPartnerInviteEmail } from '../email-adapter'
 import { generateRoundPairings } from '../mixer-scheduler'
 import { submitScore, SCORE_ERROR_HTTP_STATUS } from '../services/score-service'
 import { createRateLimitMiddleware } from '../middleware/rate-limit'
@@ -91,7 +95,41 @@ export default function tournamentsRouter(deps: AppDependencies) {
   const accountRepo = new AccountRepository(deps.db)
   const conversationRepo = new ConversationRepository(deps.db as any)
   const leaderboardRepo = new LeaderboardRepository(deps.db as any)
+  const groupMsgRepo = new GroupMessageRepository(deps.db as any)
   const sseConnectionCount = new Map<string, number>()
+
+  // ISSUE-15: notify an already-account-linked partner that they've been
+  // invited. Fire-and-forget — mirrors notifyPlayer in player-groups.ts.
+  // requesterRegistrationId lets NotificationCard deep-link straight to the
+  // existing confirm page (registration.partner_id points at this player).
+  async function notifyPartnerInvite(
+    playerId: string,
+    requesterName: string,
+    tournamentName: string,
+    tournamentId: string,
+    requesterRegistrationId: string
+  ): Promise<void> {
+    await groupMsgRepo.postPersonalNotification(
+      playerId,
+      `${requesterName} invited you to be their doubles partner for ${tournamentName}`,
+      { tournamentId, registrationId: requesterRegistrationId }
+    )
+  }
+
+  // ISSUE-15 sub-decision 3: a partner may accept past the registration
+  // deadline when the invite predates it — the requester acted in time. The
+  // exception ends where play begins: once the tournament leaves
+  // registration_closed, groups exist and a late team would have nowhere to
+  // be placed, so this stays narrower than "any non-open status".
+  function partnerConfirmWindowOpen(
+    tournament: { status: string; registration_deadline?: string | Date | null },
+    registeredAt: string | Date
+  ): boolean {
+    if (tournament.status === 'registration_open') return true
+    if (tournament.status !== 'registration_closed') return false
+    return tournament.registration_deadline != null &&
+      new Date(registeredAt) < new Date(tournament.registration_deadline)
+  }
 
   // Resolve the acting player for a tournament from either a magic-link player
   // session (tournament-scoped) or a registered player's account JWT (verified
@@ -1150,6 +1188,19 @@ export default function tournamentsRouter(deps: AppDependencies) {
   }
   const registerIpKey = (req: Request): string => `register:ip:${req.ip}`
 
+  // ISSUE-15 sub-decision 2: a doubles partner invite emails a third party,
+  // not the requester — without a limiter on THAT address, rotating
+  // requester emails would dodge registerEmailKey entirely and reopen the
+  // email-bombing vector ISSUE-11 closed. Falls back to the requester's own
+  // email (already covered by registerEmailKey) when no partner is invited,
+  // so this never rate-limits a plain registration.
+  const partnerInviteEmailKey = (req: Request): string => {
+    const partnerEmail = typeof req.body?.partnerEmail === 'string' ? req.body.partnerEmail.trim().toLowerCase() : ''
+    if (partnerEmail) return `partner-invite:email:${partnerEmail}`
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+    return `partner-invite:email:${email}`
+  }
+
   router.post(
     '/:tournamentId/register',
     createRateLimitMiddleware(registerEmailKey, {
@@ -1162,6 +1213,12 @@ export default function tournamentsRouter(deps: AppDependencies) {
       maxAttempts: deps.config.limits.rateLimit.registerPerIpMaxAttempts,
       windowMs: deps.config.limits.rateLimit.registerPerIpWindowMs,
       prefix: 'register-ip',
+      countMode: 'all',
+    }),
+    createRateLimitMiddleware(partnerInviteEmailKey, {
+      maxAttempts: deps.config.limits.rateLimit.partnerInvitePerEmailMaxAttempts,
+      windowMs: deps.config.limits.rateLimit.partnerInvitePerEmailWindowMs,
+      prefix: 'partner-invite-email',
       countMode: 'all',
     }),
     async (req: Request, res: Response, next: NextFunction) => {
@@ -1185,29 +1242,27 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       const registrationCount = await playerRepo.countRegistrationsForTournament(tournamentId)
-      if (registrationCount >= tournament.max_players) {
+      // ISSUE-15 sub-decision 1: a pending invite to a not-yet-existing
+      // partner holds their slot too, so the last spot can't be taken out
+      // from under a team the requester and partner both believe is formed.
+      const pendingInviteHolds = tournament.match_format === 'doubles'
+        ? await playerRepo.countPendingPartnerInviteHolds(tournamentId, deps.config.auth.magicLinkTtlSeconds)
+        : 0
+      if (registrationCount + pendingInviteHolds >= tournament.max_players) {
         return res.status(409).json({ code: 'TOURNAMENT_FULL', message: 'Tournament has reached maximum capacity' })
       }
 
-      // Handle partner selection for doubles tournaments (optional - teams auto-created during group creation)
-      if (tournament.match_format === 'doubles' && req.body.partnerSelection) {
-
-        const { type, value } = req.body.partnerSelection
-        if (!['select', 'invite'].includes(type)) {
-          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid partner selection type' })
+      // ISSUE-15: one email-based partner entry point (no picker) — the old
+      // partnerSelection {type, value} shape (select-by-id / invite-stub) is
+      // gone; the requester supplies the partner's email and the backend
+      // resolves it (see the doubles-partnership block below).
+      if (tournament.match_format === 'doubles' && req.body.partnerEmail !== undefined) {
+        const partnerEmailRaw = req.body.partnerEmail
+        if (typeof partnerEmailRaw !== 'string' || !partnerEmailRaw.trim() || !partnerEmailRaw.includes('@')) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid email format for partner invite' })
         }
-
-        if (type === 'select' && !value) {
-          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Partner ID required for select option' })
-        }
-
-        if (type === 'invite') {
-          if (!value || !value.includes('@')) {
-            return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Invalid email format for invite option' })
-          }
-          if (value === req.body.email.trim()) {
-            return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Cannot partner with yourself' })
-          }
+        if (partnerEmailRaw.trim().toLowerCase() === req.body.email.trim().toLowerCase()) {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Cannot partner with yourself' })
         }
       }
 
@@ -1251,59 +1306,97 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       const existingReg = await playerRepo.findRegistration(player.id, tournamentId)
 
-      // Handle doubles partnership
-      if (tournament.match_format === 'doubles' && req.body.partnerSelection) {
-        const { type, value } = req.body.partnerSelection
+      // ISSUE-15: doubles partnership by email — the requester's own
+      // registration always goes to pending_partner_confirm until the
+      // partner accepts, regardless of which branch below resolves it.
+      let partnerStatus: string | undefined
+      if (tournament.match_format === 'doubles' && typeof req.body.partnerEmail === 'string' && req.body.partnerEmail.trim()) {
+        const partnerEmail = req.body.partnerEmail.trim().toLowerCase()
 
-        if (type === 'select') {
-          // Partner already registered - create paired registrations
-          const partnerPlayer = await playerRepo.findById(value)
-          if (!partnerPlayer) {
-            return res.status(404).json({ code: 'NOT_FOUND', message: 'Partner player not found' })
-          }
-
-          // Create registration for this player with partner reference
-          if (!existingReg) {
-            await playerRepo.createRegistration(player.id, tournamentId)
-          }
-
-          // Update with partner information
-          const reg1 = await playerRepo.findRegistration(player.id, tournamentId)
-          if (reg1) {
-            await playerRepo.updateRegistrationWithPartner(reg1.id, value)
-          }
-
-          // Check or create registration for partner
-          const partnerReg = await playerRepo.findRegistration(value, tournamentId)
-          if (!partnerReg) {
-            await playerRepo.createRegistration(value, tournamentId)
-          } else {
-            // Update partner's registration with this player's ID
-            await playerRepo.updateRegistrationWithPartner(partnerReg.id, player.id)
-          }
-
-          log.info('team.created', {
-            tournamentId,
-            player1Id: player.id,
-            player2Id: value,
-            registrationType: 'select',
-          })
-        } else if (type === 'invite') {
-          // Partner not yet registered - create registration with invite pending
-          if (!existingReg) {
-            await playerRepo.createRegistration(player.id, tournamentId)
-          }
-
-          // Store invitation info (will be linked when partner signs up)
-          // For now, we just create the registration
-          log.info('team.created', {
-            tournamentId,
-            playerId: player.id,
-            registrationType: 'invite',
-          })
+        if (!existingReg) {
+          await playerRepo.createRegistration(player.id, tournamentId)
         }
+        const requesterReg = (await playerRepo.findRegistration(player.id, tournamentId))!
+
+        // An expired invite is no invite: its token can no longer be redeemed
+        // and its capacity hold has lapsed, so the requester is free to try a
+        // different address rather than being stuck behind their own typo.
+        const inviteExpiresAt = new Date(requesterReg.registered_at).getTime() +
+          deps.config.auth.magicLinkTtlSeconds * 1000
+        const hasLiveInvite = requesterReg.status === 'pending_partner_confirm' &&
+          (requesterReg.partner_id != null || inviteExpiresAt > Date.now())
+        if (requesterReg.partner_id || hasLiveInvite) {
+          return res.status(409).json({ code: 'INVALID_STATE', message: 'You already have a partner invite pending' })
+        }
+
+        // Resolve the partner email: a registered account (has a linked
+        // player) gets notified in-app; anyone else with an existing player
+        // row (guest, no account) gets a magic link; a genuinely new email
+        // gets a partner-invite email and their player row is created at
+        // accept time (own attestation — see /partner-invites/accept).
+        const account = await accountRepo.findByEmail(partnerEmail)
+        const accountPlayer = account?.player_id ? await playerRepo.findById(account.player_id) : undefined
+        const existingPartnerPlayer = accountPlayer ?? (await playerRepo.findByEmail(partnerEmail))
+
+        if (existingPartnerPlayer) {
+          const targetReg = await playerRepo.findRegistration(existingPartnerPlayer.id, tournamentId)
+          if (targetReg?.partner_id) {
+            return res.status(409).json({ code: 'INVALID_STATE', message: 'That player already has a partner' })
+          }
+          if (!targetReg) {
+            await playerRepo.createRegistration(existingPartnerPlayer.id, tournamentId)
+          }
+          await playerRepo.updateRegistrationWithPartner(requesterReg.id, existingPartnerPlayer.id)
+          const finalTargetReg = (await playerRepo.findRegistration(existingPartnerPlayer.id, tournamentId))!
+          await playerRepo.updateRegistrationWithPartner(finalTargetReg.id, player.id)
+
+          if (accountPlayer) {
+            notifyPartnerInvite(existingPartnerPlayer.id, player.name, tournament.name, tournamentId, requesterReg.id).catch((e: Error) => {
+              log.warn('personal.notification.failed', { playerId: existingPartnerPlayer.id, error: e.message })
+            })
+            log.info('team.invited', { tournamentId, playerId: player.id, targetPlayerId: existingPartnerPlayer.id, delivery: 'notification' })
+          } else {
+            const partnerMagicLink = await generateMagicLinkToken(
+              { playerId: existingPartnerPlayer.id, tournamentId, email: existingPartnerPlayer.email, createdAt: Date.now() },
+              deps.config.auth.magicLinkTtlSeconds,
+              deps.tokenStore
+            )
+            if (deps.emailAdapter) {
+              await sendMagicLinkEmail(
+                deps.emailAdapter,
+                deps.config.email,
+                existingPartnerPlayer.email,
+                partnerMagicLink.token,
+                tournamentId,
+                tournament.name
+              )
+            }
+            log.info('team.invited', { tournamentId, playerId: player.id, targetPlayerId: existingPartnerPlayer.id, delivery: 'magic_link' })
+          }
+        } else {
+          await playerRepo.markPendingPartnerInvite(requesterReg.id)
+          const invite = await generatePartnerInviteToken(
+            { type: 'partner-invite', tournamentId, requesterRegistrationId: requesterReg.id, email: partnerEmail, createdAt: Date.now() },
+            deps.config.auth.magicLinkTtlSeconds,
+            deps.tokenStore
+          )
+          if (deps.emailAdapter) {
+            await sendPartnerInviteEmail(
+              deps.emailAdapter,
+              deps.config.email,
+              partnerEmail,
+              invite.token,
+              tournamentId,
+              tournament.name,
+              player.name
+            )
+          }
+          log.info('team.invited', { tournamentId, playerId: player.id, delivery: 'partner_invite_email' })
+        }
+
+        partnerStatus = (await playerRepo.findRegistration(player.id, tournamentId))!.status
       } else if (!existingReg) {
-        // Single registration (not doubles, or doubles without partner selection)
+        // Single registration (not doubles, or doubles without a partner invite)
         log.debug('registration.creating', { tournamentId, playerId: player.id, format: tournament.match_format })
         const reg = await playerRepo.createRegistration(player.id, tournamentId)
         log.debug('registration.created.db', { tournamentId, playerId: player.id, registrationId: reg.id })
@@ -1329,11 +1422,16 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       log.info('player.registered', { tournamentId, playerId: player.id, format: tournament.match_format })
 
-      res.status(202).json({
+      const responseBody: Record<string, unknown> = {
         message: `Registration email sent to ${player.email}`,
         magicLinkExpires: deps.config.auth.magicLinkTtlSeconds,
         magicLinkToken: magicLink.token,
-      })
+      }
+      if (partnerStatus) {
+        responseBody.partner = { status: partnerStatus }
+      }
+
+      res.status(202).json(responseBody)
     } catch (err) {
       next(err)
     }
@@ -1746,6 +1844,40 @@ export default function tournamentsRouter(deps: AppDependencies) {
     }
   })
 
+  // GET /:tournamentId/my-partner-invite - ISSUE-15: the caller's own pending
+  // partner invite, so the UI can show "awaiting acceptance" and offer to
+  // cancel it. A brand-new-email invite has no partner row yet, hence the
+  // null partnerName and the expiry (the invite token's own TTL).
+  router.get('/:tournamentId/my-partner-invite', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.tournamentId as string
+      const { playerId } = await resolveTournamentPlayer(req.headers.authorization, tournamentId)
+
+      const registration = await playerRepo.findRegistration(playerId, tournamentId)
+      if (!registration || registration.status !== 'pending_partner_confirm' || registration.partner_confirmed) {
+        return res.json({ pending: false })
+      }
+
+      const expiresAt = new Date(
+        new Date(registration.registered_at).getTime() + deps.config.auth.magicLinkTtlSeconds * 1000
+      )
+      if (!registration.partner_id && expiresAt.getTime() <= Date.now()) {
+        return res.json({ pending: false })
+      }
+
+      const partner = registration.partner_id ? await playerRepo.findById(registration.partner_id) : undefined
+
+      res.json({
+        pending: true,
+        registrationId: registration.id,
+        partnerName: partner?.name ?? null,
+        expiresAt: registration.partner_id ? null : expiresAt.toISOString(),
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // GET /:id/available-partners - solo doubles registrants available to partner with
   router.get('/:id/available-partners', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1828,19 +1960,29 @@ export default function tournamentsRouter(deps: AppDependencies) {
   // PATCH /registrations/:registrationId/confirm - partner confirms doubles registration
   router.patch('/registrations/:registrationId/confirm', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
       const registrationId = req.params.registrationId as string
+
+      // Credentials are checked before the lookup so an anonymous caller gets
+      // 401 rather than a registration-existence oracle; the full check has to
+      // wait for the registration, since resolveTournamentPlayer needs its
+      // tournamentId and an account JWT is not tournament-scoped.
+      extractBearerToken(req.headers.authorization)
 
       const registration = await playerRepo.findRegistrationById(registrationId)
       if (!registration) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Registration not found' })
       }
 
+      // Dual auth: ISSUE-15 branch A invites a registered account holder, who
+      // holds an account JWT rather than a magic-link player session — taking
+      // only the latter here made that branch unusable end to end.
+      const { playerId } = await resolveTournamentPlayer(req.headers.authorization, registration.tournament_id)
+
       if (!registration.partner_id) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'This registration does not have a pending partner confirmation' })
       }
 
-      if (registration.partner_id !== payload.playerId) {
+      if (registration.partner_id !== playerId) {
         return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the partner can confirm this registration' })
       }
 
@@ -1849,13 +1991,16 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       const tournament = await repo.findById(registration.tournament_id)
-      if (!tournament || tournament.status !== 'registration_open') {
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+      if (!partnerConfirmWindowOpen(tournament, registration.registered_at)) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'Tournament is no longer in registration phase' })
       }
 
       const updated = await playerRepo.confirmPartner(registrationId)
 
-      log.info('registration.partner_confirmed', { tournamentId: registration.tournament_id, registrationId, partnerId: payload.playerId })
+      log.info('registration.partner_confirmed', { tournamentId: registration.tournament_id, registrationId, partnerId: playerId })
 
       res.json({
         registrationId: updated.id,
@@ -1865,6 +2010,153 @@ export default function tournamentsRouter(deps: AppDependencies) {
         status: updated.status,
         confirmedAt: updated.confirmed_at,
       })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /:tournamentId/partner-invites/accept - ISSUE-15 branch C: accept a
+  // doubles partner invite sent to an email with no existing player row.
+  // Public (no session auth): the invitee may be a brand-new player, so
+  // their own 18+ attestation is collected here rather than at invite time.
+  router.post('/:tournamentId/partner-invites/accept', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tournamentId = req.params.tournamentId as string
+      const { token, email, name, dob_attestation } = req.body
+
+      if (!token || !email || typeof email !== 'string' || !email.trim()) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'token and email are required' })
+      }
+
+      let invitePayload
+      try {
+        invitePayload = await validatePartnerInviteToken(token, email.trim(), deps.tokenStore)
+      } catch (err) {
+        if (err instanceof TokenInvalidError) {
+          return res.status(400).json({ code: 'TOKEN_INVALID', message: err.message })
+        }
+        throw err
+      }
+      if (invitePayload.tournamentId !== tournamentId) {
+        return res.status(400).json({ code: 'TOKEN_INVALID', message: 'Token does not match this tournament' })
+      }
+
+      const tournament = await repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      const requesterReg = await playerRepo.findRegistrationById(invitePayload.requesterRegistrationId)
+      if (!requesterReg || requesterReg.partner_id || requesterReg.status !== 'pending_partner_confirm') {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'This invite is no longer pending' })
+      }
+
+      if (!partnerConfirmWindowOpen(tournament, requesterReg.registered_at)) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'Tournament is no longer in registration phase' })
+      }
+
+      if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'name must be a non-empty string' })
+      }
+
+      // findOrCreatePlayerByEmail: existing players bypass the age gate;
+      // new players must provide a valid 18+ attestation. name is optional —
+      // defaults to the email, matching the group-invite accept precedent —
+      // since the invite already came addressed to a real person.
+      const ageAttestation: AgeAttestation | null = dob_attestation || null
+      let partnerPlayer: PlayerRow
+      try {
+        partnerPlayer = await playerRepo.findOrCreatePlayerByEmail(
+          email.trim(),
+          typeof name === 'string' && name.trim() ? name.trim() : email.trim(),
+          undefined,
+          undefined,
+          ageAttestation
+        )
+      } catch (err) {
+        if (err instanceof AgeAttestationRequiredError) {
+          return res.status(400).json({ code: 'AGE_ATTESTATION_REQUIRED', message: (err as Error).message })
+        }
+        if (err instanceof UnderAgeError) {
+          return res.status(422).json({ code: 'UNDER_AGE', message: (err as Error).message })
+        }
+        throw err
+      }
+
+      let targetReg = await playerRepo.findRegistration(partnerPlayer.id, tournamentId)
+      if (targetReg?.partner_id) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'That player already has a partner' })
+      }
+      if (!targetReg) {
+        // The invite already held this slot (countPendingPartnerInviteHolds);
+        // re-check capacity as a safety net against a genuine race.
+        const registrationCount = await playerRepo.countRegistrationsForTournament(tournamentId)
+        if (registrationCount >= tournament.max_players) {
+          return res.status(409).json({ code: 'TOURNAMENT_FULL', message: 'Tournament has reached maximum capacity' })
+        }
+        targetReg = await playerRepo.createRegistration(partnerPlayer.id, tournamentId)
+      }
+
+      await playerRepo.updateRegistrationWithPartner(requesterReg.id, partnerPlayer.id)
+      // confirmPartner cascades to targetReg too: sets its partner_id back to
+      // the requester, partner_confirmed, and status — see db.ts.
+      await playerRepo.confirmPartner(requesterReg.id)
+
+      const session = await generatePlayerSession(
+        { playerId: partnerPlayer.id, tournamentId, email: partnerPlayer.email, createdAt: Date.now() },
+        deps.config.auth.sessionTtlSeconds,
+        deps.tokenStore
+      )
+
+      log.info('registration.partner_confirmed', {
+        tournamentId,
+        registrationId: requesterReg.id,
+        partnerId: partnerPlayer.id,
+        delivery: 'invite_accept',
+      })
+
+      res.status(200).json({ ok: true, tournamentId, playerId: partnerPlayer.id, token: session.token })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // DELETE /registrations/:registrationId/partner-invite - ISSUE-15: the
+  // requester cancels their own pending invite. Without this a mistyped
+  // partner address locks them out of re-inviting (and holds a slot) until
+  // the invite expires. Registered before the plain withdraw route below so
+  // the literal segment can't be swallowed by it.
+  router.delete('/registrations/:registrationId/partner-invite', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const registrationId = req.params.registrationId as string
+
+      // Same ordering as confirm above: credentials first so an anonymous
+      // caller gets 401, then the lookup that scopes the real auth check.
+      extractBearerToken(req.headers.authorization)
+
+      const registration = await playerRepo.findRegistrationById(registrationId)
+      if (!registration) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Registration not found' })
+      }
+
+      const { playerId } = await resolveTournamentPlayer(req.headers.authorization, registration.tournament_id)
+      if (registration.player_id !== playerId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the requester can cancel this invite' })
+      }
+
+      if (registration.status !== 'pending_partner_confirm' || registration.partner_confirmed) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'There is no pending partner invite to cancel' })
+      }
+
+      const updated = await playerRepo.cancelPartnerInvite(registrationId)
+
+      log.info('partner.invite_cancelled', {
+        tournamentId: registration.tournament_id,
+        registrationId,
+        playerId,
+      })
+
+      res.json({ registrationId: updated.id, status: updated.status })
     } catch (err) {
       next(err)
     }

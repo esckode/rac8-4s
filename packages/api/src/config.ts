@@ -120,6 +120,21 @@ export interface RateLimitConfig {
    * Default: 900000 (15 minutes)
    */
   registerPerIpWindowMs: number
+
+  /**
+   * Maximum doubles partner-invite emails sent to the same partner address
+   * before rate limiting (ISSUE-15 sub-decision 2). The partner is a third
+   * party, not the requester — without a limiter keyed on their address, an
+   * attacker could rotate requester emails and re-open the email-bombing
+   * vector ISSUE-11 closed. Default: 3.
+   */
+  partnerInvitePerEmailMaxAttempts: number
+
+  /**
+   * Time window for per-partner-email invite rate limiting in milliseconds.
+   * Default: 900000 (15 minutes)
+   */
+  partnerInvitePerEmailWindowMs: number
 }
 
 /**
@@ -508,6 +523,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
       registerPerEmailWindowMs: 15 * 60 * 1000, // 15 minutes
       registerPerIpMaxAttempts: 25, // Generous — venue shared Wi-Fi, one phone registering several people
       registerPerIpWindowMs: 15 * 60 * 1000, // 15 minutes
+      partnerInvitePerEmailMaxAttempts: 3, // Sharp anti-bombing defense, mirrors registerPerEmail
+      partnerInvitePerEmailWindowMs: 15 * 60 * 1000, // 15 minutes
     },
     paginationDefaults: {
       tournaments: 20, // Default limit for tournament listings
@@ -662,6 +679,16 @@ export function getAppConfig(): AppConfig {
         registerPerIpWindowMs: parseInt(
           process.env.APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_WINDOW_MS ??
             String(DEFAULT_APP_CONFIG.limits.rateLimit.registerPerIpWindowMs),
+          10
+        ),
+        partnerInvitePerEmailMaxAttempts: parseInt(
+          process.env.APP_LIMITS_RATE_LIMIT_PARTNER_INVITE_PER_EMAIL_MAX_ATTEMPTS ??
+            String(DEFAULT_APP_CONFIG.limits.rateLimit.partnerInvitePerEmailMaxAttempts),
+          10
+        ),
+        partnerInvitePerEmailWindowMs: parseInt(
+          process.env.APP_LIMITS_RATE_LIMIT_PARTNER_INVITE_PER_EMAIL_WINDOW_MS ??
+            String(DEFAULT_APP_CONFIG.limits.rateLimit.partnerInvitePerEmailWindowMs),
           10
         ),
       },

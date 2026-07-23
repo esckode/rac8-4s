@@ -53,8 +53,13 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   either way.
 - You can't register twice for the same tournament.
 - Already signed in? Registering is one click — no need to re-type your email or name.
-- Registering for a **doubles** tournament lets you invite a partner by email; they get their own
-  invite to confirm.
+- Registering for a **doubles** tournament lets you invite a partner by email. Your registration
+  shows as **awaiting acceptance** until they confirm. If your partner already has an account,
+  they get a notification; otherwise they get an emailed invite link. Either way, your team isn't
+  final until they accept.
+- Sent an invite to the wrong address? Open the tournament and **cancel the invite** in the
+  partner section, then invite someone else. An invite nobody accepts expires by itself after
+  24 hours, which also frees the spot it was holding for your partner.
 
 ## Tournament flow (scheduled tournaments)
 

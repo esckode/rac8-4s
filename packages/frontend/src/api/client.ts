@@ -246,6 +246,29 @@ export async function sendPartnerRequest(
   )
 }
 
+export interface MyPartnerInvite {
+  pending: boolean
+  registrationId?: string
+  /** null for an invite to an email with no player row yet. */
+  partnerName?: string | null
+  /** When the invite (and its capacity hold) lapses; null once a partner row exists. */
+  expiresAt?: string | null
+}
+
+export async function fetchMyPartnerInvite(
+  tournamentId: string,
+  token: string
+): Promise<MyPartnerInvite> {
+  return apiFetch<MyPartnerInvite>(`/tournaments/${tournamentId}/my-partner-invite`, { token })
+}
+
+export async function cancelPartnerInvite(registrationId: string, token: string): Promise<void> {
+  await apiFetch<{ registrationId: string }>(
+    `/tournaments/registrations/${registrationId}/partner-invite`,
+    { method: 'DELETE', token }
+  )
+}
+
 export async function confirmPartner(registrationId: string, token: string): Promise<void> {
   await apiFetch<{ registrationId: string }>(
     `/tournaments/registrations/${registrationId}/confirm`,

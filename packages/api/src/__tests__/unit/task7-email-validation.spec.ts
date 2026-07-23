@@ -38,6 +38,8 @@ const testConfig: AppConfig = {
       registerPerEmailWindowMs: 15 * 60 * 1000,
       registerPerIpMaxAttempts: 25,
       registerPerIpWindowMs: 15 * 60 * 1000,
+      partnerInvitePerEmailMaxAttempts: 3,
+      partnerInvitePerEmailWindowMs: 15 * 60 * 1000,
     },
     paginationDefaults: {
       tournaments: 20,

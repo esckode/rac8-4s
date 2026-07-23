@@ -138,7 +138,7 @@ describe('No PII in logs (P0.9)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ email: erasePlayer.email, type: 'erase' })
 
-    // --- routes/tournaments.ts: team.created (invite) + magic_link.validated ---
+    // --- routes/tournaments.ts: team.invited (partner invite) + magic_link.validated ---
     const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
     const tournament = await TournamentFactory.open(pool, organizerId, { matchFormat: 'doubles' })
     const registerRes = await request(app)
@@ -147,7 +147,7 @@ describe('No PII in logs (P0.9)', () => {
         email: `invite-focus-${uid()}@test.local`,
         name: 'Invite Focus Player',
         dob_attestation: ADULT_ATTESTATION,
-        partnerSelection: { type: 'invite', value: `partner-${uid()}@test.local` },
+        partnerEmail: `partner-${uid()}@test.local`,
       })
     expect(registerRes.body.magicLinkToken).toBeDefined()
     await request(app).get(`/tournaments/auth/magic-link?token=${registerRes.body.magicLinkToken}`)

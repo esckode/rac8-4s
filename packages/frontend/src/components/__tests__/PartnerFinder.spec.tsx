@@ -22,6 +22,12 @@ const mockFetchAvailable = apiClient.fetchAvailablePartners as jest.MockedFuncti
 const mockSendRequest = apiClient.sendPartnerRequest as jest.MockedFunction<
   typeof apiClient.sendPartnerRequest
 >
+const mockFetchInvite = apiClient.fetchMyPartnerInvite as jest.MockedFunction<
+  typeof apiClient.fetchMyPartnerInvite
+>
+const mockCancelInvite = apiClient.cancelPartnerInvite as jest.MockedFunction<
+  typeof apiClient.cancelPartnerInvite
+>
 
 function apiError(code: string, status: number) {
   return { code, message: `API error: ${code}`, status }
@@ -32,6 +38,7 @@ describe('PartnerFinder', () => {
     jest.clearAllMocks()
     localStorage.clear()
     localStorage.setItem('auth_token', 'player-token')
+    mockFetchInvite.mockResolvedValue({ pending: false })
   })
 
   it('lists available partners loaded with the stored token', async () => {
@@ -73,6 +80,78 @@ describe('PartnerFinder', () => {
     fireEvent.click(screen.getByTestId('request-partner-button'))
 
     await waitFor(() => expect(screen.getByTestId('partner-error')).toBeInTheDocument())
+  })
+
+  // ISSUE-15 follow-up: a requester who invited a partner by email had no way
+  // to see or undo that invite once signed in — a typo'd address locked them
+  // out of re-inviting and held a capacity slot until the invite expired.
+  describe('pending outgoing invite', () => {
+    it('shows awaiting-acceptance instead of the finder when an invite is pending', async () => {
+      mockFetchInvite.mockResolvedValueOnce({
+        pending: true,
+        registrationId: 'reg1',
+        partnerName: null,
+        expiresAt: '2026-07-24T00:00:00.000Z',
+      })
+
+      render(<PartnerFinder tournamentId="t1" />)
+
+      await waitFor(() => expect(screen.getByTestId('partner-invite-pending')).toBeInTheDocument())
+      expect(mockFetchInvite).toHaveBeenCalledWith('t1', 'player-token')
+      expect(screen.queryByTestId('partner-row')).not.toBeInTheDocument()
+    })
+
+    it('names the invited partner when they already have an account', async () => {
+      mockFetchInvite.mockResolvedValueOnce({
+        pending: true,
+        registrationId: 'reg1',
+        partnerName: 'Bea',
+        expiresAt: null,
+      })
+
+      render(<PartnerFinder tournamentId="t1" />)
+
+      await waitFor(() => expect(screen.getByTestId('partner-invite-pending')).toBeInTheDocument())
+      expect(screen.getByText(/Bea/)).toBeInTheDocument()
+    })
+
+    it('cancels the invite and returns to the finder', async () => {
+      mockFetchInvite.mockResolvedValueOnce({
+        pending: true,
+        registrationId: 'reg1',
+        partnerName: null,
+        expiresAt: '2026-07-24T00:00:00.000Z',
+      })
+      mockCancelInvite.mockResolvedValueOnce(undefined as any)
+      mockFetchAvailable.mockResolvedValueOnce([{ id: 'p2', name: 'Bea' }])
+
+      render(<PartnerFinder tournamentId="t1" />)
+
+      await waitFor(() => expect(screen.getByTestId('cancel-partner-invite-button')).toBeInTheDocument())
+      fireEvent.click(screen.getByTestId('cancel-partner-invite-button'))
+
+      await waitFor(() => expect(mockCancelInvite).toHaveBeenCalledWith('reg1', 'player-token'))
+      await waitFor(() => expect(screen.getByTestId('partner-row')).toBeInTheDocument())
+      expect(screen.queryByTestId('partner-invite-pending')).not.toBeInTheDocument()
+    })
+
+    it('surfaces an error when the cancel fails', async () => {
+      mockFetchInvite.mockResolvedValueOnce({
+        pending: true,
+        registrationId: 'reg1',
+        partnerName: null,
+        expiresAt: '2026-07-24T00:00:00.000Z',
+      })
+      mockCancelInvite.mockRejectedValueOnce(apiError('INVALID_STATE', 409))
+
+      render(<PartnerFinder tournamentId="t1" />)
+
+      await waitFor(() => expect(screen.getByTestId('cancel-partner-invite-button')).toBeInTheDocument())
+      fireEvent.click(screen.getByTestId('cancel-partner-invite-button'))
+
+      await waitFor(() => expect(screen.getByTestId('partner-error')).toBeInTheDocument())
+      expect(screen.getByTestId('partner-invite-pending')).toBeInTheDocument()
+    })
   })
 
   it('shows an empty state when no partners are available', async () => {

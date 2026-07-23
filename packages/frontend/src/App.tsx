@@ -13,6 +13,7 @@ import { Signout } from './pages/Signout'
 import { BrowseTournaments } from './pages/BrowseTournaments'
 import { TournamentBrowse } from './pages/TournamentBrowse'
 import { TournamentJoin } from './pages/TournamentJoin'
+import { PartnerInviteAcceptPage } from './pages/PartnerInviteAcceptPage'
 import { TournamentDetail } from './pages/TournamentDetail'
 import { MyTournamentsHub } from './pages/MyTournamentsHub'
 import { GroupList, GroupDetail, GroupSettings } from './pages/MyGroups'
@@ -75,6 +76,10 @@ export const App: React.FC = () => {
           <Route
             path="/tournament/:tournamentId/join"
             element={<TournamentJoin />}
+          />
+          <Route
+            path="/tournament/:tournamentId/partner-invite"
+            element={<PartnerInviteAcceptPage />}
           />
 
           {/* Protected routes (require authentication) */}

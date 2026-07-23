@@ -182,33 +182,18 @@ describe('Tournament Lifecycle Workflows', () => {
         const player1 = await PlayerFactory.create(pool)
         const player2 = await PlayerFactory.create(pool)
 
-        // Register first player with invite to second player
+        // Register first player, inviting the second (already-existing) player
+        // by email — this creates both sides' registrations in one call, so
+        // there's no separate call needed for player2.
         const regRes1 = await request(app)
           .post(`/tournaments/${tournamentId}/register`)
           .send({
             email: player1.email,
             name: player1.name,
-            partnerSelection: {
-              type: 'invite',
-              value: player2.email,
-            },
+            partnerEmail: player2.email,
           })
 
         expect(regRes1.status).toBe(202)
-
-        // Register second player with invite to first player (completes the pairing)
-        const regRes2 = await request(app)
-          .post(`/tournaments/${tournamentId}/register`)
-          .send({
-            email: player2.email,
-            name: player2.name,
-            partnerSelection: {
-              type: 'invite',
-              value: player1.email,
-            },
-          })
-
-        expect(regRes2.status).toBe(202)
       }
 
       // Close registration

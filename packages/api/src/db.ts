@@ -592,6 +592,74 @@ export class PlayerRepository {
     return registration
   }
 
+  // ISSUE-15: mark a registration as awaiting a not-yet-existing partner
+  // (partner_id stays NULL — no player row exists for them yet). Bumps
+  // registered_at to "invite sent at" like updateRegistrationWithPartner,
+  // so the deadline exception (sub-decision 3) can compare against it.
+  async markPendingPartnerInvite(registrationId: string): Promise<RegistrationRow> {
+    const now = new Date().toISOString()
+    await this.pool.query(
+      `UPDATE public.player_registrations
+       SET status = $1, registered_at = $2
+       WHERE id = $3`,
+      ['pending_partner_confirm', now, registrationId]
+    )
+    const registration = await this.findRegistrationById(registrationId)
+    if (!registration) throw new NotFoundError('Registration')
+    return registration
+  }
+
+  // ISSUE-15: count registrations holding a capacity slot for a partner who
+  // has been invited by email but has no player row yet (sub-decision 1 —
+  // without this, the invite's slot could be taken by someone else before
+  // the partner accepts).
+  //
+  // The hold expires with the invite token that reserves it (ttlSeconds =
+  // magicLinkTtlSeconds): once the token can no longer be redeemed, the slot
+  // is unreachable, so holding it any longer just squats capacity on behalf
+  // of an invite to a dead address.
+  async countPendingPartnerInviteHolds(tournamentId: string, ttlSeconds: number): Promise<number> {
+    const result = await this.pool.query(
+      `SELECT COUNT(*) as count FROM public.player_registrations
+       WHERE tournament_id = $1 AND status = 'pending_partner_confirm' AND partner_id IS NULL
+         AND registered_at > NOW() - ($2 * INTERVAL '1 second')`,
+      [tournamentId, ttlSeconds]
+    )
+    return Number((result.rows[0] as { count: any }).count)
+  }
+
+  // ISSUE-15: release a pending (unconfirmed) partner invite — the requester
+  // goes back to a plain solo registration, and an invited existing player
+  // who was pulled into the pairing is released with them. Confirmed teams
+  // are not cancellable here; that is what withdrawal is for.
+  async cancelPartnerInvite(registrationId: string): Promise<RegistrationRow> {
+    const registration = await this.findRegistrationById(registrationId)
+    if (!registration) throw new NotFoundError('Registration')
+
+    if (registration.partner_id) {
+      const partnerReg = await this.findRegistration(registration.partner_id, registration.tournament_id)
+      if (partnerReg && !partnerReg.partner_confirmed) {
+        await this.pool.query(
+          `UPDATE public.player_registrations
+           SET partner_id = NULL, partner_confirmed = false, status = 'registered', confirmed_at = NULL
+           WHERE id = $1`,
+          [partnerReg.id]
+        )
+      }
+    }
+
+    await this.pool.query(
+      `UPDATE public.player_registrations
+       SET partner_id = NULL, partner_confirmed = false, status = 'registered', confirmed_at = NULL
+       WHERE id = $1`,
+      [registrationId]
+    )
+
+    const updated = await this.findRegistrationById(registrationId)
+    if (!updated) throw new NotFoundError('Registration')
+    return updated
+  }
+
   async confirmPartner(registrationId: string): Promise<RegistrationRow> {
     const now = new Date().toISOString()
 

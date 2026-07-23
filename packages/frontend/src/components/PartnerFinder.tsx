@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { fetchAvailablePartners, sendPartnerRequest, type AvailablePartner } from '../api/client'
+import {
+  fetchAvailablePartners,
+  sendPartnerRequest,
+  fetchMyPartnerInvite,
+  cancelPartnerInvite,
+  type AvailablePartner,
+  type MyPartnerInvite,
+} from '../api/client'
 
 /**
  * PartnerFinder — a solo doubles registrant finds another solo registrant in the
@@ -9,6 +16,10 @@ import { fetchAvailablePartners, sendPartnerRequest, type AvailablePartner } fro
  * Loads available (solo) partners with the stored session token and lets the
  * player request one; the target confirms via PartnerRequestConfirm. Backend
  * error codes map to friendly messages; a 409 (already paired) keeps the list usable.
+ *
+ * ISSUE-15 follow-up: a player who invited a partner by email at registration
+ * time has a pending outgoing invite instead — this is where they see it and
+ * can cancel it, which also releases the capacity slot the invite holds.
  */
 
 interface PartnerFinderProps {
@@ -21,6 +32,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   VALIDATION_ERROR: "That request isn't valid.",
 }
 
+const CANCEL_ERROR_MESSAGES: Record<string, string> = {
+  INVALID_STATE: 'That invite is no longer pending — refresh to see the latest.',
+  FORBIDDEN: 'Only the player who sent the invite can cancel it.',
+}
+
 function messageFor(code?: string): string {
   return (code && ERROR_MESSAGES[code]) || "Couldn't send the request. Please try again."
 }
@@ -30,6 +46,7 @@ export function PartnerFinder({ tournamentId }: PartnerFinderProps) {
   const [loading, setLoading] = useState(true)
   const [requestedId, setRequestedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pendingInvite, setPendingInvite] = useState<MyPartnerInvite | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -38,9 +55,18 @@ export function PartnerFinder({ tournamentId }: PartnerFinderProps) {
       setLoading(false)
       return
     }
-    fetchAvailablePartners(tournamentId, token)
-      .then((list) => {
-        if (!cancelled) setPartners(list)
+    // A pending outgoing invite replaces the finder — the backend already
+    // refuses a second one, so offering the list would only dead-end.
+    fetchMyPartnerInvite(tournamentId, token)
+      .then((invite) => {
+        if (cancelled) return
+        if (invite.pending) {
+          setPendingInvite(invite)
+          return null
+        }
+        return fetchAvailablePartners(tournamentId, token).then((list) => {
+          if (!cancelled) setPartners(list)
+        })
       })
       .catch(() => {
         if (!cancelled) setError("Couldn't load available partners.")
@@ -52,6 +78,24 @@ export function PartnerFinder({ tournamentId }: PartnerFinderProps) {
       cancelled = true
     }
   }, [tournamentId])
+
+  const handleCancelInvite = async () => {
+    setError(null)
+    const token = localStorage.getItem('auth_token')
+    if (!token || !pendingInvite?.registrationId) {
+      setError('You need to sign in again to cancel this invite.')
+      return
+    }
+    try {
+      await cancelPartnerInvite(pendingInvite.registrationId, token)
+      setPendingInvite(null)
+      const list = await fetchAvailablePartners(tournamentId, token)
+      setPartners(list)
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code
+      setError(CANCEL_ERROR_MESSAGES[code ?? ''] || "Couldn't cancel the invite. Please try again.")
+    }
+  }
 
   const handleRequest = async (targetPlayerId: string) => {
     setError(null)
@@ -89,6 +133,22 @@ export function PartnerFinder({ tournamentId }: PartnerFinderProps) {
 
       {loading ? (
         <p className="text-sm text-[--ink-500]">Loading available partners…</p>
+      ) : pendingInvite ? (
+        <div data-testid="partner-invite-pending" className="space-y-[--s-2]">
+          <p className="text-sm text-[--ink-700]">
+            {pendingInvite.partnerName
+              ? `Waiting for ${pendingInvite.partnerName} to accept your invite.`
+              : 'Waiting for your invited partner to accept.'}
+          </p>
+          <button
+            type="button"
+            data-testid="cancel-partner-invite-button"
+            onClick={handleCancelInvite}
+            className="px-[--s-3] py-[--s-2] text-sm font-medium border border-[--border] text-[--ink-700] rounded-[--r-md]"
+          >
+            Cancel invite
+          </button>
+        </div>
       ) : partners.length === 0 ? (
         <p className="text-sm text-[--ink-500]">No available partners right now.</p>
       ) : (
