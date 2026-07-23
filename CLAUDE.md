@@ -64,25 +64,14 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 **"For the right reason" means reading the actual failure.** In the red phase, keep the assertion message and stack in view — a pass/fail summary is not enough to tell a correct red from a typo, a bad import, or a suite that never ran. The output-filtering rules in §12 are deliberately relaxed for this one step; tighten them again once the test is green.
 
-## 5. Skill organization
-
-Skills are organized into bucket folders under `skills/`:
-
-- `engineering/` — daily code work
-- `productivity/` — daily non-code workflow tools
-- `misc/` — kept around but rarely used
-- `personal/` — tied to my own setup, not promoted
-- `deprecated/` — no longer used
-
-Every skill in `engineering/`, `productivity/`, or `misc/` must have a reference in the top-level `README.md` and an entry in `.claude-plugin/plugin.json`. Skills in `personal/` and `deprecated/` must not appear in either.
-
-Each skill entry in the top-level `README.md` must link the skill name to its `SKILL.md`.
-
-Each bucket folder has a `README.md` that lists every skill in the bucket with a one-line description, with the skill name linked to its `SKILL.md`.
-
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+<!-- §5 (skill organization) removed 2026-07-22: this repo has no skills/ directory.
+     The gap is deliberate. Section numbers are load-bearing — ~100 references of the
+     form "CLAUDE.md §N" exist across assets/planning/*, db/migrations/*, packages/*/
+     jest.config.js, and source comments. Do not renumber to close the gap. -->
 
 ## 6. Logging Standards
 
@@ -117,10 +106,7 @@ const log = getLogger('module-name')
 
 This project uses **PostgreSQL 15+** for all persistent data storage. See [README.md](./README.md) for database setup instructions, including Docker configuration and local PostgreSQL installation options.
 
-**Key details:**
-- Two schemas: `public` (tournament data) and `auth` (authentication)
-- Connection configured via environment variables
-- Requires Docker or local PostgreSQL installation before running the application
+Two schemas: `public` (tournament data) and `auth` (authentication).
 
 **Test isolation (integration tests):**
 - Integration tests run through the transactional test harness (`getTestPool()` in `packages/api/src/__tests__/helpers/db.ts`), which routes every query through one per-suite connection and rolls it back. **Never autocommit or write directly to the shared DB in tests** — a full run must leave row counts unchanged.
@@ -128,19 +114,10 @@ This project uses **PostgreSQL 15+** for all persistent data storage. See [READM
 
 ## 8. End-to-End Testing
 
-**When the user asks to run e2e tests, run the `/e2e-testing` skill.** This skill guides the complete workflow for running browser-based e2e tests.
-
-The skill workflow:
-1. **Validates prerequisites** — checks if backend API and frontend dev servers are accessible
-2. **Starts missing servers** — optionally auto-starts API or frontend if not running
-3. **Validates frontend** — uses `node scripts/browser.js` to verify the webapp loads with persistent browser state
-4. **Runs tests** — headless and targeted; see the command table below
-5. **Reviews results** — reads the line-reporter output, then failure screenshots/video
-6. **Debugs failures** — documents troubleshooting steps for common issues
+**When the user asks to run e2e tests, run the `/e2e-testing` skill** — it owns the workflow (prerequisites → start servers → validate via `scripts/browser.js` → run → read results).
 
 **Quick commands (use after `/e2e-testing` workflow):**
-- Check prerequisites: `node scripts/e2e-setup.js`
-- Auto-start missing servers: `node scripts/e2e-setup.js --auto-start`
+- Check prerequisites: `node scripts/e2e-setup.js` (`--auto-start` to start what's missing)
 - **Default run (one spec, one browser):**
   `npx playwright test <spec>.spec.ts --project=chromium --reporter=line --max-failures=1`
 - Full sweep, both browsers — **final verification only**: `npm run test:e2e -- --reporter=line`
@@ -150,10 +127,7 @@ The skill workflow:
 
 **`test:e2e:ui` and `test:e2e:debug` are human-only.** `--ui` opens a GUI and `--debug` opens the Inspector paused on the first line; both hang forever when invoked non-interactively. Never run them from an agent session — suggest them to the user instead.
 
-**Test file locations:**
-- E2E tests: `packages/frontend/e2e/auth.spec.ts`
-- Browser validation script: `scripts/browser.js`
-- Setup helper: `scripts/e2e-setup.js`
+Specs live in `packages/frontend/e2e/` — see the selection map in `e2e-scenarios.md` (§"Test Organization") for which one covers what.
 
 **Important:** E2E tests require both servers running:
 - Backend API on port 3001 (requires PostgreSQL)
@@ -171,6 +145,7 @@ The skill workflow:
 **E2E conventions** (details in `packages/frontend/e2e/README.md`):
 - **Seed your own data** via the fixtures (`createTournamentWithOpenRegistration`, `getOrganizerToken`, …) — never depend on ambient DB state.
 - Select with **`data-testid` and the constants in `e2e/config.ts`**, not emoji/`role` guesses.
+- **Adding a spec means adding its row to the selection map** in `e2e-scenarios.md` (§"Test Organization") in the same change — that table is how the right spec gets picked for a future change, and it is worthless once it drifts.
 - Use **unique test data** (e.g. a random email suffix) so parallel browser projects don't collide.
 - **Authenticate before visiting protected routes.** `/browse` and `/tournament/:id/browse` are public; `/matches`, `/standings`, and tournament detail require auth.
 - `TEMPLATE.spec.ts` is a scaffold, excluded via `testIgnore` — copy it to a real filename to use it.
@@ -193,7 +168,12 @@ Express matches routes in registration order. **Register literal/static paths be
 - Commit **only when asked**. If on the default branch (`main`), **create a branch first**.
 - **One logical change per commit** — don't mix verified fixes with new or intentionally-failing work.
 - **TDD history:** commit failing tests as their own commit, then the implementation as the next.
-- **Run the relevant test suite before merging** — the specs covering the change, not the whole suite; save the full run for the final pass. Prefer fast-forward merges.
+- **Run the specs covering the change before merging** — not the whole suite. "Covering" means *depends on what you changed*, which is wider than the module you edited. Select them, don't recall them:
+  - **Unit/integration (jest)** — let jest walk the import graph:
+    `npx jest --findRelatedTests $(git diff --name-only main...HEAD) --bail`
+    Run it per workspace (`npm --workspace=packages/api exec -- jest …`). Expect asymmetry: a leaf module is precise (`NotificationCard.tsx` → 3 specs, including the *page* spec that directory-scoping would miss), while an API cross-cutting module is near-total (`email-adapter.ts` → 91 specs, because the api specs import the express app). The wide answer is the correct one, not a cheap one — if it's too slow to run, narrow it deliberately and say so, don't silently fall back to the module's own spec.
+  - **E2E (playwright)** — no import graph reaches the API, so selection is by user-facing flow: use the selection map in `e2e-scenarios.md` (§"Test Organization"), plus `auth.spec.ts` whenever route protection changed (§9). If nothing matches, `grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts`.
+- **The full run is a merge gate, not a per-task step** — once per branch before merging, it covers the two things the selectors above can't see: workspace coverage floors (§13) and the both-browser e2e sweep (§8). Prefer fast-forward merges.
 - End commit messages with the `Co-Authored-By` trailer.
 
 ## 12. Context & Output Discipline
@@ -211,7 +191,7 @@ npx jest path/to/foo.test.ts > "$SCRATCH/run.log" 2>&1; \
 - **Red** — need the reason it failed: `grep -B2 -A15 "●" "$SCRATCH/run.log"`
 - **Green / regression** — need only the verdict: `grep -E "Tests:|Suites:"`
 
-**Scope every run to the change.** One spec file per iteration; `--project=chromium` for e2e; full suite once at the end (§11). Prefer `--bail` / `--max-failures=1` — failure #1 is actionable, failures #2–30 are usually the same root cause reprinted.
+**While iterating, run one spec at a time** (`--project=chromium` for e2e) — not because it's the right *coverage*, but because it's the right *output volume*. §11 owns which specs a change actually needs and when the full run happens; this is only about not paying for 40 suites' output on every loop. Prefer `--bail` / `--max-failures=1` — failure #1 is actionable, failures #2–30 are usually the same root cause reprinted.
 
 **Reading files:**
 - `Grep` with `-C 3` to find a symbol; `Read` with `offset`/`limit` for a known region. Whole-file reads are a last resort.
@@ -226,6 +206,8 @@ npx jest path/to/foo.test.ts > "$SCRATCH/run.log" 2>&1; \
 **The numbers in `packages/*/jest.config.js` are measured actuals, not aspirations.** Each `coverageThreshold` records what the suite genuinely covered on the date in the comment above it. They exist to catch regressions, so they are **raise-only**.
 
 **Thresholds are only enforced per-workspace.** `coverageThreshold` is a Jest *global-only* option — it is silently dropped from project configs in a `projects:` setup. A root-level `npx jest --coverage` therefore enforces **nothing**. `npm run test:coverage` delegates to the workspaces for exactly this reason; don't "simplify" it back into a single root run.
+
+**Coverage is jest-only — e2e contributes nothing.** `packages/frontend/jest.config.js` matches `<rootDir>/src/**`, and the 42 Playwright specs live in `packages/frontend/e2e/`, outside it. So a path exercised *solely* by e2e (auth redirect flows, worker queue paths, SSE) reads as uncovered against the floors. Don't write a jest test purely to move that number, and don't read a low floor on such a file as "untested" — check the selection map in `e2e-scenarios.md` first.
 
 **Don't change `coverageProvider`.** The floors are `babel` numbers. v8 reports differently, so switching providers invalidates every floor at once — re-measure the whole repo if you ever do.
 
