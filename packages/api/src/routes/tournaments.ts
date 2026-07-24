@@ -139,6 +139,19 @@ export default function tournamentsRouter(deps: AppDependencies) {
     )
   }
 
+  // ISSUE-16 requirement 5: notify a claimant whose unconfirmed claim (on
+  // the player who just accepted a different partnership) was voided —
+  // required, not optional, so a cluster that notifies for auto-pairing and
+  // for being left unpaired doesn't stay silent for having your invite
+  // killed. Not in a transaction with anything else — inline, best-effort.
+  async function notifyClaimVoided(playerId: string, winnerName: string, tournamentName: string, tournamentId: string): Promise<void> {
+    await groupMsgRepo.postPersonalNotification(
+      playerId,
+      `Your partner invite is no longer available — ${winnerName} joined a different team for ${tournamentName}`,
+      { tournamentId }
+    )
+  }
+
   // ISSUE-15 sub-decision 3: a partner may accept past the registration
   // deadline when the invite predates it — the requester acted in time. The
   // exception ends where play begins: once the tournament leaves
@@ -182,6 +195,36 @@ export default function tournamentsRouter(deps: AppDependencies) {
       const reg = await playerRepo.findRegistration(account.playerId, tournamentId)
       if (!reg) {
         throw new ForbiddenError('tournament')
+      }
+      return { playerId: account.playerId }
+    }
+  }
+
+  // ISSUE-16: like resolveTournamentPlayer, but for the one caller where the
+  // account-JWT branch's registration-existence check is now a chicken-and-
+  // egg problem — confirming a branch A invite may be the invited account
+  // holder's FIRST touch on this tournament (requirement 7: their
+  // registration is created by confirmPartner, which can't run until after
+  // this resolves). The registration this route already looks up by id is
+  // the scoping proof for the account branch instead: only the account
+  // whose linked playerId equals that registration's partner_id can pass
+  // the caller's own ownership check right after this returns. The session
+  // branch keeps assertPlayerInTournament — that check doesn't depend on a
+  // registration existing, so there's no reason to weaken it.
+  async function resolveConfirmingPlayer(authHeader: string | undefined, tournamentId: string): Promise<{ playerId: string }> {
+    try {
+      const session = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
+      assertPlayerInTournament(session, tournamentId)
+      return { playerId: session.playerId }
+    } catch (sessionErr) {
+      let account
+      try {
+        account = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
+      } catch {
+        throw sessionErr
+      }
+      if (!account.playerId) {
+        throw sessionErr
       }
       return { playerId: account.playerId }
     }
@@ -1277,14 +1320,15 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(409).json({ code: 'REGISTRATION_CLOSED', message: 'Registration is not open for this tournament' })
       }
 
+      // ISSUE-16 requirement 4: a pending invite holds no capacity — count
+      // people who will play, not people who might not exist. Reversed from
+      // ISSUE-15 sub-decision 1: concurrent invites over-reserved (A and B
+      // both inviting X held two slots for one future person), and leftover
+      // solos who opted in are auto-paired at group creation regardless, so
+      // the hold was never protecting anyone's ability to play — only a
+      // preference to play with a specific person.
       const registrationCount = await playerRepo.countRegistrationsForTournament(tournamentId)
-      // ISSUE-15 sub-decision 1: a pending invite to a not-yet-existing
-      // partner holds their slot too, so the last spot can't be taken out
-      // from under a team the requester and partner both believe is formed.
-      const pendingInviteHolds = tournament.match_format === 'doubles'
-        ? await playerRepo.countPendingPartnerInviteHolds(tournamentId, deps.config.auth.magicLinkTtlSeconds)
-        : 0
-      if (registrationCount + pendingInviteHolds >= tournament.max_players) {
+      if (registrationCount >= tournament.max_players) {
         return res.status(409).json({ code: 'TOURNAMENT_FULL', message: 'Tournament has reached maximum capacity' })
       }
 
@@ -1354,14 +1398,18 @@ export default function tournamentsRouter(deps: AppDependencies) {
         }
         const requesterReg = (await playerRepo.findRegistration(player.id, tournamentId))!
 
-        // An expired invite is no invite: its token can no longer be redeemed
-        // and its capacity hold has lapsed, so the requester is free to try a
-        // different address rather than being stuck behind their own typo.
-        const inviteExpiresAt = new Date(requesterReg.registered_at).getTime() +
-          deps.config.auth.magicLinkTtlSeconds * 1000
-        const hasLiveInvite = requesterReg.status === 'pending_partner_confirm' &&
-          (requesterReg.partner_id != null || inviteExpiresAt > Date.now())
-        if (requesterReg.partner_id || hasLiveInvite) {
+        // ISSUE-16 requirement 6: a player holds at most one outgoing claim
+        // per tournament, in either form — this is the guard that enforces
+        // it. An expired branch-C invite is no invite: its token can no
+        // longer be redeemed, so the requester is free to try a different
+        // address rather than being stuck behind their own typo. A branch
+        // A/B claim (partner_id set) never expires this way; only the
+        // manual cancel route releases it.
+        const claimedAt = requesterReg.partner_claimed_at ?? requesterReg.registered_at
+        const inviteExpiresAt = new Date(claimedAt).getTime() + deps.config.auth.magicLinkTtlSeconds * 1000
+        const hasOutgoingClaim = requesterReg.partner_id != null || requesterReg.pending_partner_email != null
+        const hasLiveInvite = hasOutgoingClaim && (requesterReg.partner_id != null || inviteExpiresAt > Date.now())
+        if (hasLiveInvite) {
           return res.status(409).json({ code: 'INVALID_STATE', message: 'You already have a partner invite pending' })
         }
 
@@ -1376,15 +1424,16 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
         if (existingPartnerPlayer) {
           const targetReg = await playerRepo.findRegistration(existingPartnerPlayer.id, tournamentId)
-          if (targetReg?.partner_id) {
+          // ISSUE-16 requirement 3: narrowed to CONFIRMED pairings only —
+          // refusing to invite someone already on a team stays correct;
+          // refusing because someone else invited them first does not.
+          if (targetReg?.partner_confirmed) {
             return res.status(409).json({ code: 'INVALID_STATE', message: 'That player already has a partner' })
           }
-          if (!targetReg) {
-            await playerRepo.createRegistration(existingPartnerPlayer.id, tournamentId)
-          }
+          // ISSUE-16 requirement 1: an invite writes only the requester's
+          // own row. X's registration is created at accept time
+          // (confirmPartner), not here — no auto-create, no mirror-write.
           await playerRepo.updateRegistrationWithPartner(requesterReg.id, existingPartnerPlayer.id)
-          const finalTargetReg = (await playerRepo.findRegistration(existingPartnerPlayer.id, tournamentId))!
-          await playerRepo.updateRegistrationWithPartner(finalTargetReg.id, player.id)
 
           if (accountPlayer) {
             notifyPartnerInvite(existingPartnerPlayer.id, player.name, tournament.name, tournamentId, requesterReg.id).catch((e: Error) => {
@@ -1410,7 +1459,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
             log.info('team.invited', { tournamentId, playerId: player.id, targetPlayerId: existingPartnerPlayer.id, delivery: 'magic_link' })
           }
         } else {
-          await playerRepo.markPendingPartnerInvite(requesterReg.id)
+          await playerRepo.markPendingPartnerInvite(requesterReg.id, partnerEmail)
           const invite = await generatePartnerInviteToken(
             { type: 'partner-invite', tournamentId, requesterRegistrationId: requesterReg.id, email: partnerEmail, createdAt: Date.now() },
             deps.config.auth.magicLinkTtlSeconds,
@@ -1430,7 +1479,12 @@ export default function tournamentsRouter(deps: AppDependencies) {
           log.info('team.invited', { tournamentId, playerId: player.id, delivery: 'partner_invite_email' })
         }
 
-        partnerStatus = (await playerRepo.findRegistration(player.id, tournamentId))!.status
+        // A claim never changes the row's real status (requirement 6) — this
+        // is a synthesized response-shape signal, not a DB read. The
+        // frontend (TournamentBrowse.tsx) checks this literal string to
+        // show "awaiting acceptance"; every path above always leaves the
+        // requester's row holding a claim, so it's unconditional here.
+        partnerStatus = 'pending_partner_confirm'
       } else if (!existingReg) {
         // Single registration (not doubles, or doubles without a partner invite)
         log.debug('registration.creating', { tournamentId, playerId: player.id, format: tournament.match_format })
@@ -1890,12 +1944,13 @@ export default function tournamentsRouter(deps: AppDependencies) {
       const { playerId } = await resolveTournamentPlayer(req.headers.authorization, tournamentId)
 
       const registration = await playerRepo.findRegistration(playerId, tournamentId)
-      if (!registration || registration.status !== 'pending_partner_confirm' || registration.partner_confirmed) {
+      const hasClaim = !!registration && (registration.partner_id != null || registration.pending_partner_email != null)
+      if (!registration || !hasClaim || registration.partner_confirmed) {
         return res.json({ pending: false })
       }
 
       const expiresAt = new Date(
-        new Date(registration.registered_at).getTime() + deps.config.auth.magicLinkTtlSeconds * 1000
+        new Date(registration.partner_claimed_at ?? registration.registered_at).getTime() + deps.config.auth.magicLinkTtlSeconds * 1000
       )
       if (!registration.partner_id && expiresAt.getTime() <= Date.now()) {
         return res.json({ pending: false })
@@ -1976,10 +2031,17 @@ export default function tournamentsRouter(deps: AppDependencies) {
       if (!targetReg) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'That player is not registered in this tournament' })
       }
-      if (requesterReg.partner_id) {
+      // ISSUE-16 requirement 6: one outgoing claim per player per
+      // tournament, in either form — a live branch-C claim (pending_partner_
+      // email) must block a second outgoing claim here just as a branch A/B
+      // one does.
+      if (requesterReg.partner_id || requesterReg.pending_partner_email) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'You already have a partner' })
       }
-      if (targetReg.partner_id) {
+      // Narrowed to CONFIRMED pairings only (requirement 3/6) — a target
+      // with a merely pending outgoing claim of their own remains invitable;
+      // receiving claims is unlimited.
+      if (targetReg.partner_confirmed) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'That player already has a partner' })
       }
 
@@ -2012,7 +2074,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
       // Dual auth: ISSUE-15 branch A invites a registered account holder, who
       // holds an account JWT rather than a magic-link player session — taking
       // only the latter here made that branch unusable end to end.
-      const { playerId } = await resolveTournamentPlayer(req.headers.authorization, registration.tournament_id)
+      const { playerId } = await resolveConfirmingPlayer(req.headers.authorization, registration.tournament_id)
 
       // ISSUE-18: reject a second accept when the confirming player already
       // has a CONFIRMED partner in this tournament. Confirmed only — a
@@ -2033,7 +2095,10 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the partner can confirm this registration' })
       }
 
-      if (registration.status !== 'pending_partner_confirm') {
+      // ISSUE-16: a claim never changes status (requirement 6), so "still
+      // pending" is now "not yet confirmed" rather than a status value —
+      // registration.partner_confirmed already covers re-confirm attempts.
+      if (registration.partner_confirmed) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'This registration is not pending partner confirmation' })
       }
 
@@ -2041,11 +2106,11 @@ export default function tournamentsRouter(deps: AppDependencies) {
       if (!tournament) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
       }
-      if (!partnerConfirmWindowOpen(tournament, registration.registered_at)) {
+      if (!partnerConfirmWindowOpen(tournament, registration.partner_claimed_at ?? registration.registered_at)) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'Tournament is no longer in registration phase' })
       }
 
-      const updated = await playerRepo.confirmPartner(registrationId)
+      const { registration: updated, voidedClaimants } = await playerRepo.confirmPartner(registrationId)
 
       log.info('registration.partner_confirmed', { tournamentId: registration.tournament_id, registrationId, partnerId: playerId })
 
@@ -2062,6 +2127,14 @@ export default function tournamentsRouter(deps: AppDependencies) {
         notifyTeamFormed(playerId, requesterPlayer.name, tournament.name, tournament.id).catch((e: Error) => {
           log.warn('personal.notification.failed', { playerId, error: e.message })
         })
+        // ISSUE-16 requirement 5: every other unconfirmed claim naming the
+        // confirming player is void now — tell each claimant, the same
+        // infrastructure ISSUE-19 already built.
+        for (const claimant of voidedClaimants) {
+          notifyClaimVoided(claimant.playerId, confirmingPlayer.name, tournament.name, tournament.id).catch((e: Error) => {
+            log.warn('personal.notification.failed', { playerId: claimant.playerId, error: e.message })
+          })
+        }
       }
 
       res.json({
@@ -2109,11 +2182,13 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       const requesterReg = await playerRepo.findRegistrationById(invitePayload.requesterRegistrationId)
-      if (!requesterReg || requesterReg.partner_id || requesterReg.status !== 'pending_partner_confirm') {
+      // ISSUE-16: a claim never changes status — "still pending" is now
+      // "the requester's row still names this email", not a status value.
+      if (!requesterReg || requesterReg.partner_id || !requesterReg.pending_partner_email) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'This invite is no longer pending' })
       }
 
-      if (!partnerConfirmWindowOpen(tournament, requesterReg.registered_at)) {
+      if (!partnerConfirmWindowOpen(tournament, requesterReg.partner_claimed_at ?? requesterReg.registered_at)) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'Tournament is no longer in registration phase' })
       }
 
@@ -2154,8 +2229,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'That player already has a partner' })
       }
       if (!targetReg) {
-        // The invite already held this slot (countPendingPartnerInviteHolds);
-        // re-check capacity as a safety net against a genuine race.
+        // ISSUE-16 requirement 4 removed the invite-time capacity hold, so
+        // this is now the actual enforcement point for a brand-new partner's
+        // seat, not a safety net against a hold expiring early.
         const registrationCount = await playerRepo.countRegistrationsForTournament(tournamentId)
         if (registrationCount >= tournament.max_players) {
           return res.status(409).json({ code: 'TOURNAMENT_FULL', message: 'Tournament has reached maximum capacity' })
@@ -2164,9 +2240,13 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       await playerRepo.updateRegistrationWithPartner(requesterReg.id, partnerPlayer.id)
+      // Converting the email-claim to an id-claim: updateRegistrationWithPartner
+      // deliberately never touches pending_partner_email (its other callers have
+      // nothing to clear), so the now-redundant email trace is cleared here.
+      await playerRepo.clearPendingPartnerEmail(requesterReg.id)
       // confirmPartner cascades to targetReg too: sets its partner_id back to
-      // the requester, partner_confirmed, and status — see db.ts.
-      await playerRepo.confirmPartner(requesterReg.id)
+      // the requester and partner_confirmed — see db.ts.
+      const { voidedClaimants } = await playerRepo.confirmPartner(requesterReg.id)
 
       // ISSUE-19: tell both players their team is formed. Best-effort — a
       // notification failure must not undo an already-confirmed team.
@@ -2178,6 +2258,14 @@ export default function tournamentsRouter(deps: AppDependencies) {
         notifyTeamFormed(partnerPlayer.id, requesterPlayer.name, tournament.name, tournamentId).catch((e: Error) => {
           log.warn('personal.notification.failed', { playerId: partnerPlayer.id, error: e.message })
         })
+        // ISSUE-16 requirement 5: void every other unconfirmed claim naming
+        // the accepting player (in either form) and notify each claimant —
+        // the email-form regression a partner_id-only void would miss.
+        for (const claimant of voidedClaimants) {
+          notifyClaimVoided(claimant.playerId, partnerPlayer.name, tournament.name, tournamentId).catch((e: Error) => {
+            log.warn('personal.notification.failed', { playerId: claimant.playerId, error: e.message })
+          })
+        }
       }
 
       const session = await generatePlayerSession(
@@ -2222,7 +2310,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(403).json({ code: 'FORBIDDEN', message: 'Only the requester can cancel this invite' })
       }
 
-      if (registration.status !== 'pending_partner_confirm' || registration.partner_confirmed) {
+      // ISSUE-16: "no claim in either form" replaces the deleted status check.
+      const hasClaim = registration.partner_id != null || registration.pending_partner_email != null
+      if (!hasClaim || registration.partner_confirmed) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'There is no pending partner invite to cancel' })
       }
 

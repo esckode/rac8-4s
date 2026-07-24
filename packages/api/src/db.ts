@@ -113,8 +113,10 @@ export interface RegistrationRow {
   tournament_id: string
   registered_at: string
   partner_id?: string
+  pending_partner_email?: string
+  partner_claimed_at?: string
   partner_confirmed: boolean
-  status: 'registered' | 'pending_partner_confirm' | 'withdrawn' | 'withdrawal_pending' | 'unpaired'
+  status: 'registered' | 'withdrawn' | 'withdrawal_pending' | 'unpaired'
   withdrawal_requested_at?: string
   confirmed_at?: string
 }
@@ -580,78 +582,63 @@ export class PlayerRepository {
     return { rows, total }
   }
 
+  // ISSUE-16: an invite writes only the requester's own row — status stays
+  // 'registered' (a claim is not a status change) and registered_at is
+  // write-once, so neither is touched here. partner_claimed_at records when
+  // THIS claim was made, for the deadline exception and the re-invite TTL.
   async updateRegistrationWithPartner(registrationId: string, partnerId: string): Promise<RegistrationRow> {
     const now = new Date().toISOString()
     await this.pool.query(
       `UPDATE public.player_registrations
-       SET partner_id = $1, status = $2, registered_at = $3
-       WHERE id = $4`,
-      [partnerId, 'pending_partner_confirm', now, registrationId]
+       SET partner_id = $1, partner_claimed_at = $2
+       WHERE id = $3`,
+      [partnerId, now, registrationId]
     )
     const registration = await this.findRegistrationById(registrationId)
     if (!registration) throw new NotFoundError('Registration')
     return registration
   }
 
-  // ISSUE-15: mark a registration as awaiting a not-yet-existing partner
-  // (partner_id stays NULL — no player row exists for them yet). Bumps
-  // registered_at to "invite sent at" like updateRegistrationWithPartner,
-  // so the deadline exception (sub-decision 3) can compare against it.
-  async markPendingPartnerInvite(registrationId: string): Promise<RegistrationRow> {
+  // ISSUE-16: converting a branch-C email-claim into an id-claim (the
+  // invitee just accepted) must drop the now-redundant email trace —
+  // updateRegistrationWithPartner deliberately never touches this column,
+  // since every other caller (branches A/B, partner-requests) has nothing
+  // to clear.
+  async clearPendingPartnerEmail(registrationId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE public.player_registrations SET pending_partner_email = NULL WHERE id = $1`,
+      [registrationId]
+    )
+  }
+
+  // ISSUE-16 (was ISSUE-15): mark a registration as awaiting a not-yet-
+  // existing partner — partner_id stays NULL (no player row exists for them
+  // yet), so pending_partner_email is the entire on-row record that this
+  // claim exists. Emails are stored lowercase (migration 026 convention).
+  async markPendingPartnerInvite(registrationId: string, invitedEmail: string): Promise<RegistrationRow> {
     const now = new Date().toISOString()
     await this.pool.query(
       `UPDATE public.player_registrations
-       SET status = $1, registered_at = $2
+       SET pending_partner_email = $1, partner_claimed_at = $2
        WHERE id = $3`,
-      ['pending_partner_confirm', now, registrationId]
+      [invitedEmail.toLowerCase(), now, registrationId]
     )
     const registration = await this.findRegistrationById(registrationId)
     if (!registration) throw new NotFoundError('Registration')
     return registration
   }
 
-  // ISSUE-15: count registrations holding a capacity slot for a partner who
-  // has been invited by email but has no player row yet (sub-decision 1 —
-  // without this, the invite's slot could be taken by someone else before
-  // the partner accepts).
-  //
-  // The hold expires with the invite token that reserves it (ttlSeconds =
-  // magicLinkTtlSeconds): once the token can no longer be redeemed, the slot
-  // is unreachable, so holding it any longer just squats capacity on behalf
-  // of an invite to a dead address.
-  async countPendingPartnerInviteHolds(tournamentId: string, ttlSeconds: number): Promise<number> {
-    const result = await this.pool.query(
-      `SELECT COUNT(*) as count FROM public.player_registrations
-       WHERE tournament_id = $1 AND status = 'pending_partner_confirm' AND partner_id IS NULL
-         AND registered_at > NOW() - ($2 * INTERVAL '1 second')`,
-      [tournamentId, ttlSeconds]
-    )
-    return Number((result.rows[0] as { count: any }).count)
-  }
-
-  // ISSUE-15: release a pending (unconfirmed) partner invite — the requester
-  // goes back to a plain solo registration, and an invited existing player
-  // who was pulled into the pairing is released with them. Confirmed teams
-  // are not cancellable here; that is what withdrawal is for.
+  // ISSUE-16: release the requester's own pending (unconfirmed) claim — in
+  // either form. The requester's row is now the only place a claim ever
+  // lives, so this is a single-row update; it must NOT touch the partner's
+  // row (requirement 8 — a claim on a third player, held on the partner's
+  // own row, is not this cancel's business). Confirmed teams are not
+  // cancellable here; that is what withdrawal is for.
   async cancelPartnerInvite(registrationId: string): Promise<RegistrationRow> {
-    const registration = await this.findRegistrationById(registrationId)
-    if (!registration) throw new NotFoundError('Registration')
-
-    if (registration.partner_id) {
-      const partnerReg = await this.findRegistration(registration.partner_id, registration.tournament_id)
-      if (partnerReg && !partnerReg.partner_confirmed) {
-        await this.pool.query(
-          `UPDATE public.player_registrations
-           SET partner_id = NULL, partner_confirmed = false, status = 'registered', confirmed_at = NULL
-           WHERE id = $1`,
-          [partnerReg.id]
-        )
-      }
-    }
-
     await this.pool.query(
       `UPDATE public.player_registrations
-       SET partner_id = NULL, partner_confirmed = false, status = 'registered', confirmed_at = NULL
+       SET partner_id = NULL, pending_partner_email = NULL, partner_claimed_at = NULL,
+           partner_confirmed = false, status = 'registered', confirmed_at = NULL
        WHERE id = $1`,
       [registrationId]
     )
@@ -667,7 +654,23 @@ export class PlayerRepository {
   // row that permanently occupies the index slot for the other player. See
   // the worked Gil/Eli/Fay race in ISSUE-18 for why the index is what turns
   // this from benign into harmful.
-  async confirmPartner(registrationId: string): Promise<RegistrationRow> {
+  //
+  // ISSUE-16 requirement 7: an invite no longer creates the accepting
+  // player's registration at invite time, so it may not exist yet — create
+  // it here (capacity-checked against COUNTS_FOR_CAPACITY), rather than
+  // silently forming a one-sided team.
+  //
+  // ISSUE-16 requirement 5: accepting voids every OTHER unconfirmed claim
+  // naming the accepting player, in both forms (partner_id or
+  // pending_partner_email) — and, on the accepting player's own row, voids
+  // their own outgoing claim on anyone else, since they can no longer pair
+  // with someone else. Returns who was voided so the caller can notify them
+  // (ISSUE-19 infrastructure; this method is never in a transaction with
+  // anything else, so the caller notifies inline, best-effort, after this
+  // resolves).
+  async confirmPartner(
+    registrationId: string
+  ): Promise<{ registration: RegistrationRow; voidedClaimants: { playerId: string }[] }> {
     return retryOnDeadlock(async () => {
       const client = await (this.pool as Pool).connect()
       try {
@@ -676,10 +679,8 @@ export class PlayerRepository {
 
         // Confirm the requester's registration.
         await client.query(
-          `UPDATE public.player_registrations
-           SET partner_confirmed = $1, status = $2, confirmed_at = $3
-           WHERE id = $4`,
-          [true, 'registered', now, registrationId]
+          `UPDATE public.player_registrations SET partner_confirmed = $1, confirmed_at = $2 WHERE id = $3`,
+          [true, now, registrationId]
         )
 
         const regResult = await client.query(
@@ -690,27 +691,75 @@ export class PlayerRepository {
         if (!regRow) throw new NotFoundError('Registration')
         const registration = { ...regRow, partner_confirmed: !!regRow.partner_confirmed } as RegistrationRow
 
-        // Link the partner's registration back so both sides form a confirmed team.
+        let voidedClaimants: { playerId: string }[] = []
+
+        // Link the accepting player's registration back so both sides form a confirmed team.
         if (registration.partner_id) {
           const partnerResult = await client.query(
             'SELECT * FROM public.player_registrations WHERE player_id = $1 AND tournament_id = $2',
             [registration.partner_id, registration.tournament_id]
           )
           const partnerReg = partnerResult.rows[0] as RegistrationRow | undefined
+
           if (partnerReg) {
+            // pending_partner_email/partner_claimed_at cleared here too: the
+            // accepting player's own outgoing claim (if any) is void now
+            // that they're paired.
             await client.query(
               `UPDATE public.player_registrations
-               SET partner_id = $1, partner_confirmed = $2, status = $3, confirmed_at = $4
-               WHERE id = $5`,
-              [registration.player_id, true, 'registered', now, partnerReg.id]
+               SET partner_id = $1, partner_confirmed = $2, confirmed_at = $3,
+                   pending_partner_email = NULL, partner_claimed_at = NULL
+               WHERE id = $4`,
+              [registration.player_id, true, now, partnerReg.id]
+            )
+          } else {
+            const tournamentResult = await client.query(
+              'SELECT max_players FROM public.tournaments WHERE id = $1',
+              [registration.tournament_id]
+            )
+            const maxPlayers = (tournamentResult.rows[0] as { max_players?: number } | undefined)?.max_players
+            const countResult = await client.query(
+              `SELECT COUNT(*) as count FROM public.player_registrations WHERE tournament_id = $1 AND ${COUNTS_FOR_CAPACITY}`,
+              [registration.tournament_id]
+            )
+            const currentCount = Number((countResult.rows[0] as { count: any }).count)
+            if (maxPlayers != null && currentCount >= maxPlayers) {
+              throw new ConstraintViolationError('Tournament has reached maximum capacity', 'TOURNAMENT_FULL')
+            }
+
+            const newRegId = `reg_${Date.now()}_${Math.random().toString(36).slice(2)}`
+            await client.query(
+              `INSERT INTO public.player_registrations
+                 (id, player_id, tournament_id, registered_at, partner_id, partner_confirmed, confirmed_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [newRegId, registration.partner_id, registration.tournament_id, now, registration.player_id, true, now]
             )
           }
+
+          const acceptingPlayerResult = await client.query(
+            'SELECT email FROM public.players WHERE id = $1',
+            [registration.partner_id]
+          )
+          const acceptingPlayerEmail = ((acceptingPlayerResult.rows[0] as { email?: string } | undefined)?.email ?? '').toLowerCase()
+
+          const voidedResult = await client.query(
+            `UPDATE public.player_registrations
+                SET partner_id = NULL, pending_partner_email = NULL, partner_claimed_at = NULL
+              WHERE tournament_id = $1
+                AND partner_confirmed = false
+                AND id <> $2
+                AND (partner_id = $3 OR lower(pending_partner_email) = $4)
+              RETURNING player_id`,
+            [registration.tournament_id, registrationId, registration.partner_id, acceptingPlayerEmail]
+          )
+          voidedClaimants = (voidedResult.rows as { player_id: string }[]).map(r => ({ playerId: r.player_id }))
         }
 
         await client.query('COMMIT')
-        return registration
+        return { registration, voidedClaimants }
       } catch (error) {
         await client.query('ROLLBACK')
+        if (error instanceof ConstraintViolationError) throw error
         if (
           error instanceof Error &&
           error.message.includes('uq_registrations_confirmed_partner')
@@ -724,6 +773,11 @@ export class PlayerRepository {
     })
   }
 
+  // ISSUE-16 requirement 6: a player with an outstanding OUTGOING claim
+  // must remain invitable by others until they are actually paired —
+  // receiving claims is unlimited. partner_id IS NULL would still hide
+  // them (an outgoing claim is precisely what sets it); partner_confirmed
+  // is the only correct gate.
   async findAvailablePartners(tournamentId: string, excludePlayerId: string): Promise<{ id: string; name: string }[]> {
     const result = await this.pool.query(
       `SELECT p.id, p.name
@@ -731,7 +785,7 @@ export class PlayerRepository {
        JOIN public.players p ON p.id = pr.player_id
        WHERE pr.tournament_id = $1
          AND pr.player_id <> $2
-         AND pr.partner_id IS NULL
+         AND pr.partner_confirmed = false
          AND pr.status = 'registered'
        ORDER BY p.name`,
       [tournamentId, excludePlayerId]
@@ -749,7 +803,7 @@ export class PlayerRepository {
        JOIN public.players p ON p.id = pr.player_id
        WHERE pr.tournament_id = $1
          AND pr.partner_id = $2
-         AND pr.status = 'pending_partner_confirm'
+         AND pr.partner_confirmed = false
        ORDER BY p.name`,
       [tournamentId, targetPlayerId]
     )
@@ -761,7 +815,7 @@ export class PlayerRepository {
   }
 
   async updateRegistrationStatus(registrationId: string, status: string): Promise<RegistrationRow> {
-    const validStatuses = ['registered', 'pending_partner_confirm', 'withdrawn', 'withdrawal_pending', 'unpaired']
+    const validStatuses = ['registered', 'withdrawn', 'withdrawal_pending', 'unpaired']
     if (!validStatuses.includes(status)) {
       throw new CheckConstraintError('status')
     }
@@ -956,17 +1010,21 @@ export class GroupRepository {
         const teamIds: string[] = []
         const teamed = new Set<string>()
 
-        // ISSUE-21: an invite nobody answered must not become a team. Clear
-        // every unconfirmed claim before any pairing is planned, so a
-        // mirror-written invite (branches A/B — partner_id set mutually,
-        // status = 'pending_partner_confirm') resolves to two genuinely
-        // unpaired players instead of a mutual link nobody confirmed. Post-
-        // ISSUE-16 this also clears pending_partner_email/partner_claimed_at;
-        // today the claim's only trace is partner_id + status.
+        // ISSUE-21 (updated for ISSUE-16's schema): an invite nobody
+        // answered must not become a team, and a stale outgoing claim must
+        // not linger on a registration that's about to be auto-paired with
+        // someone else — createTeam below only inserts into `teams`, it
+        // never touches player_registrations, so without this a requester
+        // auto-paired with C would keep a dangling partner_id pointing at
+        // the X who never responded. Clear every unconfirmed claim, in
+        // either form, before any pairing is planned. ISSUE-16 requirement
+        // 1 (an invite writes only the requester's row) already makes the
+        // original "mutually linked but unconfirmed" scenario unreachable —
+        // this is the durable closure, not a redundant belt-and-suspenders.
         await client.query(
           `UPDATE public.player_registrations
-              SET partner_id = NULL, status = 'registered'
-            WHERE tournament_id = $1 AND partner_confirmed = false AND status = 'pending_partner_confirm'`,
+              SET partner_id = NULL, pending_partner_email = NULL, partner_claimed_at = NULL
+            WHERE tournament_id = $1 AND partner_confirmed = false`,
           [tournamentId]
         )
 
