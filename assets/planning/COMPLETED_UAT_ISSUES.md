@@ -1085,3 +1085,84 @@ only path — it can't reach a partner who hasn't registered yet.
   gets a notification (account) or a magic link (new); accepting forms the team both directions; a
   burst of invites to different addresses from one IP is throttled.
 
+---
+
+## ISSUE-18 — Confirming a partner has no accept-time guard, and `confirmPartner` is not atomic 🔴 {#issue-18}
+
+**✅ Resolved** (2026-07-24, branch `fix-pairing`): split out of
+[ISSUE-16](UAT_ISSUES.md#issue-16) as a standalone 🔴 data-corruption fix that does not wait on that
+rework — a player could confirm two suitors and end up "on a team" with two different people, the
+last write silently winning. Fixed with three changes that are one unit, not three:
+
+1. **Migration `058_confirmed_partner_unique_index.sql`** adds
+   `CREATE UNIQUE INDEX uq_registrations_confirmed_partner ON player_registrations (tournament_id,
+   partner_id) WHERE partner_confirmed = true` — the column ordering matters, since the corruption is
+   two rows both pointing `partner_id` at the same player, not two rows for the same player.
+2. **`confirmPartner` (`db.ts`) wrapped in one transaction** (`pool.connect()` +
+   `BEGIN`/`COMMIT`/`ROLLBACK`, the `createGroupsForDoubles` pattern). Previously it linked both
+   sides of a team in two un-transacted writes; once the index exists, a legitimate concurrent accept
+   landing between them left a one-sided confirmed row that permanently squatted the other player's
+   index slot. The transaction makes that impossible — either both writes land or neither does.
+3. **Both accept-time routes** (`PATCH .../confirm` and `POST .../partner-invites/accept`) now 409
+   `INVALID_STATE` when the accepting player already has a **confirmed** partner in that tournament —
+   a merely *pending* claim does not block, which would reintroduce first-inviter-wins. The Postgres
+   `23505` raised by a race that slips past the handler check is mapped to the same 409 body, not a
+   generic 500.
+
+**Test coverage:** `partner-confirm-atomicity.spec.ts` — the second-inviter race, the branch-C
+double-accept, the confirmed-only accept guard, and the Gil/Eli/Fay half-commit scenario (force the
+second write to fail and assert neither row changed, not just that the call rejected). Per
+CLAUDE.md §7 the integration harness collapses both connections used by `confirmPartner`'s two writes
+onto one, so the transaction-boundary test drives the race directly rather than relying on the
+harness to expose it.
+
+---
+
+## ISSUE-19 — No notification fires when a doubles team is formed, by any path 🟠 {#issue-19}
+
+**✅ Resolved** (2026-07-24, branch `fix-pairing`): split out of [ISSUE-17](UAT_ISSUES.md#issue-17)
+so ISSUE-16/17/20/21's team-formation and un-pairing outcomes would be observable in UAT without a
+DB probe. `postPersonalNotification` was called from exactly two places in the codebase, neither of
+them team formation — `confirmPartner` and the auto-pair loop in `createGroupsForDoubles` both
+linked/created rows and returned, silently.
+
+Two delivery shapes, matching whether the caller already holds a transaction:
+
+- **`confirmPartner` and `POST .../partner-invites/accept` are not in a transaction with anything
+  else**, so they notify inline, best-effort, from the route — the same
+  `notifyPartnerInvite(...).catch(...)` pattern already used for invite-sent notifications.
+- **Group creation notifies via a new `teams.formed` job queue**, enqueued in the route *after*
+  `createGroupsForDoubles` commits and the `group_stage_active` transition lands — payload is just
+  `{ tournamentId }`. The enqueue is wrapped best-effort (`try`/`catch` + `log.warn`, never thrown):
+  a Redis blip must not 500 an already-committed group creation, since the status guard means the
+  organizer cannot retry group creation a second time. A new processor
+  (`packages/api/src/workers/teams-formed-processor.ts`, the pattern of the other 13 processors)
+  reads committed `teams` and `player_registrations` state, distinguishes a chosen/confirmed pair
+  from an auto-pair by checking mutual confirmed `partner_id` on both rows (worded differently in the
+  notification body — "confirmed" vs. "paired"), and notifies every `unpaired` leftover too.
+  Registered in `worker-entrypoint.ts`'s `workers` array; `teams.formed` added to
+  `packages/worker/src/types.ts`'s `JobName`/`JobPayload`.
+
+  Posting from inside `createGroupsForDoubles`'s own transaction was considered and rejected:
+  `postPersonalNotification` opens its **own** `pool.connect()` + `BEGIN` (it cannot join a caller's
+  transaction), so its writes would commit independently of the surrounding transaction — surviving a
+  `ROLLBACK` and getting re-sent by `retryOnDeadlock`. Per CLAUDE.md §7 the integration test harness
+  collapses both onto one connection, so this failure mode is invisible in jest; the RED test for it
+  (case f) asserts on the queue directly — a group creation that throws deep inside the transaction
+  enqueues nothing — rather than relying on the harness to expose a rollback surviving.
+
+**One operational cost accepted, not introduced:** this repo's dev/e2e default is
+`JOB_QUEUE=bullmq` (CLAUDE.md §8), so any e2e spec that creates doubles groups now needs
+`npm run dev:worker --workspace=packages/api` running, same prerequisite as the assistant/coach
+specs. Noted in `scripts/e2e-setup.js`'s worker-check messaging.
+
+**Test coverage:** `teams-formed-notify.spec.ts` (6 integration tests — inline notify on confirm and
+on emailed-invite accept, the processor distinguishing chosen from auto-paired, a leftover notified
+as unpaired, and enqueue-only-after-commit in both directions). Frontend e2e:
+`partner-requests.spec.ts` gained two tests — the inline confirm-notify path (no worker required) and
+the queue-based auto-pair path (worker required); both verified passing against live servers
+(chromium). Docs: `docs/assistant-help.md` §9, `e2e-scenarios.md` (two new scenarios under "Partner
+Requests & Confirmation (Doubles)"; the `partner-requests.spec.ts` selection-map row count bumped
+3 → 5). The "leftover unpaired" notification wording is integration-tested only — no distinct e2e UI
+surface beyond the notifications page already covered by "Feature: Notifications Center".
+
