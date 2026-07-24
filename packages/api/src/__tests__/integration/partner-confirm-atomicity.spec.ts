@@ -186,7 +186,7 @@ describe('ISSUE-18 — confirmPartner atomicity + accept-time guard', () => {
     const xPlayer = await playerRepo.findOrCreatePlayerByEmail(partnerEmail, 'X', undefined, undefined, defaultAdultAttestation())
     const xReg = await playerRepo.createRegistration(xPlayer.id, tournament!.id)
     await pool.query(
-      `UPDATE public.player_registrations SET partner_id = $1, status = 'pending_partner_confirm' WHERE id = $2`,
+      `UPDATE public.player_registrations SET partner_id = $1 WHERE id = $2`,
       [somebody.id, xReg.id]
     )
 
@@ -240,7 +240,7 @@ describe('ISSUE-18 — confirmPartner atomicity + accept-time guard', () => {
     // directly (per ISSUE-18's own note) rather than mocked.
     await pool.query(
       `UPDATE public.player_registrations
-       SET partner_id = $1, partner_confirmed = false, status = 'pending_partner_confirm'
+       SET partner_id = $1, partner_confirmed = false
        WHERE id = $2`,
       [fay.id, eliReg.id]
     )

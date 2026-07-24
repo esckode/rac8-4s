@@ -10,9 +10,14 @@
  *       /:tournamentId/partner-invites/accept), so the 18+ attestation gate
  *       is satisfied by the partner themselves, not the requester.
  *
- * Either way the requester's own registration goes to pending_partner_confirm
- * until the partner accepts (PATCH /tournaments/registrations/:id/confirm for
- * A/B, or the accept endpoint for C).
+ * ISSUE-16 update: an invite writes only the REQUESTER's own row (partner_id
+ * or pending_partner_email — see db.ts) — it never mutates or auto-creates
+ * the invitee's registration. The invitee's row is created at accept time
+ * for every branch now, not just C. A claim never changes `status`: it
+ * stays 'registered' throughout, and `partner.status: 'pending_partner_confirm'`
+ * in responses below is a synthesized signal for the frontend, not a DB
+ * read. There is no capacity hold for a pending invite any more (reversed
+ * from ISSUE-15 sub-decision 1) — see the "no capacity hold" describe block.
  */
 import request from 'supertest'
 import { Express } from 'express'
@@ -119,8 +124,10 @@ describe('ISSUE-15 — doubles partner invite by email', () => {
 
       expect(emailAdapter.getSentTo(partnerEmail)).toHaveLength(0)
 
+      // ISSUE-16 requirement 1: an invite writes only the requester's own
+      // row — the partner's registration does not exist yet at all.
       const targetReg = await playerRepo.findRegistration(partnerPlayer.id, tournament!.id)
-      expect(targetReg?.status).toBe('pending_partner_confirm')
+      expect(targetReg).toBeUndefined()
 
       const notif = await pool.query(
         `SELECT gm.body, gm.metadata FROM messaging.group_messages gm
@@ -199,8 +206,10 @@ describe('ISSUE-15 — doubles partner invite by email', () => {
       const sent = emailAdapter.getSentTo(partnerEmail)
       expect(sent).toHaveLength(1)
 
+      // ISSUE-16 requirement 1: an invite writes only the requester's own
+      // row — the partner's registration does not exist yet at all.
       const targetReg = await playerRepo.findRegistration(partnerPlayer.id, tournament!.id)
-      expect(targetReg?.status).toBe('pending_partner_confirm')
+      expect(targetReg).toBeUndefined()
     })
   })
 
@@ -281,17 +290,29 @@ describe('ISSUE-15 — doubles partner invite by email', () => {
     })
   })
 
-  describe('capacity hold (sub-decision 1)', () => {
-    it('a pending brand-new invite blocks an unrelated solo registrant once max_players is reached', async () => {
+  describe('no capacity hold for a pending invite (ISSUE-16 reverses sub-decision 1)', () => {
+    // Reversed 2026-07-23: concurrent invites over-reserved (A and B both
+    // inviting X held two slots for one future person), and a hold never
+    // protected anyone's ability to play — only a preference to play with a
+    // specific person. Count people who will play, not people who might not
+    // exist.
+    it('a pending brand-new invite does NOT block an unrelated solo registrant, even at max_players', async () => {
       const tournament = await openDoubles({ maxPlayers: 2 })
-      const partnerEmail = `capacity-hold-${uid()}@test.local`
+      const partnerEmail = `capacity-${uid()}@test.local`
 
       const first = await registerRequester(tournament!.id, { partnerEmail })
       expect(first.status).toBe(202)
 
-      const blocked = await registerRequester(tournament!.id)
-      expect(blocked.status).toBe(409)
-      expect(blocked.body.code).toBe('TOURNAMENT_FULL')
+      // The pending invite holds no capacity — a second, unrelated solo
+      // registrant can still take the tournament's other real seat.
+      const second = await registerRequester(tournament!.id)
+      expect(second.status).toBe(202)
+
+      // The seat is genuinely gone now: two real registrations at
+      // max_players = 2.
+      const third = await registerRequester(tournament!.id)
+      expect(third.status).toBe(409)
+      expect(third.body.code).toBe('TOURNAMENT_FULL')
     })
   })
 
@@ -324,7 +345,10 @@ describe('ISSUE-15 — doubles partner invite by email', () => {
 
       // Simulate organizer-closed registration with a deadline that came
       // just after the invite was sent — the invite still predates it.
-      const deadlineAfterInvite = new Date(new Date(requesterReg!.registered_at).getTime() + 1)
+      // ISSUE-16: the claim's own timestamp is partner_claimed_at now, not
+      // registered_at (which is write-once, set at the earlier plain
+      // registration and no longer bumped when a claim is made).
+      const deadlineAfterInvite = new Date(new Date(requesterReg!.partner_claimed_at!).getTime() + 1)
       await pool.query(
         `UPDATE public.tournaments SET status = 'registration_closed', registration_deadline = $1 WHERE id = $2`,
         [deadlineAfterInvite, tournament!.id]
@@ -339,11 +363,15 @@ describe('ISSUE-15 — doubles partner invite by email', () => {
     })
   })
 
-  // Helper: age a tournament's registrations so the invite hold looks stale.
+  // Helper: age a tournament's registrations so a pending claim looks
+  // stale. ISSUE-16: claim expiry reads partner_claimed_at ?? registered_at
+  // (registered_at is write-once and no longer bumped when a claim is
+  // made), so both must be aged for this to have any effect.
   async function ageRegistrations(tournamentId: string, days: number) {
     await pool.query(
       `UPDATE public.player_registrations
-       SET registered_at = NOW() - ($2 * INTERVAL '1 day')
+       SET registered_at = NOW() - ($2 * INTERVAL '1 day'),
+           partner_claimed_at = NOW() - ($2 * INTERVAL '1 day')
        WHERE tournament_id = $1`,
       [tournamentId, days]
     )
@@ -440,19 +468,13 @@ describe('ISSUE-15 — doubles partner invite by email', () => {
     })
   })
 
-  describe('the capacity hold expires with its token (sub-decision 1)', () => {
-    // The hold must not outlive the invite token it reserves a slot for —
-    // otherwise an invite to a dead address squats a spot forever.
-    it('stops blocking new registrations once the invite token has expired', async () => {
-      const tournament = await openDoubles({ maxPlayers: 2 })
-      await registerRequester(tournament!.id, { partnerEmail: `dead-address-${uid()}@test.local` })
-
-      await ageRegistrations(tournament!.id, 30)
-
-      const res = await registerRequester(tournament!.id)
-      expect(res.status).toBe(202)
-    })
-
+  describe('the re-invite guard expires with the branch-C token (ISSUE-16, was sub-decision 1)', () => {
+    // ISSUE-16 removed the capacity hold entirely (see the "no capacity
+    // hold" describe block above) — a dead-address invite never squatted a
+    // real seat to begin with under the new model. What still needs to
+    // expire is the REQUESTER's own re-invite guard: a branch-C claim
+    // (pending_partner_email) can't be redeemed once its token has, so the
+    // requester must be free to try a different address.
     it('lets the requester re-invite once their own invite has expired', async () => {
       const tournament = await openDoubles()
       const requesterEmail = `req-${uid()}@test.local`
@@ -513,25 +535,10 @@ describe('ISSUE-15 — doubles partner invite by email', () => {
       expect(reg?.partner_id).toBeNull()
     })
 
-    it('frees the held capacity slot', async () => {
-      const tournament = await openDoubles({ maxPlayers: 2 })
-      const requesterEmail = `req-${uid()}@test.local`
-      await registerRequester(tournament!.id, { partnerEmail: `held-${uid()}@test.local`, email: requesterEmail })
-
-      const requesterPlayer = await playerRepo.findByEmail(requesterEmail)
-      const requesterReg = await playerRepo.findRegistration(requesterPlayer!.id, tournament!.id)
-      const token = await playerSession(requesterPlayer!.id, tournament!.id, requesterEmail)
-
-      expect((await registerRequester(tournament!.id)).status).toBe(409)
-
-      await request(app)
-        .delete(`/tournaments/registrations/${requesterReg!.id}/partner-invite`)
-        .set('Authorization', `Bearer ${token}`)
-
-      expect((await registerRequester(tournament!.id)).status).toBe(202)
-    })
-
-    it('releases an invited existing player back to solo', async () => {
+    it('does not touch the invited existing player, who never had a registration to begin with', async () => {
+      // ISSUE-16 requirement 8: cancelling releases only the requester's own
+      // row now — there is nothing on the partner's side to release,
+      // because requirement 1 means an invite never wrote to it.
       const tournament = await openDoubles()
       const { email: partnerEmail, player: partnerPlayer } = await createGuestPlayer()
       const requesterEmail = `req-${uid()}@test.local`
@@ -547,8 +554,7 @@ describe('ISSUE-15 — doubles partner invite by email', () => {
       expect(cancel.status).toBe(200)
 
       const partnerReg = await playerRepo.findRegistration(partnerPlayer.id, tournament!.id)
-      expect(partnerReg?.status).toBe('registered')
-      expect(partnerReg?.partner_id).toBeNull()
+      expect(partnerReg).toBeUndefined()
     })
 
     it('only the requester can cancel their invite', async () => {

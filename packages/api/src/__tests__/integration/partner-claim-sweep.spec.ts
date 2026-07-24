@@ -1,20 +1,31 @@
 /**
  * ISSUE-21 — An invite nobody answered becomes a real team at group creation.
  *
- * Branches A/B of POST /:tournamentId/register mirror-write a pending invite
- * onto BOTH the requester's and the invitee's registration (partner_id set
+ * Written before ISSUE-16 shipped, when branches A/B of
+ * POST /:tournamentId/register still mirror-wrote a pending invite onto
+ * BOTH the requester's and the invitee's registration (partner_id set
  * mutually, status = 'pending_partner_confirm'). createGroupsForDoubles's
  * mutuality check only required partner_id to point both ways — it never
  * checked partner_confirmed — so an invite nobody ever confirmed still
  * became a real team at group creation.
  *
- * Fix: sweep every unconfirmed claim (partner_id = NULL, status back to
- * 'registered') as the first statement inside createGroupsForDoubles's
- * transaction, before any pairing is planned, and tighten the mutuality
- * check to require partner_confirmed on both sides as a backstop. Swept
- * players re-enter the leftover pool and are notified by the existing
- * ISSUE-19 teams.formed pipeline like any other auto-paired or unpaired
- * player — no bespoke notification copy needed for this issue.
+ * Fix: sweep every unconfirmed claim (partner_id = NULL — and, post-
+ * ISSUE-16, pending_partner_email/partner_claimed_at too) as the first
+ * statement inside createGroupsForDoubles's transaction, before any
+ * pairing is planned, and tighten the mutuality check to require
+ * partner_confirmed on both sides as a backstop. Swept players re-enter
+ * the leftover pool and are notified by the existing ISSUE-19 teams.formed
+ * pipeline like any other auto-paired or unpaired player — no bespoke
+ * notification copy needed for this issue.
+ *
+ * ISSUE-16 update: an invite now writes only the requester's own row, so
+ * the "mutually linked but unconfirmed" scenario this issue was written
+ * against can no longer arise from an invite at all — ISSUE-16 requirement
+ * 1 is the durable closure. The sweep and the tightened check both remain:
+ * the sweep now also prevents a stale, unanswered OUTGOING claim from
+ * lingering on a registration that group creation auto-pairs with someone
+ * else (createTeam never touches player_registrations), and the tightened
+ * check is unchanged defense-in-depth.
  */
 import request from 'supertest'
 import { Express } from 'express'
@@ -127,10 +138,12 @@ describe('ISSUE-21 — unconfirmed claims are swept at group creation', () => {
     await playerRepo.createRegistration(x.id, tournamentId)
     const a = await inviteExisting(tournamentId, x.email)
 
-    // Sanity: the mirror-write happened and nobody confirmed it.
+    // Sanity: A's own outgoing claim on X exists and nobody confirmed it —
+    // ISSUE-16 requirement 6, a claim never changes status.
     const aRegBefore = (await playerRepo.findRegistration(a.id, tournamentId))!
-    expect(aRegBefore.status).toBe('pending_partner_confirm')
+    expect(aRegBefore.status).toBe('registered')
     expect(aRegBefore.partner_id).toBe(x.id)
+    expect(aRegBefore.partner_confirmed).toBe(false)
 
     const groupsRes = await createGroups(tournamentId, orgToken, false)
     expect(groupsRes.status).toBe(201)
@@ -148,8 +161,18 @@ describe('ISSUE-21 — unconfirmed claims are swept at group creation', () => {
     expect(xRegAfter.partner_id).toBeNull()
   })
 
-  // (b) — the backstop mutuality check, independent of the sweep.
-  it('a mutually linked but unconfirmed pair is not teamed even when the sweep does not touch it', async () => {
+  // (b) — the backstop mutuality check.
+  //
+  // Pre-ISSUE-16 this crafted a link the sweep's status filter deliberately
+  // couldn't reach, isolating the tightened mutuality check. Post-ISSUE-16
+  // the sweep filters only on partner_confirmed (no status filter left to
+  // dodge), so it now also clears this scenario — the sweep and the
+  // backstop cooperate rather than being independently provable here. Kept
+  // as a regression guard on the underlying invariant (a mutually-unconfirmed
+  // pair is never teamed), which is still worth a dedicated case: ISSUE-15's
+  // pre-existing partner-requests flow can produce exactly this shape
+  // (A requests X, X requests A back) without going through an email invite.
+  it('a mutually linked but unconfirmed pair is not teamed', async () => {
     const { tournamentId, orgToken } = await openDoublesTournament()
     const { e, f } = await confirmedPair(tournamentId)
     const a = await PlayerFactory.create(pool)
@@ -157,9 +180,7 @@ describe('ISSUE-21 — unconfirmed claims are swept at group creation', () => {
     await playerRepo.createRegistration(a.id, tournamentId)
     await playerRepo.createRegistration(x.id, tournamentId)
 
-    // Craft a mutual, unconfirmed link that does NOT sit in
-    // pending_partner_confirm, so the sweep's status filter can't be what
-    // stops it from being teamed — only the tightened mutuality check can.
+    // Craft a mutual, unconfirmed link directly.
     const aReg = (await playerRepo.findRegistration(a.id, tournamentId))!
     const xReg = (await playerRepo.findRegistration(x.id, tournamentId))!
     await pool.query(
@@ -268,11 +289,14 @@ describe('ISSUE-21 — unconfirmed claims are swept at group creation', () => {
     const groupsRes = await createGroups(tournamentId, orgToken, false)
     expect(groupsRes.status).toBeGreaterThanOrEqual(400)
 
+    // ISSUE-16: an invite writes only the requester's own row — A's claim
+    // on X is what the rollback must restore; X's row was never touched by
+    // the invite in the first place, so it stays a plain solo throughout.
     const aRegAfter = (await playerRepo.findRegistration(a.id, tournamentId))!
     const xRegAfter = (await playerRepo.findRegistration(x.id, tournamentId))!
-    expect(aRegAfter.status).toBe('pending_partner_confirm')
+    expect(aRegAfter.status).toBe('registered')
     expect(aRegAfter.partner_id).toBe(x.id)
-    expect(xRegAfter.status).toBe('pending_partner_confirm')
-    expect(xRegAfter.partner_id).toBe(a.id)
+    expect(xRegAfter.status).toBe('registered')
+    expect(xRegAfter.partner_id).toBeNull()
   })
 })
