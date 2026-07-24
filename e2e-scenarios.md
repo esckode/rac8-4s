@@ -848,14 +848,31 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 > email" scenarios, which contradicted the implemented auto-team model.
 >
 > **Backend:** ✅ implemented + integration-tested (`partner-requests.spec.ts`,
-> `group-stage-doubles.spec.ts`). **Frontend (Slice 2):** ⏳ partner-finder UI +
-> confirm page — see `assets/planning/phase5-partner-requests.md`.
+> `partner-invite-by-email.spec.ts`, `partner-claim-model.spec.ts`,
+> `partner-claim-sweep.spec.ts`, `group-stage-doubles.spec.ts`). **Frontend
+> (Slice 2):** ⏳ partner-finder UI + confirm page — see
+> `assets/planning/phase5-partner-requests.md`.
+>
+> **ISSUE-16 (2026-07-24):** an invite/request writes only the requester's own
+> row — never the invitee's — so multiple people can claim the same player
+> concurrently; whichever they accept becomes final and the rest 409 at accept
+> time. A player with their own outstanding *outgoing* claim remains available
+> to others (see the scenario below) — only a *confirmed* partner removes them
+> from the pool. There is no capacity hold for a pending invite.
 
 ### Scenario: Solo registrant views available partners (Doubles)
 - **Type:** Happy path
 - **Given** I am a solo registrant in a doubles tournament
 - **When** I open the partner finder
-- **Then** I should see the other solo (unpaired) registrants, excluding myself
+- **Then** I should see the other unconfirmed registrants, excluding myself
+
+### Scenario: A player with their own outgoing claim remains available to others (ISSUE-16)
+- **Type:** Happy path / consent
+- **Given** A has invited X and X hasn't responded yet
+- **When** a third player C opens the partner finder
+- **Then** A still appears as available to C — receiving an invite is unlimited; only being on a
+  *confirmed* team removes a player from the pool
+- **Backend:** ✅ integration-tested (`partner-claim-model.spec.ts`, case g)
 
 ### Scenario: Solo registrant sends a partnership request (Doubles)
 - **Type:** Happy path
@@ -868,6 +885,34 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 - **Given** someone has sent me a partnership request
 - **When** I open `/registrations/:registrationId/confirm` and confirm
 - **Then** both registrations become a confirmed team (status "registered")
+
+### Scenario: Two players invite the same target; whichever they accept wins (ISSUE-16)
+- **Type:** Happy path
+- **Given** A and B both invite the same player X by email (or already-registered player)
+- **When** X accepts A's invite
+- **Then** the A↔X team forms, X's later attempt to accept B's invite 409s, and B keeps a valid,
+  unconfirmed solo registration — free to invite someone else
+- **And** if B's invite was to a brand-new email (not yet a player), B is notified their invite is
+  no longer available once X accepts A's
+- **Backend:** ✅ integration-tested (`partner-claim-model.spec.ts`, cases a/b/i;
+  `partner-confirm-atomicity.spec.ts` covers the branch-C double-accept)
+
+### Scenario: A pending invite reserves no capacity (ISSUE-16)
+- **Type:** Validation
+- **Given** a tournament at `max_players` with only real registrations counted
+- **When** a solo registrant invites a not-yet-registered partner by email
+- **Then** the invite does not reserve a seat — a genuinely new solo registrant can still fill the
+  tournament's last real spot
+- **Backend:** ✅ integration-tested (`partner-claim-model.spec.ts` case e;
+  `partner-invite-by-email.spec.ts` "no capacity hold" block)
+
+### Scenario: Cancelling your own invite never touches someone else's claim on you (ISSUE-16)
+- **Type:** Validation
+- **Given** A has invited X, and X has independently invited a third player C
+- **When** X cancels their own invite to C
+- **Then** X's claim on C is cleared and A's claim on X is untouched — and the reverse (A cancels,
+  X's claim on C survives)
+- **Backend:** ✅ integration-tested (`partner-claim-model.spec.ts` case h)
 
 ### Scenario: Confirmed partnerships are honored at group creation (Doubles)
 - **Type:** Happy path

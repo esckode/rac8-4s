@@ -58,9 +58,17 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   they get a notification; otherwise they get an emailed invite link. Either way, your team isn't
   final until they accept. You'll both be notified as soon as your team is formed — whether you
   picked each other or the organizer paired you at group creation.
+- You can be invited by more than one person at once — whoever you accept is your team, and it
+  costs you nothing to be invited and never respond. Inviting someone doesn't reserve them or a
+  seat for them: if you invite a not-yet-registered player, their spot isn't held, so a real
+  registration can still fill the tournament while your invite is pending. You can only have one
+  outstanding invite of your own at a time per tournament, though — cancel it to invite someone
+  else.
+- If you accept an invite while you had your own outstanding invite to someone else, that invite
+  is automatically cancelled and the person you'd invited is told it's no longer available.
 - Sent an invite to the wrong address? Open the tournament and **cancel the invite** in the
-  partner section, then invite someone else. An invite nobody accepts expires by itself after
-  24 hours, which also frees the spot it was holding for your partner.
+  partner section, then invite someone else. A brand-new-email invite nobody accepts expires with
+  its link after 24 hours, after which you're free to invite a different address.
 - An invite that's still unanswered when the organizer makes groups is cleared automatically —
   you won't be teamed with someone who never confirmed. You'll re-enter the pool of solo
   registrants and be paired according to the organizer's auto-pair setting for the tournament,
