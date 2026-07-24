@@ -1166,3 +1166,43 @@ Requests & Confirmation (Doubles)"; the `partner-requests.spec.ts` selection-map
 3 → 5). The "leftover unpaired" notification wording is integration-tested only — no distinct e2e UI
 surface beyond the notifications page already covered by "Feature: Notifications Center".
 
+---
+
+## ISSUE-21 — An invite nobody answered becomes a real team at group creation 🔴 {#issue-21}
+
+**✅ Resolved** (2026-07-24, branch `fix-pairing`): raised while grilling [ISSUE-16](UAT_ISSUES.md#issue-16)
+— branches A/B of `POST /:tournamentId/register` mirror-write a pending invite onto **both** the
+requester's and the invitee's registration (`partner_id` set mutually, `status =
+'pending_partner_confirm'`), and `createGroupsForDoubles`'s mutuality check only required a mutual
+`partner_id` — it never checked `partner_confirmed`. An invite nobody ever opened still became a
+real team at group creation.
+
+Fixed with two changes inside `createGroupsForDoubles`'s existing transaction:
+
+1. **A sweep runs first, before any pairing is planned:** `UPDATE player_registrations SET
+   partner_id = NULL, status = 'registered' WHERE tournament_id = $1 AND partner_confirmed = false
+   AND status = 'pending_partner_confirm'`. Both sides of a mirror-written claim are cleared in one
+   statement (there being only one `player_registrations` row per player). The status filter
+   deliberately excludes `withdrawn`/`withdrawal_pending` rows, which can also have
+   `partner_confirmed = false` — those must not be silently reset to `registered`.
+2. **The mutuality check is tightened** to also require `partner_confirmed = true` on both sides
+   (`db.ts`'s doubles-pairing query now selects `partner_confirmed` and the pairing loop checks it),
+   as a backstop independent of the sweep — belt-and-suspenders against any future write that leaves
+   a mutual-but-unconfirmed link in place.
+
+Swept players re-enter the leftover pool exactly like an ordinary solo registrant and are notified
+by the existing [ISSUE-19](#issue-19) `teams.formed` pipeline (auto-paired or left-unpaired wording)
+— no bespoke "your invite lapsed" copy was needed, since the doc's own RED test list didn't require
+distinguishing that wording and the generic auto-pair/unpaired notification already tells the player
+their status changed.
+
+**Test coverage:** `partner-claim-sweep.spec.ts` (6 integration tests) — the headline regression (an
+unanswered invite is not honored as a team), the backstop mutuality check exercised independently of
+the sweep (a mutual link crafted with `status = 'registered'` so the sweep's own filter can't be
+what stops it), swept players landing in the leftover pool and getting auto-paired, a confirmed team
+surviving the sweep untouched, the ISSUE-15 sub-decision-3 deadline exception still working right up
+until group creation, and an aborted group creation (`teamIds.length < numGroups`) rolling the sweep
+back along with everything else. 3 of 6 failed before the fix: the stale claim was honored as a team
+instead of being cleared, and the abort case never fired because the stale claim silently supplied
+the one team needed to clear `teamIds.length < numGroups`.
+

@@ -35,7 +35,7 @@ full index: resolved rows link into the archive, open rows link to a section in 
 | [ISSUE-18](COMPLETED_UAT_ISSUES.md#issue-18) | ✅ Resolved | 🔴 | Confirming a partner has no accept-time guard, and `confirmPartner` is not atomic | api · data |
 | [ISSUE-19](COMPLETED_UAT_ISSUES.md#issue-19) | ✅ Resolved | 🟠 | No notification fires when a doubles team is formed, by any path | api |
 | [ISSUE-20](#issue-20) | 🔲 Open | 🟠 | Withdrawal never dissolves a team, and no query filters withdrawn registrations | api · data |
-| [ISSUE-21](#issue-21) | 🔲 Open | 🔴 | An invite nobody answered becomes a real team at group creation | api · data |
+| [ISSUE-21](COMPLETED_UAT_ISSUES.md#issue-21) | ✅ Resolved | 🔴 | An invite nobody answered becomes a real team at group creation | api · data |
 
 **Sequencing (doubles-pairing cluster).** ISSUE-18 and ISSUE-19 were split out of 16 and 17 on
 2026-07-23; ISSUE-20 and ISSUE-21 were raised the same day while grilling the split (see
@@ -119,7 +119,7 @@ came from questioning the analysis rather than from it.
 
 **🔲 Open** (raised 2026-07-23 while verifying ISSUE-15; owner decision below taken the same day.
 Re-scoped the same day: the accept-time guard split out to [ISSUE-18](COMPLETED_UAT_ISSUES.md#issue-18) and the
-group-creation sweep to [ISSUE-21](#issue-21). This issue **depends on both and assumes they are
+group-creation sweep to [ISSUE-21](COMPLETED_UAT_ISSUES.md#issue-21). This issue **depends on both and assumes they are
 already shipped**.)
 
 **Root problem: no single place decides who X's partner is, and an invite writes to X's row.**
@@ -189,7 +189,7 @@ and the branch-C expiry read `partner_claimed_at ?? registered_at`, so existing 
 
 ### Required behaviour
 
-> **Requirement (1) below also fixes the live defect behind [ISSUE-21](#issue-21)** — the mirror-
+> **Requirement (1) below also fixes the live defect behind [ISSUE-21](COMPLETED_UAT_ISSUES.md#issue-21)** — the mirror-
 > write is the only thing that produces a *mutually linked but unconfirmed* pair, which group
 > creation happily turns into a real team. That was never stated as a reason for (1) and is the
 > strongest one. 21 ships first and fixes it directly, so (1) becomes the durable closure rather
@@ -392,7 +392,7 @@ than the answer.
 - ~~**Store the invited email on the requester's row?**~~ **Yes — required, not a nicety.** It is
   the only representation a branch-C claim has once (6) stops using `status`. See "Schema" above.
 - ~~**Do branch A/B claims expire at all?**~~ **No timer.** A claim does not survive into team
-  formation — [ISSUE-21](#issue-21) sweeps every unconfirmed claim at group creation. Deliberately
+  formation — [ISSUE-21](COMPLETED_UAT_ISSUES.md#issue-21) sweeps every unconfirmed claim at group creation. Deliberately
   *not* at the registration deadline: `partnerConfirmWindowOpen` (`tournaments.ts:128-131`) keeps
   confirms open through `registration_closed`, so sweeping at the deadline would destroy ISSUE-15
   sub-decision 3. During registration the manual cancel route remains the exit.
@@ -460,7 +460,7 @@ the pattern is `resolveTournamentPlayer(authHeader, registration.tournament_id)`
 
 **🔲 Open** (raised 2026-07-23 while grilling ISSUE-16; owner decision below taken the same day.
 Re-scoped the same day: the "silently" half — notifying on team formation — split out to
-[ISSUE-19](COMPLETED_UAT_ISSUES.md#issue-19), and the leftover pool's definition to [ISSUE-21](#issue-21). This issue
+[ISSUE-19](COMPLETED_UAT_ISSUES.md#issue-19), and the leftover pool's definition to [ISSUE-21](COMPLETED_UAT_ISSUES.md#issue-21). This issue
 **depends on both and assumes they are already shipped**.)
 
 **Symptom:** a player registers alone for a doubles tournament. At group creation they are shuffled
@@ -529,7 +529,7 @@ possibly the night before the event.
    preview would naturally test `partner_confirmed = true` while group creation tests *mutuality*
    (`db.ts:907`), and those disagree on a one-sided confirmed row — leaving the organizer's only
    pre-close warning silent exactly when something is wrong. That divergence is closed at the source
-   instead: [ISSUE-21](#issue-21)'s sweep means "teamed" and "mutually confirmed" describe the same
+   instead: [ISSUE-21](COMPLETED_UAT_ISSUES.md#issue-21)'s sweep means "teamed" and "mutually confirmed" describe the same
    set, and [ISSUE-18](COMPLETED_UAT_ISSUES.md#issue-18)'s `confirmPartner` transaction removes the only remaining way to
    produce a one-sided row. With both shipped, re-deriving is safe and avoids restructuring a
    130-line transactional method (CLAUDE.md §3).
@@ -736,112 +736,6 @@ at all: the two predicates are code, and the dissolve is behaviour. Nothing to m
 
 ---
 
-## ISSUE-21 — An invite nobody answered becomes a real team at group creation 🔴 {#issue-21}
-
-**🔲 Open** (raised 2026-07-23 while grilling ISSUE-16 — specifically by asking why a partner who
-never opened their email wasn't simply cleared. **Live today**, reachable without any code from this
-cluster.)
-
-**Symptom:** Eli invites Fay on Wednesday. Fay never opens the email — no click, no confirm,
-`partner_confirmed = false` on both rows. On Friday, group creation puts them on a doubles team
-together.
-
-**Verified root cause — two shipped behaviours that combine:**
-
-1. **Branches A/B mirror-write the pairing at invite time** (`tournaments.ts:1346-1351`), so Eli and
-   Fay are mutually linked before Fay has done anything.
-2. **Group creation never checks `partner_confirmed`.** It builds its pairing map from `partner_id`
-   alone (`db.ts:896-900` — the column is not even selected) and teams any mutual pair
-   (`db.ts:907`).
-
-`POST /:id/partner-requests` is **not** affected: it writes only the requester's row, so it never
-produces a mutual link. This is specifically the two branches ISSUE-16 is removing.
-
-**Why this is 🔴 and belongs before the rework:** it is a consent defect, and a sharper one than
-[ISSUE-17](#issue-17)'s. Ignoring an invite is a *stronger* signal of non-consent than never having
-been asked — and today it produces a team anyway. ISSUE-16 requirement (1) removes the population
-path as a side effect, but 16 ships fifth.
-
-### Required behaviour
-
-1. **Sweep unconfirmed claims at group creation**, as the first statement inside the existing
-   transaction, before any planning:
-
-   ```sql
-   UPDATE public.player_registrations
-      SET partner_id = NULL, pending_partner_email = NULL, partner_claimed_at = NULL
-    WHERE tournament_id = $1 AND partner_confirmed = false
-   ```
-
-   (The two extra columns land with [ISSUE-16](#issue-16); until then it is `partner_id` and
-   `status`. Before 16 the sweep clears **both** rows of a mirror-written claim; after requirement
-   (1) there is only ever one row to clear.)
-
-   Eli and Fay then enter the leftover pool as genuinely unpaired players, and each is auto-paired
-   or not **according to their own consent flag** ([ISSUE-17](#issue-17)) rather than according to a
-   stale invite.
-
-2. **Tighten the mutuality check** to require `partner_confirmed` on both sides — select the column
-   at `db.ts:896` and test it at `:907`. Two lines. The sweep makes it redundant in the normal case;
-   it is the backstop that stops any future write of an unconfirmed link from silently becoming a
-   team.
-
-3. **Notify the swept claimant** ([ISSUE-19](COMPLETED_UAT_ISSUES.md#issue-19), shipped by now): *"Fay didn't respond to
-   your invite — you've been paired with Gil"* / *"…you're not on a team."* Being silently cleared
-   and re-paired is the ISSUE-17 complaint in miniature.
-
-### Why group creation, and not the deadline or a TTL
-
-**Group creation is the correct moment and the deadline is not.** `partnerConfirmWindowOpen`
-(`tournaments.ts:128-131`) deliberately keeps confirms open through `registration_closed`, so Fay
-may legitimately accept after the deadline — ISSUE-15 sub-decision 3. Sweeping at the deadline would
-destroy that. Sweeping at group creation gives her every moment right up until the organizer
-actually forms teams, then resolves the state.
-
-**The hook is universal.** Knockout requires `group_stage_complete` (`tournaments.ts:922-929`), so
-`createGroupsForDoubles` is mandatory for any doubles tournament that reaches play — there is no
-skip-groups path where a claim could survive into a bracket.
-
-**No TTL sweep, and the lifecycle sweep does not help.** A TTL would need a scheduled job for a core
-flow; the manual cancel route already covers the impatient inviter. And the tournament-lifecycle
-sweep on the untriaged list below is **orthogonal** — it would close *registration*, not trigger
-*group creation*, so it would not resolve a single claim. The residual cost is that in a tournament
-the organizer abandons, claims persist indefinitely; that is contained by the one-outgoing-claim cap
-being **per tournament** (ISSUE-16 §6), so a stale claim never blocks a player elsewhere.
-
-### Do NOT
-
-- **Do not sweep at the registration deadline**, and **if a tournament-lifecycle sweep is ever
-  built, it must not clear partner claims.** That is exactly the "obvious improvement" someone would
-  add while writing it, and it silently destroys ISSUE-15 sub-decision 3. Noted on the untriaged
-  entry too, so it is found from either direction.
-- **Do not skip (2) because (1) makes it redundant.** The sweep fixes the instance; the check fixes
-  the class.
-- **Do not sweep confirmed claims.** A confirmed team broken by withdrawal is [ISSUE-20](#issue-20);
-  a one-sided confirmed row is [ISSUE-18](COMPLETED_UAT_ISSUES.md#issue-18) §4. This sweep touches
-  `partner_confirmed = false` only.
-
-### Fix (TDD §4)
-
-- **[RED]** Integration: (a) **A invites X by email, X never responds, groups are created → A and X
-  are NOT teamed with each other** (the headline regression, failing today); (b) a mutually linked
-  but unconfirmed pair is not teamed even with the sweep disabled — the requirement-(2) backstop;
-  (c) the swept players land in the leftover pool and are auto-paired per their own consent;
-  (d) confirmed teams are untouched by the sweep; (e) X can still confirm after the deadline, right
-  up until group creation — the sub-decision-3 regression; (f) group creation that aborts
-  (`teamIds < numGroups`) rolls the sweep back with everything else.
-- **Docs:** `docs/assistant-help.md` (§9 — "an invite nobody accepts is cleared when the organizer
-  makes groups; you'll be paired by your own preference instead"), `e2e-scenarios.md` scenario +
-  selection-map row (§8).
-
-### Verify
-
-- Send an invite, never accept it, create groups → the two are not teamed, and the inviter is told.
-- Accept an invite after the registration deadline but before group creation → still works.
-- A confirmed team formed a week earlier survives group creation untouched.
-
----
-
 ## Not yet triaged / follow-ups
 
 - Any routes ISSUE-1's audit turns up with the same strict-auth-where-dual-intended gap
@@ -873,7 +767,7 @@ being **per tournament** (ISSUE-16 §6), so a stale claim never blocks a player 
     That looks like an obvious thing to fold in and it silently destroys ISSUE-15 sub-decision 3 —
     a partner's right to accept, during `registration_closed`, an invite that was sent before the
     deadline (`partnerConfirmWindowOpen`, `tournaments.ts:128-131`). Claims are swept at group
-    creation instead; see [ISSUE-21](#issue-21).
+    creation instead; see [ISSUE-21](COMPLETED_UAT_ISSUES.md#issue-21).
   - It is **orthogonal to ISSUE-21**, not a prerequisite: closing registration does not trigger
     group creation, so a lifecycle sweep would not resolve any claim. ISSUE-21 does not wait on it.
 - **The full e2e sweep (§11's merge gate) cannot pass as configured** — observed 2026-07-23:
