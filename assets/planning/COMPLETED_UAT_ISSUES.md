@@ -1087,6 +1087,74 @@ only path — it can't reach a partner who hasn't registered yet.
 
 ---
 
+## Doubles-pairing cluster (ISSUE-16 – ISSUE-21) {#doubles-pairing-cluster}
+
+**All six resolved 2026-07-24, branch `fix-pairing`.** ISSUE-18 and ISSUE-19 were split out of
+ISSUE-16 and ISSUE-17 on 2026-07-23 as independently-shippable prerequisites; ISSUE-20 and ISSUE-21
+were raised the same day while grilling the split. Shipped in this order — each was small,
+independently correct, and correct under both the pairing model then in place and the one that
+replaced it, so none waited on the others beyond what's noted:
+
+1. **ISSUE-18** — accept-time guard, partial unique index, and `confirmPartner` atomicity. 🔴 data
+   corruption reachable from shipped UI. No dependencies.
+2. **ISSUE-19** — notify on team formation, via the job queue. Made everything after it observable
+   without a DB probe.
+3. **ISSUE-21** — unconfirmed claims resolved at group creation. 🔴 live consent defect. Shipped
+   after 19 so a cleared inviter is *told* their invite lapsed rather than silently re-paired.
+4. **ISSUE-20** — dissolve a team on withdrawal; gave the codebase an "is this registration active"
+   predicate it had lacked entirely.
+5. **ISSUE-16** — the invite-is-a-claim rework. Depended on 18 (the accept-time guard) and 21 (the
+   sweep).
+6. **ISSUE-17** — the per-registration consent flag. Depended on 19 (formation notifications) and 21
+   (the leftover pool's definition).
+
+**No live data — migrations were schema-only.** The webapp was not deployed and there was no live
+environment (per the IaC teardown) when this cluster shipped, so every backfill/duplicate-cleanup
+step some of these issues originally called for was moot and cut. Migrations `058`–`060` only add
+columns, recreate the `status` CHECK constraint, and add the partial unique index — against empty
+tables. `058_confirmed_partner_unique_index.sql` (ISSUE-18),
+`059_partner_claim_columns.sql` (ISSUE-16, adds `pending_partner_email`/`partner_claimed_at` and
+drops `pending_partner_confirm` from the status CHECK), `060_auto_pair_consent.sql` (ISSUE-17).
+ISSUE-20 and ISSUE-21 added no columns.
+
+**Grill outcomes (2026-07-23) — decisions taken while stress-testing this cluster, before any of it
+shipped:**
+
+| # | Decision | Landed in |
+|---|---|---|
+| 1 | Branch-C claims move to a `pending_partner_email` column; `pending_partner_confirm` is **deleted** from the status enum | 16 |
+| 2 | Add `partner_claimed_at`; `registered_at` becomes immutable | 16 |
+| 3 | Withdrawal dissolves a confirmed team | 20 |
+| 4 | Two named predicates for "counts for capacity" vs "plays in the bracket" | 20 |
+| 5 | **One outgoing claim per player per tournament** — settled by the row model, not policy | 16 |
+| 6 | Voiding matches *both* claim forms, and losers are notified (was "optional") | 16 |
+| 7 | Formation notifications are **queued**, not posted inline — payload `{ tournamentId }` | 19 |
+| 8 | Unconfirmed claims are swept **at group creation**, not on a TTL and not at the deadline | 21 |
+| 9 | Sweep + tightened mutuality check ship together as their own issue | 21 |
+| 10 | `confirmPartner` atomicity belongs with the index that exposes it | 18 |
+
+**Four corrections to earlier drafts, kept visible so they aren't re-introduced elsewhere:**
+
+- **ISSUE-19's stated reason was backwards.** It claimed a notification failure inside the group-
+  creation transaction would roll back real teams. `postPersonalNotification` calls
+  `this.pool.connect()` and opens its **own** transaction (`group-message-repository.ts:369`), so it
+  never joins the caller's. The real failure is the opposite: its writes commit independently, so
+  they *survive* a rollback and are *re-sent* by `retryOnDeadlock`. Integration tests could not catch
+  this — per CLAUDE.md §7 the harness collapses both onto one connection and it looks atomic.
+- **The job queue was the cheap option, not the expensive one.** An earlier draft called it "a new
+  table, a new worker path, a new failure mode." `JobQueue` is a typed generic interface
+  (`packages/worker/src/job-queue.ts:5-14`) with retry, DLQ and jobId dedupe, and there were already
+  13 processors in `packages/api/src/workers/` before this cluster added a 14th.
+- **No return-shape change was needed.** An earlier draft had `createGroupsForDoubles` return the
+  formed teams so the route could notify. With a queue the payload is `{ tournamentId }` and the
+  processor reads committed state — the teams are in the database, which is what committing them
+  was for.
+- **`confirmPartner` atomicity moved twice before landing.** It was not a pre-existing defect and not
+  one ISSUE-16 introduced: ISSUE-18's index is what made the two-statement write half-committable.
+  See the worked Gil/Eli/Fay race in the ISSUE-18 entry above.
+
+---
+
 ## ISSUE-18 — Confirming a partner has no accept-time guard, and `confirmPartner` is not atomic 🔴 {#issue-18}
 
 **✅ Resolved** (2026-07-24, branch `fix-pairing`): split out of
@@ -1338,4 +1406,65 @@ earlier manual and e2e runs, which the new constraint then rejects — exactly t
 cluster note's premise for a deployed environment, but locally the fix is a one-time
 `UPDATE player_registrations SET status = 'registered' WHERE status = 'pending_partner_confirm'`
 before the migration runs, not a code change.
+
+---
+
+## ISSUE-17 — Solo doubles registrants are auto-paired with a stranger without consent 🟠 {#issue-17}
+
+**✅ Resolved** (2026-07-24, branch `fix-pairing`): raised while grilling ISSUE-16 — solo
+registrants left over at group creation were shuffled into a partnership with a stranger by default
+(`pairUnpaired` defaults true), with no way to opt out. **Owner decision: prospective consent,
+auto-pairing retained.** Consent is collected at registration, not at pairing time — registration is
+closed by group creation, so a player who declines then has no path to find a partner and the only
+outcome would be exclusion, not consent. Removing auto-pairing entirely was considered and rejected:
+the social-mixer format's per-round re-pairing can't lose it, organizers would be stranded by
+`createGroupsForDoubles`'s `teamIds.length < numGroups` guard, and it would break the capacity model
+(solo registrants only correctly count toward `max_players` because they get auto-paired). Depended
+on [ISSUE-19](#issue-19) (formation notifications) and [ISSUE-21](#issue-21) (the leftover pool's
+definition), both shipped first.
+
+**Migration `060_auto_pair_consent.sql`** adds `auto_pair_consent BOOLEAN DEFAULT true` — default on
+preserves today's behaviour for every existing row and every client that omits the field.
+
+**Wiring:**
+- `createRegistration` takes a third `autoPairConsent` arg (default `true`). Only the register
+  route's solo-registration branch reads it from the request body
+  (`req.body.autoPairConsent !== false`) — every other call site (the auto-create when inviting a
+  partner, `partner-invites/accept`, `confirmPartner`'s new create) keeps the default, since only
+  the person registering chooses their own consent, never an inviter or a confirm acting on their
+  behalf.
+- `createGroupsForDoubles`'s auto-pair loop filters leftovers to consenting players before
+  shuffling; the organizer's `pairUnpaired` became a ceiling on top of individual consent, not the
+  sole decision. Everyone still unteamed afterward — opted out, the odd one out among consenting
+  leftovers, or every leftover when `pairUnpaired` is false — is marked `unpaired` through the same
+  single code path, so the "left unpaired" notification (ISSUE-19's `teams.formed` processor)
+  reaches them with **no new notification code needed** — requirement 3 fell out of requirement 2
+  for free.
+- New `getPairingPreview` (organizer visibility before closing registration, `GET
+  /:tournamentId/pairing-preview?pairUnpaired=true`) deliberately **re-derives leftovers/teamed
+  independently from `createGroupsForDoubles`** rather than sharing code — decided safe once
+  ISSUE-18's `confirmPartner` transaction and ISSUE-21's sweep both shipped, since "teamed" and
+  "mutually confirmed" now describe the same set. A hand-written preview sharing code with group
+  creation would give the organizer's only pre-close warning nothing to independently disagree
+  about. `unpairedCount` handles the parity trap: `optedOut.length + consentingLeftovers.length % 2`
+  when `pairUnpaired` is true, **not** `leftovers.length % 2` over everyone — that formula is only
+  wrong once someone opts out, so it silently passes every test written before the flag has
+  adoption.
+- Frontend: `TournamentBrowse.tsx`'s doubles registration form (both the one-click and guest paths)
+  gained a checkbox defaulting checked, sending `autoPairConsent` in the register body.
+
+**Test coverage:** `auto-pair-consent.spec.ts` (9 integration tests — opt-out excluded from
+auto-pairing regardless of the organizer's `pairUnpaired`, opt-in and default-absent behaving as
+today, the left-unpaired notification, and five organizer-preview cases including the parity trap
+and independence from group creation). Frontend: `TournamentBrowseDetails.spec.tsx` (existing suite,
+unaffected) plus a new e2e scenario in `tournament-discovery-registration.spec.ts` verifying the
+checkbox defaults checked and that unchecking it shows up in the organizer's preview — verified
+live against real servers. That e2e pass also surfaced (and fixed) two pre-existing, unrelated bugs
+in the same spec file: a `text=${regex}|text=success` locator that produces invalid selector syntax
+whenever the interpolated value is a `RegExp` (as `UI_TEXT.SUCCESS.REGISTERED` is), and that pattern
+not actually matching this page's real success copy ("Check your email to confirm.") regardless.
+
+**This closes the doubles-pairing cluster** — see
+[the cluster summary](#doubles-pairing-cluster) above for the full ISSUE-16–21 ship order and grill
+outcomes.
 
