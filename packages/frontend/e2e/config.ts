@@ -270,6 +270,7 @@ export const SELECTORS = {
   REQUEST_PARTNER_BUTTON: '[data-testid="request-partner-button"]',
   PARTNER_ERROR: '[data-testid="partner-error"]',
   CONFIRM_PARTNERSHIP_BUTTON: '[data-testid="confirm-partnership-button"]',
+  AUTO_PAIR_CONSENT_CHECKBOX: '[data-testid="auto-pair-consent-checkbox"]',
 
   // Age gate (18+ attestation), shown on first registration from a device
   DOB_INPUT: '[data-testid="dob-input"]',

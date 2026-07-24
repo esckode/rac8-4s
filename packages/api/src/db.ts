@@ -2,7 +2,7 @@ import { Pool, PoolClient } from 'pg'
 import { randomInt } from 'crypto'
 import { NotFoundError, DeadlockError, CheckConstraintError, UniqueConstraintError, ConstraintViolationError } from './db/errors'
 import { getLogger } from './logger'
-import { COUNTS_FOR_CAPACITY } from './registration-status'
+import { COUNTS_FOR_CAPACITY, PLAYS_IN_BRACKET } from './registration-status'
 
 const log = getLogger('db')
 
@@ -119,6 +119,7 @@ export interface RegistrationRow {
   status: 'registered' | 'withdrawn' | 'withdrawal_pending' | 'unpaired'
   withdrawal_requested_at?: string
   confirmed_at?: string
+  auto_pair_consent: boolean
 }
 
 export interface GroupRow {
@@ -494,14 +495,18 @@ export class PlayerRepository {
     return { ...row, share_contact: !!row.share_contact }
   }
 
-  async createRegistration(playerId: string, tournamentId: string): Promise<RegistrationRow> {
+  // ISSUE-17: autoPairConsent defaults true so every caller except the
+  // registrant's own solo registration (the only one where it's the
+  // player's own choice, not something an inviter or confirm decides on
+  // their behalf) can keep passing two args.
+  async createRegistration(playerId: string, tournamentId: string, autoPairConsent = true): Promise<RegistrationRow> {
     const id = `reg_${Date.now()}_${Math.random().toString(36).slice(2)}`
     const now = new Date().toISOString()
 
     await this.pool.query(
-      `INSERT INTO public.player_registrations (id, player_id, tournament_id, registered_at)
-       VALUES ($1, $2, $3, $4)`,
-      [id, playerId, tournamentId, now]
+      `INSERT INTO public.player_registrations (id, player_id, tournament_id, registered_at, auto_pair_consent)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, playerId, tournamentId, now, autoPairConsent]
     )
 
     const registration = await this.findRegistration(playerId, tournamentId)
@@ -1049,15 +1054,17 @@ export class GroupRepository {
 
         // 1) Honor confirmed partnerships (mutual partner_id) first.
         const regResult = await client.query(
-          `SELECT player_id, partner_id, partner_confirmed FROM public.player_registrations
+          `SELECT player_id, partner_id, partner_confirmed, auto_pair_consent FROM public.player_registrations
            WHERE tournament_id = $1 AND player_id = ANY($2::text[])`,
           [tournamentId, playerIds]
         )
         const partnerOf = new Map<string, string | null>()
         const confirmedOf = new Map<string, boolean>()
+        const consentOf = new Map<string, boolean>()
         for (const r of regResult.rows as any[]) {
           partnerOf.set(r.player_id, r.partner_id || null)
           confirmedOf.set(r.player_id, !!r.partner_confirmed)
+          consentOf.set(r.player_id, r.auto_pair_consent !== false)
         }
 
         // ISSUE-21 requirement (2): require partner_confirmed on both sides,
@@ -1078,21 +1085,23 @@ export class GroupRepository {
           }
         }
 
-        // 2) Handle solo registrants: auto-pair (default) or drop as 'unpaired'.
+        // 2) Handle solo registrants: auto-pair consenting leftovers (unless
+        // the organizer opted out entirely), drop the rest as 'unpaired'.
+        // ISSUE-17: the organizer's pairUnpaired is a ceiling now, not the
+        // decision — a player who opted out is excluded regardless of it.
         const leftovers = playerIds.filter(p => !teamed.has(p))
         if (pairUnpaired) {
-          const shuffled = [...leftovers].sort(() => Math.random() - 0.5)
+          const consenting = leftovers.filter(p => consentOf.get(p) !== false)
+          const shuffled = [...consenting].sort(() => Math.random() - 0.5)
           for (let i = 0; i < shuffled.length - 1; i += 2) {
             await createTeam(shuffled[i], shuffled[i + 1])
           }
-          // An odd one out can't be teamed — mark them unpaired rather than drop silently.
-          for (const p of playerIds.filter(x => !teamed.has(x))) {
-            await markUnpaired(p)
-          }
-        } else {
-          for (const p of leftovers) {
-            await markUnpaired(p)
-          }
+        }
+        // Everyone still unteamed here — opted out, the odd one out among
+        // consenting leftovers, or every leftover when pairUnpaired is
+        // false — is marked unpaired rather than dropped silently.
+        for (const p of playerIds.filter(x => !teamed.has(x))) {
+          await markUnpaired(p)
         }
 
         if (teamIds.length < numGroups) {
@@ -1151,6 +1160,74 @@ export class GroupRepository {
         client.release()
       }
     })
+  }
+
+  // ISSUE-17 requirement 4: organizer visibility before closing
+  // registration. Deliberately re-derives independently from
+  // createGroupsForDoubles rather than sharing code — with ISSUE-18's
+  // confirmPartner transaction and ISSUE-21's sweep both shipped, "teamed"
+  // and "mutually confirmed" describe the same set, so re-deriving is safe
+  // and avoids restructuring a 150-line transactional method.
+  //
+  // Population is PLAYS_IN_BRACKET. Leftovers = that population not in a
+  // confirmed mutual pair. unpairedCount is the parity trap: it's
+  // optedOut.length + (consentingLeftovers.length % 2) when pairUnpaired is
+  // true, NOT leftovers.length % 2 over everyone — that's only wrong once
+  // someone opts out, so it passes every test written before the flag has
+  // adoption. With pairUnpaired false, every leftover is unpaired.
+  async getPairingPreview(
+    tournamentId: string,
+    pairUnpaired: boolean
+  ): Promise<{ unpairedCount: number; optedOut: { playerId: string; name: string }[] }> {
+    const result = await this.pool.query(
+      `SELECT pr.player_id, pr.partner_id, pr.partner_confirmed, pr.auto_pair_consent, p.name
+       FROM public.player_registrations pr
+       JOIN public.players p ON p.id = pr.player_id
+       WHERE pr.tournament_id = $1 AND pr.${PLAYS_IN_BRACKET}`,
+      [tournamentId]
+    )
+    const rows = result.rows as {
+      player_id: string
+      partner_id: string | null
+      partner_confirmed: boolean
+      auto_pair_consent: boolean
+      name: string
+    }[]
+
+    const partnerOf = new Map<string, string | null>()
+    const confirmedOf = new Map<string, boolean>()
+    for (const r of rows) {
+      partnerOf.set(r.player_id, r.partner_id)
+      confirmedOf.set(r.player_id, !!r.partner_confirmed)
+    }
+
+    const teamed = new Set<string>()
+    for (const r of rows) {
+      if (teamed.has(r.player_id)) continue
+      const partner = partnerOf.get(r.player_id)
+      if (
+        partner &&
+        !teamed.has(partner) &&
+        partnerOf.get(partner) === r.player_id &&
+        confirmedOf.get(r.player_id) &&
+        confirmedOf.get(partner)
+      ) {
+        teamed.add(r.player_id)
+        teamed.add(partner)
+      }
+    }
+
+    const leftovers = rows.filter(r => !teamed.has(r.player_id))
+    const optedOut = leftovers
+      .filter(r => !r.auto_pair_consent)
+      .map(r => ({ playerId: r.player_id, name: r.name }))
+    const consentingCount = leftovers.length - optedOut.length
+
+    const unpairedCount = pairUnpaired
+      ? optedOut.length + (consentingCount % 2)
+      : leftovers.length
+
+    return { unpairedCount, optedOut }
   }
 
   async findGroupsByTournament(tournamentId: string): Promise<GroupRow[]> {

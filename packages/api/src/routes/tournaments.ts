@@ -327,6 +327,33 @@ export default function tournamentsRouter(deps: AppDependencies) {
     }
   })
 
+  // GET /:tournamentId/pairing-preview - ISSUE-17: organizer visibility into
+  // how many doubles registrants won't be teamed (opted out of auto-pairing,
+  // or opted in with no match to pair with) before registration closes,
+  // while it's still fixable. Registered before the parameterized /:id
+  // routes below (CLAUDE.md §10).
+  router.get('/:tournamentId/pairing-preview', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = await requireOrganizerAuth(req.headers.authorization, deps.jwtConfig, deps.tokenStore)
+      const tournamentId = req.params.tournamentId as string
+
+      const tournament = await repo.findById(tournamentId)
+      if (!tournament) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+
+      // Not knowable at preview time — it's a request-body param on group
+      // creation, never stored. Default true rather than silently assume.
+      const pairUnpaired = req.query.pairUnpaired !== 'false'
+
+      const preview = await groupRepo.getPairingPreview(tournamentId, pairUnpaired)
+      res.json(preview)
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // POST /:id/groups - create and distribute groups (organizer)
   router.post('/:id/groups', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1487,8 +1514,13 @@ export default function tournamentsRouter(deps: AppDependencies) {
         partnerStatus = 'pending_partner_confirm'
       } else if (!existingReg) {
         // Single registration (not doubles, or doubles without a partner invite)
+        // ISSUE-17: only the registrant's own solo registration reads
+        // autoPairConsent from the request — only the person registering
+        // chooses their own consent, never an inviter or confirm on their
+        // behalf (those call sites pass the createRegistration default).
+        const autoPairConsent = req.body.autoPairConsent !== false
         log.debug('registration.creating', { tournamentId, playerId: player.id, format: tournament.match_format })
-        const reg = await playerRepo.createRegistration(player.id, tournamentId)
+        const reg = await playerRepo.createRegistration(player.id, tournamentId, autoPairConsent)
         log.debug('registration.created.db', { tournamentId, playerId: player.id, registrationId: reg.id })
         log.info('registration.created', { tournamentId, playerId: player.id, format: tournament.match_format })
       }

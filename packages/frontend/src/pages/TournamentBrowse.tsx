@@ -39,6 +39,7 @@ export const TournamentBrowse: React.FC = () => {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [partnerEmail, setPartnerEmail] = useState('')
+  const [autoPairConsent, setAutoPairConsent] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [successEmail, setSuccessEmail] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -83,6 +84,9 @@ export const TournamentBrowse: React.FC = () => {
       if (attestation) body.dob_attestation = attestation
       if (tournament?.matchFormat === 'doubles' && partnerEmail.trim()) {
         body.partnerEmail = partnerEmail.trim()
+      }
+      if (tournament?.matchFormat === 'doubles') {
+        body.autoPairConsent = autoPairConsent
       }
       const res = await fetch(`/tournaments/${tournamentId}/register`, {
         method: 'POST',
@@ -243,6 +247,15 @@ export const TournamentBrowse: React.FC = () => {
                       onChange={(e) => setPartnerEmail(e.target.value)}
                       style={{ width: '100%', padding: 8, marginTop: 4, border: '1px solid var(--border-soft)', borderRadius: 8, boxSizing: 'border-box' }}
                     />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--ink-700)' }}>
+                      <input
+                        type="checkbox"
+                        data-testid="auto-pair-consent-checkbox"
+                        checked={autoPairConsent}
+                        onChange={(e) => setAutoPairConsent(e.target.checked)}
+                      />
+                      If nobody joins my team, pair me up with another solo player
+                    </label>
                   </div>
                 )}
 
@@ -302,6 +315,15 @@ export const TournamentBrowse: React.FC = () => {
                         onChange={(e) => setPartnerEmail(e.target.value)}
                         style={{ width: '100%', padding: 8, marginTop: 4, border: '1px solid var(--border-soft)', borderRadius: 8, boxSizing: 'border-box' }}
                       />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--ink-700)' }}>
+                        <input
+                          type="checkbox"
+                          data-testid="auto-pair-consent-checkbox"
+                          checked={autoPairConsent}
+                          onChange={(e) => setAutoPairConsent(e.target.checked)}
+                        />
+                        If nobody joins my team, pair me up with another solo player
+                      </label>
                     </div>
                   )}
 
