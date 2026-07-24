@@ -56,7 +56,8 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
 - Registering for a **doubles** tournament lets you invite a partner by email. Your registration
   shows as **awaiting acceptance** until they confirm. If your partner already has an account,
   they get a notification; otherwise they get an emailed invite link. Either way, your team isn't
-  final until they accept.
+  final until they accept. You'll both be notified as soon as your team is formed — whether you
+  picked each other or the organizer paired you at group creation.
 - Sent an invite to the wrong address? Open the tournament and **cancel the invite** in the
   partner section, then invite someone else. An invite nobody accepts expires by itself after
   24 hours, which also frees the spot it was holding for your partner.

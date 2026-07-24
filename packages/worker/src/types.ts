@@ -8,6 +8,7 @@ export type JobName =
   | 'messaging.notify'
   | 'assistant.reply'
   | 'coach.turn'
+  | 'teams.formed'
 
 export type JobPayload = {
   'standings.recalculate': { tournamentId: string; groupId: string; conversationId?: string }
@@ -31,6 +32,7 @@ export type JobPayload = {
     body: string
     timezone?: string
   }
+  'teams.formed': { tournamentId: string }
 }
 
 export interface JobOptions {

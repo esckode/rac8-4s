@@ -186,7 +186,7 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 | **Group Stage - Singles (Score submission)** | 4 | `group-stage-singles-score.spec.ts` | `npx playwright test group-stage-singles-score` |
 | **Group Stage - Doubles** | 4 | `group-stage-doubles.spec.ts` | `npx playwright test group-stage-doubles.spec` |
 | **Group Stage - Doubles (Score submission)** | 2 | `group-stage-doubles-score.spec.ts` | `npx playwright test group-stage-doubles-score` |
-| **Partner Confirmation** | 3 | `partner-requests.spec.ts` | `npx playwright test partner-requests` |
+| **Partner Confirmation** | 5 | `partner-requests.spec.ts` | `npx playwright test partner-requests` |
 | **Bracket - Singles** | 3 | `bracket-singles.spec.ts` | `npx playwright test bracket-singles` |
 | **Bracket - Doubles** | 2 | `bracket-doubles.spec.ts` | `npx playwright test bracket-doubles` |
 | **Casual tournaments (round-robin / social mixer)** | 8 | `casual-tournament.spec.ts` | `npx playwright test casual-tournament` |
@@ -881,6 +881,27 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
 - **Given** some registrants never found a partner
 - **When** the organizer creates groups with `pairUnpaired: false`
 - **Then** only confirmed teams advance and the solo registrants are marked "unpaired"
+
+### Scenario: Both players are notified when a team is formed (ISSUE-19)
+- **Type:** Happy path
+- **Given** a player confirms a partnership request, or accepts an emailed invite
+- **Then** both players get a personal notification naming the other, visible on `/notifications`
+- **Backend:** ✅ integration-tested (`teams-formed-notify.spec.ts`, cases a/b). **Frontend:** ✅
+  e2e (`partner-requests.spec.ts` — inline notify path, no worker required).
+
+### Scenario: Auto-paired teams and left-out solos are notified at group creation (ISSUE-19)
+- **Type:** Happy path
+- **Given** the organizer creates groups and leftover solos are auto-paired (or dropped, per
+  `pairUnpaired`)
+- **Then** each auto-paired player is notified naming their partner, worded differently from a
+  chosen-partner confirmation, and a leftover left `unpaired` is told so
+- **Delivery:** via the `teams.formed` job queue, enqueued only after group creation commits —
+  requires `npm run dev:worker --workspace=packages/api` running (CLAUDE.md §8), same as the
+  assistant/coach specs. **Backend:** ✅ integration-tested (`teams-formed-notify.spec.ts`, cases
+  c/d/e/f — including that a rolled-back group creation enqueues nothing). **Frontend:** ✅ e2e
+  (`partner-requests.spec.ts` — auto-pair notification only; the "leftover unpaired" wording is
+  integration-tested only, no distinct UI surface beyond the notifications page already covered by
+  "Feature: Notifications Center").
 
 ---
 

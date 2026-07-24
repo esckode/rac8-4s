@@ -25,6 +25,7 @@ import { processCoachTurn } from './workers/coach-processor'
 import { processNudgeSweep } from './workers/nudge-processor'
 import { processRecapSweep } from './workers/recap-processor'
 import { processDigestSweep } from './workers/digest-processor'
+import { processTeamsFormed } from './workers/teams-formed-processor'
 import { registerAssistantSweepJobs } from './assistant/sweep-scheduler'
 import { registerAutoCloseSweepJob } from './workers/auto-close-scheduler'
 import { processAutoCloseSweep } from './workers/auto-close-processor'
@@ -247,6 +248,14 @@ async function main() {
       redisUrl: REDIS_URL!,
       processor: async () => {
         await processAutoCloseSweep({ pool })
+      },
+    }),
+
+    createWorker({
+      queueName: 'teams.formed',
+      redisUrl: REDIS_URL!,
+      processor: async (job) => {
+        await processTeamsFormed(job.data, { pool })
       },
     }),
   ]

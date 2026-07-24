@@ -172,11 +172,13 @@ async function main() {
   }
 
   // Check/start the background worker (assistant/coach replies, nudge/recap/digest
-  // sweeps — anything JOB_QUEUE=bullmq routes through a queue consumer instead of
-  // an inline in-process call). Silently missing, these specs fail with confusing
-  // errors ("Custom Id cannot contain :", "not wired (JOB_QUEUE=bullmq mode?)", or
-  // an assistant reply that never appears) rather than an obvious "not running".
-  log('\n4️⃣  Checking background worker (assistant/coach, nudge/recap/digest sweeps)...', 'blue')
+  // sweeps, and doubles group-creation's teams.formed notifications — anything
+  // JOB_QUEUE=bullmq routes through a queue consumer instead of an inline
+  // in-process call). Silently missing, these specs fail with confusing errors
+  // ("Custom Id cannot contain :", "not wired (JOB_QUEUE=bullmq mode?)", or an
+  // assistant reply / team-formed notification that never appears) rather than
+  // an obvious "not running" (ISSUE-19).
+  log('\n4️⃣  Checking background worker (assistant/coach, nudge/recap/digest, teams.formed)...', 'blue')
   let workerRunning = checkWorkerProcess()
 
   if (workerRunning) {
@@ -204,7 +206,8 @@ async function main() {
       }
     } else {
       log('   Only needed if JOB_QUEUE=bullmq (this repo\'s dev/e2e default) and you\'re', 'yellow')
-      log('   running assistant/coach/nudge/recap/digest specs.', 'yellow')
+      log('   running assistant/coach/nudge/recap/digest specs, or a doubles spec that', 'yellow')
+      log('   creates groups (partner-requests.spec.ts, group-stage-doubles.spec.ts).', 'yellow')
       log('   Run manually: npm run dev:worker --workspace=packages/api', 'yellow')
       log('   Or use: node scripts/e2e-setup.js --auto-start', 'yellow')
     }
@@ -229,12 +232,13 @@ async function main() {
   log(`  PostgreSQL: ${pgRunning ? '✅' : '❌'}`, 'blue')
   log(`  API Server (3001): ${apiRunning ? '✅' : '❌'}`, 'blue')
   log(`  Frontend Server (5173): ${frontendRunning ? '✅' : '❌'}`, 'blue')
-  log(`  Worker: ${workerRunning ? '✅' : '❌ (only needed for assistant/coach/sweep specs)'}`, 'blue')
+  log(`  Worker: ${workerRunning ? '✅' : '❌ (only needed for assistant/coach/sweep/doubles-groups specs)'}`, 'blue')
 
   if (apiRunning && frontendRunning) {
     log('\n✅ Core prerequisites met! Ready to run E2E tests.', 'green')
     if (!workerRunning) {
-      log('⚠️  Worker not running — assistant/coach/nudge/recap/digest specs will fail.', 'yellow')
+      log('⚠️  Worker not running — assistant/coach/nudge/recap/digest specs and doubles', 'yellow')
+      log('   group-creation specs (teams.formed notifications) will fail.', 'yellow')
     }
     log('\nNext steps:', 'green')
     log('  npm run test:e2e              # Headless mode', 'green')

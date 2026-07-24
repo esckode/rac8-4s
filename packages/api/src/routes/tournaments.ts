@@ -116,6 +116,17 @@ export default function tournamentsRouter(deps: AppDependencies) {
     )
   }
 
+  // ISSUE-19: confirmPartner and the accept route are not in a transaction
+  // with anything else, so they notify inline, best-effort — the caller is
+  // responsible for .catch()ing this, matching notifyPartnerInvite above.
+  async function notifyTeamFormed(playerId: string, partnerName: string, tournamentName: string, tournamentId: string): Promise<void> {
+    await groupMsgRepo.postPersonalNotification(
+      playerId,
+      `Your team with ${partnerName} is confirmed for ${tournamentName}`,
+      { tournamentId }
+    )
+  }
+
   // ISSUE-15 sub-decision 3: a partner may accept past the registration
   // deadline when the invite predates it — the requester acted in time. The
   // exception ends where play begins: once the tournament leaves
@@ -340,6 +351,19 @@ export default function tournamentsRouter(deps: AppDependencies) {
         groups = await groupRepo.createGroups(id, numGroups, advancingPerGroup, playerIds)
       }
       await repo.updateStatus(id, 'group_stage_active')
+
+      // ISSUE-19: notify players their team formed (or that they were left
+      // unpaired), via the queue and only after this commits — a rollback
+      // above never reaches here, so there is nothing to double-enqueue.
+      // Best-effort: swallow enqueue errors, never fail an already-committed
+      // group creation because Redis hiccuped.
+      try {
+        if (deps.jobQueue) {
+          await deps.jobQueue.add('teams.formed', { tournamentId: id }, { jobId: `teams-formed-${id}` })
+        }
+      } catch (e) {
+        log.warn('teams.formed.enqueue.failed', { tournamentId: id, error: (e as Error).message })
+      }
 
       log.info('groups.created', { tournamentId: id, numGroups: groups.length, playerCount: playerIds.length, organizerId: payload.sub })
 
@@ -2013,6 +2037,21 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
       log.info('registration.partner_confirmed', { tournamentId: registration.tournament_id, registrationId, partnerId: playerId })
 
+      // ISSUE-19: tell both players their team is formed. Best-effort — a
+      // notification failure must not undo an already-confirmed team.
+      const [requesterPlayer, confirmingPlayer] = await Promise.all([
+        playerRepo.findById(updated.player_id),
+        playerRepo.findById(playerId),
+      ])
+      if (requesterPlayer && confirmingPlayer) {
+        notifyTeamFormed(updated.player_id, confirmingPlayer.name, tournament.name, tournament.id).catch((e: Error) => {
+          log.warn('personal.notification.failed', { playerId: updated.player_id, error: e.message })
+        })
+        notifyTeamFormed(playerId, requesterPlayer.name, tournament.name, tournament.id).catch((e: Error) => {
+          log.warn('personal.notification.failed', { playerId, error: e.message })
+        })
+      }
+
       res.json({
         registrationId: updated.id,
         playerId: updated.player_id,
@@ -2116,6 +2155,18 @@ export default function tournamentsRouter(deps: AppDependencies) {
       // confirmPartner cascades to targetReg too: sets its partner_id back to
       // the requester, partner_confirmed, and status — see db.ts.
       await playerRepo.confirmPartner(requesterReg.id)
+
+      // ISSUE-19: tell both players their team is formed. Best-effort — a
+      // notification failure must not undo an already-confirmed team.
+      const requesterPlayer = await playerRepo.findById(requesterReg.player_id)
+      if (requesterPlayer) {
+        notifyTeamFormed(requesterReg.player_id, partnerPlayer.name, tournament.name, tournamentId).catch((e: Error) => {
+          log.warn('personal.notification.failed', { playerId: requesterReg.player_id, error: e.message })
+        })
+        notifyTeamFormed(partnerPlayer.id, requesterPlayer.name, tournament.name, tournamentId).catch((e: Error) => {
+          log.warn('personal.notification.failed', { playerId: partnerPlayer.id, error: e.message })
+        })
+      }
 
       const session = await generatePlayerSession(
         { playerId: partnerPlayer.id, tournamentId, email: partnerPlayer.email, createdAt: Date.now() },
