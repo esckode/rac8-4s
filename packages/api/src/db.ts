@@ -2,6 +2,7 @@ import { Pool, PoolClient } from 'pg'
 import { randomInt } from 'crypto'
 import { NotFoundError, DeadlockError, CheckConstraintError, UniqueConstraintError, ConstraintViolationError } from './db/errors'
 import { getLogger } from './logger'
+import { COUNTS_FOR_CAPACITY } from './registration-status'
 
 const log = getLogger('db')
 
@@ -516,7 +517,7 @@ export class PlayerRepository {
 
   async countRegistrationsForTournament(tournamentId: string): Promise<number> {
     const result = await this.pool.query(
-      'SELECT COUNT(*) as count FROM public.player_registrations WHERE tournament_id = $1',
+      `SELECT COUNT(*) as count FROM public.player_registrations WHERE tournament_id = $1 AND ${COUNTS_FOR_CAPACITY}`,
       [tournamentId]
     )
     return Number((result.rows[0] as { count: any }).count)
@@ -774,18 +775,67 @@ export class PlayerRepository {
     return registration
   }
 
-  async withdrawRegistration(registrationId: string, isBeforeDeadline: boolean): Promise<RegistrationRow> {
-    const now = new Date().toISOString()
-    const status = isBeforeDeadline ? 'withdrawn' : 'withdrawal_pending'
-    await this.pool.query(
-      `UPDATE public.player_registrations
-       SET status = $1, withdrawal_requested_at = $2
-       WHERE id = $3`,
-      [status, now, registrationId]
-    )
-    const registration = await this.findRegistrationById(registrationId)
-    if (!registration) throw new NotFoundError('Registration')
-    return registration
+  // ISSUE-20: a withdrawal that dissolves a confirmed team is a two-row
+  // clear (this row and the partner's), so it runs in one transaction —
+  // the createGroupsForDoubles/confirmPartner pattern — rather than the
+  // single un-transacted UPDATE this used to be.
+  async withdrawRegistration(
+    registrationId: string,
+    isBeforeDeadline: boolean
+  ): Promise<{ registration: RegistrationRow; dissolvedPartner?: { playerId: string } }> {
+    return retryOnDeadlock(async () => {
+      const client = await (this.pool as Pool).connect()
+      try {
+        await client.query('BEGIN')
+        const now = new Date().toISOString()
+        const status = isBeforeDeadline ? 'withdrawn' : 'withdrawal_pending'
+
+        const beforeResult = await client.query(
+          'SELECT * FROM public.player_registrations WHERE id = $1',
+          [registrationId]
+        )
+        const before = beforeResult.rows[0] as any
+        if (!before) throw new NotFoundError('Registration')
+
+        await client.query(
+          `UPDATE public.player_registrations SET status = $1, withdrawal_requested_at = $2 WHERE id = $3`,
+          [status, now, registrationId]
+        )
+
+        // Requirement (1): only a genuine 'withdrawn' departure dissolves a
+        // confirmed team. 'withdrawal_pending' is a request awaiting the
+        // organizer, not a departure — the team holds until it resolves.
+        let dissolvedPartner: { playerId: string } | undefined
+        if (status === 'withdrawn' && !!before.partner_confirmed && before.partner_id) {
+          await client.query(
+            `UPDATE public.player_registrations SET partner_id = NULL, partner_confirmed = false WHERE id = $1`,
+            [registrationId]
+          )
+          await client.query(
+            `UPDATE public.player_registrations
+                SET partner_id = NULL, partner_confirmed = false, status = 'registered'
+              WHERE tournament_id = $1 AND player_id = $2`,
+            [before.tournament_id, before.partner_id]
+          )
+          dissolvedPartner = { playerId: before.partner_id }
+        }
+
+        await client.query('COMMIT')
+
+        const regResult = await client.query(
+          'SELECT * FROM public.player_registrations WHERE id = $1',
+          [registrationId]
+        )
+        const regRow = regResult.rows[0] as any
+        const registration = { ...regRow, partner_confirmed: !!regRow.partner_confirmed } as RegistrationRow
+        return { registration, dissolvedPartner }
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      } finally {
+        client.release()
+      }
+    })
   }
 
   async findById(playerId: string): Promise<PlayerRow | undefined> {

@@ -65,6 +65,11 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   you won't be teamed with someone who never confirmed. You'll re-enter the pool of solo
   registrants and be paired according to the organizer's auto-pair setting for the tournament,
   the same as anyone else without a confirmed partner.
+- If your partner withdraws you'll be told, and you can find a new one — withdrawing dissolves a
+  confirmed doubles team, so you go back to being a solo registrant free to request a new partner
+  right away. This only happens for a completed withdrawal made before the registration deadline;
+  a withdrawal *request* made after the deadline needs the organizer's approval first, and your
+  team stays intact until then.
 
 ## Tournament flow (scheduled tournaments)
 

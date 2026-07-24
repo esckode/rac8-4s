@@ -29,6 +29,7 @@ import { sendMagicLinkEmail, sendPartnerInviteEmail } from '../email-adapter'
 import { generateRoundPairings } from '../mixer-scheduler'
 import { submitScore, SCORE_ERROR_HTTP_STATUS } from '../services/score-service'
 import { createRateLimitMiddleware } from '../middleware/rate-limit'
+import { PLAYS_IN_BRACKET } from '../registration-status'
 
 const log = getLogger('tournaments')
 
@@ -123,6 +124,17 @@ export default function tournamentsRouter(deps: AppDependencies) {
     await groupMsgRepo.postPersonalNotification(
       playerId,
       `Your team with ${partnerName} is confirmed for ${tournamentName}`,
+      { tournamentId }
+    )
+  }
+
+  // ISSUE-20: withdrawal isn't a group-creation path, so this notifies
+  // inline, best-effort, the same as notifyTeamFormed above — it must not
+  // enqueue teams.formed.
+  async function notifyPartnerWithdrew(playerId: string, withdrawnPlayerName: string, tournamentName: string, tournamentId: string): Promise<void> {
+    await groupMsgRepo.postPersonalNotification(
+      playerId,
+      `${withdrawnPlayerName} withdrew from ${tournamentName} — your team is dissolved`,
       { tournamentId }
     )
   }
@@ -308,7 +320,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
       // Fetch all registered players for this tournament
       log.debug('groups.fetching.players', { tournamentId: id, status: tournament.status })
       const result = await deps.db.query(
-        'SELECT DISTINCT pr.player_id FROM public.player_registrations pr WHERE pr.tournament_id = $1',
+        `SELECT DISTINCT pr.player_id FROM public.player_registrations pr WHERE pr.tournament_id = $1 AND pr.${PLAYS_IN_BRACKET}`,
         [id]
       )
       const allPlayers = result.rows as { player_id: string }[]
@@ -2253,10 +2265,19 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       const isBeforeDeadline = tournament.registration_deadline != null && new Date() < new Date(tournament.registration_deadline)
-      const updated = await playerRepo.withdrawRegistration(registrationId, isBeforeDeadline)
+      const { registration: updated, dissolvedPartner } = await playerRepo.withdrawRegistration(registrationId, isBeforeDeadline)
 
       const eventName = isBeforeDeadline ? 'registration.withdrawn' : 'registration.withdrawal_requested'
       log.info(eventName, { tournamentId: registration.tournament_id, registrationId, playerId: payload.playerId, beforeDeadline: isBeforeDeadline })
+
+      if (dissolvedPartner) {
+        const withdrawnPlayer = await playerRepo.findById(payload.playerId)
+        if (withdrawnPlayer) {
+          notifyPartnerWithdrew(dissolvedPartner.playerId, withdrawnPlayer.name, tournament.name, tournament.id).catch((e: Error) => {
+            log.warn('personal.notification.failed', { playerId: dissolvedPartner.playerId, error: e.message })
+          })
+        }
+      }
 
       res.json({
         registrationId: updated.id,

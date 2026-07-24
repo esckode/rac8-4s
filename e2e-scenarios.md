@@ -918,6 +918,24 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
   `group-stage-doubles.spec.ts`; a swept player is notified via the existing "auto-paired" or
   "left unpaired" wording from the scenario above, not bespoke copy.
 
+### Scenario: Withdrawing from a confirmed team dissolves it and frees the other player (ISSUE-20)
+- **Type:** Happy path
+- **Given** two players have a confirmed doubles team and one withdraws before the registration
+  deadline
+- **Then** the team is dissolved on both rows, the remaining player becomes a plain solo
+  registrant, they're notified their team was dissolved, and they can immediately request a new
+  partner
+- **And** a post-deadline withdrawal *request* (`withdrawal_pending`) does not dissolve the team —
+  it still counts toward capacity and still holds until the organizer resolves it, unlike a
+  completed `withdrawn` departure which frees the seat
+- **And** neither a `withdrawn` nor a `withdrawal_pending` registration is auto-paired or scheduled
+  when the organizer creates groups
+- **Backend:** ✅ integration-tested (`withdrawal-dissolve.spec.ts` — the dissolve + notification,
+  the post-deadline non-dissolve, capacity counting both ways, exclusion from the group-creation
+  player list, and the freed player immediately inviting someone else). **Frontend:** no UI surface
+  exists for withdrawal at all today — `DELETE /registrations/:registrationId` has no caller
+  anywhere in `packages/frontend/src`, so there is nothing to e2e-test until that UI is built.
+
 ---
 
 ## Feature: Organizer Tournament Management
