@@ -1259,3 +1259,83 @@ new because their row still looked confirmed.
 has no caller anywhere in `packages/frontend/src` — so this is integration-tested only; noted in
 `e2e-scenarios.md` rather than left silently uncovered.
 
+---
+
+## ISSUE-16 — Partner pairing is first-*inviter*-wins: an invite mutates the invitee's registration 🟠 {#issue-16}
+
+**✅ Resolved** (2026-07-24, branch `fix-pairing`): raised while verifying [ISSUE-15](#issue-15) —
+branches A/B of `POST /:tournamentId/register` mirror-wrote the pairing onto **both** the
+requester's and the invitee's registration and auto-created the invitee's row if absent, so the
+invite-time 409 refused the *second* inviter rather than letting whoever the invitee actually chose
+win. Branch C (a brand-new email) already had this right — the invite lived only in the emailed
+token, nothing was written to the invitee. **Owner decision:** A inviting X must never stop B
+inviting X; whichever pairing X accepts becomes final, the rest fail at accept time. Depended on
+[ISSUE-18](#issue-18) (the accept-time guard and its unique index) and [ISSUE-21](#issue-21) (the
+group-creation sweep), both shipped first.
+
+**Schema** — migration `059_partner_claim_columns.sql` adds `pending_partner_email` (branch C's
+claim, since the invitee has no player row to hold a `partner_id` yet) and `partner_claimed_at`
+(replaces `registered_at`, which used to be overwritten to mean "invite sent at" — `registered_at`
+is now write-once, set only at INSERT), and drops `pending_partner_confirm` from the `status` CHECK
+constraint. A claim keeps `status = 'registered'` throughout; the on-row record of a claim is
+`partner_id` (invitee has a row) XOR `pending_partner_email` (they don't).
+
+**db.ts rewrites:**
+- `updateRegistrationWithPartner`/`markPendingPartnerInvite` no longer touch `status`/`registered_at`
+  — one rewrite each fixes the requester side of branches A/B, `partner-requests`, and the branch-C
+  accept conversion (which also needed a new `clearPendingPartnerEmail`, since converting an
+  email-claim to an id-claim must drop the now-redundant email trace).
+- `countPendingPartnerInviteHolds` deleted — capacity holds are reversed from ISSUE-15 sub-decision
+  1. Concurrent invites over-reserved (A and B both inviting X held two slots for one future
+  person), and a hold never protected anyone's ability to *play*, only a preference to play with
+  someone specific. The governing rule: count people who will play, not people who might not exist.
+- `cancelPartnerInvite` drops the cross-row release branch — a claim lives on exactly one row now,
+  so cancelling one must never touch a different player's claim that happens to name the same
+  person.
+- `findAvailablePartners`/`findIncomingPartnerRequests` gate on `partner_confirmed` instead of
+  `partner_id`/`status` — receiving claims is unlimited, so a player with their own live outgoing
+  claim must remain invitable and visible to others until they're actually paired. Getting this
+  wrong (relaxing only the status check) makes the requirement a no-op that still passes a
+  status-only test.
+- `confirmPartner` creates the accepting player's registration if absent (capacity-checked against
+  `COUNTS_FOR_CAPACITY`) instead of silently forming a one-sided team, and voids every other
+  unconfirmed claim naming the accepting player — in **both** forms, since a `partner_id`-only void
+  misses the branch-C email-form regression — returning who was voided so the route notifies them
+  (the [ISSUE-19](#issue-19) infrastructure). The [ISSUE-21](#issue-21) sweep in
+  `createGroupsForDoubles` was updated for the new schema: it now clears
+  `pending_partner_email`/`partner_claimed_at` too and is no longer scoped to the deleted status
+  value — the "mutually linked but unconfirmed" scenario it was originally written against can no
+  longer arise from an invite at all (this issue's requirement 1 is the durable closure), but the
+  sweep still matters: `createTeam` never touches `player_registrations`, so a stale outgoing claim
+  would otherwise linger on a registration group creation auto-pairs with someone else.
+
+**tournaments.ts rewrites:** branches A/B stop mirror-writing/auto-creating the invitee's row; the
+invite-time 409 narrows to *confirmed* pairings only; the register route's capacity check drops the
+pending-invite virtual slot. Five sites that read the deleted status were rewritten to check claim
+presence or `partner_confirmed` instead: `my-partner-invite`, `partner-invites/accept`'s pending
+check, the confirm route's already-confirmed check, and the cancel route.
+
+**A genuine chicken-and-egg bug found by running the tests, not named in the original design:** the
+confirm route's dual-auth helper (`resolveTournamentPlayer`) required an existing registration to
+authenticate an account-JWT holder — fine when an invite auto-created that registration, broken once
+it doesn't, since branch A's whole point is an account holder confirming *before* they have one. New
+`resolveConfirmingPlayer` drops that requirement for this one caller; the confirm route's own
+`registration.partner_id === accountPlayerId` check right after is a strictly stronger scoping proof
+than "some registration exists" ever was, so nothing is weakened. The account-JWT regression test in
+`partner-invite-by-email.spec.ts` caught this immediately (403 instead of 200).
+
+**Test coverage:** `partner-claim-model.spec.ts` (7 new integration tests — concurrent invites to
+the same player, capacity ignoring pending invites, a live outgoing claim not hiding a player,
+cancelling never crossing rows, the email-form voiding regression, and the partner-requests-GET
+regression). `partner-invite-by-email.spec.ts` (22 tests, several assertions rewritten — a test
+asserting the invitee's row went `pending_partner_confirm` at invite time was asserting the bug; the
+capacity-hold describe block was inverted to assert the reversed decision). `partner-confirm-
+atomicity.spec.ts` and `partner-claim-sweep.spec.ts` updated for the schema change.
+
+**Local dev DB note:** this branch's migration recreates the `status` CHECK constraint without
+`pending_partner_confirm`. A long-lived local dev/test database accumulates rows in that status from
+earlier manual and e2e runs, which the new constraint then rejects — exactly the "no live data"
+cluster note's premise for a deployed environment, but locally the fix is a one-time
+`UPDATE player_registrations SET status = 'registered' WHERE status = 'pending_partner_confirm'`
+before the migration runs, not a code change.
+
