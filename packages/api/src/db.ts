@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg'
 import { randomInt } from 'crypto'
-import { NotFoundError, DeadlockError, CheckConstraintError, UniqueConstraintError } from './db/errors'
+import { NotFoundError, DeadlockError, CheckConstraintError, UniqueConstraintError, ConstraintViolationError } from './db/errors'
 import { getLogger } from './logger'
 
 const log = getLogger('db')
@@ -660,34 +660,67 @@ export class PlayerRepository {
     return updated
   }
 
+  // ISSUE-18: both writes below must land together or not at all. Without a
+  // transaction, statement (2) can fail (uq_registrations_confirmed_partner)
+  // after statement (1) has already committed, leaving a one-sided confirmed
+  // row that permanently occupies the index slot for the other player. See
+  // the worked Gil/Eli/Fay race in ISSUE-18 for why the index is what turns
+  // this from benign into harmful.
   async confirmPartner(registrationId: string): Promise<RegistrationRow> {
-    const now = new Date().toISOString()
+    return retryOnDeadlock(async () => {
+      const client = await (this.pool as Pool).connect()
+      try {
+        await client.query('BEGIN')
+        const now = new Date().toISOString()
 
-    // Confirm the requester's registration.
-    await this.pool.query(
-      `UPDATE public.player_registrations
-       SET partner_confirmed = $1, status = $2, confirmed_at = $3
-       WHERE id = $4`,
-      [true, 'registered', now, registrationId]
-    )
-
-    const registration = await this.findRegistrationById(registrationId)
-    if (!registration) throw new NotFoundError('Registration')
-
-    // Link the partner's registration back so both sides form a confirmed team.
-    if (registration.partner_id) {
-      const partnerReg = await this.findRegistration(registration.partner_id, registration.tournament_id)
-      if (partnerReg) {
-        await this.pool.query(
+        // Confirm the requester's registration.
+        await client.query(
           `UPDATE public.player_registrations
-           SET partner_id = $1, partner_confirmed = $2, status = $3, confirmed_at = $4
-           WHERE id = $5`,
-          [registration.player_id, true, 'registered', now, partnerReg.id]
+           SET partner_confirmed = $1, status = $2, confirmed_at = $3
+           WHERE id = $4`,
+          [true, 'registered', now, registrationId]
         )
-      }
-    }
 
-    return registration
+        const regResult = await client.query(
+          'SELECT * FROM public.player_registrations WHERE id = $1',
+          [registrationId]
+        )
+        const regRow = regResult.rows[0] as any
+        if (!regRow) throw new NotFoundError('Registration')
+        const registration = { ...regRow, partner_confirmed: !!regRow.partner_confirmed } as RegistrationRow
+
+        // Link the partner's registration back so both sides form a confirmed team.
+        if (registration.partner_id) {
+          const partnerResult = await client.query(
+            'SELECT * FROM public.player_registrations WHERE player_id = $1 AND tournament_id = $2',
+            [registration.partner_id, registration.tournament_id]
+          )
+          const partnerReg = partnerResult.rows[0] as RegistrationRow | undefined
+          if (partnerReg) {
+            await client.query(
+              `UPDATE public.player_registrations
+               SET partner_id = $1, partner_confirmed = $2, status = $3, confirmed_at = $4
+               WHERE id = $5`,
+              [registration.player_id, true, 'registered', now, partnerReg.id]
+            )
+          }
+        }
+
+        await client.query('COMMIT')
+        return registration
+      } catch (error) {
+        await client.query('ROLLBACK')
+        if (
+          error instanceof Error &&
+          error.message.includes('uq_registrations_confirmed_partner')
+        ) {
+          throw new ConstraintViolationError('This player already has a confirmed partner', 'INVALID_STATE')
+        }
+        throw error
+      } finally {
+        client.release()
+      }
+    })
   }
 
   async findAvailablePartners(tournamentId: string, excludePlayerId: string): Promise<{ id: string; name: string }[]> {

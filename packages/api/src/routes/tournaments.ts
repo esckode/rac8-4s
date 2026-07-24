@@ -1978,6 +1978,17 @@ export default function tournamentsRouter(deps: AppDependencies) {
       // only the latter here made that branch unusable end to end.
       const { playerId } = await resolveTournamentPlayer(req.headers.authorization, registration.tournament_id)
 
+      // ISSUE-18: reject a second accept when the confirming player already
+      // has a CONFIRMED partner in this tournament. Confirmed only — a
+      // merely pending claim elsewhere must not block this accept, or we
+      // reintroduce first-inviter-wins (ISSUE-16). The database's partial
+      // unique index is the real backstop against the underlying race; this
+      // is the friendly, non-racy rejection for the common case.
+      const confirmerReg = await playerRepo.findRegistration(playerId, registration.tournament_id)
+      if (confirmerReg?.partner_confirmed) {
+        return res.status(409).json({ code: 'INVALID_STATE', message: 'You already have a confirmed partner in this tournament' })
+      }
+
       if (!registration.partner_id) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'This registration does not have a pending partner confirmation' })
       }
@@ -2084,7 +2095,11 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       let targetReg = await playerRepo.findRegistration(partnerPlayer.id, tournamentId)
-      if (targetReg?.partner_id) {
+      // ISSUE-18: confirmed only — a merely pending claim on the invitee's
+      // own row (e.g. their own outstanding outgoing request to someone
+      // else) must not block accepting this invite. The partial unique
+      // index is the real backstop for the underlying race.
+      if (targetReg?.partner_confirmed) {
         return res.status(409).json({ code: 'INVALID_STATE', message: 'That player already has a partner' })
       }
       if (!targetReg) {
