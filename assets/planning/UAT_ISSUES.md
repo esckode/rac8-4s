@@ -34,7 +34,7 @@ full index: resolved rows link into the archive, open rows link to a section in 
 | [ISSUE-17](#issue-17) | 🔲 Open | 🟠 | Solo doubles registrants are auto-paired with a stranger without consent | api + frontend |
 | [ISSUE-18](COMPLETED_UAT_ISSUES.md#issue-18) | ✅ Resolved | 🔴 | Confirming a partner has no accept-time guard, and `confirmPartner` is not atomic | api · data |
 | [ISSUE-19](COMPLETED_UAT_ISSUES.md#issue-19) | ✅ Resolved | 🟠 | No notification fires when a doubles team is formed, by any path | api |
-| [ISSUE-20](#issue-20) | 🔲 Open | 🟠 | Withdrawal never dissolves a team, and no query filters withdrawn registrations | api · data |
+| [ISSUE-20](COMPLETED_UAT_ISSUES.md#issue-20) | ✅ Resolved | 🟠 | Withdrawal never dissolves a team, and no query filters withdrawn registrations | api · data |
 | [ISSUE-21](COMPLETED_UAT_ISSUES.md#issue-21) | ✅ Resolved | 🔴 | An invite nobody answered becomes a real team at group creation | api · data |
 
 **Sequencing (doubles-pairing cluster).** ISSUE-18 and ISSUE-19 were split out of 16 and 17 on
@@ -307,7 +307,7 @@ and the branch-C expiry read `partner_claimed_at ?? registered_at`, so existing 
    - Because confirming now adds a registration, `PATCH .../confirm` needs a capacity check it does
      not currently have (it checks existence, caller identity, pending status, and the confirm
      window — nothing else). Without it, "don't count pending invites" becomes "capacity is
-     unenforceable." Use `COUNTS_FOR_CAPACITY` from [ISSUE-20](#issue-20), not a raw count.
+     unenforceable." Use `COUNTS_FOR_CAPACITY` from [ISSUE-20](COMPLETED_UAT_ISSUES.md#issue-20), not a raw count.
 8. **`cancelPartnerInvite` must stop releasing the invitee's row — requirement (1) turns that from
    necessary cleanup into a destructive write.** `cancelPartnerInvite` (`db.ts:635`) currently
    clears `partner_id`/`status` on the *partner's* registration as well as the requester's. That is
@@ -345,7 +345,7 @@ conversion explicitly — do not leave this to be inferred from the end-state de
 - **Comment/capacity cleanup in the accept route (`:2091-2096`):** it references
   `countPendingPartnerInviteHolds` (deleted by requirement (4)) and uses a raw
   `countRegistrationsForTournament`; switch the count to `COUNTS_FOR_CAPACITY`
-  ([ISSUE-20](#issue-20)) and drop the hold comment.
+  ([ISSUE-20](COMPLETED_UAT_ISSUES.md#issue-20)) and drop the hold comment.
 
 **RED for this section:** assert that an invite leaves the *requester's* row `status = 'registered'`
 with the claim recorded (`partner_id` or `pending_partner_email`) — the `23514` regression, which a
@@ -538,7 +538,7 @@ possibly the night before the event.
    - **RED test (e) must assert the rules, not the agreement.** "The preview matches what group
      creation does" passes once and enforces nothing between two hand-written copies. Assert
      explicit cases instead — see below.
-   - **Use `PLAYS_IN_BRACKET`** from [ISSUE-20](#issue-20) as the population, so at minimum the two
+   - **Use `PLAYS_IN_BRACKET`** from [ISSUE-20](COMPLETED_UAT_ISSUES.md#issue-20) as the population, so at minimum the two
      agree on *who is eligible* even where they compute independently.
 
    Two traps for whoever writes the query:
@@ -573,7 +573,7 @@ possibly the night before the event.
 - **Organizer preview endpoint:** `GET /:tournamentId/pairing-preview?pairUnpaired=true` (organizer
   auth), **registered before the parameterized `/:id` routes** (CLAUDE.md §10). Response
   `{ unpairedCount: number, optedOut: [{ playerId, name }] }`. Population is `PLAYS_IN_BRACKET`
-  ([ISSUE-20](#issue-20)). **Leftovers** = `PLAYS_IN_BRACKET` registrants not in a confirmed mutual
+  ([ISSUE-20](COMPLETED_UAT_ISSUES.md#issue-20)). **Leftovers** = `PLAYS_IN_BRACKET` registrants not in a confirmed mutual
   pair; `optedOut` = leftovers with `auto_pair_consent = false`; `consentingLeftovers` = the rest.
   `unpairedCount = optedOut.length + (consentingLeftovers % 2)` — the parity trap in requirement (4);
   with `pairUnpaired=false`, every leftover is unpaired.
@@ -626,113 +626,6 @@ decision; requirement (3) means they are told either way.
   (the notification itself comes from ISSUE-19; here it must name an auto-paired partner).
 - Register solo with consent off → stay unpaired → excluded from groups, and told so.
 - A mixer tournament is unaffected end to end.
-
----
-
-## ISSUE-20 — Withdrawal never dissolves a team, and no query filters withdrawn registrations 🟠 {#issue-20}
-
-**🔲 Open** (raised 2026-07-23 while grilling ISSUE-16/17. Pre-existing, but this cluster makes it
-worse in two specific ways, below.)
-
-**All four sibling issues treat a team as write-once.** Every requirement in them is about *forming*
-one. Nothing dissolves one, and `withdrawRegistration` (`db.ts:744-755`) writes **only** `status`
-and `withdrawal_requested_at` — it never touches `partner_id` or `partner_confirmed`, on either row.
-
-After A ↔ X is confirmed and X withdraws:
-
-```
-X: status='withdrawn'   partner_id=A  partner_confirmed=true
-A: status='registered'  partner_id=X  partner_confirmed=true   ← still "on a team"
-```
-
-**A is stranded with no exit.** ISSUE-16 requirement (3) refuses A a new invite because A has a
-*confirmed* partner; `cancelPartnerInvite` refuses confirmed teams (`db.ts:632` — *"Confirmed teams
-are not cancellable here; that is what withdrawal is for"*). A's only remedy is to withdraw from a
-tournament they still want to play.
-
-**ISSUE-18's index makes it permanent.** `(tournament_id, partner_id) WHERE partner_confirmed` means
-A's stale row owns the only confirmed claim on X *forever*. It will not block the migration (one
-stale row is not a duplicate), but if X re-registers, nobody can ever confirm a team with them.
-
-### Second defect, same root: nothing anywhere asks "is this registration active"
-
-Two queries decide participation and **neither looks at `status`**:
-
-| Query | Site | Consequence |
-|---|---|---|
-| `countRegistrationsForTournament` | `db.ts:517-523` | Withdrawn players hold seats forever; `TOURNAMENT_FULL` fires for capacity that does not exist |
-| group-creation player list | `tournaments.ts:300` | `withdrawn` and `withdrawal_pending` players are auto-paired and put on the bracket |
-
-This contradicts ISSUE-16 §4's own governing rule — *"count people who will play"* — which the issue
-applies to pending invitees while withdrawn players sit uncounted-against in the same tally.
-
-### Required behaviour
-
-1. **Dissolve on withdrawal.** When a registration goes to `withdrawn` **and** it is
-   `partner_confirmed`, clear `partner_id` / `partner_confirmed` on **both** rows and return the
-   remaining partner to a plain solo `registered`. Notify them ([ISSUE-19](COMPLETED_UAT_ISSUES.md#issue-19), shipped by
-   now) — being silently un-teamed is the same defect ISSUE-17 exists to fix, from the other side.
-   The method is `withdrawRegistration` (`db.ts:744`), which today writes **one** row un-transacted;
-   the two-row clear must run in a `pool.connect()` + `BEGIN`/`COMMIT`/`ROLLBACK` transaction (the
-   `createGroupsForDoubles` pattern, `db.ts:857`) so a half-dissolve is impossible. Notify the freed
-   partner **inline, best-effort** from the withdraw route (the `confirmPartner` notify pattern,
-   `tournaments.ts:1354`) — this is not a group-creation path, so it does **not** enqueue
-   `teams.formed`.
-2. **`withdrawal_pending` does NOT dissolve.** It is a post-deadline *request* awaiting the
-   organizer (`tournaments.ts:2190`), not a departure. The team holds until it resolves.
-3. **Two named predicates, exported from one place**, so the intentional difference between them is
-   visible instead of implied by two omissions:
-
-   ```ts
-   export const COUNTS_FOR_CAPACITY = `status <> 'withdrawn'`
-   export const PLAYS_IN_BRACKET    = `status NOT IN ('withdrawn','withdrawal_pending')`
-   ```
-
-   **Capacity excludes `withdrawn` only.** A pending request has not been granted, and it can only
-   happen after the deadline — when the seat cannot be resold anyway. Freeing it early lets a
-   replacement register, after which the organizer can no longer refuse the request without
-   over-filling.
-
-   **The bracket excludes both.** Someone who has asked to leave should not be auto-paired with a
-   stranger and scheduled into matches.
-
-   **Home:** a new `packages/api/src/registration-status.ts` exporting both constants — the
-   group-creation player list is an **inline query in the route** (`tournaments.ts:301`,
-   `SELECT DISTINCT pr.player_id …`), *not* a repo method, so the predicates must live somewhere both
-   `db.ts` and `routes/tournaments.ts` can import.
-
-   Consumers: `countRegistrationsForTournament` (`db.ts:517`) → `COUNTS_FOR_CAPACITY`; the
-   group-creation player query (`tournaments.ts:301`) and ISSUE-17's organizer preview →
-   `PLAYS_IN_BRACKET`.
-
-### Backfill
-
-None — no live data (see the cluster "No live data" note). There is no schema change in this issue
-at all: the two predicates are code, and the dissolve is behaviour. Nothing to migrate.
-
-### Do NOT
-
-- **Do not dissolve on `withdrawal_pending`** — see (2).
-- **Do not delete or unregister the withdrawing player's row.** Withdrawal is a status change; the
-  row is the audit trail.
-- **Do not inline the two predicates at their call sites.** The whole point is that the difference
-  between them is deliberate and reviewable in one place.
-
-### Fix (TDD §4)
-
-- **[RED]** Integration: (a) X withdraws from a confirmed team → both rows cleared, A is solo
-  `registered`, A is notified; (b) X requests withdrawal *after* the deadline → team intact;
-  (c) a withdrawn registration does not count toward `max_players`; (d) a `withdrawal_pending`
-  registration **does**; (e) neither appears in the group-creation player list; (f) A, freed by (a),
-  can immediately invite someone else.
-- **Docs:** `docs/assistant-help.md` (§9 — "if your partner withdraws you'll be told, and you can
-  find a new one"), `e2e-scenarios.md` scenario + selection-map row (§8).
-
-### Verify
-
-- Confirmed team, one player withdraws before the deadline → the other is told and can re-partner.
-- A full tournament frees a seat when someone withdraws; a post-deadline request does not.
-- Group creation ignores withdrawn players entirely.
 
 ---
 

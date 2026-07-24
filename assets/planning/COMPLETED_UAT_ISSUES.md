@@ -1206,3 +1206,56 @@ back along with everything else. 3 of 6 failed before the fix: the stale claim w
 instead of being cleared, and the abort case never fired because the stale claim silently supplied
 the one team needed to clear `teamIds.length < numGroups`.
 
+---
+
+## ISSUE-20 — Withdrawal never dissolves a team, and no query filters withdrawn registrations 🟠 {#issue-20}
+
+**✅ Resolved** (2026-07-24, branch `fix-pairing`): raised while grilling
+[ISSUE-16/17](UAT_ISSUES.md#issue-16) — `withdrawRegistration` wrote only `status` and
+`withdrawal_requested_at`, never touching `partner_id`/`partner_confirmed` on either row. After a
+confirmed team's one half withdrew, the other stayed "on a team" with someone who had left —
+stranded, since [ISSUE-16](UAT_ISSUES.md#issue-16) requirement (3) and
+[ISSUE-18](#issue-18) both refuse a new invite/confirm to a player who already has a *confirmed*
+partner, and ISSUE-18's unique index made the stale confirmed row a permanent squat on that
+`partner_id` slot. Separately, `countRegistrationsForTournament` and the group-creation player
+query never looked at `status` at all, so withdrawn players held capacity forever and could still
+be auto-paired into the bracket.
+
+Fixed with two independent changes:
+
+1. **`withdrawRegistration` wraps the dissolve in a transaction** (the
+   `createGroupsForDoubles`/`confirmPartner` pattern) so a half-dissolve is impossible. Only a
+   genuine `'withdrawn'` departure dissolves a confirmed team — `'withdrawal_pending'` is a
+   post-deadline *request* awaiting the organizer, not a departure, so the team holds until it
+   resolves. When it dissolves, `partner_id`/`partner_confirmed` are cleared on **both** rows (not
+   just the partner's) — clearing the withdrawing player's own row too is what frees the confirmed-
+   partner index slot ISSUE-18 added, since a stale `partner_confirmed = true` row would otherwise
+   permanently block anyone from ever confirming a team with the freed partner again. The freed
+   partner is notified inline, best-effort, from the withdraw route — this isn't a group-creation
+   path, so it does not enqueue `teams.formed`.
+2. **Two named predicates**, added in a new `packages/api/src/registration-status.ts` (home chosen
+   because the group-creation player list is an inline query in the route, not a repo method, so
+   both `db.ts` and `routes/tournaments.ts` need to import from somewhere neutral):
+   ```ts
+   export const COUNTS_FOR_CAPACITY = `status <> 'withdrawn'`
+   export const PLAYS_IN_BRACKET    = `status NOT IN ('withdrawn', 'withdrawal_pending')`
+   ```
+   Capacity excludes only `withdrawn` (a pending request hasn't been granted, and only becomes
+   possible after the deadline, when the seat can't be resold anyway); the bracket excludes both.
+   Wired into `countRegistrationsForTournament` and the group-creation player query respectively —
+   the latter also serves as the population for [ISSUE-17](UAT_ISSUES.md#issue-17)'s not-yet-built
+   organizer preview.
+
+**Test coverage:** `withdrawal-dissolve.spec.ts` (6 integration tests) — the dissolve + notification
+on a pre-deadline withdrawal, a post-deadline request leaving the team intact, capacity counting
+correctly both ways, exclusion from the group-creation player list (and confirmation that a
+withdrawn/pending registration is left completely untouched by group creation, never even entering
+the leftover pool), and the freed player immediately inviting someone else. 4 of 6 failed before the
+fix: the dissolve never happened, capacity still counted a withdrawn registration, the group-creation
+player list still included withdrawn/pending players, and the freed partner couldn't invite anyone
+new because their row still looked confirmed.
+
+**Frontend:** no UI surface exists for withdrawal at all — `DELETE /registrations/:registrationId`
+has no caller anywhere in `packages/frontend/src` — so this is integration-tested only; noted in
+`e2e-scenarios.md` rather than left silently uncovered.
+
