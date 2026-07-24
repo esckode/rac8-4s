@@ -903,6 +903,21 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
   integration-tested only, no distinct UI surface beyond the notifications page already covered by
   "Feature: Notifications Center").
 
+### Scenario: An invite nobody answered is cleared, not honored, at group creation (ISSUE-21)
+- **Type:** Validation / consent
+- **Given** a solo registrant invited a partner (by email, or an already-registered player) and
+  nobody confirmed before the organizer creates groups
+- **Then** the two are not teamed together from the stale invite — the unconfirmed claim is swept
+  and both re-enter the leftover pool, auto-paired (or dropped) exactly like any other solo
+  registrant with no partner
+- **Backend:** ✅ integration-tested (`partner-claim-sweep.spec.ts` — the headline regression, a
+  backstop mutuality check independent of the sweep, swept players landing in the leftover pool,
+  a confirmed team surviving untouched, the deadline-exception regression, and an aborted group
+  creation rolling the sweep back with everything else). **Frontend:** no distinct UI surface —
+  the observable effect is normal auto-pair/unpaired behavior, already covered by
+  `group-stage-doubles.spec.ts`; a swept player is notified via the existing "auto-paired" or
+  "left unpaired" wording from the scenario above, not bespoke copy.
+
 ---
 
 ## Feature: Organizer Tournament Management

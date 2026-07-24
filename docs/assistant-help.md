@@ -61,6 +61,10 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
 - Sent an invite to the wrong address? Open the tournament and **cancel the invite** in the
   partner section, then invite someone else. An invite nobody accepts expires by itself after
   24 hours, which also frees the spot it was holding for your partner.
+- An invite that's still unanswered when the organizer makes groups is cleared automatically —
+  you won't be teamed with someone who never confirmed. You'll re-enter the pool of solo
+  registrants and be paired according to the organizer's auto-pair setting for the tournament,
+  the same as anyone else without a confirmed partner.
 
 ## Tournament flow (scheduled tournaments)
 

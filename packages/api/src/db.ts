@@ -906,6 +906,20 @@ export class GroupRepository {
         const teamIds: string[] = []
         const teamed = new Set<string>()
 
+        // ISSUE-21: an invite nobody answered must not become a team. Clear
+        // every unconfirmed claim before any pairing is planned, so a
+        // mirror-written invite (branches A/B — partner_id set mutually,
+        // status = 'pending_partner_confirm') resolves to two genuinely
+        // unpaired players instead of a mutual link nobody confirmed. Post-
+        // ISSUE-16 this also clears pending_partner_email/partner_claimed_at;
+        // today the claim's only trace is partner_id + status.
+        await client.query(
+          `UPDATE public.player_registrations
+              SET partner_id = NULL, status = 'registered'
+            WHERE tournament_id = $1 AND partner_confirmed = false AND status = 'pending_partner_confirm'`,
+          [tournamentId]
+        )
+
         const createTeam = async (p1: string, p2: string) => {
           const teamId = `team_${Date.now()}_${Math.random().toString(36).slice(2)}`
           await client.query(
@@ -927,17 +941,31 @@ export class GroupRepository {
 
         // 1) Honor confirmed partnerships (mutual partner_id) first.
         const regResult = await client.query(
-          `SELECT player_id, partner_id FROM public.player_registrations
+          `SELECT player_id, partner_id, partner_confirmed FROM public.player_registrations
            WHERE tournament_id = $1 AND player_id = ANY($2::text[])`,
           [tournamentId, playerIds]
         )
         const partnerOf = new Map<string, string | null>()
-        for (const r of regResult.rows as any[]) partnerOf.set(r.player_id, r.partner_id || null)
+        const confirmedOf = new Map<string, boolean>()
+        for (const r of regResult.rows as any[]) {
+          partnerOf.set(r.player_id, r.partner_id || null)
+          confirmedOf.set(r.player_id, !!r.partner_confirmed)
+        }
 
+        // ISSUE-21 requirement (2): require partner_confirmed on both sides,
+        // not just a mutual partner_id. The sweep above already clears every
+        // unconfirmed claim, so this is a backstop against any future write
+        // that leaves a mutual-but-unconfirmed link in place.
         for (const playerId of playerIds) {
           if (teamed.has(playerId)) continue
           const partner = partnerOf.get(playerId)
-          if (partner && !teamed.has(partner) && partnerOf.get(partner) === playerId) {
+          if (
+            partner &&
+            !teamed.has(partner) &&
+            partnerOf.get(partner) === playerId &&
+            confirmedOf.get(playerId) &&
+            confirmedOf.get(partner)
+          ) {
             await createTeam(playerId, partner)
           }
         }
