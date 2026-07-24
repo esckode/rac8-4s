@@ -71,13 +71,21 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   its link after 24 hours, after which you're free to invite a different address.
 - An invite that's still unanswered when the organizer makes groups is cleared automatically —
   you won't be teamed with someone who never confirmed. You'll re-enter the pool of solo
-  registrants and be paired according to the organizer's auto-pair setting for the tournament,
-  the same as anyone else without a confirmed partner.
+  registrants and be paired according to your own auto-pair choice below (and the organizer's
+  setting for the tournament), the same as anyone else without a confirmed partner.
 - If your partner withdraws you'll be told, and you can find a new one — withdrawing dissolves a
   confirmed doubles team, so you go back to being a solo registrant free to request a new partner
   right away. This only happens for a completed withdrawal made before the registration deadline;
   a withdrawal *request* made after the deadline needs the organizer's approval first, and your
   team stays intact until then.
+- Registering solo for doubles (no partner invite)? A checkbox, checked by default, lets you say
+  whether you're okay being paired with another solo registrant if nobody plays with you by choice.
+  It's checked automatically for you, since this is what happens today unless you say otherwise —
+  either way, you'll be told at group creation whether you were auto-paired or left unpaired.
+  Unchecking it means: if you never find or accept a partner, you won't play, but you also won't
+  be teamed with a stranger without your say-so. This choice is made once, when you register — you
+  can't change it after, and group creation is too late to ask, since registration is already
+  closed by then.
 
 ## Tournament flow (scheduled tournaments)
 

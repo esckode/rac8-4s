@@ -307,6 +307,49 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       })
     })
 
+    test('Scenario: User can opt out of auto-pairing when registering solo for doubles (ISSUE-17)', async ({ page }) => {
+      // Given: a doubles tournament with registration open
+      const organizerToken = await getOrganizerToken()
+      const { id: tournamentId } = await createTournamentWithOpenRegistration(
+        { ...createTestTournament(), matchFormat: 'doubles' },
+        organizerToken
+      )
+
+      // And: I am an unauthenticated guest on its public browse page
+      await page.goto(ROUTES.TOURNAMENT_BROWSE(tournamentId), { waitUntil: 'networkidle' })
+
+      // Then: the auto-pair consent checkbox defaults checked
+      await expect(page.locator(SELECTORS.AUTO_PAIR_CONSENT_CHECKBOX)).toBeChecked()
+
+      // When: I register solo (no partner) with the checkbox unchecked
+      const user = createTestUser()
+      await page.fill('#email', user.email)
+      await page.fill('#name', user.name)
+      await page.locator(SELECTORS.AUTO_PAIR_CONSENT_CHECKBOX).uncheck()
+      await page.click('button:has-text("Register for Tournament")')
+
+      await expect(page.locator(SELECTORS.DOB_INPUT)).toBeVisible({
+        timeout: TIMEOUTS.ELEMENT_VISIBLE,
+      })
+      await page.fill(SELECTORS.DOB_INPUT, '1990-01-01')
+      await page.click(SELECTORS.DOB_SUBMIT)
+
+      await expect(page.getByText('Check your email to confirm.')).toBeVisible({
+        timeout: TIMEOUTS.ELEMENT_VISIBLE,
+      })
+
+      // Then: the organizer's pairing preview shows me opted out
+      const preview = await apiCall(
+        `/tournaments/${tournamentId}/pairing-preview`,
+        'GET',
+        undefined,
+        organizerToken
+      )
+      expect(preview.ok).toBeTruthy()
+      const data = await preview.json()
+      expect(data.optedOut.some((p: { name: string }) => p.name === user.name)).toBe(true)
+    })
+
     test('Scenario: User cannot register after deadline', async ({ page }) => {
       // Given: I am on a tournament page with an expired registration deadline
       // Note: This requires setting up a tournament with past deadline

@@ -177,7 +177,7 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 |---|---|---|---|
 | **Authentication & Authorization** | 33 | `auth.spec.ts` | `npm run test:e2e:auth` |
 | **Login rate limiting** | 1 | `login-rate-limit.spec.ts` | `npx playwright test login-rate-limit` |
-| **Tournament Discovery & Registration** | 13 | `tournament-discovery-registration.spec.ts` | `npm run test:e2e:tournament` |
+| **Tournament Discovery & Registration** | 14 | `tournament-discovery-registration.spec.ts` | `npm run test:e2e:tournament` |
 | **Public registration (guest, no account)** | 4 | `tournament-public-registration.spec.ts` | `npx playwright test tournament-public-registration` |
 | **Browse tournaments (public discovery)** | 8 | `browse-tournaments.spec.ts` | `npx playwright test browse-tournaments` |
 | **My tournaments hubs (/standings, /matches)** | 6 | `my-tournaments-hub.spec.ts` | `npx playwright test my-tournaments-hub` |
@@ -690,6 +690,21 @@ Each test is explicitly named to match the Gherkin scenario, making it easy to t
   they've never used the app before
 - **And** once my partner accepts, both of our registrations link up and show
   "registered"
+
+### Scenario: User opts out of auto-pairing when registering solo for doubles (ISSUE-17)
+- **Type:** Happy path / consent
+- **Given** I am registering solo for a doubles tournament (no partner invite)
+- **When** I uncheck "if nobody joins my team, pair me up with another solo player" and register
+- **Then** my registration succeeds normally
+- **And** the organizer's pairing preview lists me under `optedOut`
+- **And** at group creation I'm marked `unpaired` and excluded from teams regardless of the
+  organizer's `pairUnpaired` setting, and I'm notified I was left unpaired (ISSUE-19's
+  `teams.formed` pipeline)
+- **Backend:** ✅ integration-tested (`auto-pair-consent.spec.ts` — opt-out excluded from
+  auto-pairing, opt-in unaffected, default-on when the field is absent, the left-unpaired
+  notification, and the organizer preview's parity-trap cases). **Frontend:** ✅ e2e
+  (`tournament-discovery-registration.spec.ts`) — checkbox defaults checked, unchecking it and
+  registering is reflected in the organizer's preview.
 
 ### Scenario: User cancels a pending partner invite (ISSUE-15)
 - **Type:** Happy path
