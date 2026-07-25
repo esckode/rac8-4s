@@ -27,6 +27,7 @@ here.
 | [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (long-term primary) + organizer SaaS (secondary); ads rejected; §3.2 coach-led player subscription added 2026-07-15 | 📐 **Strategy** — wedge/pricing/rail **grilled 2026-07-15 → MONETIZATION_DESIGN.md** |
 | [MONETIZATION_DESIGN.md](assets/planning/MONETIZATION_DESIGN.md) | Paid player registration ($10/mo, 14-day card trial, $5×3mo launch intro; Stripe Billing, US-only): guests keep tournaments + community layer free forever; registration = identity + /matches + /standings + profile + stats dashboard (new build) + 1:1 coach | 📐 **Design (fully grilled 2026-07-15, §2; 2 ⚖ owner calls; amended 2026-07-16: #6b lapse retention — coach data purges 90d after lapse; #10 retention levers — price lock, memory-as-benefit, pause, tenure data depth)** — stats scope ✅ grilled (row below); → `MONETIZATION_IMPLEMENTATION.md` next |
 | [STATS_DASHBOARD_DESIGN.md](assets/planning/STATS_DASHBOARD_DESIGN.md) | Premium `/stats` page (monetization launch blocker): core four — all-time W-L + streak, standings cards w/ rank_reason, per-tournament rank sparkline (singles, 90-day snapshot window), match history; ⚖ casual play as separated section; H2H → v1.1 | 📐 **Design (fully grilled 2026-07-16, §3; 1 ⚖ owner call; window grilled same day → all-history, subscription-window rejected)** — build folds into `MONETIZATION_IMPLEMENTATION.md` phase 1 |
+| [LOCATION_DISCOVERY_DESIGN.md](assets/planning/LOCATION_DISCOVERY_DESIGN.md) | Tournament location model + "Near me" discovery, D1–D13: gate on `visibility` (public ⇒ findable at publish; unlisted ⇒ text, never geocoded), shared ownerless address-keyed venues (provider place id = identity), one input box with provider-derived precision (venue/address/city/region), ⚖ one location per tournament (multi-site = a `region`), AWS Location `geo-places` adapter (Google's 30-day lat/lng cap disqualifies a durable table), opt-in "Near me" **sort**, player position coarsened ~1.1 km and never stored, SQL haversine + bbox with zero extensions | 📐 **Design (fully grilled 2026-07-25, §3 D1–D13; 1 ⚖ owner call)** — completes [PERSONALIZATION_DESIGN.md](assets/planning/PERSONALIZATION_DESIGN.md) P1c (venue tz tier); → `LOCATION_DISCOVERY_IMPLEMENTATION.md` next. ⚠ POI-naming smoke test is an open build-time gate |
 | [GROUP_CHALLENGE_STRATEGY.md](assets/planning/GROUP_CHALLENGE_STRATEGY.md) | Inter-group casual tournaments: owner-to-owner challenge → dual auto-polls (047 machinery) → merged roster tagged `origin_group_id` on registrations (single host `group_id` FK unchanged) → derived rivalry stats; N-ary entity, v1 capped at 2 groups; member-side free-forever, owner-side gating → parked owner-tier grill (§5) | 📐 **Strategy (draft, 2026-07-16)** — **not yet grilled**; grill §6 → `GROUP_CHALLENGE_DESIGN.md` |
 | [LLM_ASSISTANT_DESIGN.md](assets/planning/LLM_ASSISTANT_DESIGN.md) | @coach LLM assistant in group chat — Tier 1 read-only Q&A (MVP), Tier 2 confirmed write actions, Tier 3 proactive nudges | 📐 **Design (fully grilled 2026-07-10 §10, Phase B/C mechanics grilled 2026-07-11/12 §11)** → Tier 1 ✅ **Built**, Tier 2 ✅ **Built**, Tier 3 ✅ **Built** (nudges/recap/digest) ([LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md)) |
 | [PERSONALIZATION_DESIGN.md](assets/planning/PERSONALIZATION_DESIGN.md) | Player personalization P0–P13 — `player_settings` store + first `/profile` page, 3-level timezone hierarchy (player/group/venue — supersedes assistant B-Q6/C-Q3/C-Q8), self-centered UI (standings anchoring, initials avatars, local times), pending-actions endpoint → badges/up-next strip/composer chip, per-event notify prefs + quiet hours, table density (theme system ⚖ cut), standings snapshots → trends, availability grid | 📐 **Design (fully grilled 2026-07-13, §5; 3 ⚖ owner calls)** → P0–P12 ✅ **Built & merged** ([PERSONALIZATION_IMPLEMENTATION.md](assets/planning/PERSONALIZATION_IMPLEMENTATION.md)); P13 skill ratings **needs its own grill**; 1:1 Coach later phase → own docs below |
@@ -41,7 +42,7 @@ here.
 | [FRONTEND_IMPLEMENTATION.md](assets/planning/FRONTEND_IMPLEMENTATION.md) | Frontend-quality / rendering tasks driving [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) — FE-RENDER-1 (memoize `AuthProvider` value) | 📋 **Plan ready** — not started |
 | [PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md) | Community layer — Phases G0–G5 (compliance/age-gate prereq, group entity+membership, durable chat+moderation, polls, casual tournament engine+launch, DSR erasure cascade). TDD-first, ≥85% coverage; carries R-A reconciliation (G4.7) | ✅ **Built & merged** (G0.1–G5.1, migrations 038–045) |
 | [PLAYER_GROUPS_V2_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_V2_IMPLEMENTATION.md) | Community-layer refinements (FrontEndPlan §A/§B, grilled Q1–Q16) in **3 phases** — P1 member layer (group settings, member mgmt, invite-accept, age-gate wiring, @mentions), P2 personal notification thread (conversation-backed, DM seed), P3 casual play (launch flow + poll auto-launch/min-count + **shared scheduler** + casual scoring/leaderboards). TDD-first, ≥85%; 3 new pages + 1 tab; carries backend deltas + the 🔴 shared scheduler | ✅ **Built & merged** (P1.1–P3.9, migrations 046–048) |
-| [LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md) | @coach assistant — Phase A MVP (A0–A9: migration 049, @coach trigger, read-only tool layer + rank_reason, Haiku 4.5 via adapter, worker processor + rate limits, toggle + intro, FE render/picker/settings, e2e), Phase B confirm-card writes (B0–B7: assistant_cards migration, propose_score/propose_poll/propose_poll_vote/propose_casual_launch, ActionCard UI, confirm/cancel/complete routes, timezone plumbing, Tier-2 prompt), Phase C proactive (C0–C6: migration 051, nudge/recap/digest sweeps + hourly/weekly BullMQ jobs). TDD + e2e-scenario-first | ✅ **Built** (Phase A/B merged to `main`; Phase C 2026-07-13, branch `llm-assistant-phase-c`, not yet merged) — Phase A 8/8 + Phase B 7/7 + Phase C 11/11 e2e passing (26/26 total), no regressions. Launch gate: prod channel stays off (`ASSISTANT_ADAPTER` unset/mock = bot inert) until the privacy-policy AI clause ships (A9.2); recap-polish live-model quality also blocked on the same A0.1b (P-AWS enrollment) smoke gate |
+| [LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md) | @coach assistant — Phase A MVP (A0–A9: migration 049, @coach trigger, read-only tool layer + rank_reason, Haiku 4.5 via adapter, worker processor + rate limits, toggle + intro, FE render/picker/settings, e2e), Phase B confirm-card writes (B0–B7: assistant_cards migration, propose_score/propose_poll/propose_poll_vote/propose_casual_launch, ActionCard UI, confirm/cancel/complete routes, timezone plumbing, Tier-2 prompt), Phase C proactive (C0–C6: migration 051, nudge/recap/digest sweeps + hourly/weekly BullMQ jobs). TDD + e2e-scenario-first | ✅ **Built & merged** — Phases A, B **and C all on `main`** (verified 2026-07-25: `git branch --no-merged main` is empty; `nudge`/`recap`/`digest-processor.ts` all wired). Phase A 8/8 + Phase B 7/7 + Phase C 11/11 e2e passing (26/26 total), no regressions. **Pending rename:** the group trigger becomes `@ref` (design §12, grilled 2026-07-25 — see the "Plan ready" queue); the 1:1 Coach identity is unaffected. Launch gate: prod channel stays off (`ASSISTANT_ADAPTER` unset/mock = bot inert) until the privacy-policy AI clause ships (A9.2); recap-polish live-model quality also blocked on the same A0.1b (P-AWS enrollment) smoke gate |
 | [PERSONALIZATION_IMPLEMENTATION.md](assets/planning/PERSONALIZATION_IMPLEMENTATION.md) | Player personalization — S0–S8 (migrations 052–056: `player_settings` + `/profile` page; timezone hierarchy + group-tz digest reschedule; "you" anchoring + initials avatars + viewer-local times; pending-actions endpoint + tab badges + up-next strip + composer chip; notify prefs + quiet hours AND-layered with the group dial; table density; digest-aligned standings snapshots + rank movement; availability grid + Coach counts-only tool). TDD + e2e-scenario-first | ✅ **Built & merged** (S0–S8, 2026-07-14, branch `personalization-design` → `main`) — found+fixed a real dual-auth bug via live e2e |
 | [COACH_1TO1_IMPLEMENTATION.md](assets/planning/COACH_1TO1_IMPLEMENTATION.md) | 1:1 Coach — S0–S10 (migration 057: `type='coach'` convo + `player_memories` + `assistant_cards.conversation_id` re-key; `/player/coach/*` routes + SSE; player-level tool context + snapshot; history-cached coach client (`COACH_MODEL`); 20/hr+60/day limiter + heads-up; `propose_remember` + memory routes; pinned entry + `/coach` page + Profile section; DSR export/erasure incl. the §5.2 [RED] personal-scope card test; **privacy-policy page** clearing the A9.2 gate). TDD + e2e-scenario-first | ✅ **Built & merged** (S0–S10, 2026-07-14/15, branch `coach-1to1` → `main`) — e2e 8/8 chromium+firefox, coverage ≥85% stmts on all named modules, regression ladder green modulo documented pre-existing flakes. Privacy-policy page (`/privacy`) live; **owner review/approval of its text still pending**, and manual live-model smoke blocked on A0.1b (P-AWS enrollment) — A9.2 + launch-readiness clear once those land |
 | [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md) | Token-usage lint gate — Phases E0–E5: (b) repair broken ESLint config + clear 53 errors + gate lint in CI, (a) color-literal `no-restricted-syntax` rule on the unified gate w/ interim baseline + permanent allowlist, (c) husky/lint-staged pre-commit, **(E5 mandatory) full retrofit of all ~301 legacy color literals across 11 files + tear down the baseline** (gate becomes total). TDD-first via ESLint fixture harness | ✅ **Built & merged** to `main` |
@@ -104,11 +105,48 @@ here.
   `MONETIZATION_IMPLEMENTATION.md` — phase 1 = stats dashboard build (launch blocker, TDD-first),
   then Stripe Checkout/Billing signup rework, subscription-status webhook mirror, resubscribe wall,
   privacy-policy billing section.
-- *(done)* ~~**LLM assistant (@coach)** → `LLM_ASSISTANT_IMPLEMENTATION.md`~~ — **Phase A (A0–A9) +
-  Phase B (B0–B7)** merged to `main`; **Phase C (C0–C6) built 2026-07-13** on branch
-  `llm-assistant-phase-c` (not yet merged to `main`).
+- *(done)* ~~**LLM assistant (@coach)** → `LLM_ASSISTANT_IMPLEMENTATION.md`~~ — **Phases A (A0–A9),
+  B (B0–B7) and C (C0–C6) all built and merged to `main`** (status corrected 2026-07-25; the docs
+  had claimed Phase C was unmerged on `llm-assistant-phase-c`). **Remaining work is two owner
+  actions, no code:** **A9.2** — privacy-policy page is built and routed, owner approval of the
+  *text* outstanding, and the launch gate holds the prod channel off until it ships
+  (`ASSISTANT_ADAPTER` unset/mock = bot inert); **A0.1b** — P-AWS channel enrollment, which blocks
+  the manual live-model smoke for every phase (e2e asserts plumbing against the mock; real model
+  behaviour — decline phrasing, injection resistance, recap-polish quality — is unverified).
+
+- **Location & discovery** — **grilled 2026-07-25
+  ([LOCATION_DISCOVERY_DESIGN.md](assets/planning/LOCATION_DISCOVERY_DESIGN.md) §3, D1–D13)**. Next:
+  create `LOCATION_DISCOVERY_IMPLEMENTATION.md` — migration (`locations` +`place_id`/address/precision/
+  extent, `REAL`→`double precision`, `sport`/`total_courts` nullable; `tournaments` +`location_id`/
+  `location_text`), `GeocoderAdapter` + mock + AWS `geo-places`, `/geo/*` routes **and their CloudFront
+  behavior**, `visibility` on tournament create/edit, the publish gate, the "Near me" sort chip +
+  coarsened geolocation, `findNearby` fix, and `location-discovery.spec.ts`. **Do the POI-naming smoke
+  test first** — it's the one unverified assumption.
 
 ### 📋 Plan ready → available to tackle
+- **Group trigger rename `@coach` → `@ref`** *(decided 2026-07-25,
+  [LLM_ASSISTANT_DESIGN.md](assets/planning/LLM_ASSISTANT_DESIGN.md) §12 N-Q1–N-Q8; no grill left).*
+  The group bot **executes** (scores, polls, launches, location) while only the 1:1 surface
+  **advises** — one identity for both misdescribed the group role. **Group trigger only:**
+  `detectAssistantTrigger` has a single call site (`routes/player-groups.ts:697`) and the 1:1 route
+  never used it, so the 1:1 Coach identity and its `e2e/config.ts` constants are untouched. A
+  per-action `@verb` set was designed and rejected (too many words for a group to select correctly).
+  **Steps: `LLM_ASSISTANT_IMPLEMENTATION.md` Phase N (N0–N7 + DoD).**
+  🔴 **Do this BEFORE the A9.2 privacy-text approval** — `PrivacyPolicy.tsx` renders user-visible copy
+  naming "Coach" for both surfaces, including *"When you @mention Coach in a group chat"* (line 41),
+  and A9.2 is the owner-approval gate on that exact text. Approving first forces a second approval
+  round. It's also free right now: the bot is gated off (`ASSISTANT_ADAPTER` unset ⇒ inert), so no
+  real group has ever seen `@coach`. Verified scope: **101 occurrences across 32 files**, of which
+  the functional ones are `trigger.ts`, `prompt.ts`, `GroupChatPanel.tsx` (the P7 chip inserts
+  `@coach` text), `PrivacyPolicy.tsx`, `docs/assistant-help.md`, and the e2e specs. Touches: `trigger.ts` (constants, regex, `RESERVED_DISPLAY_NAMES`
+  gains `ref` **and keeps `coach`** — else the retired identity is impersonable), `prompt.ts` persona
+  **plus an explicit "you do not arbitrate disputes" instruction** (N-Q6: "ref" invites
+  "@ref that score is wrong" and there is **no reject/dispute path** in the codebase — only
+  `PATCH /:id/matches/:matchId/confirm`), `MentionAutocomplete`, `ActionCard`, `GroupChatPanel`,
+  the group-assistant e2e specs, and steps/DoD in `LLM_ASSISTANT_IMPLEMENTATION.md`. ⚠ **Update
+  `docs/assistant-help.md` in the same change** — it is the corpus the bot answers *from*, so
+  shipping without it makes `@ref` explain itself as `@coach`. No HL/REQUIREMENTS reconciliation
+  needed (both contain zero `@coach` references).
 - **FRONTEND_IMPLEMENTATION.md** — frontend-quality tasks (TDD). First task: **FE-RENDER-1** memoize the
   `AuthProvider` context value.
 
@@ -307,19 +345,29 @@ here.
   2 groups by invite, N-ary entity from day one; member-side free-forever, **owner-side gating routed
   to the parked organizer/owner-tier grill** (§5 — symmetric paywall ruled out; v2 directory = natural
   paid owner surface).
-- **Location-based tournament discovery ("nearest tournaments")** *(growth/discovery; surfaced 2026-07-21
-  during the UAT walkthrough).* No mechanism exists today and the data model doesn't support one: the
-  frontend never reads the device location (no `navigator.geolocation`), **tournaments carry no location
-  data at all** (`TournamentRow`, `db.ts:29` — no venue/`location_id`/lat-lng), and Browse sorts
-  `created_at DESC`. There **is** dormant venue scaffolding — a `public.locations` table (lat/long) +
-  `public.courts` + a `findNearby(lat,lng,radiusKm)` helper (`db.ts:1442`) — but it's **venue-scoped,
-  not linked to tournaments, exposed by no route, and dead code** (zero callers; a crude lat/long
-  bounding-box defaulting to **25 m** — a venue geofence, not a discovery radius). **To grill:** where
-  tournament location lives (link tournaments → `locations`, vs. coords on the tournament); device
-  geolocation UX (consent prompt + graceful denied-permission fallback like manual city/postal search);
-  a proper distance query (haversine / PostGIS `earthdistance` with a spatial index — the bbox helper is
-  the wrong shape); a Browse "Near me" sort/filter + distance-on-card; and privacy (consent, non-storage
-  of precise location). 📐 **Design needed — not yet grilled** → `LOCATION_DISCOVERY_DESIGN.md`.
+- ~~**Location-based tournament discovery ("nearest tournaments")**~~ *(growth/discovery; surfaced
+  2026-07-21 during the UAT walkthrough).* — **GRILLED 2026-07-25 (D1–D13) → design written**
+  ([LOCATION_DISCOVERY_DESIGN.md](assets/planning/LOCATION_DISCOVERY_DESIGN.md)). Gate keyed on
+  **`visibility`** (public ⇒ findable location required at the `draft → registration_open` transition;
+  unlisted ⇒ free text, never geocoded); **shared ownerless address-keyed venues** (provider place id =
+  identity ⇒ no owner/edit-permissions/moderation); **one input box**, precision derived from the
+  provider's place type (venue/address/city/region); ⚖ **one location per tournament** — a multi-site
+  event is a `region`, players coordinate the meeting spot in chat (deletes the join table; matches carry
+  no dates anyway); **AWS Location `geo-places`** adapter + mock — Google's **30-day lat/lng caching cap**
+  disqualifies a durable local geo table, AWS's `intendedUse=Stored` permits it, and the IANA tz arrives
+  free in the same call, **completing PERSONALIZATION_DESIGN P1c**; opt-in **"Near me" sort** (not a
+  filter — a radius filter empties the page at launch); player position **coarsened to ~1.1 km and never
+  stored**; **plain SQL haversine + bbox, zero extensions**; unlisted text seeded from
+  `player_groups.default_location_text` and **editable per session by any group member**, with the change
+  posted to group chat (D14 — poll auto-launch is a worker with nobody to type one; needs its own
+  player-authed route since `PATCH /tournaments/:id` is organizer+creator-only). Group locations stay free
+  text, **never geocoded** (a social "usual place" is often a residence). **@coach** (D15): a location
+  field on the existing `LaunchConfirmSheet` (same pattern as its editable `matchFormat`) + a new
+  registry-wall `propose_location_change` card — **addressed-only**, no inferring moves from ambient chat
+  (that would breach `trigger.ts` mention-only, `recap.ts`'s "model only polishes", and act on
+  unconfirmed intent). Next: `LOCATION_DISCOVERY_IMPLEMENTATION.md`.
+  ⚠ **Open build-time gate:** POI name quality is the one unverified assumption — smoke-test ~6 real
+  venues against a live key before wiring the UI (§3 D5).
 - **🔴 Legal hold not enforced by the DSR erasure cascade** *(compliance; platform-wide; grill in the DSR
   track, PLAYER_GROUPS_DESIGN §12).* A legal hold / litigation-preservation obligation **overrides** a DSR
   erasure for the data in scope (GDPR Art. 17(3) / CCPA "retain to meet a legal obligation or defend
