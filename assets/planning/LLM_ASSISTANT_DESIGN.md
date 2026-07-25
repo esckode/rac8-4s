@@ -4,11 +4,15 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-07-10 (drafted + **fully grilled to resolution the same day** — see §10;
-Phase B/C mechanics grilled 2026-07-11 — see §11)
-**Status:** ✅ **Built for Phase A** (2026-07-11, A0–A9), **Phase B** (2026-07-12, B0–B7 — merged
-to `main` 2026-07-12), **and Phase C** (2026-07-13, C0–C6, proactive nudges/recap/digest — see
-[LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md); branch
-`llm-assistant-phase-c`, not yet merged to `main`). Builds on the community layer
+Phase B/C mechanics grilled 2026-07-11 — see §11; **group trigger rename `@coach` → `@ref`
+grilled 2026-07-25 — see §12, decided but not yet built**)
+**Status:** ✅ **Built & merged — all three phases on `main`:** Phase A (2026-07-11, A0–A9),
+Phase B (2026-07-12, B0–B7), Phase C (2026-07-13, C0–C6, proactive nudges/recap/digest — see
+[LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md)). *(Merge status corrected
+2026-07-25 — this header had said Phase C was "not yet merged to `main`" on branch
+`llm-assistant-phase-c`; it is merged.)* Remaining work is two owner actions, not code: **A9.2**
+privacy-text approval (the launch gate keeps the prod channel off until it ships) and **A0.1b**
+P-AWS enrollment for the live-model smoke. Builds on the community layer
 ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)) and the messaging platform
 ([MESSAGING_DESIGN.md](./MESSAGING_DESIGN.md) §16–§17).
 
@@ -59,6 +63,8 @@ Grilled placement decisions:
 - **Trigger (grilled): reserved `@coach`.** Case-insensitive literal, detected server-side before
   the name-based player-mention parser runs. `coach` joins a reserved-display-names list enforced at
   signup/rename, so no player can collide with the bot. Sender renders as **Coach**.
+  → ⚠ **Superseded by §12 (2026-07-25), not yet built:** the group trigger becomes **`@ref`** (the
+  group bot *executes*; only the 1:1 surface *advises*). This section describes the as-built state.
 - **Bot identity (grilled Q3): new message type `assistant`.** Migration adds `'assistant'` to the
   `type` CHECK on `messaging.messages` and `messaging.group_messages`. Bot rows:
   `type='assistant'`, `player_id=NULL`, `sender_name_snapshot='Coach'`. The explicit type (rather
@@ -574,3 +580,32 @@ the auto-close gap itself is flagged in BACKLOG.md as a pre-existing issue, out 
 
 Proactive verbosity (Q16 addendum): the 20/50 tiers govern *reactive answers*; proactive posts get
 their own bounds — nudge ≤40 words + the match list, recap ≤80 words, digest ≤120 words.
+
+## 12. Group trigger rename grill (2026-07-25)
+
+Grilled with the product owner to the same standard as §10/§11 — settled; do not relitigate
+without new evidence.
+
+**The problem.** One identity, `@coach`, serves two jobs that are not alike. In the 1:1 surface the
+bot *advises* (performance, tactics, scouting) — "coach" is exactly right. In group chat it
+*executes*: submit a score, create or vote a poll, launch a casual tournament, set the location,
+answer questions about standings and schedule. "Coach" misdescribes that, and the mismatch is
+user-facing.
+
+| Q | Decision |
+|---|----------|
+| N-Q1 Scope of the rename | **Group trigger only.** Verified: `detectAssistantTrigger` has exactly **one** call site (`routes/player-groups.ts:697`, the group send path) and the 1:1 route does **not** use it — inside a `type='coach'` conversation every message goes to the coach. So `@coach` was never a 1:1 trigger; "Coach" there is a page/persona label. The two surfaces are independently renameable, and the 1:1 keeps its identity untouched (`e2e/config.ts`'s `COACH: '/coach'`, `COACH_ENTRY`, `COACH_CHAT_PAGE` all stay) |
+| N-Q2 A name, not a verb set | **One name.** A per-action `@verb` vocabulary (`@score`, `@poll`, `@in`/`@out`/`@maybe`, `@launch`, `@where`, `@next`, `@who`, `@draw`) was designed and **rejected by the owner: too many words to remember, and unlikely to be selected correctly by everyone in a group.** Two supporting findings: verbs fit the *write* half beautifully (`@in`/`@out`/`@maybe` are literally `poll_votes.choice`'s CHECK values, migration 042) but **strain on the read half** — standings and bracket are nouns, you ask *for* them rather than *do* them; and every verb would have to join `RESERVED_DISPLAY_NAMES`, multiplying signup/invite rejections and nickname collisions ("Ace", "Will") |
+| N-Q3 Bare-verb triggers | **Rejected** independently of N-Q2: group members use those words conversationally ("should we *launch* it tonight?", "did you *submit* the score?"), so a verb-initial trigger misfires constantly. The `@` prefix exists precisely to make addressing unambiguous |
+| N-Q4 Slash commands | **Rejected.** They discard the natural-language path the model is for, need an argument parser and command registry, and duplicate the **P7 composer chip** (PERSONALIZATION_DESIGN) which already provides the structured affordance beside the conversational one |
+| N-Q5 The new name | **`@ref`.** Maximally distinct from "coach" — and the pair *teaches* the split with no explanation: nobody asks a ref about their backhand, nobody asks a coach to record a score. Fit by job area: **strong** on scoring (the highest-volume action), records/standings/draw/schedule (the official keeps the records), and Tier 3 nudges + recap (chasing results and announcing outcomes is ref work); **weak** on creating polls and launching tournaments (refs officiate, they don't organise events). The weak cases are cheap because both have first-class UI — the P7 composer chip and `LaunchConfirmSheet` — so people tap rather than type them |
+| N-Q6 The adjudication caveat | **Handle in the prompt, don't rename around it.** "Ref" invites "@ref that score is wrong" in a way `@coach` never did, and the app **cannot** arbitrate: `PATCH /:id/matches/:matchId/confirm` exists but there is **no reject/dispute path anywhere**. Mitigation: an explicit *you do not arbitrate disputes* instruction in the system prompt, replying with the real mechanism (ask the reporter to re-report; use the confirm flow). `@marshal`/`@desk` avoid the courtroom connotation but read less naturally on scoring, which is the volume case |
+| N-Q7 Reserved-name migration | `RESERVED_DISPLAY_NAMES` gains `ref` **and keeps `coach`**. Dropping `coach` would let a player register under the retired identity and impersonate it — and historical messages still contain literal `@coach` text |
+| N-Q8 Timing | **Now is the cheap moment.** The assistant is built and merged but gated off (`ASSISTANT_ADAPTER` unset/mock ⇒ bot inert, pending the A9.2 privacy-text approval), so **no real group has ever seen `@coach`**. One functional call site; the cost is churn across ~25 test/prose files |
+
+**Not a source-of-truth reconciliation.** `rac8-4s-HL.md` and `REQUIREMENTS.md` contain **zero**
+`@coach` references, so §9's HL-reconciliation requirement does not apply to this rename.
+
+⚠ **Sequencing trap for the build:** `docs/assistant-help.md` is the corpus the bot answers *from*
+(loaded into its system prompt). If the rename ships without updating it, `@ref` will explain
+itself to users as `@coach`.

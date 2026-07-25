@@ -6,7 +6,12 @@
 > **read §10 of the design doc before starting; do not relitigate those decisions**).
 
 **Date:** 2026-07-10
-**Status:** ✅ Phase A BUILT (2026-07-11, A0–A9) and Phase B BUILT (2026-07-12, B0–B7).
+**Status:** ✅ Phase A BUILT (2026-07-11, A0–A9), Phase B BUILT (2026-07-12, B0–B7), Phase C BUILT
+(2026-07-13, C0–C6) — **all merged to `main`**. 📋 **Phase N** (group trigger rename `@coach` →
+`@ref`, design §12) **planned, not started** — see the end of this document.
+*Step-status audit 2026-07-25: all code-level `[x]` claims verified against the tree (migrations
+049/050/051, four e2e specs, help corpus); the only defects were C6's two skipped doc bullets, now
+corrected. The 4 unchecked DoD items are all the legitimate A0.1b live-model blocker.*
 **Both independently re-verified and fast-forward-merged to `main` 2026-07-12** —
 see "Independent verification" below the Phase B DoD. Phase C below remains plan-only.
 **Method:** TDD-first per CLAUDE.md §4/§11 — every step is a **[RED]** commit (failing tests, run
@@ -651,11 +656,17 @@ Phase A. Execution order: B0 follow-up → B6 scenario docs → B1 → B2 → B3
 
 ## Phase C — Proactive (T3.1 deadline nudges → T3.3 recap → T3.2 digest)
 
-**Status: T3.1 (C1–C3) BUILT 2026-07-13, branch `llm-assistant-phase-c`, unmerged.**
-Sequencing: C1→C3 ship T3.1, then an **owner-judgment checkpoint** (C-Q5 — Coach's first
-unprompted speech; gauge reception) before C4 (recap) and C5 (digest). Every step TDD
-([RED]→[GREEN]) like Phases A/B. **Currently paused at the C-Q5 checkpoint** — C4/C5 not
-started pending owner sign-off on T3.1's reception.
+**Status: ✅ Phase C BUILT (C0–C6) and merged to `main`.** All three proactive surfaces ship as
+wired workers — T3.1 nudges (C1–C3, `workers/nudge-processor.ts`), T3.3 recap (C4,
+`workers/recap-processor.ts`), T3.2 digest (C5, `workers/digest-processor.ts`) — 11/11 e2e passing.
+Sequencing as built: C1→C3 shipped T3.1, then an **owner-judgment checkpoint** (C-Q5 — Coach's first
+unprompted speech; gauge reception) before C4 and C5. Every step TDD ([RED]→[GREEN]) like Phases A/B.
+
+> *Status corrected 2026-07-25.* This line previously read "T3.1 (C1–C3) BUILT 2026-07-13, branch
+> `llm-assistant-phase-c`, unmerged … Currently paused at the C-Q5 checkpoint — C4/C5 not started."
+> C4 and C5 subsequently shipped and the branch was merged; the line was never updated. Verified by
+> `git branch --no-merged main` (empty) plus `recap-processor.ts`/`digest-processor.ts` calling
+> `buildRecap`/`buildDigest` on `main`.
 
 ### C0 — Context pack (decisions + verified grounding)
 
@@ -783,6 +794,14 @@ started pending owner sign-off on T3.1's reception.
 - **C5.3** E2E scenario (8).
 
 ### C6 — Wrap-up
+
+> **Status audit 2026-07-25:** C6's *code* bullets were complete, but **two doc bullets were
+> silently skipped** — "flip Phase C status entries" (BACKLOG) and "Design doc status → Built for
+> Phase C". Both were still claiming Phase C was unmerged on `llm-assistant-phase-c` twelve days
+> after the merge, in four places. **Corrected 2026-07-25**; C6 is now genuinely complete.
+> Root cause: the Phase C DoD ticks `[x] All C-steps built (C1–C6)` against *commit history*, which
+> a prose doc-update bullet doesn't produce — so nothing failed when it was skipped. The N-phase DoD
+> below therefore makes its doc bullet **grep-verifiable** instead of prose.
 
 - BACKLOG.md: flag the pre-existing **auto-close sweep has no production caller** finding
   (out of assistant scope); flip Phase C status entries.
@@ -953,3 +972,133 @@ Re-verified before starting Phase C planning:
       (no invented names/scores), and reliably falls back to the template on any failure.
 - [x] No prod channel enablement — unchanged from Phase A/B (`ASSISTANT_ADAPTER` stays
       unset/mock); the digest opt-in also stays off by default per group.
+
+---
+
+## Phase N — Group trigger rename `@coach` → `@ref`
+
+**Status: 📋 Planned (not started).** Decisions locked in
+[LLM_ASSISTANT_DESIGN.md](./LLM_ASSISTANT_DESIGN.md) **§12 (N-Q1–N-Q8, grilled 2026-07-25)** — do
+not relitigate here. Every step TDD ([RED]→[GREEN]) like Phases A/B/C.
+
+**Why now:** the bot is gated off (`ASSISTANT_ADAPTER` unset/mock ⇒ inert, pending A9.2), so **no
+real group has ever seen `@coach`**. One functional call site; the cost is churn across test and
+prose files. This gets more expensive the moment the prod channel opens.
+
+⚠ **Phase N blocks A9.2 — sequence it first.** `PrivacyPolicy.tsx` renders user-visible copy naming
+the assistant "Coach" in both places, including line 41: *"When you @mention Coach in a group
+chat…"*. A9.2 is the **owner-approval gate on that exact text**. Approving it before the rename means
+approving copy the rename immediately falsifies, forcing a second approval round. Do Phase N, then
+send the privacy text for approval once.
+
+### N0 — Context pack (verified 2026-07-25)
+
+- **Scope: the group trigger only.** `detectAssistantTrigger` has exactly **one** call site —
+  `routes/player-groups.ts:697`. The 1:1 route does **not** use it (inside a `type='coach'`
+  conversation every message goes to the coach), so the 1:1 identity is untouched: `/coach` route,
+  `CoachChat`, `coach-prompt.ts`, `coach-processor.ts`, `/privacy` copy, and `e2e/config.ts`'s
+  `COACH: '/coach'` / `COACH_ENTRY` / `COACH_CHAT_PAGE` all stay exactly as they are.
+- **Hard cutover** *(extends N-Q7/N-Q8; the grill settled that `coach` stays **reserved**, this
+  settles that it stops **triggering**)*: after N2, `@coach` no longer invokes the group bot and
+  produces no reply. Silence is acceptable precisely because no real group has used it. A
+  transition period where both trigger was considered and rejected — it doubles the reserved-trigger
+  surface for zero real users. If the prod channel opens *before* this ships, revisit.
+- **`sender_name_snapshot` is a snapshot column — no backfill.** Historical group rows keep
+  `'Coach'` by design (that is what the column is for). There are no real historical rows; dev/test
+  fixtures may carry them and that is fine.
+- **Verified baseline: 101 `@coach` occurrences across 32 real files** (excluding `node_modules`
+  and `coverage/`). Most are comments or test expectations. The **functional, user-visible** ones are:
+  - `GroupChatPanel.tsx:260/265/269` — the P7 composer chip **inserts `@coach …` text into the
+    composer** (`"@coach beat ${opponent} "`, `"@coach when's my next match? "`, plus the chip label).
+  - `PrivacyPolicy.tsx:38/41/46/52/66–69/79` — **rendered legal copy** naming "Coach" for both
+    surfaces, incl. *"When you @mention Coach in a group chat"*. The **group** references must become
+    Ref; the **1:1** references stay Coach (N-Q1). See the A9.2 sequencing warning above.
+  - `trigger.ts`, `prompt.ts`, `docs/assistant-help.md`, and the e2e specs / `e2e/config.ts`.
+  - Comment-only (safe, update for consistency): `auth.ts:87` (which confirms the reserved-name
+    enforcement point), `group-message-repository.ts:196`, `conversation-repository.ts:156`.
+- **No HL/REQUIREMENTS reconciliation:** both contain **zero** `@coach` references (verified), so
+  §9's source-of-truth requirement does not apply.
+
+### N1 — Scenario docs first (own commit)
+
+- `e2e-scenarios.md`: update the assistant scenarios' trigger text to `@ref`; the selection-map rows
+  are unchanged (same spec files). Same "scenario docs before code" convention as C1 and B6.
+
+### N2 — Trigger + reserved names *(the only functional change)*
+
+- **[RED]** `trigger.ts` tests: `@ref` triggers (case-insensitive, word-boundary, mid-message);
+  **`@coach` no longer triggers**; `isReservedDisplayName` rejects **both** `ref` and `coach`.
+- **[GREEN]** `ASSISTANT_TRIGGER_NAME = 'ref'`, `ASSISTANT_DISPLAY_NAME = 'Ref'`, `TRIGGER_RE`,
+  and `RESERVED_DISPLAY_NAMES = ['ref', 'coach']` — **keeping `coach` reserved** (N-Q7: otherwise a
+  player registers under the retired identity and impersonates it, while historical message bodies
+  still contain literal `@coach`).
+- Verify the signup and group-invite-accept paths reject both names (they call
+  `isReservedDisplayName`; confirm no separate hardcoded list exists).
+
+### N3 — Persona, display name, and the no-arbitration instruction
+
+- **[RED]** assistant-service tests: group replies carry `sender_name_snapshot='Ref'`; the system
+  prompt contains the no-arbitration clause; the 1:1 coach prompt is **unchanged**.
+- **[GREEN]** `prompt.ts` persona → Ref, and **N-Q6's explicit instruction: Ref does not arbitrate
+  score disputes.** On "@ref that score is wrong", reply with the real mechanism — ask the reporter
+  to re-report, or use the confirm flow — because `PATCH /:id/matches/:matchId/confirm` exists but
+  **there is no reject/dispute path anywhere in the codebase**. This is the one behavioral addition
+  in Phase N, not a cosmetic rename.
+- Leave `coach-prompt.ts` alone (1:1 advises; N-Q1).
+
+### N4 — Frontend
+
+- **[RED]** component tests: `MentionAutocomplete` suggests `@ref`; the composer chip inserts
+  `@ref …`; `GroupChatPanel` renders the `Ref` sender label.
+- **[GREEN]** `MentionAutocomplete.tsx`, `GroupChatPanel.tsx` (**the three literals in N0**),
+  `ActionCard.tsx` copy. Note the chip is hidden when `assistant_enabled=false` (P7) — that
+  behavior is unchanged.
+
+### N5 — Help corpus + docs *(§9 same-change rule)*
+
+- `docs/assistant-help.md` → `@ref` throughout. ⚠ **This is the corpus the bot answers *from***
+  (loaded into its system prompt), so shipping the rename without it makes Ref explain itself as
+  `@coach`. Add a line covering what Ref does *not* do (arbitrate disputes), mirroring N3.
+- **[RED]→[GREEN]** `PrivacyPolicy.tsx` — rendered legal copy: the **group** assistant becomes Ref
+  (line 41's *"@mention Coach in a group chat"* especially), the **1:1** stays Coach, and the
+  distinction between the two surfaces is made explicit since the page now names two things. This is
+  the step that **unblocks a single clean A9.2 approval round** (see the warning at the top of
+  Phase N). `PrivacyPolicy.spec` assertions update with it.
+- Design doc §2 supersession pointer and §12 already recorded (2026-07-25).
+
+### N6 — E2E
+
+- Update the three **group** assistant specs — `assistant.spec.ts`, `assistant-actions.spec.ts`,
+  `assistant-proactive.spec.ts` — plus the group-assistant constants in `e2e/config.ts`.
+  **Do not touch `coach.spec.ts`** or the `COACH_*` constants (1:1 surface, N-Q1).
+- `assistant-proactive.spec.ts` and `coach.spec.ts` require `npm run dev:worker`
+  (§8 — `JOB_QUEUE=bullmq` routes replies and sweeps through the queue consumer).
+- Also update `personalization-pending-actions.spec.ts` and `personalization-availability.spec.ts`
+  if they assert chip text (both reference `@coach`).
+
+### N7 — Wrap-up
+
+- BACKLOG.md: move the "Plan ready" rename entry to Built; update the assistant design-table row
+  (drop "Pending rename").
+- Design doc: §12 status → Built; §2's supersession pointer becomes the as-built description.
+
+## Definition of done (Phase N)
+
+- [ ] N1–N7 built with [RED]→[GREEN] commit history.
+- [ ] `npx jest --findRelatedTests $(git diff --name-only main...HEAD)` per workspace, clean
+      (§11 — expect this to be wide: `trigger.ts` is imported by the express app).
+- [ ] `npx playwright test assistant assistant-actions assistant-proactive --project=chromium
+      --reporter=line` green, **with `npm run dev:worker` running**; `coach.spec.ts` re-run
+      unchanged to prove the 1:1 surface was not disturbed.
+- [ ] `npx tsc --noEmit` (both packages) and `npm run lint` (repo-wide) clean.
+- [ ] **Grep gate (learned from the C6 failure above — a verifiable check, not a prose bullet).**
+      Baseline before Phase N: **101 hits / 32 files.** After:
+      `grep -rn "@coach" packages/ docs/ --include='*.ts' --include='*.tsx' --include='*.md' | grep -v node_modules | grep -v coverage`
+      must return **zero** hits in the functional set — `trigger.ts`, `prompt.ts`,
+      `GroupChatPanel.tsx`, `MentionAutocomplete.tsx`, `PrivacyPolicy.tsx`, `docs/assistant-help.md`,
+      and every e2e spec + `e2e/config.ts`. Remaining hits are permitted **only** as deliberate
+      historical prose (design §2/§12 supersession notes, this document's own history).
+- [ ] A player cannot register or be invited as **either** `ref` or `coach`.
+- [ ] Coverage floors unchanged or raised (§13) — this is a rename, so no floor should move; if one
+      drops, something was deleted that shouldn't have been.
+- [ ] No prod channel enablement (`ASSISTANT_ADAPTER` stays unset/mock) — unchanged from A/B/C.
