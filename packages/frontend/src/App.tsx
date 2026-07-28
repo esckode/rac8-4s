@@ -1,5 +1,5 @@
 import React from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { PublicRoute } from './components/PublicRoute'
@@ -33,6 +33,20 @@ import { ROUTES } from './constants/routes'
 import './styles/globals.css'
 
 
+
+// ISSUE-30: the bare /tournament/:id route redirects to the standings tab.
+// useParams() substitutes the real id — a template literal alone does not
+// interpolate route params, so the old inline <Navigate> sent users to a
+// URL containing the literal string ':tournamentId'.
+export const TournamentDetailRedirect: React.FC = () => {
+  const { tournamentId } = useParams()
+  return (
+    <Navigate
+      to={ROUTES.TOURNAMENT_TAB.replace(':tournamentId', tournamentId ?? '').replace(':tab', 'standings')}
+      replace
+    />
+  )
+}
 
 export const App: React.FC = () => {
   const { serviceUnavailable } = useServiceUnavailable()
@@ -125,9 +139,7 @@ export const App: React.FC = () => {
           />
           <Route
             path={ROUTES.TOURNAMENT_DETAIL}
-            element={
-              <Navigate to={`/tournament/:tournamentId/standings`} replace />
-            }
+            element={<TournamentDetailRedirect />}
           />
           <Route
             path={ROUTES.STANDINGS}

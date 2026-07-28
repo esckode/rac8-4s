@@ -161,6 +161,13 @@ test.describe('G4.8 — Casual tournament', () => {
       // No confirm sheet — launch fired directly (no format selection required)
     }
 
+    // ISSUE-30: the post-launch redirect used to send the browser to a
+    // literal, unsubstituted '/tournament/:tournamentId/standings' URL.
+    // The client-side navigate() lands on the bare route first, which then
+    // redirects — confirm it resolves to real content, not an error page.
+    await page.waitForURL(/\/tournament\/(?!:tournamentId)[^/]+\/standings/, { timeout: 10000 })
+    await expect(page.getByText('Failed to load tournament data')).not.toBeVisible()
+
     // Find the tournament the launch created and verify it is playable.
     let tournamentId: string | undefined
     for (let attempt = 0; attempt < 10 && !tournamentId; attempt++) {
