@@ -31,8 +31,8 @@ async function serversRunning(): Promise<boolean> {
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
-async function signupAndGetToken(user: { email: string; name: string; password: string }) {
-  const res = await apiCall('/test/player-token', 'POST', { email: user.email, name: user.name })
+async function signupAndGetToken(user: { email: string; name: string; password: string }, tournamentId?: string) {
+  const res = await apiCall('/test/player-token', 'POST', { email: user.email, name: user.name, tournamentId })
   if (!res.ok) throw new Error(`player-token failed: ${await res.text()}`)
   const data = await res.json()
   return { token: data.playerToken as string, playerId: data.playerId as string }
@@ -173,7 +173,11 @@ test.describe('G4.8 — Casual tournament', () => {
     }
     expect(tournamentId).toBeDefined()
 
-    const matchesRes = await apiCall(`/tournaments/${tournamentId}/matches`, 'GET', undefined, ownerToken)
+    // /tournaments/:id/matches requires a session scoped to *this* tournament
+    // (assertPlayerInTournament) — ownerToken above was minted before the
+    // tournament existed, so re-mint one scoped to it for the same player.
+    const { token: scopedOwnerToken } = await signupAndGetToken(owner, tournamentId)
+    const matchesRes = await apiCall(`/tournaments/${tournamentId}/matches`, 'GET', undefined, scopedOwnerToken)
     expect(matchesRes.ok).toBe(true)
     const { matches } = await matchesRes.json()
     expect(matches.length).toBeGreaterThan(0)

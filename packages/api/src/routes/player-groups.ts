@@ -947,8 +947,21 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           await playerRepo.createRegistration(voterId, tournament.id)
         }
 
-        // Lock registration
+        // Lock registration, then make the tournament immediately playable
+        // (ISSUE-31). A group launch has nothing left to decide — the roster
+        // is fixed at poll close and the format was chosen at poll creation —
+        // so there is no organizer transition to wait on; a group can never
+        // reach one anyway. Below 2 In-voters there is nothing a round-robin
+        // can generate, so the tournament stays registration_closed.
         await tournamentRepo.updateStatus(tournament.id, 'registration_closed')
+        if (inVoters.length >= 2) {
+          if (matchFormat === 'doubles') {
+            await tournamentGroupRepo.createGroupsForDoubles(tournament.id, 1, 1, inVoters)
+          } else {
+            await tournamentGroupRepo.createGroups(tournament.id, 1, 1, inVoters)
+          }
+          await tournamentRepo.updateStatus(tournament.id, 'group_stage_active')
+        }
 
         // Post system message into group conversation
         const conversationId = await conversationRepo.resolveGroupConversation(groupId)

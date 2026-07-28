@@ -1,6 +1,6 @@
 import type { Pool } from 'pg'
 import { PollRepository } from '../repositories/poll-repository'
-import { TournamentRepository, PlayerRepository } from '../db'
+import { TournamentRepository, PlayerRepository, GroupRepository } from '../db'
 import { ConversationRepository } from '../repositories/conversation-repository'
 import { getLogger } from '../logger'
 
@@ -87,6 +87,7 @@ async function tryAutoLaunch(
 
   const tournamentRepo = new TournamentRepository(pool as any)
   const playerRepo = new PlayerRepository(pool as any)
+  const groupRepo = new GroupRepository(pool as any)
 
   const tournament = await tournamentRepo.create({
     name: tournamentName,
@@ -103,7 +104,17 @@ async function tryAutoLaunch(
     await playerRepo.createRegistration(voterId, tournament.id)
   }
 
+  // Make the tournament immediately playable (ISSUE-31) — same rule as the
+  // manual launch route: below 2 In-voters there is nothing to generate.
   await tournamentRepo.updateStatus(tournament.id, 'registration_closed')
+  if (inVoters.length >= 2) {
+    if (matchFormat === 'doubles') {
+      await groupRepo.createGroupsForDoubles(tournament.id, 1, 1, inVoters)
+    } else {
+      await groupRepo.createGroups(tournament.id, 1, 1, inVoters)
+    }
+    await tournamentRepo.updateStatus(tournament.id, 'group_stage_active')
+  }
 
   await postSystemMessage(pool, conversationId, `Tournament started: ${tournament.name}`, { tournament_id: tournament.id })
 
