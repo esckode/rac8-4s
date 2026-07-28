@@ -8,6 +8,33 @@ still the index and links here; anchors are unchanged.
 **All issues below are resolved and merged on branch `fix/uat-issues`.** Open work —
 including follow-ups these issues surfaced — lives in `UAT_ISSUES.md`.
 
+| # | Severity | Title | Area |
+|---|---|---|---|
+| [ISSUE-1](#issue-1) | 🔴 | Registered-account users locked out of Groups (dual-auth gap) | api + frontend |
+| [ISSUE-2](#issue-2) | 🟠 | `teardown-uat.sh` silently deletes the SES sender identity | scripts |
+| [ISSUE-3](#issue-3) | 🟡 | `deploy-uat.sh` SES re-adopt guard uses the same fragile pattern | scripts |
+| [ISSUE-4](#issue-4) | 🟡 | `deploy-uat.sh` frontend build runs from the wrong cwd | scripts |
+| [ISSUE-5](#issue-5) | 🟠 | Fake iOS status bar (hardcoded `9:41` + fake signal/wifi/battery) shipped on the auth pages | frontend |
+| [ISSUE-6](#issue-6) | 🟠 | Auth "back" buttons hardcode `navigate('/')` instead of true history-back | frontend |
+| [ISSUE-7](#issue-7) | 🟠 | Guest bottom nav leaks auth-gated Standings/Matches tabs (dead-end → login) | frontend |
+| [ISSUE-8](#issue-8) | 🟠 | Bottom nav has no safe-area-inset handling; viewport lacks `viewport-fit=cover` | frontend |
+| [ISSUE-9](#issue-9) | 🟠 | Browse (discovery board) shows raw status enums + lists expired-`registration_open` as "Reg Open" | frontend + api |
+| [ISSUE-10](#issue-10) | 🟡 | Featured is positional `[0]`, not curated — make it a "Register soon" set (open + has-spots, most-registered, max 3) | frontend + api |
+| [ISSUE-11](#issue-11) | 🟠 | `POST /:id/register` is a public, unauthenticated, **unthrottled** email-send trigger (email-bombing / SES-reputation vector) | api · security |
+| [ISSUE-12](#issue-12) | 🟠 | Guest-registration UX: ambiguous app-vs-tournament framing, no auth-aware one-click, doubles partner unsurfaced, email-typo safety | frontend + api |
+| [ISSUE-13](#issue-13) | 🟠 | Tournament detail page (`TournamentBrowse`) — no design parity + missing description/deadline/capacity | frontend + api |
+| [ISSUE-14](#issue-14) | 🟠 | Emailed magic link forces account creation — wire it to the existing guest-session exchange ("continue as guest") | frontend + api |
+| [ISSUE-15](#issue-15) | 🟠 | Doubles partner: three competing mechanisms, the one wired to the UI is a no-op — consolidate on an email-based invite | api + frontend |
+| [ISSUE-16](#issue-16) | 🟠 | Partner pairing is first-*inviter*-wins — an invite mutates the invitee's registration | api + frontend |
+| [ISSUE-17](#issue-17) | 🟠 | Solo doubles registrants are auto-paired with a stranger without consent | api + frontend |
+| [ISSUE-18](#issue-18) | 🔴 | Confirming a partner has no accept-time guard, and `confirmPartner` is not atomic | api · data |
+| [ISSUE-19](#issue-19) | 🟠 | No notification fires when a doubles team is formed, by any path | api |
+| [ISSUE-20](#issue-20) | 🟠 | Withdrawal never dissolves a team, and no query filters withdrawn registrations | api · data |
+| [ISSUE-21](#issue-21) | 🔴 | An invite nobody answered becomes a real team at group creation | api · data |
+
+**The doubles-pairing cluster (ISSUE-16–21) is fully resolved.** Ship order, schema/migration notes,
+and the grill outcomes behind it are in [the cluster section](#doubles-pairing-cluster).
+
 ---
 
 ## ISSUE-1 — Registered-account users locked out of Groups (dual-auth gap) 🔴 {#issue-1}
