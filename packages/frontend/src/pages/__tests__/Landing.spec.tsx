@@ -30,7 +30,7 @@ describe('Landing', () => {
 
     renderWithRouter(<Landing />)
 
-    expect(screen.getByText('See you at the court.')).toBeInTheDocument()
+    expect(screen.getByText('See you at the court')).toBeInTheDocument()
   })
 
   it('renders subtitle', () => {
@@ -110,7 +110,7 @@ describe('Landing', () => {
 
     renderWithRouter(<Landing />)
 
-    expect(screen.getByText('See you at the court.')).toBeInTheDocument()
+    expect(screen.getByText('See you at the court')).toBeInTheDocument()
   })
 
   it('renders navigation buttons for both authenticated and unauthenticated users', () => {
