@@ -1239,24 +1239,55 @@ player plays every other player once"). Nothing in any group path calls it.
 
 So the suite is green while the flow dead-ends.
 
-### Fix — needs a decision first
+### The framing — this is *not* "social tournaments have no organizer" *(settled 2026-07-27)*
 
-**The question is who triggers generation for a group tournament**, given there is no organizer:
+That reading leads to the wrong fix. The missing organizer is a symptom; the real problem is **a
+state transition with no decision behind it**.
 
-1. **Generate at launch**, inside the existing launch handler, right after registering the In-voters
-   — the roster is already fixed at that moment (Q14: "the open poll window is the join window;
-   roster locks at close"), so there is nothing to wait for.
-2. **Generate on the auto-close/auto-launch worker path** too — `auto-close-processor.ts:98` launches
-   without anyone pressing a button, so it needs the same treatment or auto-launched tournaments stay
-   empty.
-3. **A group-member-authed transition**, mirroring how launch itself is creator-authed.
+For a *scheduled* tournament, `REGISTRATION_CLOSED → GROUP_STAGE_ACTIVE` is a genuine judgment —
+enough players, right time, start now? An organizer makes it. For a *casual group* tournament that
+judgment **was already made at poll close**: Q14 fixed the roster ("the open poll window is the join
+window; roster locks at close"), the format was chosen at poll creation, and nobody can join late. By
+the time the tournament exists there is nothing left to decide. The transition is ceremony.
 
-**(1) + (2) is the obvious shape** — a fixed roster with no organizer has nothing to gate on — but
-this is a real design decision, not a mechanical fix, so it is stated rather than assumed.
+The code already agrees. `player-groups.ts` never uses the state machine — it calls
+`updateStatus(tournament.id, 'registration_closed')` directly, jumping `DRAFT → REGISTRATION_CLOSED`
+and skipping `OPEN_REGISTRATION` entirely. It is already asserting states it knows to be true.
+Finishing the job in the same handler is consistent with what it does, not a new pattern.
+
+**⚠ Rejected: giving social tournaments an organizer, or adding a group-member-authed transition.**
+Both reintroduce a decision point that has nothing to decide — and the first collides head-on with
+the monetization grill. `MONETIZATION_DESIGN.md` §7.1 **O3** keeps group casual launch free *because*
+it goes `draft → registration_closed` and never touches `OPEN_REGISTRATION`, placing it outside the
+paywall **by construction**. Make social play need an organizer, and free social play needs a
+subscription — the exact outcome that decision exists to prevent.
+
+### Fix — decided: launch makes the tournament immediately playable
+
+**Owner decision 2026-07-27: a group tournament becomes playable the moment it launches.** Generating
+the round-robin does not force anyone to play — it shows them who they are matched against — and with
+a fixed roster, waiting gains nothing.
+
+1. **Generate in the launch handler**, immediately after registering the In-voters: call
+   `createGroups` (or `createGroupsForDoubles` when the resolved `matchFormat` is doubles — the
+   handler already computes it) and advance the status to `group_stage_active`.
+2. **Do the same on the auto-launch path** — `auto-close-processor.ts:98` launches with nobody
+   pressing a button, so without this, auto-launched tournaments stay empty in exactly the case
+   designed to need no human.
+3. **Make it atomic with the registrations.** A launch that registers players and then fails to
+   generate leaves precisely the state this issue describes, and the handler is the only place that
+   could have fixed it.
 
 **Do NOT reuse the `/test/*` seeders' shape uncritically.** They call
-`createGroups(tournament.id, 1, 1, playerIds)` — one group, one advancing — which may be right for a
-casual session but was written for fixtures, not as a product decision.
+`createGroups(tournament.id, 1, 1, playerIds)` — one group, one advancing — written for fixtures, not
+decided as product. A single round-robin group is plausibly right for a casual session; confirm it
+rather than inherit it.
+
+**Define the small-roster edge before building.** A round-robin needs at least two players, and the
+launch handler currently sets `maxPlayers: inVoters.length || 1`, so a poll with one In-voter (or
+zero) produces a tournament that generates no matches — the same dead end by a different route.
+Polls carry a `minPlayers` floor (`047` migration, Q14) but it is optional. Decide what launch does
+below two In-voters: refuse, or launch with nothing to play.
 
 **Whatever is chosen, replace the mocked assertion.** A test that intercepts the launch call cannot
 catch this class of defect; the spec must assert that matches exist and are playable *after* a real
@@ -1280,6 +1311,20 @@ through the queue consumer.
 **Manual, and this is the real gate:** create two accounts, a group, invite and accept, run a poll,
 both vote In, launch — then confirm the tournament has matches and both players can open and score
 one. That is the sequence this issue exists to make work.
+
+The API-level reproduction takes about a dozen calls and is worth scripting:
+`POST /api/auth/signup` ×2 (needs `dob_attestation: { dateOfBirth, policyVersion }`) →
+`POST /player/groups` → `POST /:groupId/invites` → `POST /:groupId/invites/accept` →
+`POST /:groupId/polls` → `POST /:groupId/polls/:pollId/votes` ×2 (`{choice:'in'}`) →
+`POST /:groupId/polls/:messageId/launch`. Then assert non-zero rows:
+
+```sql
+SELECT (SELECT count(*) FROM groups WHERE tournament_id=$1) AS groups,
+       (SELECT count(*) FROM group_matches gm JOIN groups g ON g.id=gm.group_id
+        WHERE g.tournament_id=$1)                            AS matches;
+```
+
+Both were **0** when this issue was filed, against 2 registrations.
 
 ---
 
