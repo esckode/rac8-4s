@@ -262,4 +262,54 @@ describe('P3.4 — Auto-launch hook', () => {
 
     expect(await countTournaments(pool, groupId)).toBe(1)
   })
+
+  it('with >=2 In-voters, auto-launch also generates matches (ISSUE-31)', async () => {
+    const creator = await createPlayer(pool)
+    const voter1 = await createPlayer(pool)
+    const groupId = await createGroup(pool, creator.id)
+    await pool.query(
+      `INSERT INTO public.player_group_members (group_id, player_id, role) VALUES ($1, $2, 'member')`,
+      [groupId, voter1.id],
+    )
+
+    const { messageId } = await createAutoLaunchPoll(pool, groupId, creator.id, {
+      autoLaunch: true, minPlayers: null, launchMatchFormat: 'singles',
+    })
+    await addVote(pool, messageId, creator.id, 'in')
+    await addVote(pool, messageId, voter1.id, 'in')
+
+    await processAutoCloseSweep({ pool })
+
+    const tRes = await pool.query(
+      `SELECT id, status FROM public.tournaments WHERE group_id = $1`,
+      [groupId],
+    )
+    expect(tRes.rows).toHaveLength(1)
+    expect(tRes.rows[0].status).toBe('group_stage_active')
+
+    const mRes = await pool.query(
+      `SELECT COUNT(*) AS n FROM public.group_matches WHERE tournament_id = $1`,
+      [tRes.rows[0].id],
+    )
+    expect(Number(mRes.rows[0].n)).toBe(1)
+  })
+
+  it('with only 1 In-voter, auto-launch still creates the tournament but stays registration_closed', async () => {
+    const creator = await createPlayer(pool)
+    const groupId = await createGroup(pool, creator.id)
+
+    const { messageId } = await createAutoLaunchPoll(pool, groupId, creator.id, {
+      autoLaunch: true, minPlayers: null,
+    })
+    await addVote(pool, messageId, creator.id, 'in')
+
+    await processAutoCloseSweep({ pool })
+
+    const tRes = await pool.query(
+      `SELECT id, status FROM public.tournaments WHERE group_id = $1`,
+      [groupId],
+    )
+    expect(tRes.rows).toHaveLength(1)
+    expect(tRes.rows[0].status).toBe('registration_closed')
+  })
 })

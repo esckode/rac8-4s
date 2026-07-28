@@ -374,3 +374,132 @@ describe('G4.5 — launch: matchFormat override in body', () => {
     expect(tournamentRes.rows[0].match_format).toBe('doubles')
   })
 })
+
+// ── Suite G: Match generation (ISSUE-31) ──────────────────────────────────────
+// A group launch has nothing left to decide once the poll closes — the roster
+// is fixed and the format was chosen at poll creation — so the tournament must
+// be immediately playable rather than stuck in registration_closed waiting on
+// an organizer transition that a group can never reach.
+
+describe('G4.5 — launch: generates matches and advances to group_stage_active (ISSUE-31)', () => {
+  let pool: Pool
+  let app: Express
+  let tokenStore: InMemoryTokenStore
+
+  beforeAll(async () => {
+    pool = await getTestPool()
+    await beginTransaction(pool)
+    const deps = createTestApp(pool)
+    app = deps.app
+    tokenStore = deps.tokenStore
+  })
+
+  afterAll(async () => {
+    await rollbackTransaction()
+  })
+
+  it('with >=2 In-voters, advances to group_stage_active with round-robin matches', async () => {
+    const creator = await createPlayer(pool)
+    const voter1 = await createPlayer(pool)
+    const voter2 = await createPlayer(pool)
+    const creatorToken = await playerToken(creator, tokenStore)
+
+    const group = await createGroupViaApi(app, creatorToken, 'singles')
+    await addMember(pool, group.id, voter1.id)
+    await addMember(pool, group.id, voter2.id)
+
+    const { pollId, messageId } = await createPoll(pool, group.id, creator.id)
+    await castVote(pool, pollId, voter1.id, 'in')
+    await castVote(pool, pollId, voter2.id, 'in')
+
+    const res = await request(app)
+      .post(`/player/groups/${group.id}/polls/${messageId}/launch`)
+      .set('Authorization', `Bearer ${creatorToken}`)
+      .send({})
+
+    expect(res.status).toBe(201)
+
+    const tournamentRes = await pool.query(
+      `SELECT status FROM public.tournaments WHERE id = $1`,
+      [res.body.tournamentId]
+    )
+    expect(tournamentRes.rows[0].status).toBe('group_stage_active')
+
+    // Round-robin of 2 players = 1 match
+    const matchesRes = await pool.query(
+      `SELECT id, status FROM public.group_matches WHERE tournament_id = $1`,
+      [res.body.tournamentId]
+    )
+    expect(matchesRes.rows).toHaveLength(1)
+    expect(matchesRes.rows[0].status).toBe('pending')
+  })
+
+  it('with fewer than 2 In-voters, stays registration_closed with no matches', async () => {
+    const creator = await createPlayer(pool)
+    const voter1 = await createPlayer(pool)
+    const creatorToken = await playerToken(creator, tokenStore)
+
+    const group = await createGroupViaApi(app, creatorToken, 'singles')
+    await addMember(pool, group.id, voter1.id)
+
+    const { pollId, messageId } = await createPoll(pool, group.id, creator.id)
+    await castVote(pool, pollId, voter1.id, 'in')
+
+    const res = await request(app)
+      .post(`/player/groups/${group.id}/polls/${messageId}/launch`)
+      .set('Authorization', `Bearer ${creatorToken}`)
+      .send({})
+
+    expect(res.status).toBe(201)
+
+    const tournamentRes = await pool.query(
+      `SELECT status FROM public.tournaments WHERE id = $1`,
+      [res.body.tournamentId]
+    )
+    expect(tournamentRes.rows[0].status).toBe('registration_closed')
+
+    const matchesRes = await pool.query(
+      `SELECT COUNT(*) AS n FROM public.group_matches WHERE tournament_id = $1`,
+      [res.body.tournamentId]
+    )
+    expect(Number(matchesRes.rows[0].n)).toBe(0)
+  })
+
+  it('with matchFormat=doubles and >=4 In-voters, forms teams and generates matches', async () => {
+    const creator = await createPlayer(pool)
+    const voters = [await createPlayer(pool), await createPlayer(pool), await createPlayer(pool)]
+    const creatorToken = await playerToken(creator, tokenStore)
+
+    const group = await createGroupViaApi(app, creatorToken, 'doubles')
+    for (const v of voters) await addMember(pool, group.id, v.id)
+
+    const { pollId, messageId } = await createPoll(pool, group.id, creator.id)
+    await castVote(pool, pollId, creator.id, 'in')
+    for (const v of voters) await castVote(pool, pollId, v.id, 'in')
+
+    const res = await request(app)
+      .post(`/player/groups/${group.id}/polls/${messageId}/launch`)
+      .set('Authorization', `Bearer ${creatorToken}`)
+      .send({})
+
+    expect(res.status).toBe(201)
+
+    const tournamentRes = await pool.query(
+      `SELECT status FROM public.tournaments WHERE id = $1`,
+      [res.body.tournamentId]
+    )
+    expect(tournamentRes.rows[0].status).toBe('group_stage_active')
+
+    const teamsRes = await pool.query(
+      `SELECT COUNT(*) AS n FROM public.teams WHERE tournament_id = $1`,
+      [res.body.tournamentId]
+    )
+    expect(Number(teamsRes.rows[0].n)).toBe(2)
+
+    const matchesRes = await pool.query(
+      `SELECT COUNT(*) AS n FROM public.group_matches WHERE tournament_id = $1`,
+      [res.body.tournamentId]
+    )
+    expect(Number(matchesRes.rows[0].n)).toBe(1)
+  })
+})

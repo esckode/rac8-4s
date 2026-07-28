@@ -125,30 +125,34 @@ test.describe('G4.8 — Casual tournament', () => {
     await expect(page.locator(SELECTORS.POLL_LAUNCH_BUTTON)).not.toBeVisible()
   })
 
-  test('Launching casual tournament from poll calls launch endpoint', async ({ page }) => {
+  test('Launching casual tournament from poll generates playable matches (ISSUE-31)', async ({ page }) => {
+    // Real launch, no route interception — a mocked launch response cannot
+    // prove matches were generated, which is exactly how ISSUE-31 shipped
+    // (the old version of this test only asserted the POST fired).
     const owner = createTestUser()
-    const { token } = await signupAndGetToken(owner)
-    const groupId = await createGroup(token, `Launch Group ${Date.now()}`)
+    const member = createTestUser()
+    const { token: ownerToken } = await signupAndGetToken(owner)
+    const { token: memberToken } = await signupAndGetToken(member)
+    const groupName = `Launch Group ${Date.now()}`
+    const groupId = await createGroup(ownerToken, groupName)
 
-    // Create poll and close it
-    const poll = await createPoll(token, groupId, 'Game on?')
-    await closePoll(token, groupId, poll.messageId)
-
-    // Intercept the launch POST before navigating to the page
-    let launchCalled = false
-    await loginFrontend(page, token)
-
-    await page.route(`**/player/groups/${groupId}/polls/${poll.messageId}/launch`, async route => {
-      launchCalled = true
-      await route.fulfill({ status: 201, body: JSON.stringify({ tournamentId: 'test-tid' }) })
+    const invRes = await apiCall(`/player/groups/${groupId}/invites`, 'POST', { email: member.email }, ownerToken)
+    const { rawToken } = await invRes.json()
+    await apiCall(`/player/groups/${groupId}/invites/accept`, 'POST', {
+      token: rawToken, email: member.email,
     })
 
+    // Two In-voters is the floor for a real round-robin match to exist.
+    const poll = await createPoll(ownerToken, groupId, 'Game on?')
+    await castVote(ownerToken, groupId, poll.pollId, 'in')
+    await castVote(memberToken, groupId, poll.pollId, 'in')
+    await closePoll(ownerToken, groupId, poll.messageId)
+
+    await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
     await expect(page.locator(SELECTORS.POLL_LAUNCH_BUTTON)).toBeVisible({ timeout: 5000 })
 
-    // Click opens the confirmation sheet; Confirm fires the POST
     await page.locator(SELECTORS.POLL_LAUNCH_BUTTON).click()
-    // Wait for the route interception or the confirm sheet — whichever comes first
     const confirmBtn = page.locator(SELECTORS.LAUNCH_CONFIRM_BUTTON)
     try {
       await confirmBtn.waitFor({ state: 'visible', timeout: 3000 })
@@ -156,9 +160,23 @@ test.describe('G4.8 — Casual tournament', () => {
     } catch {
       // No confirm sheet — launch fired directly (no format selection required)
     }
-    // Give the request time to resolve
-    await page.waitForTimeout(1000)
-    expect(launchCalled).toBe(true)
+
+    // Find the tournament the launch created and verify it is playable.
+    let tournamentId: string | undefined
+    for (let attempt = 0; attempt < 10 && !tournamentId; attempt++) {
+      const listRes = await apiCall('/player/tournaments?limit=20', 'GET', undefined, ownerToken)
+      const { tournaments } = await listRes.json()
+      const match = (tournaments as Array<{ id: string; name: string; status: string }>)
+        .find(t => t.name.startsWith(groupName))
+      if (match) tournamentId = match.id
+      else await page.waitForTimeout(300)
+    }
+    expect(tournamentId).toBeDefined()
+
+    const matchesRes = await apiCall(`/tournaments/${tournamentId}/matches`, 'GET', undefined, ownerToken)
+    expect(matchesRes.ok).toBe(true)
+    const { matches } = await matchesRes.json()
+    expect(matches.length).toBeGreaterThan(0)
   })
 
   test('Leaderboard panel renders when group has leaderboard data', async ({ page }) => {
