@@ -21,7 +21,7 @@ from where the archive ends.
 | [ISSUE-24](#issue-24) | 🔲 Open | 🟡→🟠 | An account with no linked player gets `TOKEN_INVALID` + "sign in again" — an unbreakable loop (🟡 today, 🟠 once organizers can be created) | api + frontend |
 | [ISSUE-25](#issue-25) | 🔲 Open | 🟡 | `seed-test-accounts.ts` creates accounts with no linked player — every seeded login hits ISSUE-24 | scripts · dev |
 | [ISSUE-26](#issue-26) | 🔲 Open | 🟠 | Bottom nav labels clip off-screen at every phone width (6 items don't fit under ~444px) | frontend · layout |
-| [ISSUE-27](#issue-27) | 🔲 Open | 🟡 | Auth pages and hub pages are two different design languages | frontend · design |
+| [ISSUE-27](#issue-27) | 🔲 Open | 🟡 | Dark entry vs light app is intentional — document the boundary; replace the emoji icons | frontend · design |
 | [ISSUE-28](#issue-28) | 🔲 Open | 🟠 | Nav: collapse Standings + Matches into one "Play" hub; four items | frontend + api |
 | [ISSUE-29](#issue-29) | 🔲 Open | 🟠 | Temporarily block public browse + public registration; keep both invite paths working | frontend + api |
 
@@ -273,12 +273,21 @@ column absorbs the height change on its own.
 defensive rule; it only *masked* this bug. Removing it would trade silent clipping for a stray
 horizontal scrollbar app-wide and fix nothing.
 
-**The blob SVGs — decide, don't inherit.** Each container holds a decorative
-`<svg viewBox="0 0 390 844" preserveAspectRatio="none">` authored to stretch to the fixed frame. Once
-the shell is fluid, at the widest full-bleed size (639px) the circles smear into visible horizontal
-ellipses. Not broken, but not intended either. Pick one: `preserveAspectRatio="xMidYMid slice"` so
-they stay circular and crop, or replace them with CSS radial-gradients. **Whichever you choose, the
-`viewBox` must stop being the layout's source of truth.**
+**The blob SVGs — `preserveAspectRatio="xMidYMid slice"`** *(settled 2026-07-27)*. Each container
+holds a decorative `<svg viewBox="0 0 390 844" preserveAspectRatio="none">` authored to stretch to
+the fixed frame; once the shell is fluid the circles smear into visible ellipses at the widest
+full-bleed size (639px, screenshotted). Change the attribute in all seven blocks:
+
+```diff
+- preserveAspectRatio="none"
++ preserveAspectRatio="xMidYMid slice"
+```
+
+Circles then stay circular, scale to cover, and crop at whichever edge overflows. **Deliberately the
+minimal fix** — CSS radial-gradients were considered and rejected for now because
+[ISSUE-27](#issue-27) may redo this surface entirely, and rewriting decoration that might be
+discarded is wasted work. The `viewBox` survives, but demoted: it describes the *artwork*, while
+`.auth-shell` owns the *layout*. That separation is the actual requirement.
 
 ### Fix — TDD (CLAUDE.md §4, commit red separately per §11)
 
@@ -550,7 +559,7 @@ its spec rather than adding a second.
 
 ---
 
-## ISSUE-27 — Auth pages and hub pages are two different design languages 🟡 {#issue-27}
+## ISSUE-27 — Dark entry vs light app: document the boundary, replace the emoji icons 🟡 {#issue-27}
 
 *Raised during the 2026-07-26 local walkthrough — a design decision, not a defect.*
 
@@ -574,15 +583,52 @@ by design and reveals it at the tablet breakpoint.
 So the split is a deliberate-looking aesthetic difference between two generations of screens, not
 drift in the token system. **Do not "fix" this by editing tokens.**
 
-### What this issue needs
+### Reframed 2026-07-27 — the split is intentional, and the real defect is smaller
 
-An owner decision on direction before any code: does the dark/glass auth treatment extend into the
-app, or do the auth pages come back toward the flat/light hub style? Everything else follows from
-that, including whether the emoji tab icons stay (they are the single most dated-looking element, and
-they interact with ISSUE-26 — icon-only tabs would lean on them much harder).
+**This issue was originally written as accidental drift. That was wrong.** Landing's computed
+background is byte-identical to Login's:
 
-Sequence this **after** ISSUE-24/25, since four hub pages currently render error states for seeded
-accounts — the design cannot be judged fairly against empty error screens.
+```
+Landing  linear-gradient(rgb(31, 45, 78) 0%, rgb(15, 27, 46) 100%)
+Login    linear-gradient(rgb(31, 45, 78) 0%, rgb(15, 27, 46) 100%)
+```
+
+So the boundary is not "auth pages diverge from the app" — it is **the entire pre-login funnel
+(Landing + all four auth pages) is dark, and the authenticated app is light**. A dark entry and a
+light workspace is a deliberate, common pattern. **Owner confirmed 2026-07-27: intentional, keep it.**
+
+Rejected: extending dark/glass into the app (every authenticated screen plus contrast work on dense
+standings/bracket tables), and flattening the entry pages (discards the most finished-looking art in
+the product, where distinctiveness pays most).
+
+### Scope — two things
+
+**1. Write the boundary down as a rule.** It currently exists only as a coincidence of which files
+were built when. Record it where frontend work will actually meet it (§9 of `rac8-4s-HL.md` or the
+design spec): *pre-login surfaces use the dark/glass treatment; authenticated surfaces use the flat
+`--ink-*` palette.* Without this, the next new page picks a side at random and the pattern decays
+into the drift this issue originally described.
+
+**2. Replace the emoji icons with a real icon set** — the one genuinely dated element, and the only
+actual defect here. Emoji are load-bearing UI in four places:
+
+| Location | Emoji |
+|---|---|
+| Bottom nav (`ResponsiveLayout.tsx:139,142,143`, + inline Groups/Notifications) | 🏆 📊 🎾 👥 🔔 |
+| "More" menu (`ResponsiveLayout.tsx:33-36`) | 👤 🏟️ ⚙️ ℹ️ |
+| Guest sign-in entry | 🔑 |
+| Tournament detail tabs (`TournamentDetail/index.tsx:77-79`) | 📊 🎾 🏆 |
+
+Emoji render differently on every platform, cannot be recoloured to match the active/inactive
+palette, and are the reason the nav reads as unfinished next to the auth pages. `LogoMark` is the
+existing precedent for an inline SVG icon in this codebase — follow it.
+
+**Sequence after [ISSUE-28](#issue-28)**, which cuts the nav from six items to four and renames two.
+Drawing icons for tabs that are about to be deleted is wasted work.
+
+**No test risk:** §8's e2e convention already forbids selecting on emoji (`data-testid` and
+`e2e/config.ts` constants only), so the specs should not notice this change. If one breaks, it was
+violating that rule.
 
 ---
 
@@ -785,10 +831,47 @@ Public tournaments effectively cannot exist in production already: `auth.ts:168`
 seed scripts. So no account can create a public tournament. This issue makes the de-facto state
 explicit and removes the dead surface rather than changing behaviour.
 
+### Mechanism — `PUBLIC_DISCOVERY_ENABLED` *(settled 2026-07-27)*
+
+Follows the **owner-approved `BILLING_ENABLED` pattern** (`MONETIZATION_DESIGN.md:51-64`): a single
+**server-authoritative** env switch, read at boot, **default off**, surfaced to the frontend via a
+config response — **never a build-time constant**, so flipping it needs no client redeploy.
+
+```
+PUBLIC_DISCOVERY_ENABLED (env, default off)
+   → GET /api/config  { publicDiscoveryEnabled: boolean }
+   → API routes gated server-side; UI reads the flag for nav, CTAs and redirects
+```
+
+**Why a runtime flag rather than static removal.** This issue's whole instruction is *block the
+surface, keep the machinery*, and it tells you not to delete the three discovery e2e specs. A
+runtime flag is the only option where those specs **still run** — turn the flag on in the test
+environment and the suite keeps proving discovery works. Under static UI removal they cannot execute
+at all, so the "kept" machinery rots unverified until someone tries to revive it months later.
+
+**`GET /api/config` does not exist yet** — build it here. This is not scope creep: `BILLING_ENABLED`
+already specifies surfacing "via an existing bootstrap/config response" that was never built, so
+billing needs the same endpoint. It lands at its first use.
+
+**Enforcement must be server-side, not UI-only.** The billing amendment's corollary — *do not build
+dormant-but-reachable* — applies with more force here, because unlike billing these endpoints
+already exist and work today. A UI-only gate leaves a live public registration endpoint reachable by
+direct request.
+
+**Two infra findings, both already verified — do not re-investigate:**
+- **CloudFront needs no change.** `/api/*` is already a behavior (`infra/modules/frontend/main.tf:63`,
+  `api_path_patterns`), so `/api/config` is covered by §9's rule automatically.
+- **CloudFront will not cache it.** All API behaviors use `caching_disabled` (`main.tf:116`), so an
+  env flip takes effect immediately rather than waiting out a TTL.
+- ⚠ **The service worker must classify `/api/config` as `passthrough`** — never cached, never
+  replay-queued — exactly as `/api/billing/*` does (`PWA_CACHING_DESIGN.md` D7). Otherwise an
+  installed PWA keeps serving a stale flag and the "no redeploy" property is lost for exactly the
+  users hardest to debug.
+
 ### Scope
 
 1. **Remove the Browse nav entry and route surface.** `/browse` and `/tournament/:id/browse` are
-   public (`App.tsx:65,72`). Gate them behind a single flag rather than deleting — the pages, tests
+   public (`App.tsx:65,72`). Gate them behind the flag above rather than deleting — the pages, tests
    and fixtures stay.
 2. **Block public registration.** `POST /tournaments/:id/register` is the unauthenticated entry
    point (ISSUE-11 rate-limits it). It must reject when the tournament was not reached via an
