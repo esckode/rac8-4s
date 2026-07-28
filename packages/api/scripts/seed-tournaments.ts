@@ -1,5 +1,5 @@
 import { Pool } from 'pg'
-import { TournamentRepository, AccountRepository } from '../src/db'
+import { TournamentRepository, AccountRepository, PlayerRepository } from '../src/db'
 import { getLogger } from '../src/logger'
 import * as bcryptjs from 'bcryptjs'
 
@@ -96,12 +96,37 @@ const TEST_TOURNAMENTS: TournamentSeed[] = [
 async function seedTournaments(pool: Pool): Promise<void> {
   const tournamentRepo = new TournamentRepository(pool)
   const accountRepo = new AccountRepository(pool)
+  const playerRepo = new PlayerRepository(pool)
 
   try {
     // Create or get organizer account
     let organizer = await accountRepo.findByEmail('tournament-organizer@test.com')
 
+    if (organizer && !organizer.player_id) {
+      // Repair path (ISSUE-25) — see seed-test-accounts.ts for the reasoning.
+      const player = await playerRepo.findOrCreatePlayerByEmail(
+        'tournament-organizer@test.com',
+        'Tournament Organizer',
+        undefined,
+        undefined,
+        { dateOfBirth: '2000-01-01', policyVersion: 'v1' }
+      )
+      await accountRepo.linkPlayer(organizer.id, player.id)
+      log.info('account.repaired', { email: 'tournament-organizer@test.com', playerId: player.id })
+    }
+
     if (!organizer) {
+      // Mirror real signup (auth.ts): claim/create the durable player identity
+      // BEFORE the account, then link them (ISSUE-25) — an organizer browses
+      // Standings/Matches like any authenticated user, so an unlinked account
+      // hits ISSUE-24's TOKEN_INVALID loop there.
+      const player = await playerRepo.findOrCreatePlayerByEmail(
+        'tournament-organizer@test.com',
+        'Tournament Organizer',
+        undefined,
+        undefined,
+        { dateOfBirth: '2000-01-01', policyVersion: 'v1' }
+      )
       organizer = await accountRepo.create(
         'tournament-organizer@test.com',
         'organizer',
@@ -109,7 +134,8 @@ async function seedTournaments(pool: Pool): Promise<void> {
       )
       const hash = await bcryptjs.hash('testpass123', 10)
       await accountRepo.updatePasswordHash(organizer.id, hash)
-      log.info('account.created', { email: 'tournament-organizer@test.com' })
+      await accountRepo.linkPlayer(organizer.id, player.id)
+      log.info('account.created', { email: 'tournament-organizer@test.com', playerId: player.id })
     }
 
     // Create tournaments
