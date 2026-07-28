@@ -18,7 +18,7 @@ from where the archive ends.
 |---|---|---|---|---|
 | [ISSUE-22](#issue-22) | 🔲 Open | 🟡 | Login greets guests with "Welcome back."; page titles/descriptions end in full stops | frontend · copy |
 | [ISSUE-23](#issue-23) | 🔲 Open | 🟠 | Auth pages hardcode a 390×844 phone frame — clipped below 390, gutters above | frontend · layout |
-| [ISSUE-24](#issue-24) | 🔲 Open | 🟠 | An account with no linked player gets `TOKEN_INVALID` + "sign in again" — an unbreakable loop | api + frontend |
+| [ISSUE-24](#issue-24) | 🔲 Open | 🟡→🟠 | An account with no linked player gets `TOKEN_INVALID` + "sign in again" — an unbreakable loop (🟡 today, 🟠 once organizers can be created) | api + frontend |
 | [ISSUE-25](#issue-25) | 🔲 Open | 🟡 | `seed-test-accounts.ts` creates accounts with no linked player — every seeded login hits ISSUE-24 | scripts · dev |
 | [ISSUE-26](#issue-26) | 🔲 Open | 🟠 | Bottom nav labels clip off-screen at every phone width (6 items don't fit under ~444px) | frontend · layout |
 | [ISSUE-27](#issue-27) | 🔲 Open | 🟡 | Auth pages and hub pages are two different design languages | frontend · design |
@@ -397,13 +397,23 @@ immediately before it (`auth.ts:143-153`, `findOrCreatePlayerByEmail`). So a nor
 player cannot reach this. The other three `accountRepo.create` call sites are all scripts —
 `seed-test-accounts.ts:35`, `seed-admin.ts:45`, `seed-tournaments.ts:105`.
 
-**The open question is organizer and admin accounts.** `auth.ts:168` hardcodes role `'player'`, so
-organizers cannot be created through signup at all — meaning however they *are* provisioned in a real
-deployment, it is not a path that links a player. An organizer who signs in and taps Standings or
-Matches (both are in the bottom nav for any authenticated user) would land in exactly this loop.
-`organizer@test.com` reproduces it today. **Establish how organizers are provisioned in production
-before sizing this**: if they can exist without a linked player, this is user-facing and 🟠 stands;
-if organizer provisioning always links, downgrade to 🟡 robustness.
+**Resolved 2026-07-27 by the organizer-tier grill** (`MONETIZATION_DESIGN.md` §7.1). `auth.ts:168`
+hardcodes role `'player'`, so organizers cannot be created through signup — and **no other
+production path exists**, so today this is unreachable outside seed data. That makes it **🟡 in
+practice right now**.
+
+**But it becomes 🟠 the moment the organizer-grant route is built**, which the beta requires. An
+organizer who signs in and taps Standings or Matches — both in the bottom nav for any authenticated
+user — lands straight in this loop. `organizer@test.com` reproduces it today.
+
+**Therefore: fix this before or alongside the organizer-grant route, never after.** The grill's O4
+already commits to the shape that prevents it — every account is always a player, with organizer
+layered on top rather than an exclusive role — so building the grant route on the current exclusive
+`role` column would ship this defect deliberately.
+
+*(Verified 2026-07-27: real signup does populate `playerId` — a live `POST /api/auth/signup` returned
+one — confirming the null-`player_id` accounts come from seeding, not from any user-reachable flow.
+See [ISSUE-25](#issue-25).)*
 
 ### Fix — TDD (CLAUDE.md §4, commit red separately per §11)
 
@@ -644,6 +654,20 @@ Replaces `MyTournamentsHub` as the nav destination. Renders, in order:
    tabs indistinguishable.
 3. **Recent results** — last few completed matches.
 
+**Empty states — two, keyed on group membership** *(settled 2026-07-27)*. `MyTournamentsHub.tsx:122`
+currently sends an empty hub to `/browse`, which [ISSUE-29](#issue-29) blocks, so this cannot be
+carried over as-is. Entry is group-only, so the next action is always about groups:
+
+| State | Message | Action |
+|---|---|---|
+| No groups | "Create a group to start playing" | reuse the existing `CreateGroupCta` (`MyGroups.tsx:61`) — do not build a second one |
+| In a group, no tournaments | "No games yet — start a poll in your group" | link to the group |
+
+"No groups" is genuinely reachable: signup is self-serve, and a new user has neither created nor
+joined one yet. **Verified live 2026-07-27** that the whole chain works today — `POST /api/auth/signup`
+(with `dob_attestation`) → `POST /player/groups` → `POST /:groupId/invites` → `POST /:groupId/polls`,
+each returning success — so both states are real and the CTAs point at working flows.
+
 **Carry the guest-upgrade CTA across.** `MyTournamentsHub.tsx:96-105` renders a
 `data-testid="guest-upgrade-cta"` card ("Create a password to save your account" → `/signup`) gated
 on `tab === 'matches'` — a tab this issue deletes. It is the only prompt a magic-link guest ever
@@ -718,6 +742,41 @@ switched off until group play has traction. Entry is by **invite only**.
 
 This is **temporary and reversible** — block the surface, do not delete the machinery. Four resolved
 issues built this path (ISSUE-9, 10, 12, 13 in the archive) and it is expected to return.
+
+### The invite model is group-only *(settled 2026-07-27 — read this before scoping)*
+
+**There is no tournament-level invite, and none is being built.** You are invited to a *group*;
+tournaments follow from group polls, which auto-register the In-voters. Nobody is ever invited to a
+single event.
+
+This is a bigger consequence than "discovery is off", because today there are exactly **two** ways
+into a tournament and this removes one of them:
+
+| Path | Status |
+|---|---|
+| Public registration — **starts** at `/tournament/:id/browse` | **blocked by this issue** |
+| Group poll launch — auto-registers In-voters, no invite step | the only remaining path |
+
+So blocking public browse also removes the only *tournament-level* front door. That is intended.
+
+**The onboarding chain that replaces it already works — verified live 2026-07-27**, each call
+returning success against a running API:
+
+```
+POST /api/auth/signup   (dob_attestation)  → account + linked playerId
+POST /player/groups                        → group created, caller is owner
+POST /:groupId/invites                     → email-bound single-use token
+POST /:groupId/polls                       → poll (autoCloseAt/autoLaunch/minPlayers/format)
+```
+
+UI exists for all of it: `CreateGroupCta` (`MyGroups.tsx:61`) and `GroupDetail`'s Chat · Members ·
+Invite tabs. **No new onboarding needs building** — this issue only removes the alternative.
+
+**Consequence: `/tournament/:id/join` becomes dead code.** It is a token-verification interstitial
+("Signing you in…" → redirect to `/matches`) reached only by someone who registered publicly and
+received a magic link. With public registration blocked, nobody reaches it. **Flag it, do not delete
+it** (§3) — it returns with public registration. Note its error branch links to
+`/tournament/${id}/browse` ("Register again"), which is one of the six dead links below.
 
 ### Why this is close to a no-op today
 
