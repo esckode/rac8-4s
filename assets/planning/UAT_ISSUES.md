@@ -24,6 +24,7 @@ from where the archive ends.
 | [ISSUE-27](#issue-27) | 🔲 Open | 🟡 | Dark entry vs light app is intentional — document the boundary; replace the emoji icons | frontend · design |
 | [ISSUE-28](#issue-28) | 🔲 Open | 🟠 | Nav: collapse Standings + Matches into one "Play" hub; four items | frontend + api |
 | [ISSUE-29](#issue-29) | 🔲 Open | 🟠 | Temporarily block public browse + public registration; keep both invite paths working | frontend + api |
+| [ISSUE-30](#issue-30) | 🔲 Open | 🔴 | `/tournament/:id` redirects to a **literal** unsubstituted path — group launch's payoff step is broken | frontend |
 
 ---
 
@@ -396,8 +397,34 @@ the failure mode is that "this account has no linked player identity" is reporte
 code for "your token is bad." The frontend then renders its generic re-authentication prompt,
 because that is the correct response to `TOKEN_INVALID` — it is being told the wrong thing.
 
-**Two defects, fix both:** the wrong error code in the API, and a frontend prompt that offers an
-action which provably cannot resolve the state.
+**⚠ The same bug exists in a second resolver** (`tournaments.ts:175`, `resolveTournamentPlayer`) —
+found 2026-07-27, and easy to miss because the issue originally named only `player.ts`:
+
+```ts
+if (!account.playerId) {
+  throw sessionErr        // rethrows the SESSION error → TOKEN_INVALID
+}
+```
+
+**Fix both resolvers.** Fixing only `player.ts` makes `/player/*` correct while every tournament-
+scoped route keeps looping, and the tests would still pass.
+
+**Two defects, fix both layers:** the wrong error code in the API, and a frontend prompt that offers
+an action which provably cannot resolve the state.
+
+**The frontend copy lives in five places**, not one — all must be handled, or the loop simply
+reappears elsewhere:
+
+| File | Line |
+|---|---|
+| `pages/MyGroups.tsx` | 152 |
+| `pages/PartnerRequestConfirm.tsx` | 38 |
+| `components/ScoreSubmitForm.tsx` | 84 |
+| `components/PartnerFinder.tsx` | 86, 104 |
+
+Each currently says some variant of "You need to sign in again". They are correct responses to a
+genuine `TOKEN_INVALID`; they must stay correct for that case and only change behaviour for the new
+code.
 
 ### Reachability — verify this FIRST, it sets the severity
 
@@ -431,13 +458,56 @@ See [ISSUE-25](#issue-25).)*
 `TOKEN_INVALID`. Add a frontend test that this new code renders a message which does *not* offer
 re-authentication as the remedy.
 
-**Green:** give `resolvePlayerId` an explicit third branch for "authenticated, but no linked player"
-returning its own code (e.g. `403 PLAYER_NOT_LINKED`), and map it in the frontend to copy that states
-the real problem. **Do NOT fix this by having `resolvePlayerId` auto-create a player record** — that
-silently mints identities from any authenticated request and bypasses the age-attestation path in
-`auth.ts:143-153`.
+**Green:** give **both** `resolvePlayerId` (`player.ts:16-30`) and `resolveTournamentPlayer`
+(`tournaments.ts:175`) an explicit branch for "authenticated, but no linked player", returning
+**`403 PLAYER_NOT_LINKED`** — that is the decided code, not a suggestion. Map it in the frontend at
+all five copy sites listed above.
+
+**The copy — one shared constant, reused at all five sites** *(settled 2026-07-27)*:
+
+> **This account isn't set up to play yet.**
+
+Deliberately **no "contact support" clause**: verified 2026-07-27 that the app has *no* support
+destination anywhere — no `mailto:`, no `support@`, no `/support` route — so the phrase would point
+nowhere. (`ServiceUnavailable.tsx:14` already makes that empty promise; see the follow-up.)
+
+One string, not five variants: all five sites describe the same underlying state, so per-context
+wording would add words without adding information. Note this is a body/error message, so per
+[ISSUE-22](#issue-22) it **keeps** its full stop — that convention covers titles and descriptions
+only.
+
+**Do NOT fix this by having either resolver auto-create a player record** — that silently mints
+identities from any authenticated request and bypasses the age-attestation path in `auth.ts:143-153`.
+
+**Do NOT change the existing `TOKEN_INVALID` copy for real token failures.** Those five messages are
+correct when the token genuinely is invalid; only the new code gets new copy.
 
 Per §9, any user-visible message change here must update `docs/assistant-help.md` in the same change.
+
+### Verify
+
+```bash
+SCRATCH=/tmp   # or the session scratchpad
+npm --workspace=packages/api exec -- jest \
+  --findRelatedTests $(git diff --name-only main...HEAD -- 'packages/api/src/**') \
+  --bail > "$SCRATCH/api.log" 2>&1
+grep -E "Tests:|Suites:|✕" "$SCRATCH/api.log" | head -40
+
+npm --workspace=packages/frontend exec -- jest \
+  --findRelatedTests $(git diff --name-only main...HEAD -- 'packages/frontend/src/**') \
+  --bail > "$SCRATCH/fe.log" 2>&1
+grep -E "Tests:|Suites:|✕" "$SCRATCH/fe.log" | head -40
+```
+
+**Expect the api selection to be wide** — §11 warns that api specs import the express app, so
+touching a route resolver pulls in most of the suite. That is the correct answer, not a slow one.
+
+E2E, by the five copy sites (§11 — selection is by user-facing flow):
+`npx playwright test partner-requests player-groups group-stage-singles-score --project=chromium --reporter=line --max-failures=1`
+
+**Manual check that the loop is actually gone:** sign in as `organizer@test.com` / `testpass123`
+(unlinked by construction, see [ISSUE-25](#issue-25)) and open `/groups` — it must explain the real
+problem, not offer a Sign in button.
 
 ---
 
@@ -557,6 +627,26 @@ Coordinate with ISSUE-23: both want a Playwright geometry spec, and one `layout.
 shell width *and* nav labels is better than two near-duplicate files. If ISSUE-23 lands first, extend
 its spec rather than adding a second.
 
+### Verify
+
+```bash
+npx playwright test layout --project=chromium --reporter=line --max-failures=1
+```
+
+Every `.responsive-bottom-nav-item` label must report `x >= 0` and a `boundingBox()` no wider than
+its item's, at 360 / 400 / 430. **Assert geometry, never text presence** — the clipped label is
+still in the DOM, which is exactly why this shipped.
+
+Re-measure with the inspector rather than eyeballing a screenshot:
+
+```bash
+node scripts/inspect-route.mjs /standings --width=360 --depth=3
+```
+
+No jest specs cover the nav's geometry (jsdom reports zero-size boxes — see ISSUE-28's note on why
+the guard must be Playwright), so `--findRelatedTests` on `ResponsiveLayout.tsx` is worth running for
+regressions but will not prove this fix.
+
 ---
 
 ## ISSUE-27 — Dark entry vs light app: document the boundary, replace the emoji icons 🟡 {#issue-27}
@@ -620,8 +710,20 @@ actual defect here. Emoji are load-bearing UI in four places:
 | Tournament detail tabs (`TournamentDetail/index.tsx:77-79`) | 📊 🎾 🏆 |
 
 Emoji render differently on every platform, cannot be recoloured to match the active/inactive
-palette, and are the reason the nav reads as unfinished next to the auth pages. `LogoMark` is the
-existing precedent for an inline SVG icon in this codebase — follow it.
+palette, and are the reason the nav reads as unfinished next to the auth pages.
+
+**Approach — hand-rolled components, paths sourced from Lucide or Feather** *(settled 2026-07-27)*.
+One small component per icon under `components/shared/icons/`, taking `size` and `color` props,
+following `LogoMark.tsx`. Verified there is **no icon library installed**, and inline SVG is already
+the house pattern — eight shared components hand-roll `<svg>`. Using `currentColor` gives the
+active/inactive theming that emoji structurally cannot.
+
+⚠ **Licensing: hand-rolled is not automatically licence-free.** Retyping a `d` attribute copied from
+a commercial set does not change its licence. Source paths only from permissive sets — Lucide (ISC),
+Feather / Heroicons / Phosphor (MIT), Material Symbols (Apache-2.0); none require attribution.
+**Avoid Font Awesome** — its free tier is CC BY 4.0 and *does* require visible attribution, and Pro
+is paid. `react-icons` is MIT as a wrapper but you inherit each bundled set's own licence.
+*(Licences stated 2026-07-27; re-check at implementation time.)*
 
 **Sequence after [ISSUE-28](#issue-28)**, which cuts the nav from six items to four and renames two.
 Drawing icons for tabs that are about to be deleted is wasted work.
@@ -629,6 +731,39 @@ Drawing icons for tabs that are about to be deleted is wasted work.
 **No test risk:** §8's e2e convention already forbids selecting on emoji (`data-testid` and
 `e2e/config.ts` constants only), so the specs should not notice this change. If one breaks, it was
 violating that rule.
+
+### Fix — TDD (CLAUDE.md §4)
+
+Part 1 (the boundary rule) is documentation and has no test — say so rather than inventing one.
+
+Part 2 (icons) is a component change, so it does:
+
+**Red:** assert each nav item renders an accessible icon element (not a text node) and that the
+active/inactive states are distinguishable by the icon's own colour, which is the thing emoji cannot
+do. `ResponsiveLayout.guestNav.spec.tsx` is the existing harness to extend.
+
+**Green:** swap the icons. Keep every `data-testid` and `aria-label` byte-identical — the emoji sit
+inside `aria-hidden="true"` spans today (`ResponsiveLayout.tsx:~195`), and the accessible name comes
+from the label text and `aria-label`, so the a11y surface must not move.
+
+### Verify
+
+```bash
+SCRATCH=/tmp
+npm --workspace=packages/frontend exec -- jest \
+  --findRelatedTests packages/frontend/src/components/shared/ResponsiveLayout.tsx \
+  --bail > "$SCRATCH/fe.log" 2>&1
+grep -E "Tests:|Suites:|✕" "$SCRATCH/fe.log" | head -40
+
+npx playwright test accessibility mobile --project=chromium --reporter=line --max-failures=1
+```
+
+`accessibility.spec.ts` matters here specifically: replacing emoji with SVG is the change most likely
+to drop an accessible name without any visual sign.
+
+Visual check at 360 / 400 / 1024 via `node scripts/inspect-route.mjs`, and confirm the unread badges
+on Groups and Notifications still position correctly — they are absolutely positioned against the
+emoji span (`ResponsiveLayout.tsx:~197,~215`), so the replacement must preserve that anchor.
 
 ---
 
@@ -763,6 +898,37 @@ it rather than inventing a second path.
 Per §9, this changes user-visible behaviour and route structure — update `docs/assistant-help.md`
 (the coach's help corpus describes the tabs) and the auth/route-protection tests in the same change.
 
+### Verify
+
+```bash
+SCRATCH=/tmp
+npm --workspace=packages/api exec -- jest \
+  --findRelatedTests $(git diff --name-only main...HEAD -- 'packages/api/src/**') \
+  --bail > "$SCRATCH/api.log" 2>&1
+grep -E "Tests:|Suites:|✕" "$SCRATCH/api.log" | head -40
+
+npm --workspace=packages/frontend exec -- jest \
+  --findRelatedTests $(git diff --name-only main...HEAD -- 'packages/frontend/src/**') \
+  --bail > "$SCRATCH/fe.log" 2>&1
+grep -E "Tests:|Suites:|✕" "$SCRATCH/fe.log" | head -40
+```
+
+**The coach regression is the one that matters most** — the `buildPlayerSnapshot` split must leave
+the coach's formatted prompt string byte-identical. Run `coach.spec.ts` and the assistant specs, and
+remember they need `npm run dev:worker --workspace=packages/api` (§8) or they fail with confusing
+errors rather than an obvious "not running":
+
+```bash
+npx playwright test coach assistant my-tournaments-hub auth --project=chromium --reporter=line --max-failures=1
+```
+
+`auth.spec.ts` is included because `/standings` and `/matches` become redirects, which is a route-
+protection change (§9). `my-tournaments-hub.spec.ts` covers the pages being replaced — expect it to
+need rewriting, not just re-running, and update its selection-map row in the same change.
+
+Manually confirm the 1-tournament case: it must now render the Play hub, **not** auto-redirect
+(`MyTournamentsHub.tsx:61` is deleted by this issue).
+
 ### Sequencing
 
 Depends on **[ISSUE-24](#issue-24)/[ISSUE-25](#issue-25)** landing first — `/player/*` currently
@@ -873,6 +1039,17 @@ direct request.
 1. **Remove the Browse nav entry and route surface.** `/browse` and `/tournament/:id/browse` are
    public (`App.tsx:65,72`). Gate them behind the flag above rather than deleting — the pages, tests
    and fixtures stay.
+
+   **Blocked routes return 404** *(settled 2026-07-27)* — frontend renders a NotFound page, and
+   `POST /tournaments/:id/register` returns `404` when the flag is off. Chosen over a silent
+   redirect specifically because **a missed inbound link then fails loudly during implementation
+   instead of bouncing somewhere plausible**; with six links to repoint (below), that feedback is
+   worth more than the tidier UX of a redirect. Nobody should reach a 404 in normal use once those
+   six are done.
+
+   ⚠ **No NotFound page or catch-all route exists** — verified: `App.tsx` has no `path="*"`. Build a
+   minimal one here. It is genuinely missing today (any typo'd URL renders a blank router outlet),
+   so this is a gap being closed, not scope creep.
 2. **Block public registration.** `POST /tournaments/:id/register` is the unauthenticated entry
    point (ISSUE-11 rate-limits it). It must reject when the tournament was not reached via an
    invite. **Do NOT delete the route** — the invite flow uses the same registration path.
@@ -922,8 +1099,89 @@ registration by *both* magic link and full signup.
 
 ---
 
+## ISSUE-30 — `/tournament/:id` redirects to a literal, unsubstituted path 🔴 {#issue-30}
+
+*Found 2026-07-27 while checking whether a NotFound page existed for ISSUE-29.*
+
+### Symptom
+
+Every bare tournament URL is broken. Verified live against a running app:
+
+```
+requested : /tournament/tournament_1784922484786_culgi2367d
+landed on : /tournament/:tournamentId/standings        ← literal, unsubstituted
+body      : "Failed to load tournament data"  {"code":"UNAUTHORIZED", …}
+```
+
+**This breaks the group-launch payoff step**, which is why it is 🔴 rather than 🟠.
+`GroupChatPanel.tsx` navigates to the bare route in three places, all on the casual-launch path:
+
+| Line | Context |
+|---|---|
+| 207 | after `POST /polls/:messageId/launch` (launch sheet) |
+| 230 | after `POST /polls/:messageId/launch` (card launch sheet) |
+| 292 | the deep link on the launch system message |
+
+So a group votes, launches a casual tournament, gets sent to "their" tournament — and lands on an
+error page. Under [ISSUE-29](#issue-29) group launch is *the* product, so this is the highest-value
+defect in the queue.
+
+### Root cause
+
+`packages/frontend/src/App.tsx:126-131`:
+
+```jsx
+<Route
+  path={ROUTES.TOURNAMENT_DETAIL}                                  // '/tournament/:tournamentId'
+  element={<Navigate to={`/tournament/:tournamentId/standings`} replace />}
+/>
+```
+
+A template literal with **no interpolation** — it is the literal string. `<Navigate>` does not
+substitute route params, so the browser goes to a URL containing a real `:` character. That then
+matches `TOURNAMENT_TAB` (`/tournament/:tournamentId/:tab`) with `tournamentId = ":tournamentId"`,
+and the detail page requests a tournament whose id is literally `:tournamentId`.
+
+The backtick makes it *look* interpolated, which is why it survived review.
+
+### Fix — TDD (CLAUDE.md §4, commit red separately per §11)
+
+**Red:** a routing test rendering `/tournament/<real-id>` and asserting the resolved location is
+`/tournament/<real-id>/standings`. `route-protection.spec.tsx` is the existing harness for
+router-level assertions. It must fail on the literal `:tournamentId` today.
+
+**Green:** read the param and build the target, e.g. a tiny redirect component using
+`useParams()` — `<Navigate to={`/tournament/${tournamentId}/standings`} replace />`. **Do not** hand-
+roll a second path string; derive it from `ROUTES.TOURNAMENT_TAB` if practical so it cannot drift.
+
+**Also add an e2e assertion on the launch flow itself**, since that is where users meet this:
+`casual-tournament.spec.ts` already covers group launch — extend it to assert the post-launch
+landing page renders tournament content rather than an error.
+
+### Verify
+
+```bash
+SCRATCH=/tmp
+npm --workspace=packages/frontend exec -- jest \
+  --findRelatedTests packages/frontend/src/App.tsx --bail > "$SCRATCH/fe.log" 2>&1
+grep -E "Tests:|Suites:|✕" "$SCRATCH/fe.log" | head -40
+
+npx playwright test casual-tournament player-groups --project=chromium --reporter=line --max-failures=1
+```
+
+Manual: launch a casual tournament from a group poll and confirm the redirect lands on real content.
+`npm run dev:worker --workspace=packages/api` must be running (§8) or the launch path misbehaves for
+unrelated reasons.
+
+---
+
 ## Not yet triaged / follow-ups
 
+- **The app has no support destination.** No `mailto:`, no `support@`, no `/support` route anywhere
+  (verified 2026-07-27). `ServiceUnavailable.tsx:14` already tells users to "contact support" with
+  nowhere to go, and [ISSUE-24](#issue-24) had to drop the same phrase from its copy for this reason.
+  Either add a real destination or stop promising one — small, but it is currently a dead end at
+  exactly the moments a user is already stuck.
 - **Auth page titles are not headings.** `Login.tsx:186` renders its title as a styled `<div>`,
   as do `ForgotPassword.tsx` and `ResetPassword.tsx`; `Signup.tsx:260` and `Landing.tsx:45` use a
   real `<h1>`. A screen reader gets no page heading on three of the five auth screens. Noticed
