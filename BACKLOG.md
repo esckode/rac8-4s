@@ -27,7 +27,7 @@ here.
 | [MONETIZATION_STRATEGY.md](assets/planning/MONETIZATION_STRATEGY.md) | How the app earns: transaction fee on entry fees (long-term primary) + organizer SaaS (secondary); ads rejected; §3.2 coach-led player subscription added 2026-07-15 | 📐 **Strategy** — wedge/pricing/rail **grilled 2026-07-15 → MONETIZATION_DESIGN.md** |
 | [MONETIZATION_DESIGN.md](assets/planning/MONETIZATION_DESIGN.md) | Paid player registration ($10/mo, 14-day card trial, $5×3mo launch intro; Stripe Billing, US-only): guests keep tournaments + community layer free forever; registration = identity + /matches + /standings + profile + stats dashboard (new build) + 1:1 coach | 📐 **Design (fully grilled 2026-07-15, §2; 2 ⚖ owner calls; amended 2026-07-16: #6b lapse retention — coach data purges 90d after lapse; #10 retention levers — price lock, memory-as-benefit, pause, tenure data depth)** — stats scope ✅ grilled (row below); → `MONETIZATION_IMPLEMENTATION.md` next |
 | [STATS_DASHBOARD_DESIGN.md](assets/planning/STATS_DASHBOARD_DESIGN.md) | Premium `/stats` page (monetization launch blocker): core four — all-time W-L + streak, standings cards w/ rank_reason, per-tournament rank sparkline (singles, 90-day snapshot window), match history; ⚖ casual play as separated section; H2H → v1.1 | 📐 **Design (fully grilled 2026-07-16, §3; 1 ⚖ owner call; window grilled same day → all-history, subscription-window rejected)** — build folds into `MONETIZATION_IMPLEMENTATION.md` phase 1 |
-| [LOCATION_DISCOVERY_DESIGN.md](assets/planning/LOCATION_DISCOVERY_DESIGN.md) | Tournament location model + "Near me" discovery, D1–D13: gate on `visibility` (public ⇒ findable at publish; unlisted ⇒ text, never geocoded), shared ownerless address-keyed venues (provider place id = identity), one input box with provider-derived precision (venue/address/city/region), ⚖ one location per tournament (multi-site = a `region`), AWS Location `geo-places` adapter (Google's 30-day lat/lng cap disqualifies a durable table), opt-in "Near me" **sort**, player position coarsened ~1.1 km and never stored, SQL haversine + bbox with zero extensions | 📐 **Design (fully grilled 2026-07-25, §3 D1–D13; 1 ⚖ owner call)** — completes [PERSONALIZATION_DESIGN.md](assets/planning/PERSONALIZATION_DESIGN.md) P1c (venue tz tier); → `LOCATION_DISCOVERY_IMPLEMENTATION.md` next. ⚠ POI-naming smoke test is an open build-time gate |
+| [LOCATION_DISCOVERY_DESIGN.md](assets/planning/LOCATION_DISCOVERY_DESIGN.md) | Tournament location model + "Near me" discovery, D1–D13: gate on `visibility` (public ⇒ findable at publish; unlisted ⇒ text, never geocoded), shared ownerless address-keyed venues (provider place id = identity), one input box with provider-derived precision (venue/address/city/region), ⚖ one location per tournament (multi-site = a `region`), AWS Location `geo-places` adapter (Google's 30-day lat/lng cap disqualifies a durable table), opt-in "Near me" **sort**, player position coarsened ~1.1 km and never stored, SQL haversine + bbox with zero extensions | ⏸️ **Deferred 2026-07-27** — design complete and still valid (grilled 2026-07-25, §3 D1–D16; 1 ⚖ owner call), but public discovery is switched off ([UAT ISSUE-29](assets/planning/UAT_ISSUES.md#issue-29)) so it has no surface to land on. Trigger: public tournaments re-enabled. Completes [PERSONALIZATION_DESIGN.md](assets/planning/PERSONALIZATION_DESIGN.md) P1c (venue tz tier). ⚠ POI-naming smoke test remains an open build-time gate |
 | [GROUP_CHALLENGE_STRATEGY.md](assets/planning/GROUP_CHALLENGE_STRATEGY.md) | Inter-group casual tournaments: owner-to-owner challenge → dual auto-polls (047 machinery) → merged roster tagged `origin_group_id` on registrations (single host `group_id` FK unchanged) → derived rivalry stats; N-ary entity, v1 capped at 2 groups; member-side free-forever, owner-side gating → parked owner-tier grill (§5) | 📐 **Strategy (draft, 2026-07-16)** — **not yet grilled**; grill §6 → `GROUP_CHALLENGE_DESIGN.md` |
 | [LLM_ASSISTANT_DESIGN.md](assets/planning/LLM_ASSISTANT_DESIGN.md) | @coach LLM assistant in group chat — Tier 1 read-only Q&A (MVP), Tier 2 confirmed write actions, Tier 3 proactive nudges | 📐 **Design (fully grilled 2026-07-10 §10, Phase B/C mechanics grilled 2026-07-11/12 §11)** → Tier 1 ✅ **Built**, Tier 2 ✅ **Built**, Tier 3 ✅ **Built** (nudges/recap/digest) ([LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md)) |
 | [PERSONALIZATION_DESIGN.md](assets/planning/PERSONALIZATION_DESIGN.md) | Player personalization P0–P13 — `player_settings` store + first `/profile` page, 3-level timezone hierarchy (player/group/venue — supersedes assistant B-Q6/C-Q3/C-Q8), self-centered UI (standings anchoring, initials avatars, local times), pending-actions endpoint → badges/up-next strip/composer chip, per-event notify prefs + quiet hours, table density (theme system ⚖ cut), standings snapshots → trends, availability grid | 📐 **Design (fully grilled 2026-07-13, §5; 3 ⚖ owner calls)** → P0–P12 ✅ **Built & merged** ([PERSONALIZATION_IMPLEMENTATION.md](assets/planning/PERSONALIZATION_IMPLEMENTATION.md)); P13 skill ratings **needs its own grill**; 1:1 Coach later phase → own docs below |
@@ -114,15 +114,6 @@ here.
   the manual live-model smoke for every phase (e2e asserts plumbing against the mock; real model
   behaviour — decline phrasing, injection resistance, recap-polish quality — is unverified).
 
-- **Location & discovery** — **grilled 2026-07-25
-  ([LOCATION_DISCOVERY_DESIGN.md](assets/planning/LOCATION_DISCOVERY_DESIGN.md) §3, D1–D13)**. Next:
-  create `LOCATION_DISCOVERY_IMPLEMENTATION.md` — migration (`locations` +`place_id`/address/precision/
-  extent, `REAL`→`double precision`, `sport`/`total_courts` nullable; `tournaments` +`location_id`/
-  `location_text`), `GeocoderAdapter` + mock + AWS `geo-places`, `/geo/*` routes **and their CloudFront
-  behavior**, `visibility` on tournament create/edit, the publish gate, the "Near me" sort chip +
-  coarsened geolocation, `findNearby` fix, and `location-discovery.spec.ts`. **Do the POI-naming smoke
-  test first** — it's the one unverified assumption.
-
 ### 📋 Plan ready → available to tackle
 - **Group trigger rename `@coach` → `@ref`** *(decided 2026-07-25,
   [LLM_ASSISTANT_DESIGN.md](assets/planning/LLM_ASSISTANT_DESIGN.md) §12 N-Q1–N-Q8; no grill left).*
@@ -153,6 +144,42 @@ here.
 ### ⏸️ Deferred (with triggers)
 - **Capacitor native wrapper** — trigger: reliable iOS push / app-store presence / engagement for the
   social+availability features (see FRONTEND_PLATFORM_STRATEGY.md).
+
+#### Public discovery cluster — deferred 2026-07-27 (owner decision)
+> **The app is a social/casual racket-sport meetup product at heart.** Public tournament discovery
+> and stranger registration are switched off until group play has traction; entry is **invite-only**,
+> via *both* magic-link guest sessions and full account signup. The block itself is
+> [UAT ISSUE-29](assets/planning/UAT_ISSUES.md#issue-29) — **block the surface, keep the machinery**.
+> **Shared trigger for everything below: public tournaments are re-enabled.**
+
+- **Location & discovery** — **fully grilled 2026-07-25, then deferred**
+  ([LOCATION_DISCOVERY_DESIGN.md](assets/planning/LOCATION_DISCOVERY_DESIGN.md) §3, D1–D16). The whole
+  design is "Near me" discovery of *public* tournaments — D1 gates findability on `visibility = public`
+  — so it has no surface to land on while discovery is blocked. Design is complete and stays valid;
+  nothing needs re-grilling on return. Next step when it resumes: create
+  `LOCATION_DISCOVERY_IMPLEMENTATION.md` — migration (`locations` +`place_id`/address/precision/extent,
+  `REAL`→`double precision`, `sport`/`total_courts` nullable; `tournaments` +`location_id`/
+  `location_text`), `GeocoderAdapter` + mock + AWS `geo-places`, `/geo/*` routes **and their CloudFront
+  behavior**, the publish gate, the "Near me" sort chip + coarsened geolocation, `findNearby` fix, and
+  `location-discovery.spec.ts`. **Do the POI-naming smoke test first** — it's the one unverified
+  assumption. *(Note: D1's 2026-07-26 amendment already removed `visibility` from create/edit scope.)*
+
+- **Paid organizer tier** — **grilled 2026-07-27, priced-parked.** Public tournaments are the thing
+  the tier would gate, so it defers with them. **Structural outcomes that survive and should be built
+  regardless** are recorded in [MONETIZATION_DESIGN.md](assets/planning/MONETIZATION_DESIGN.md) §7:
+  the gate seam is the `OPEN_REGISTRATION` transition, draft mode is free and permanent, group casual
+  launch is free forever, every account is always a player (organizer is layered, not exclusive), and
+  the app decides eligibility while Stripe computes money. **Parked pending field data:** price, model
+  (per-event vs annual), coupons, lapse policy — deferred because the market research proved
+  unreliable (two anchors corrected mid-grill) and the beta is what produces the missing numbers:
+  players per public event, public events per organizer per year, and whether organizers charge entry
+  fees at all.
+
+- **Tournament lifecycle sweep** — nothing moves a tournament off `registration_open` at its deadline.
+  Surfaced by ISSUE-9 as a *Browse hygiene* problem (stale tournaments lingering in discovery), which
+  is the surface now blocked. Still worth building eventually for correctness; no longer urgent.
+  **Must NOT clear pending partner claims** when it closes registration — see the note in
+  `UAT_ISSUES.md`.
 
 ### 🔧 Reconciliation (doc + test debt from recent decisions)
 > Resolve each by **updating the source-of-truth docs (`rac8-4s-HL.md` §9, `REQUIREMENTS.md`) + the

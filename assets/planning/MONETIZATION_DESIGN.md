@@ -133,13 +133,60 @@ signup → Stripe Checkout (card, trial_period_days=14, launch coupon $5×3mo)
 
 | Item | Status | Trigger to revisit |
 |---|---|---|
-| **Organizer registration pricing** | ⏸️ Parked — owner explicitly unsure it stays free | Organizer-SaaS grill |
+| **Organizer registration pricing** | ⏸️ **Grilled 2026-07-27 → structure settled, price parked** (see §7.1) | Beta field data on event size + frequency |
 | Entry-fee transaction fee (§3.1 strategy) | Long-term primary, unbuilt | Entry fees become a feature → grill Stripe Connect details |
 | Organizer SaaS (§3.3 strategy) | Deferred | Organizer demand signals; grill with organizer-registration pricing |
 | Local sponsorship (§3.4 strategy) | Opportunistic, ungrilled | First inbound sponsor interest |
 | Annual pricing | Deferred | Churn data exists (~6 months post-launch) |
 | EU / international sales | Deferred | International signups blocked-at-Checkout counter shows demand |
 | Capacitor / app-store distribution | Deferred (now monetization-load-bearing, #8) | Would force a re-grill of this design |
+
+### 7.1 Organizer tier — grill outcome (2026-07-27)
+
+**Context:** the grill ran to a price, then the owner withdrew confidence in the market data and
+chose a **field beta instead**. Public tournaments are switched off entirely
+([UAT ISSUE-29](./UAT_ISSUES.md#issue-29)) — the app is a social/casual meetup product first — so the
+tier defers with them. What follows separates what is **settled** from what is **parked**, because
+the settled half should be built regardless and is cheap only if built at the right seam.
+
+**Settled — structural, price-independent, build these anyway:**
+
+| # | Decision | Grounding |
+|---|---|---|
+| O1 | **The gate is the `OPEN_REGISTRATION` transition**, not the organizer role | `core-logic/src/state-machine.ts:36` — `DRAFT: ['OPEN_REGISTRATION']` is the only way out of draft, and nothing else in the codebase writes `registration_open`. One check, one seam |
+| O2 | **Draft mode is free and permanent** — no trial, no timer, no card to start | Draft publishes nothing (no listing, no email, no registration), so there is no value to leak and nothing for a timer to protect. The real forcing function is the organizer's own event date |
+| O3 | **Group casual launch stays free forever** | Group launches go `draft → registration_closed` directly (`player-groups.ts:~951`), bypassing `OPEN_REGISTRATION` — so they are outside the gate *by construction*, not by a carve-out |
+| O4 | **Every account is always a player**; organizer is a layered entitlement, never an exclusive role | Today `role` is a single exclusive column and organizers have `player_id = NULL`, which *is* [ISSUE-24](./UAT_ISSUES.md#issue-24). Layering fixes it by construction and lets an organizer play in their own league |
+| O5 | **App decides eligibility; Stripe computes money** | Refines "no custom state" (#6). The app may hold arbitrarily rich eligibility rules and *express* them as Stripe objects — it must never independently compute an amount. Proration, tax base and dunning stay Stripe's |
+| O6 | **Grant/audit log** records who was granted what, by whom, when and why, pointing at Stripe IDs | Stripe records the financial fact; only the app can record the business reason. Same table serves organizer-capability grants and comps |
+| O7 | **Lapse reuses the player state machine unchanged** (#6, #6b, #10a, #10c) | No new states. In-flight tournaments run on, drafts persist, publish shows a resubscribe wall |
+| O8 | **Entry fees: display only.** Store and show a fee; never collect it | Collection means Stripe Connect — per-organizer KYC before the first event, refund policy, chargebacks against organizer funds, 1099-K. Display is a strict *subset*, so adding collection later is additive, never rework. There is no `entry_fee` column today; `entryFee: null` is a stub at `tournaments.ts:1763` |
+| O9 | **`visibility` stays immutable by creation path** | Preserves the location design's D16 guard. Rejected the lapse-unlists-tournaments option specifically to keep this |
+
+**Parked — needs beta field data:**
+
+- **Price and model** (per-event vs annual subscription; flat vs per-player). Deferred because the
+  market research proved unreliable: two anchors were corrected mid-grill — Pickleball Manager from
+  $3–5 to **$5–8/player**, and TopDog from "$1/entrant" to **$1/entrant plus a 7% fee when they
+  collect entry fees**. That 7% is the most useful figure found: it prices the eventual transaction
+  fee well above any per-event charge. The market has no consensus at all — free, $1/player and
+  $8/player coexist — so there is no "going rate" to be outside of.
+- **The three numbers the beta must produce:** players per public tournament (*distribution*, not
+  average — it decides flat vs per-player), public tournaments per organizer per year (decides
+  per-event vs subscription), and whether organizers charge entry fees and how much (prices the
+  transaction fee).
+- **Coupon specifics.** Settled in shape: comps are **customer-bound** promotion codes with a grant
+  row; a launch discount should be **auto-attached at Checkout by eligibility, with no code string**,
+  so nothing can leak or be arbitraged. Amounts parked.
+- **Organizer's own player subscription** — owner chose *pays both* under per-event pricing (no
+  bundle). Revisit if the model becomes a subscription, where the double-charge objection returns.
+
+**Beta terms (owner decision):** **invite-only, time-boxed, terms stated up front** — free during
+beta, pricing applies after, said at signup. This avoids the grandfathering trap: a free era with no
+stated end makes later pricing read as taking something away. There is no way to become an organizer
+today (`auth.ts:168` hardcodes `role: 'player'`; no admin promote route exists), so the invite
+mechanism must be built before any beta — and **that build is also the answer to ISSUE-24's open
+question about how organizers are provisioned**, which its severity was blocked on.
 
 ## 8. Relationship to other docs
 
