@@ -6,6 +6,7 @@ import { createTestApp, JwtConfig } from '../helpers/app'
 import { PlayerFactory, TournamentFactory, OrganizerFactory } from '../factories'
 import { InMemoryTokenStore } from '../../auth/token-store'
 import { generatePlayerSession } from '../../auth/magic-link'
+import { GroupRepository, TournamentRepository } from '../../db'
 
 describe('Players API', () => {
   let pool: Pool
@@ -161,6 +162,61 @@ describe('Players API', () => {
       expect(res.body.tournaments.length).toBe(1)
       expect(res.body.pagination.limit).toBe(1)
       expect(res.body.pagination.hasMore).toBe(true)
+    })
+  })
+
+  // ISSUE-28: the Play hub needs the same next-match/standings/last-results
+  // data the coach's snapshot already gathers, split out behind a real
+  // endpoint rather than a second query path (buildPlayerSnapshot now
+  // returns PlayerSnapshotData; see player-snapshot.ts).
+  describe('GET /player/snapshot', () => {
+    it('returns the next pending match for a player with a scheduled match', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const tournamentRepo = new TournamentRepository(pool)
+      const groupRepo = new GroupRepository(pool)
+
+      const { player: asker, sessionToken } = await createPlayerWithToken(tournament.id)
+      const opponent = await PlayerFactory.create(pool)
+      await PlayerFactory.createAndRegister(pool, tournament.id, {
+        email: opponent.email,
+        name: opponent.name,
+      })
+
+      await tournamentRepo.updateStatus(tournament.id, 'group_stage_active')
+      await groupRepo.createGroups(tournament.id, 1, 1, [asker.id, opponent.id])
+
+      const res = await request(app)
+        .get('/player/snapshot')
+        .set('Authorization', `Bearer ${sessionToken}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.nextMatch).toMatchObject({
+        opponentName: opponent.name,
+        tournamentName: tournament.name,
+      })
+      expect(Array.isArray(res.body.standingsRows)).toBe(true)
+      expect(Array.isArray(res.body.lastResults)).toBe(true)
+    })
+
+    it('returns empty-state data for a player with no matches', async () => {
+      const { sub: organizerId } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const { sessionToken } = await createPlayerWithToken(tournament.id)
+
+      const res = await request(app)
+        .get('/player/snapshot')
+        .set('Authorization', `Bearer ${sessionToken}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.nextMatch).toBeNull()
+      expect(res.body.standingsRows).toEqual([])
+      expect(res.body.lastResults).toEqual([])
+    })
+
+    it('requires authentication', async () => {
+      const res = await request(app).get('/player/snapshot')
+      expect(res.status).toBe(401)
     })
   })
 

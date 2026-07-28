@@ -14,7 +14,7 @@ import { PlayerRepository, GroupRepository, TournamentRepository } from '../../d
 import { TournamentFactory } from '../factories'
 import { defaultAdultAttestation } from '../factories/player.factory'
 import { buildCoachToolContext } from '../../assistant/tools'
-import { buildPlayerSnapshot } from '../../assistant/player-snapshot'
+import { buildPlayerSnapshot, formatPlayerSnapshot } from '../../assistant/player-snapshot'
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -72,8 +72,16 @@ describe('S3.4 — buildPlayerSnapshot(ctx)', () => {
     const pendingVsCarol = await createTournamentWithRoster([asker.id, carol.id])
 
     const ctx = await buildCoachToolContext(pool, asker.id)
-    const snapshot = await buildPlayerSnapshot(ctx)
+    const data = await buildPlayerSnapshot(ctx)
 
+    expect(data.nextMatch?.opponentName).toBe(carol.name)
+    expect(data.lastResults.some(r => r.opponentName === bob.name)).toBe(true)
+
+    // ISSUE-28 split: buildPlayerSnapshot now returns data; the coach still
+    // composes the identical prompt string by calling formatPlayerSnapshot
+    // explicitly. Pin that composition here so the split can't silently
+    // change what the coach sees.
+    const snapshot = formatPlayerSnapshot(data)
     expect(typeof snapshot).toBe('string')
     expect(snapshot).toContain(carol.name) // next pending match
     expect(snapshot).toContain(bob.name) // last result / standings
@@ -90,14 +98,18 @@ describe('S3.4 — buildPlayerSnapshot(ctx)', () => {
     const first = await buildPlayerSnapshot(ctx)
     const second = await buildPlayerSnapshot(ctx)
 
-    expect(first).toBe(second)
+    expect(formatPlayerSnapshot(first)).toBe(formatPlayerSnapshot(second))
   })
 
   it('renders short empty-state lines for a brand-new player, never throws', async () => {
     const freshPlayer = await createPlayer('fresh')
     const ctx = await buildCoachToolContext(pool, freshPlayer.id)
 
-    const snapshot = await buildPlayerSnapshot(ctx)
+    const data = await buildPlayerSnapshot(ctx)
+    expect(data.nextMatch).toBeNull()
+    expect(data.lastResults).toHaveLength(0)
+
+    const snapshot = formatPlayerSnapshot(data)
     expect(snapshot).toMatch(/no upcoming match/i)
     expect(snapshot).toMatch(/no results yet/i)
   })
