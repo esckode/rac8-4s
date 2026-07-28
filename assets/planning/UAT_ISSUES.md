@@ -25,6 +25,7 @@ from where the archive ends.
 | [ISSUE-28](#issue-28) | 🔲 Open | 🟠 | Nav: collapse Standings + Matches into one "Play" hub; four items | frontend + api |
 | [ISSUE-29](#issue-29) | 🔲 Open | 🟠 | Temporarily block public browse + public registration; keep both invite paths working | frontend + api |
 | [ISSUE-30](#issue-30) | 🔲 Open | 🔴 | `/tournament/:id` redirects to a **literal** unsubstituted path — group launch's payoff step is broken | frontend |
+| [ISSUE-31](#issue-31) | 🔲 Open | 🔴 | A group-launched casual tournament **never generates matches** — there is nothing to play | api |
 
 ---
 
@@ -1175,8 +1176,124 @@ unrelated reasons.
 
 ---
 
+## ISSUE-31 — A group-launched casual tournament never generates matches 🔴 {#issue-31}
+
+*Found 2026-07-27 by walking the casual flow end to end against a running app.*
+
+### Symptom
+
+A group votes on a poll, launches a casual tournament, and gets **a tournament with no games in it**.
+Reproduced live — two real accounts, a real group, a real poll, both voting In:
+
+```
+POST /player/groups/:id/polls/:messageId/launch
+  → {"tournamentId":"…","tournamentName":"Social Club — Jul 28",
+     "registeredPlayerIds":["player_…","player_…"]}          ← 2 players registered
+
+SELECT … FROM tournaments/groups/player_registrations:
+  registrations | groups | status              | mode
+  2             | 0      | registration_closed | casual
+  matches: 0
+```
+
+The UI reflects it honestly: standings reads *"Waiting for registrations"* and matches reads *"No
+matches scheduled"*, on a tournament that has two registered players. **This is the payoff step of
+the entire group-first product**, and under [ISSUE-29](#issue-29) it is the only remaining path into
+a tournament at all.
+
+### Root cause
+
+`createGroups` / `createGroupsForDoubles` is the only code that generates matches, and it has exactly
+three callers:
+
+| Caller | Reachable in production? |
+|---|---|
+| `app.ts:275` | ❌ test-only `/test/*` seeder ("seeds a group-linked casual round-robin session") |
+| `app.ts:321` | ❌ test-only `/test/*` seeder |
+| `tournaments.ts:431` | ✅ but **organizer-authed** `START_GROUP_STAGE` transition |
+
+The group-launch path (`player-groups.ts`) registers the In-voters and sets status
+`registration_closed` — and stops. Nothing calls the generator.
+
+The state machine's next step is `REGISTRATION_CLOSED: ['START_GROUP_STAGE']`
+(`core-logic/src/state-machine.ts:38`), and that transition runs through an organizer-authed route.
+**A group has no organizer**, so a group-launched tournament can never leave `registration_closed`.
+
+The round-robin generator itself **exists and works** (`db.ts:973`, "Generate round-robin: each
+player plays every other player once"). Nothing in any group path calls it.
+
+### Why no test caught it — read before writing one
+
+`casual-tournament.spec.ts` looks like coverage and is not:
+
+- *"Launching casual tournament from poll calls launch endpoint"* (`:128`) **intercepts the launch
+  request** with `page.route(...)` and asserts `launchCalled === true`. It mocks the very call whose
+  result is broken.
+- *"Any registered participant can score any match in a casual tournament"* (`:184`) does **not use
+  the group path at all** — it takes an organizer token, creates a tournament via `POST /tournaments`,
+  runs `OPEN_REGISTRATION`, and registers players through **public registration**. It proves casual
+  *scoring* works when an organizer sets it up, which cannot happen in the group-only model. It would
+  also break under ISSUE-29, which blocks public registration.
+- Its own comment at `:186` states: *"the casual tournament page (with openScoring MatchCards) **is
+  not yet built**"*.
+
+So the suite is green while the flow dead-ends.
+
+### Fix — needs a decision first
+
+**The question is who triggers generation for a group tournament**, given there is no organizer:
+
+1. **Generate at launch**, inside the existing launch handler, right after registering the In-voters
+   — the roster is already fixed at that moment (Q14: "the open poll window is the join window;
+   roster locks at close"), so there is nothing to wait for.
+2. **Generate on the auto-close/auto-launch worker path** too — `auto-close-processor.ts:98` launches
+   without anyone pressing a button, so it needs the same treatment or auto-launched tournaments stay
+   empty.
+3. **A group-member-authed transition**, mirroring how launch itself is creator-authed.
+
+**(1) + (2) is the obvious shape** — a fixed roster with no organizer has nothing to gate on — but
+this is a real design decision, not a mechanical fix, so it is stated rather than assumed.
+
+**Do NOT reuse the `/test/*` seeders' shape uncritically.** They call
+`createGroups(tournament.id, 1, 1, playerIds)` — one group, one advancing — which may be right for a
+casual session but was written for fixtures, not as a product decision.
+
+**Whatever is chosen, replace the mocked assertion.** A test that intercepts the launch call cannot
+catch this class of defect; the spec must assert that matches exist and are playable *after* a real
+group launch.
+
+### Verify
+
+```bash
+SCRATCH=/tmp
+npm --workspace=packages/api exec -- jest \
+  --findRelatedTests $(git diff --name-only main...HEAD -- 'packages/api/src/**') \
+  --bail > "$SCRATCH/api.log" 2>&1
+grep -E "Tests:|Suites:|✕" "$SCRATCH/api.log" | head -40
+
+npx playwright test casual-tournament player-groups poll-cards --project=chromium --reporter=line --max-failures=1
+```
+
+`npm run dev:worker --workspace=packages/api` must be running (§8) — the auto-launch path in (2) goes
+through the queue consumer.
+
+**Manual, and this is the real gate:** create two accounts, a group, invite and accept, run a poll,
+both vote In, launch — then confirm the tournament has matches and both players can open and score
+one. That is the sequence this issue exists to make work.
+
+---
+
 ## Not yet triaged / follow-ups
 
+- **SSE `/tournaments/:id/events` returns 403 on every tournament page** — observed live 2026-07-27
+  on a group-launched casual tournament while signed in as a registered participant. Real-time
+  updates are therefore dead on those pages. Not yet triaged: it may be a consequence of
+  [ISSUE-31](#issue-31) (no groups exist, so there may be nothing to subscribe to) rather than an
+  auth defect in its own right. **Re-check after ISSUE-31 lands** before filing it separately.
+- **`POST /api/analytics/events` returns 401 for a registered player** — confirmed live 2026-07-27,
+  on every authenticated page. This is the `analytics.ts:23` dual-auth gap already listed below, now
+  observed rather than inferred: it fires on each page view, so every authenticated session logs a
+  401 and no analytics are recorded for account holders.
 - **The app has no support destination.** No `mailto:`, no `support@`, no `/support` route anywhere
   (verified 2026-07-27). `ServiceUnavailable.tsx:14` already tells users to "contact support" with
   nowhere to go, and [ISSUE-24](#issue-24) had to drop the same phrase from its copy for this reason.
