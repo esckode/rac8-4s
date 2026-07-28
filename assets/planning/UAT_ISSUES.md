@@ -9,6 +9,47 @@ several fixes have a "do NOT" note because the obvious approach is wrong.**
 
 Severity: 🔴 blocks a user-facing feature · 🟠 real defect, limited blast radius · 🟡 robustness.
 
+## Before you start
+
+**Order.** Dependencies are noted per-issue but the queue as a whole runs:
+
+| # | Issue | Why here |
+|---|---|---|
+| 1 | **31** | 🔴 a group launches a tournament with no games. Group launch is the product |
+| 2 | **30** | 🔴 the launch link lands on a broken URL. Small fix, same flow as 31 |
+| 3 | **22**, **25** | independent of everything; safe to parallelise |
+| 4 | **28** | unblocks 26 and 29 |
+| 5 | **26** | its geometry guard asserts 28's four-item nav |
+| 6 | **23** | shares one `layout.spec.ts` with 26 — whichever lands first owns it |
+| 7 | **29** | needs 28: `/play` is where its two broken redirects point |
+| 8 | **24** | any time, but **before** the organizer-grant route exists |
+| 9 | **27** | last — needs 28's final tab set before drawing icons |
+
+**Servers.** API 3001, frontend 5173, Postgres/Redis via Docker, **plus
+`npm run dev:worker --workspace=packages/api`** for anything touching assistant/coach/nudge or the
+auto-launch path (§8). `node scripts/e2e-setup.js` checks all of it.
+
+**⚠ Do not test with the seeded accounts.** `organizer@test.com` / `player@test.com` have
+`player_id = NULL` and hit [ISSUE-24](#issue-24)'s loop on every player-scoped page — you will think
+you broke something. That is [ISSUE-25](#issue-25). **Sign up a fresh account instead**; real signup
+links a player correctly. Signup needs
+`dob_attestation: { dateOfBirth: 'YYYY-MM-DD', policyVersion: '1.0' }` or it 400s on the age gate.
+
+**⚠ The full e2e sweep cannot pass as configured** — ~142 failures from `RATE_LIMITED`, documented in
+the follow-ups below. **Do not treat it as your merge gate.** Per-spec runs with
+`--project=chromium --reporter=line --max-failures=1` are the real signal; restarting the API clears
+the in-memory limiter.
+
+**Coverage floors (§13) are raise-only and enforced per-workspace.** ISSUE-27, 28, 29 and 31 all add
+new files; run `npm run test:coverage` for the workspace you touched, and if a floor drops because
+you deleted well-covered code (28 removes `MyTournamentsHub`, 29 gates pages off), **lower it
+explicitly and say why in the commit** — a silent drop reads as someone editing the gate to hide a
+regression.
+
+**Tooling.** `node scripts/inspect-route.mjs <route> --width=360 --depth=3` dumps the layout box
+chain and is how every geometry number in 23/26/28 was measured. Re-measure with it rather than
+eyeballing screenshots.
+
 **ISSUE-1 – ISSUE-21 are all resolved and have been moved, index and bodies, to
 [`COMPLETED_UAT_ISSUES.md`](./COMPLETED_UAT_ISSUES.md)** (CLAUDE.md §12 — working the open queue
 shouldn't cost a read of every closed issue). This file carries only open work. Number new issues
