@@ -136,11 +136,10 @@ const BottomNav = () => {
   const isActive = (path: string) => location.pathname.startsWith(path)
 
   const tabs = [
-    { path: '/browse', label: 'Tournaments', icon: '🏆', testId: 'nav-browse' },
+    { path: '/browse', label: 'Browse', icon: '🏆', testId: 'nav-browse' },
   ]
   const authOnlyTabs = [
-    { path: '/standings', label: 'Standings', icon: '📊', testId: 'nav-standings' },
-    { path: '/matches', label: 'Matches', icon: '🎾', testId: 'nav-matches' },
+    { path: '/play', label: 'Play', icon: '🎾', testId: 'nav-play' },
   ]
 
   return (
@@ -170,7 +169,7 @@ const BottomNav = () => {
           >
             <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
               {tab.icon}
-              {tab.testId === 'nav-matches' && (
+              {tab.testId === 'nav-play' && (
                 <NavCountBadge count={pendingActions.unscoredMatches.length} testId="nav-badge-matches" />
               )}
             </span>
@@ -213,7 +212,7 @@ const BottomNav = () => {
             data-testid="nav-notifications"
             className={`responsive-bottom-nav-item ${isActive('/notifications') ? 'active' : ''}`}
             aria-current={isActive('/notifications') ? 'page' : undefined}
-            aria-label={notificationUnread > 0 ? `Notifications, ${notificationUnread} unread` : 'Notifications'}
+            aria-label={notificationUnread > 0 ? `Alerts, ${notificationUnread} unread` : 'Alerts'}
           >
             <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
               🔔
@@ -227,7 +226,7 @@ const BottomNav = () => {
                 </span>
               )}
             </span>
-            <span>Notifications</span>
+            <span>Alerts</span>
           </a>
         )}
         {isAuthenticated && (
@@ -252,9 +251,8 @@ const TopNav = () => {
   const isActive = (path: string) => location.pathname.startsWith(path)
 
   const authOnlyLinks = [
+    { path: '/play', label: 'Play' },
     { path: '/groups', label: 'Groups' },
-    { path: '/standings', label: 'Standings' },
-    { path: '/matches', label: 'Matches' },
   ]
   const links = [
     ...(isAuthenticated ? authOnlyLinks : []),

@@ -15,7 +15,7 @@ import { TournamentBrowse } from './pages/TournamentBrowse'
 import { TournamentJoin } from './pages/TournamentJoin'
 import { PartnerInviteAcceptPage } from './pages/PartnerInviteAcceptPage'
 import { TournamentDetail } from './pages/TournamentDetail'
-import { MyTournamentsHub } from './pages/MyTournamentsHub'
+import { PlayHub } from './pages/PlayHub'
 import { GroupList, GroupDetail, GroupSettings } from './pages/MyGroups'
 import { InviteAcceptPage } from './pages/InviteAcceptPage'
 import { Notifications } from './pages/Notifications'
@@ -108,15 +108,19 @@ export const App: React.FC = () => {
             }
           />
           <Route
-            path={ROUTES.MATCHES}
+            path={ROUTES.PLAY}
             element={
               <ProtectedRoute>
                 <ResponsiveLayout showHeader showNav>
-                  <MyTournamentsHub tab="matches" />
+                  <PlayHub />
                 </ResponsiveLayout>
               </ProtectedRoute>
             }
           />
+          {/* ISSUE-28: /matches and /standings are now redirects — Play replaced
+              MyTournamentsHub as the nav destination, but both routes must keep
+              working (linked from emails, notifications, auth.spec.ts). */}
+          <Route path={ROUTES.MATCHES} element={<Navigate to={ROUTES.PLAY} replace />} />
           <Route
             path={ROUTES.TOURNAMENT_MANAGE}
             element={
@@ -141,16 +145,7 @@ export const App: React.FC = () => {
             path={ROUTES.TOURNAMENT_DETAIL}
             element={<TournamentDetailRedirect />}
           />
-          <Route
-            path={ROUTES.STANDINGS}
-            element={
-              <ProtectedRoute>
-                <ResponsiveLayout showHeader showNav>
-                  <MyTournamentsHub tab="standings" />
-                </ResponsiveLayout>
-              </ProtectedRoute>
-            }
-          />
+          <Route path={ROUTES.STANDINGS} element={<Navigate to={ROUTES.PLAY} replace />} />
           <Route
             path={ROUTES.GROUP_INVITE}
             element={<InviteAcceptPage />}

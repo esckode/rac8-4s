@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
 import { PlayerRepository } from '../db'
 import { requirePlayerSessionAuth, requireOrganizerAuth } from '../auth'
+import { buildCoachToolContext } from '../assistant/tools'
+import { buildPlayerSnapshot } from '../assistant/player-snapshot'
 import { getLogger } from '../logger'
 
 const log = getLogger('player')
@@ -74,6 +76,21 @@ export default function playerRouter(deps: AppDependencies) {
           hasMore: offset + limit < result.total,
         },
       })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /player/snapshot - next match, standings, and last results across
+  // tournaments (ISSUE-28: the Play hub's data source). Reuses the coach's
+  // own gathering — buildCoachToolContext + buildPlayerSnapshot — rather
+  // than a second query path.
+  router.get('/snapshot', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePlayerId(req.headers.authorization)
+      const ctx = await buildCoachToolContext(deps.db as any, playerId)
+      const data = await buildPlayerSnapshot(ctx)
+      res.json(data)
     } catch (err) {
       next(err)
     }

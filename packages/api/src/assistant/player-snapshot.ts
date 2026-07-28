@@ -59,9 +59,12 @@ export function formatPlayerSnapshot(data: PlayerSnapshotData): string {
  * Async orchestrator: gathers next-match / standings / last-5-results data
  * through the coach tool context's repos (mirrors tools.ts's own internal
  * composition — repo methods + calculateStandings + buildRankReason — but
- * scoped uniformly through ctx per S3), then formats it.
+ * scoped uniformly through ctx per S3). Returns the raw data — callers that
+ * need the coach's prompt string call formatPlayerSnapshot explicitly
+ * (ISSUE-28: GET /player/snapshot needs the data shape, not a formatted
+ * block of English).
  */
-export async function buildPlayerSnapshot(ctx: AssistantToolContext): Promise<string> {
+export async function buildPlayerSnapshot(ctx: AssistantToolContext): Promise<PlayerSnapshotData> {
   const playerRepo = new PlayerRepository(ctx.db)
   const groupRepo = new GroupRepository(ctx.db)
   const tournamentRepo = new TournamentRepository(ctx.db)
@@ -117,7 +120,7 @@ export async function buildPlayerSnapshot(ctx: AssistantToolContext): Promise<st
     .slice(0, MAX_LAST_RESULTS)
     .map(({ opponentName, score, won }) => ({ opponentName, score, won }))
 
-  return formatPlayerSnapshot({ nextMatch, standingsRows, lastResults })
+  return { nextMatch, standingsRows, lastResults }
 }
 
 async function buildStandingsRow(

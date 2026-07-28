@@ -429,11 +429,12 @@ test.describe('Authentication E2E', () => {
       // Wait for redirect to protected route
       await expect(page).toHaveURL(/\/browse|\/dashboard/)
 
-      // When: I navigate to /matches (a protected route)
+      // When: I navigate to /matches (a protected route — ISSUE-28: redirects
+      // to /play, which replaced MyTournamentsHub as the nav destination)
       await page.goto('/matches', { waitUntil: 'networkidle' })
 
-      // Then: I should remain on /matches
-      await expect(page).toHaveURL(/\/matches/)
+      // Then: I should land on /play, not bounce to /login
+      await expect(page).toHaveURL(/\/play/)
 
       // And: I should not be redirected to /login
       const token = await getTokenFromPage(page)

@@ -44,7 +44,7 @@ async function renderAuthenticated() {
     return Promise.resolve({ ok: false, json: async () => ({}) })
   })
   const result = renderLayout()
-  await waitFor(() => expect(screen.getByTestId('nav-standings')).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByTestId('nav-play')).toBeInTheDocument())
   return result
 }
 
@@ -55,13 +55,12 @@ describe('ISSUE-7 — guest nav does not leak auth-gated tabs', () => {
   })
 
   describe('BottomNav (mobile)', () => {
-    it('guest sees Tournaments + a sign-in item, not Standings/Matches/Groups/Notifications', () => {
+    it('guest sees Tournaments + a sign-in item, not Play/Groups/Alerts (ISSUE-28)', () => {
       renderLayout()
 
       expect(screen.getByTestId('nav-browse')).toBeInTheDocument()
       expect(screen.getByTestId('nav-signin')).toBeInTheDocument()
-      expect(screen.queryByTestId('nav-standings')).not.toBeInTheDocument()
-      expect(screen.queryByTestId('nav-matches')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('nav-play')).not.toBeInTheDocument()
       expect(screen.queryByTestId('nav-groups')).not.toBeInTheDocument()
       expect(screen.queryByTestId('nav-notifications')).not.toBeInTheDocument()
     })
@@ -75,8 +74,7 @@ describe('ISSUE-7 — guest nav does not leak auth-gated tabs', () => {
       await renderAuthenticated()
 
       expect(screen.getByTestId('nav-browse')).toBeInTheDocument()
-      expect(screen.getByTestId('nav-standings')).toBeInTheDocument()
-      expect(screen.getByTestId('nav-matches')).toBeInTheDocument()
+      expect(screen.getByTestId('nav-play')).toBeInTheDocument()
       expect(screen.getByTestId('nav-groups')).toBeInTheDocument()
       expect(screen.getByTestId('nav-notifications')).toBeInTheDocument()
       expect(screen.queryByTestId('nav-signin')).not.toBeInTheDocument()
@@ -84,13 +82,12 @@ describe('ISSUE-7 — guest nav does not leak auth-gated tabs', () => {
   })
 
   describe('TopNav (desktop)', () => {
-    it('guest does not see Groups/Standings/Matches links and sees a sign-in link', () => {
+    it('guest does not see Groups/Play links and sees a sign-in link', () => {
       renderLayout()
       const topNav = screen.getByLabelText('Main navigation')
 
       expect(within(topNav).queryByRole('link', { name: /groups/i })).not.toBeInTheDocument()
-      expect(within(topNav).queryByRole('link', { name: /standings/i })).not.toBeInTheDocument()
-      expect(within(topNav).queryByRole('link', { name: /matches/i })).not.toBeInTheDocument()
+      expect(within(topNav).queryByRole('link', { name: /^play$/i })).not.toBeInTheDocument()
       expect(within(topNav).getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/login')
     })
 
@@ -99,8 +96,7 @@ describe('ISSUE-7 — guest nav does not leak auth-gated tabs', () => {
       const topNav = screen.getByLabelText('Main navigation')
 
       expect(within(topNav).getByRole('link', { name: /groups/i })).toHaveAttribute('href', '/groups')
-      expect(within(topNav).getByRole('link', { name: /standings/i })).toHaveAttribute('href', '/standings')
-      expect(within(topNav).getByRole('link', { name: /matches/i })).toHaveAttribute('href', '/matches')
+      expect(within(topNav).getByRole('link', { name: /^play$/i })).toHaveAttribute('href', '/play')
     })
   })
 })

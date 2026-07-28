@@ -14,7 +14,7 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
 - Clicking the magic link signs you in as a guest and takes you straight to your tournament — no
   password needed. Creating a full account (with a password) is an optional upgrade you can do
   later; it's not required to view or play in the tournament you registered for. While signed in
-  as a guest, you'll see a "Create a password to save your account" prompt on your Matches page —
+  as a guest, you'll see a "Create a password to save your account" prompt on your Play page —
   it routes to the same signup page.
 - If you'd rather create a full account right away, use the signup page instead — once you have
   an account, you log in with email + password.
@@ -38,7 +38,7 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   profile. It's used only to suggest times where most of a group is free — ask "when can we
   play?" in a group chat and Coach will reply with a count like "4 of 6 free Saturday evening."
   Coach never says or implies which specific person is or isn't free at a slot.
-- Your **Matches** and **Groups** tabs show a number badge when you have something waiting on
+- Your **Play** and **Groups** tabs show a number badge when you have something waiting on
   you (an unscored match, an open poll, a card to confirm) — it clears once you act. The top of
   **Browse** shows the same items as an "up next" list when you have any. In a group chat, the
   message box may suggest a one-tap action (report a score, cast a vote) based on what's

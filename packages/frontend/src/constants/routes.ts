@@ -21,6 +21,7 @@ export const ROUTES = {
   // Protected routes (require authentication)
   BROWSE: '/browse',
   ORGANIZER: '/organizer',
+  PLAY: '/play',
   MATCHES: '/matches',
   STANDINGS: '/standings',
   GROUPS: '/groups',

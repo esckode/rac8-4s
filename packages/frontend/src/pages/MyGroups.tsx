@@ -58,7 +58,7 @@ const CoachEntryLink: React.FC = () => (
   </Link>
 )
 
-const CreateGroupCta: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
+export const CreateGroupCta: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [submitting, setSubmitting] = useState(false)

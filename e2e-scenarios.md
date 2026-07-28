@@ -180,7 +180,7 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 | **Tournament Discovery & Registration** | 14 | `tournament-discovery-registration.spec.ts` | `npm run test:e2e:tournament` |
 | **Public registration (guest, no account)** | 4 | `tournament-public-registration.spec.ts` | `npx playwright test tournament-public-registration` |
 | **Browse tournaments (public discovery)** | 8 | `browse-tournaments.spec.ts` | `npx playwright test browse-tournaments` |
-| **My tournaments hubs (/standings, /matches)** | 6 | `my-tournaments-hub.spec.ts` | `npx playwright test my-tournaments-hub` |
+| **Play hub (/play, /standings + /matches redirect here)** | 8 | `play-hub.spec.ts` | `npx playwright test play-hub` |
 | **Group Stage - Singles** | 4 | `group-stage-singles.spec.ts` | `npx playwright test group-stage-singles.spec` |
 | **Group Stage - Singles (Player view)** | 2 | `group-stage-singles-player.spec.ts` | `npx playwright test group-stage-singles-player` |
 | **Group Stage - Singles (Score submission)** | 4 | `group-stage-singles-score.spec.ts` | `npx playwright test group-stage-singles-score` |
@@ -2873,33 +2873,45 @@ narrower existing one. `notifications.spec.ts` seeds via `@mention`, not a bare 
 
 ---
 
-## Feature: My Tournaments Hub — multi-tournament depth
+## Feature: Play Hub — multi-tournament depth (ISSUE-28)
 
-> ✅ built & verified (all 4 new scenarios green on `my-tournaments-hub.spec.ts`,
-> chromium + firefox — 2026-07-19, stable across repeated runs; the pre-existing
-> one-tournament auto-redirect tests are unaffected).
+> ✅ built & verified on `play-hub.spec.ts` — supersedes `my-tournaments-hub.spec.ts`
+> (deleted). PlayHub replaced MyTournamentsHub as the nav destination for both the
+> old /standings and /matches tabs (now redirects); the 1-tournament auto-redirect
+> is gone (a next-match card makes even a single tournament worth showing), and the
+> single "no tournaments" empty state split into two, keyed on group membership.
 
-**Implementation:** testids `my-tournaments`, `tournament-row`; data via
-`GET /player/tournaments` (a PWA venue-read — snapshot behavior already covered by
-`pwa-offline-venue.spec.ts`, not duplicated here). The list/row-navigation/dual-auth
-logic already worked against existing code (3 of 4 scenarios passed red-first, no
-implementation change needed); the empty-state scenario needed one fix —
-`MyTournamentsHub.tsx`'s zero-tournaments branch was missing `data-testid="empty-state"`.
+**Implementation:** testids `my-tournaments`, `tournament-row`, `next-match-card`,
+`recent-result-row`, `empty-state`; data via `GET /player/tournaments` (unchanged, a
+PWA venue-read — snapshot behavior already covered by `pwa-offline-venue.spec.ts`,
+not duplicated here) plus new `GET /player/snapshot` (next match / standings / last
+results, the same data `buildPlayerSnapshot` already gathered for @coach — split out
+behind a real endpoint rather than a second query path).
+
+### ✅ Scenario: One-tournament player sees the hub, not an auto-redirect
+- **Given** a player registered in exactly one tournament, in group stage
+- **When** they land on `/play` (via `/standings` or `/matches`, both redirect here)
+- **Then** they stay on `/play` and see a `next-match-card` and the one `tournament-row`
 
 ### ✅ Scenario: Multi-tournament player sees the hub list
 - **Given** a player registered in 2+ tournaments in different states (e.g. one in group stage, one registration-open)
 - **When** they sign in and land on the hub
-- **Then** a `tournament-row` renders per tournament with name and status, no auto-redirect
+- **Then** a `tournament-row` renders per tournament with name and status
 
 ### ✅ Scenario: Row navigation
 - **Given** the multi-tournament hub
 - **When** the player taps a tournament row
-- **Then** they land on that tournament's detail (correct tournament id in the URL)
+- **Then** they land on that tournament's standings tab (correct tournament id in the URL)
 
-### ✅ Scenario: Empty state for a player with no tournaments
-- **Given** a registered account with zero registrations
+### ✅ Scenario: "Create a group" empty state for a player with no groups and no tournaments
+- **Given** a freshly-signed-up account (no groups, zero registrations)
 - **When** they open the hub
-- **Then** an empty state with a path to `/browse` renders (no error)
+- **Then** an empty state with the `create-group-cta` renders (no error, no `/browse` link)
+
+### ✅ Scenario: "No games yet" empty state for a player in a group with no tournaments
+- **Given** an account that owns a group but has no tournament registrations
+- **When** they open the hub
+- **Then** an empty state linking to that group renders
 
 ### ✅ Scenario: Both personas see their tournaments
 - **Given** the same journeys run once with a magic-link player session and once with a registered-account JWT

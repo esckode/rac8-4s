@@ -34,7 +34,7 @@ describe('ResponsiveLayout', () => {
     )
   }
 
-  // Standings/Matches/Groups are auth-gated tabs (ISSUE-1 §Nav — a guest
+  // Play/Groups are auth-gated tabs (ISSUE-1 §Nav — a guest
   // gets nav-signin instead, see ResponsiveLayout.guestNav.spec.tsx), so
   // tests that assert their presence need an authenticated user.
   const renderAuthenticated = async (component: React.ReactElement) => {
@@ -44,7 +44,7 @@ describe('ResponsiveLayout', () => {
       return Promise.resolve({ ok: false, json: async () => ({}) })
     })
     const result = renderWithRouter(component)
-    await waitFor(() => expect(screen.getAllByText('Standings').length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByText('Play').length).toBeGreaterThan(0))
     return result
   }
 
@@ -85,7 +85,7 @@ describe('ResponsiveLayout', () => {
       </ResponsiveLayout>
     )
 
-    const standingsElements = screen.getAllByText('Standings')
+    const standingsElements = screen.getAllByText('Play')
     expect(standingsElements.length).toBeGreaterThan(0)
   })
 
@@ -96,7 +96,7 @@ describe('ResponsiveLayout', () => {
       </ResponsiveLayout>
     )
 
-    expect(screen.queryByText('Standings')).not.toBeInTheDocument()
+    expect(screen.queryByText('Play')).not.toBeInTheDocument()
   })
 
   it('renders a Groups link in the desktop TopNav for an authenticated user (P1.10)', async () => {

@@ -16,7 +16,7 @@ import { deriveCoachHeadsUpFooter } from '../assistant/rate-limiter'
 import { buildCoachToolContext } from '../assistant/tools'
 import { buildCoachSystemPrompt } from '../assistant/coach-prompt'
 import { loadHelpCorpus } from '../assistant/prompt'
-import { buildPlayerSnapshot } from '../assistant/player-snapshot'
+import { buildPlayerSnapshot, formatPlayerSnapshot } from '../assistant/player-snapshot'
 import { COACH_HISTORY_WINDOW } from '../assistant/coach-constants'
 import { getLogger } from '../logger'
 
@@ -117,7 +117,7 @@ export async function processCoachTurn(payload: CoachJobPayload, deps: CoachProc
       const memoryEnabled = settingsRes.rows[0]?.coach_memory_enabled ?? true
 
       const toolContext = await buildCoachToolContext(pool, playerId, { broadcastBus })
-      const snapshot = await buildPlayerSnapshot(toolContext)
+      const snapshot = formatPlayerSnapshot(await buildPlayerSnapshot(toolContext))
 
       const now = new Date()
       let memoriesBlock = ''

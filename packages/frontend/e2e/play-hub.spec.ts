@@ -11,13 +11,14 @@ import {
 import { SELECTORS } from './config'
 
 /**
- * E2E: the /standings and /matches tabs are "my tournaments" hubs with a
- * 0/1/2+ rule. A player in exactly one tournament is taken straight to that
- * tournament's view (no picker click). (The 2+ list is covered in the
- * MyTournamentsHub unit test.)
+ * E2E: /play (ISSUE-28) — replaces MyTournamentsHub as the nav destination
+ * for both the old /standings and /matches tabs, which now redirect here.
+ * Renders a next-match card, the 0/1/2+ tournament list (no more
+ * auto-redirect for exactly one — the next-match card gives a single
+ * tournament something worth showing), and recent results.
  */
-test.describe('My tournaments hubs — single-tournament redirect', () => {
-  test('a one-tournament player lands directly on their standings', async ({ page }) => {
+test.describe('Play hub — single-tournament player sees the hub, not an auto-redirect', () => {
+  test('a one-tournament player stays on /play and sees a next-match card', async ({ page }) => {
     const organizerToken = await getOrganizerToken()
     const fx = await createSinglesTournamentInGroupStage(organizerToken, 2)
 
@@ -27,12 +28,13 @@ test.describe('My tournaments hubs — single-tournament redirect', () => {
 
     await page.goto('/standings')
 
-    // eslint-disable-next-line security/detect-non-literal-regexp -- fx.tournamentId comes from the test fixture's own setup, not user input
-    await expect(page).toHaveURL(new RegExp(`/tournament/${fx.tournamentId}/standings`))
-    await expect(page.locator(SELECTORS.STANDINGS_TABLE)).toBeVisible()
+    // No auto-redirect into the tournament — the hub itself is the destination.
+    await expect(page).toHaveURL(/\/play$/)
+    await expect(page.locator(SELECTORS.NEXT_MATCH_CARD)).toBeVisible()
+    await expect(page.locator(SELECTORS.TOURNAMENT_ROW)).toHaveCount(1)
   })
 
-  test('a one-tournament player lands directly on their matches', async ({ page }) => {
+  test('/matches also redirects to /play', async ({ page }) => {
     const organizerToken = await getOrganizerToken()
     const fx = await createSinglesTournamentInGroupStage(organizerToken, 2)
 
@@ -42,19 +44,30 @@ test.describe('My tournaments hubs — single-tournament redirect', () => {
 
     await page.goto('/matches')
 
+    await expect(page).toHaveURL(/\/play$/)
+    await expect(page.locator(SELECTORS.MY_TOURNAMENTS)).toBeVisible()
+  })
+
+  test('a tournament row still links to its standings tab', async ({ page }) => {
+    const organizerToken = await getOrganizerToken()
+    const fx = await createSinglesTournamentInGroupStage(organizerToken, 2)
+
+    await page.addInitScript(token => {
+      localStorage.setItem('auth_token', token as string)
+    }, fx.playerToken)
+
+    await page.goto('/play')
+    await page.locator(SELECTORS.TOURNAMENT_ROW).click()
+
     // eslint-disable-next-line security/detect-non-literal-regexp -- fx.tournamentId comes from the test fixture's own setup, not user input
-    await expect(page).toHaveURL(new RegExp(`/tournament/${fx.tournamentId}/matches`))
-    await expect(page.locator(SELECTORS.BRACKET_MATCHES).first()).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/tournament/${fx.tournamentId}/standings`))
   })
 })
 
 /**
  * Registers one player (by email) into two tournaments in different states —
  * an open-registration tournament and one advanced to group_stage_active —
- * and returns a magic-link player-session token for that player. Mirrors the
- * essential steps of createSinglesTournamentInGroupStage, but parameterized
- * by email/name so the SAME durable player (matched by email) ends up
- * registered across both tournaments.
+ * and returns a magic-link player-session token for that player.
  */
 async function setupMultiTournamentPlayer(
   organizerToken: string,
@@ -122,7 +135,7 @@ async function setupMultiTournamentPlayer(
   return { tournamentA, tournamentB, playerToken }
 }
 
-test.describe('My tournaments hub — multi-tournament depth', () => {
+test.describe('Play hub — multi-tournament depth', () => {
   test('Scenario: Multi-tournament player sees the hub list', async ({ page }) => {
     const organizerToken = await getOrganizerToken()
     const email = `hub-list-${Date.now()}@example.com`
@@ -135,10 +148,8 @@ test.describe('My tournaments hub — multi-tournament depth', () => {
     await page.addInitScript(token => {
       localStorage.setItem('auth_token', token as string)
     }, playerToken)
-    await page.goto('/standings')
+    await page.goto('/play')
 
-    // No auto-redirect into a single tournament — the 2+ list renders instead.
-    await expect(page).toHaveURL(/\/standings$/)
     await expect(page.locator(SELECTORS.MY_TOURNAMENTS)).toBeVisible()
     await expect(page.locator(SELECTORS.TOURNAMENT_ROW)).toHaveCount(2)
     await expect(
@@ -157,34 +168,13 @@ test.describe('My tournaments hub — multi-tournament depth', () => {
     await page.addInitScript(token => {
       localStorage.setItem('auth_token', token as string)
     }, playerToken)
-    await page.goto('/standings')
+    await page.goto('/play')
     await expect(page.locator(SELECTORS.TOURNAMENT_ROW)).toHaveCount(2)
 
     await page.locator(SELECTORS.TOURNAMENT_ROW, { hasText: tournamentA.name }).click()
 
     // eslint-disable-next-line security/detect-non-literal-regexp -- tournamentA.id comes from this test's own fixture setup, not user input
     await expect(page).toHaveURL(new RegExp(`/tournament/${tournamentA.id}/standings`))
-  })
-
-  test('Scenario: Empty state for a player with no tournaments', async ({ page }) => {
-    const user = createTestUser()
-    const signupRes = await apiCall('/api/auth/signup', 'POST', {
-      ...user,
-      dob_attestation: defaultAgeAttestation(),
-    })
-    if (!signupRes.ok) throw new Error(`Signup failed: ${signupRes.status} ${await signupRes.text()}`)
-    const { token } = await signupRes.json()
-
-    await page.addInitScript(t => {
-      localStorage.setItem('auth_token', t as string)
-    }, token)
-    await page.goto('/standings')
-
-    await expect(page).toHaveURL(/\/standings$/)
-    await expect(page.locator(SELECTORS.MY_TOURNAMENTS)).toBeVisible()
-    await expect(page.locator(SELECTORS.EMPTY_STATE)).toBeVisible()
-    await expect(page.locator(SELECTORS.ERROR_STATE)).toHaveCount(0)
-    await expect(page.locator(SELECTORS.EMPTY_STATE).locator('a[href="/browse"]')).toBeVisible()
   })
 
   test('Scenario: Both personas see their tournaments', async ({ page }) => {
@@ -201,8 +191,7 @@ test.describe('My tournaments hub — multi-tournament depth', () => {
     await page.addInitScript(token => {
       localStorage.setItem('auth_token', token as string)
     }, playerToken)
-    await page.goto('/standings')
-    await expect(page).toHaveURL(/\/standings$/)
+    await page.goto('/play')
     await expect(page.locator(SELECTORS.TOURNAMENT_ROW)).toHaveCount(2)
     await expect(
       page.locator(SELECTORS.TOURNAMENT_ROW, { hasText: tournamentA.name })
@@ -226,7 +215,6 @@ test.describe('My tournaments hub — multi-tournament depth', () => {
     await page.evaluate(t => localStorage.setItem('auth_token', t as string), accountToken)
     await page.reload()
 
-    await expect(page).toHaveURL(/\/standings$/)
     await expect(page.locator(SELECTORS.TOURNAMENT_ROW)).toHaveCount(2)
     await expect(
       page.locator(SELECTORS.TOURNAMENT_ROW, { hasText: tournamentA.name })
@@ -234,5 +222,51 @@ test.describe('My tournaments hub — multi-tournament depth', () => {
     await expect(
       page.locator(SELECTORS.TOURNAMENT_ROW, { hasText: tournamentB.name })
     ).toBeVisible()
+  })
+})
+
+test.describe('Play hub — empty states (ISSUE-28)', () => {
+  test('Scenario: a fresh signup (no groups, no tournaments) sees the "create a group" empty state', async ({ page }) => {
+    const user = createTestUser()
+    const signupRes = await apiCall('/api/auth/signup', 'POST', {
+      ...user,
+      dob_attestation: defaultAgeAttestation(),
+    })
+    if (!signupRes.ok) throw new Error(`Signup failed: ${signupRes.status} ${await signupRes.text()}`)
+    const { token } = await signupRes.json()
+
+    await page.addInitScript(t => {
+      localStorage.setItem('auth_token', t as string)
+    }, token)
+    await page.goto('/play')
+
+    await expect(page.locator(SELECTORS.MY_TOURNAMENTS)).toBeVisible()
+    await expect(page.locator(SELECTORS.EMPTY_STATE)).toBeVisible()
+    await expect(page.locator(SELECTORS.EMPTY_STATE)).toContainText(/create a group/i)
+    await expect(page.locator(SELECTORS.EMPTY_STATE).getByTestId('create-group-cta')).toBeVisible()
+  })
+
+  test('Scenario: a player in a group with no tournaments sees the "no games yet" empty state', async ({ page }) => {
+    const owner = createTestUser()
+    const signupRes = await apiCall('/api/auth/signup', 'POST', {
+      ...owner,
+      dob_attestation: defaultAgeAttestation(),
+    })
+    if (!signupRes.ok) throw new Error(`Signup failed: ${signupRes.status} ${await signupRes.text()}`)
+    const { token } = await signupRes.json()
+
+    const groupRes = await apiCall('/player/groups', 'POST', { name: `Play Hub Group ${Date.now()}` }, token)
+    if (!groupRes.ok) throw new Error(`Create group failed: ${groupRes.status} ${await groupRes.text()}`)
+    const { id: groupId } = await groupRes.json()
+
+    await page.addInitScript(t => {
+      localStorage.setItem('auth_token', t as string)
+    }, token)
+    await page.goto('/play')
+
+    await expect(page.locator(SELECTORS.EMPTY_STATE)).toBeVisible()
+    await expect(page.locator(SELECTORS.EMPTY_STATE)).toContainText(/no games yet/i)
+    // eslint-disable-next-line security/detect-non-literal-regexp -- groupId comes from this test's own fixture setup, not user input
+    await expect(page.locator(SELECTORS.EMPTY_STATE).locator(`a[href="/groups/${groupId}"]`)).toBeVisible()
   })
 })

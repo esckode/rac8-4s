@@ -310,13 +310,18 @@ export const SELECTORS = {
   ERROR_STATE: '[data-testid="error-state"]',
   RECONNECTING_INDICATOR: '[data-testid="reconnecting-indicator"]',
 
-  // Guest nav (ISSUE-7) — hides auth-gated Standings/Matches/Groups tabs
-  // for an unauthenticated user and shows this instead
+  // Guest nav (ISSUE-7) — hides auth-gated Play/Groups tabs for an
+  // unauthenticated user and shows this instead
   NAV_SIGNIN: '[data-testid="nav-signin"]',
 
-  // Guest upgrade CTA (ISSUE-14) — offers /signup on /matches to a
+  // Guest upgrade CTA (ISSUE-14) — offers /signup on the Play hub to a
   // magic-link guest session, not a registered account
   GUEST_UPGRADE_CTA: '[data-testid="guest-upgrade-cta"]',
+
+  // Play hub — ISSUE-28, replaces MyTournamentsHub as the nav destination
+  NAV_PLAY: '[data-testid="nav-play"]',
+  NEXT_MATCH_CARD: '[data-testid="next-match-card"]',
+  RECENT_RESULT_ROW: '[data-testid="recent-result-row"]',
 
   // Groups — G2.5
   NAV_GROUPS: '[data-testid="nav-groups"]',
