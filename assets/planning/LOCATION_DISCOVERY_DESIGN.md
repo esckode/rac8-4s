@@ -3,7 +3,14 @@
 
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
-**Date:** 2026-07-25 — **grilled to resolution 2026-07-25, see §3 (D1–D13; D14 added same day).**
+**Date:** 2026-07-25 — **grilled to resolution 2026-07-25, see §3 (D1–D15).**
+**Amended 2026-07-26:** D16 added (the public-side write path + participant notification, the one gap
+D1–D15 left on the main path); D1 gains a scope call removing the visibility control from v1.
+**Grilled again 2026-07-26** on the four remaining gaps — resolved into D7 (`/geo/*` auth + limits),
+D8 (home-area storage), §4 (schema + type widening) and new **D17** (browse contract). That grill
+cascaded into two revisions: **D10** loses its bbox prefilter, and **D12** now leaves `findNearby`
+untouched. No open questions remain; the only unverified item is D5's POI smoke test, which needs a
+live key.
 **Status:** 📐 **Design (grilled)** — surfaced 2026-07-21 during the UAT walkthrough
 ([BACKLOG.md](../../BACKLOG.md) "Open design threads"). No mechanism exists today and the data
 model does not support one.
@@ -58,8 +65,22 @@ The requirement exists because strangers must find the event, which is precisely
 means. Keying it to `mode` would break both crossing cases: a **public casual** park mixer needs a
 real address, and an **unlisted scheduled** friends' league does not.
 
-*Consequence:* `POST /tournaments` must start accepting `visibility`, and tournament create/edit
-needs a visibility control. Today organizer-created tournaments are always `public`.
+**Scope call (2026-07-26): v1 builds no visibility control.** Both crossing cases above are
+currently *unreachable*, so nothing is at risk by leaving the axis fixed. Verified: `'unlisted'` is
+written in exactly two production places, both group-launch — the manual launch
+(`player-groups.ts:941`) and the auto-launch worker (`auto-close-processor.ts:98`); the only
+"unlisted scheduled" tournament in the tree is a `/test/*` e2e seeder (`app.ts:313`). Everything
+else takes the repo default `'public'` (`db.ts:234`), and `POST /tournaments` never accepts the
+field.
+
+Visibility is therefore determined entirely by **creation path** — organizer-created ⇒ `public`,
+group-launched ⇒ `unlisted` — which is already the product rule. So `POST /tournaments` does *not*
+need to accept `visibility`, create/edit does *not* need a control, and there is no post-publish
+flip case to design (no route can change the column). The gate stays keyed to `visibility` because
+that is the correct predicate and the column already exists; it simply has no UI.
+
+*Consequence of the consequence:* because visibility is immutable, D16's "reject `location_id` on an
+unlisted tournament" guard cannot be dodged by setting a venue and then flipping.
 
 ### D2 — Enforced at the publish transition
 
@@ -143,9 +164,31 @@ GET  /geo/autocomplete?q=…    → Autocomplete(SingleUse)  → predictions
 POST /geo/resolve  {placeId}  → GetPlace(Stored)         → upsert locations, return row
 ```
 
-No credential ever reaches the browser; the instance-role chain is reused (SES precedent). Abuse
-is bounded by the existing rate limiter, and the mock adapter means unit and e2e tests need no
-network. Latency is one extra hop per keystroke, which a 300 ms debounce absorbs.
+No credential ever reaches the browser; the instance-role chain is reused (SES precedent). The mock
+adapter means unit and e2e tests need no network. Latency is one extra hop per keystroke, which a
+300 ms debounce absorbs.
+
+**Both routes are public** *(grilled 2026-07-26)* — D8's "Set your area" box lives on `/browse`,
+which is unauthenticated, and strangers with no account are the audience this feature exists to
+serve. So `/geo/resolve` is an anonymous endpoint that costs money per novel place and writes to a
+shared table, and it is bounded on four levels:
+
+| Level | Control |
+|---|---|
+| Client gates | `minLength: 3` (1–2 char prefixes return unusable predictions), 300 ms debounce, in-memory session cache (backspace-and-retype costs nothing), `AbortController` on each keystroke |
+| Cache-first resolve | `SELECT … WHERE place_id = $1` **before** any provider call — a hit returns the row for free, so sustained cost tracks *novel* places, not traffic |
+| Per-IP rate limits | `geoAutocompletePerIp: 60 / 15 min`, `geoResolvePerIp: 20 / 15 min`, both `countMode: 'all'`, keys `geo:ac:${req.ip}` / `geo:resolve:${req.ip}` |
+| Config | `config.ts` `limits.rateLimit.*` with env overrides, mirroring `registerPerIp` |
+
+The split matters: the existing limits are all 3–25 per 15 min, and autocomplete fires per
+*keystroke*. Any of those numbers would break the typeahead on the first venue. The four client
+gates put a realistic selection at ~2–4 calls.
+
+⚠ **The autocomplete cache cannot live server-side.** D5 established that `Storage` is unsupported
+on Autocomplete/Suggest — those results are `SingleUse`. Caching them in Redis or a table to serve
+later requests would be storing SingleUse results, which is the same terms violation that
+disqualified Google. An ephemeral in-memory cache scoped to one typing interaction is a different
+thing and is fine.
 
 ⚠ **`/geo/*` is a new top-level mount — it MUST be added to the CloudFront behavior list**
 (`infra/modules/frontend`, CLAUDE.md §9 / `IaC-implementation.md` Step 6) or the path silently
@@ -162,9 +205,46 @@ ample for tournament discovery, useless as a home address, and it makes response
 a grid (full precision would destroy the hit rate). Precise coordinates are never transmitted,
 stored, or logged.
 
-Optionally, a coarse **home area** — a city/region place reference, *never* precise coordinates —
-is saved in `player_settings` (migration `052`), so "Near me" survives a denied permission prompt
-and persists across sessions. It is set through the same autocomplete box.
+A coarse **home area** — a city/region place reference, *never* precise coordinates — lets "Near me"
+survive a denied permission prompt and persist across sessions. It is set through the same
+autocomplete box. **Not optional:** D9's fallback chain and D13's e2e assertions both depend on it.
+
+**Storage** *(grilled 2026-07-26)*: `player_settings.home_location_id` → `locations(id)`. The player
+picks a city through D4's autocomplete, it resolves via `POST /geo/resolve` into the shared ownerless
+table, and the player row holds nothing but a pointer. No coordinate ever lands on a player-owned
+row, which makes "never stored" structurally true rather than merely intended.
+
+⚠ **The precision guard is load-bearing, not cosmetic.** Without it a player can set their home
+*club* — a ~10 m venue address — as their "area", reintroducing precise personal location through the
+back door. Cross-table precision cannot be a `CHECK`, so `PATCH /api/auth/me/settings` enforces it:
+
+```ts
+if (!['city', 'region'].includes(loc.place_precision))
+  return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Home area must be a city or region' })
+```
+
+**Read precedence** (one storage mechanism, account wins when signed in):
+
+```
+1. navigator.geolocation      granted this session
+2. home_location_id           if authed  ← account setting actually takes effect
+3. localStorage['rac8.homeArea']   this device
+4. prompt "Set your area"
+```
+
+Anonymous strangers get device persistence; signed-in players get a setting that follows them.
+Putting `home_location_id` above localStorage avoids the trap where a /profile change is silently a
+no-op on any device the player has already used.
+
+⚠ **`logout` must clear the localStorage key.** It currently removes only `TOKEN_KEY` and the session
+snapshot (`useAuth.tsx:335`) — no `localStorage.clear()` — so without this the previous user's area
+carries to the next person on the same phone. Low severity (a city, not an address) but concrete:
+this codebase already reasons about shared devices, e.g. the `registerPerIp` comment's "a captain may
+register several people from one phone". Note `group-last-seen:*` already leaks this way today.
+
+Nothing precise exists to erase on a DSR request, and `player_settings` already cascades on
+`player_id`. A copy on the user's own device is not operator-controlled data. This satisfies the
+"non-storage of precise location" constraint recorded in the backlog item.
 
 Nothing precise exists to erase on a DSR request, and `player_settings` already cascades on
 `player_id`. This satisfies the "non-storage of precise location" constraint recorded in the
@@ -202,24 +282,49 @@ user intent is both a poor first impression and reflexively denied.
 Units: miles (US-only launch, consistent with Stripe US-only in `MONETIZATION_DESIGN.md`). The
 existing client-side format chips are left exactly as they are — out of scope.
 
-### D10 — Plain SQL haversine + bbox prefilter. Zero extensions
+### D10 — Plain SQL haversine as a pure `ORDER BY`. No prefilter, zero extensions
+
+**Revised 2026-07-26.** This decision originally specified a bounding-box `WHERE` prefilter. D17
+established that unlocated tournaments sort last rather than being removed, and that clause is wrong
+twice over under that rule: it drops rows outside the radius (D9: *"distant tournaments sink but
+remain"*), and `NULL` coordinates fail a `BETWEEN` outright, so every legacy row would be eliminated
+by the very predicate meant to be an optimization. D10's own reasoning applies to it — a btree index
+is "sufficient well past this project's scale", and a prefilter solves a scale problem that does not
+exist. **Geography appears only in the `ORDER BY`.**
 
 ```sql
-WHERE lat BETWEEN $lat - $d AND $lat + $d
-  AND lng BETWEEN $lng - $d/cos(radians($lat)) AND $lng + $d/cos(radians($lat))
-ORDER BY <haversine> ASC
+SELECT t.*, l.name, l.place_precision,
+       CASE WHEN l.id IS NULL THEN NULL ELSE
+         GREATEST(0,
+           6371 * acos(LEAST(1, GREATEST(-1,
+             sin(radians($lat)) * sin(radians(l.latitude)) +
+             cos(radians($lat)) * cos(radians(l.latitude)) *
+             cos(radians(l.longitude) - radians($lng))
+           )))
+           - COALESCE(l.extent_radius_km, 0)
+         )
+       END AS distance_km
+FROM public.tournaments t
+LEFT JOIN public.locations l ON l.id = t.location_id
+WHERE <existing status / visibility / deleted_at clauses — unchanged>
+ORDER BY distance_km ASC NULLS LAST
 ```
 
-A btree index on `locations(latitude, longitude)` is sufficient well past this project's scale. The
-prefilter runs against `locations` (small) and joins to `tournaments`. Region extent folds in as
-`distance <= user_radius + extent_radius_km`.
+- **`LEFT JOIN`, not `JOIN`** — an inner join would silently delete every unlocated tournament,
+  which is the D17 failure in a different disguise.
+- **`NULLS LAST`** is Postgres's default on `ASC`; stated explicitly because the whole D17 guarantee
+  rests on it.
+- ⚠ **Clamp the `acos` argument.** Floating-point drift can push it just past ±1, and Postgres
+  *throws* rather than returning NaN. The `LEAST/GREATEST` pair is not defensive noise.
+- **Region extent is a distance correction, not a filter.** Subtracting `extent_radius_km` means
+  standing inside Palm Beach County reads as distance 0 rather than distance-to-centroid, which is
+  what lets region rows sort sensibly against venue rows. `GREATEST(0, …)` floors it.
+- **Kilometres in SQL, miles at render** (D9) — one conversion, in the client.
 
 Extensions were rejected on operational grounds, not technical ones: this project has **zero**
 extensions today, and PostGIS or `cube`+`earthdistance` would have to be provisioned in four
-environments to solve a scale problem that does not exist. PostGIS remains the migration target
-*if* regions ever need real polygon containment instead of centroid+radius.
-
-⚠ The `cos(lat)` correction is exactly what the existing `findNearby` gets wrong.
+environments. PostGIS remains the migration target *if* regions ever need real polygon containment
+instead of centroid+radius.
 
 ### D11 — One location per tournament. No multi-venue *(⚖ owner call)*
 
@@ -241,10 +346,22 @@ doesn't exist. `courts` is likewise orphaned with no `court_id` reference anywhe
 (530 lines) — well-covered code, not untested dead code. Deleting it would drop coverage floors
 through no fault of this feature (§13).
 
-- **`findNearby` is fixed in place** — it is the wrong-shaped predecessor of our query, so it's in
-  scope: add the `cos(lat)` correction, replace the 25 m default with a real discovery default, and
-  honor `extent_radius_km`. Zero production callers means no blast radius; only its own tests are
-  amended.
+- **`findNearby` is left untouched** *(revised 2026-07-26)*. This decision originally put it in scope
+  as "the wrong-shaped predecessor of our query". D10 and D17 removed that relationship: the real
+  query is a `LEFT JOIN` rooted in `tournaments` with no geographic `WHERE` clause, living in
+  `TournamentRepository.listPublic`. `findNearby` is not its predecessor in any sense —
+
+  | | `findNearby` | what "near me" needs |
+  |---|---|---|
+  | Returns | `LocationRow[]` — venues | tournaments |
+  | Ordering | `ORDER BY created_at DESC` — **never computes a distance at all** | by distance |
+  | Unlocated rows | structurally unreachable (no `locations` row to match) | must appear, sorted last |
+
+  Editing it would therefore be the adjacent-code refactor §3 prohibits — no changed line would trace
+  to the request, and its 49 tests and coverage contribution stay untouched. Its two defects are
+  recorded here as dead-code debt: the missing `cos(lat)` longitude correction, and the
+  `ORDER BY created_at` that makes its name a lie. Both are inert with zero callers. It becomes real
+  work if §6's venue pages get built — *"what courts are near me"* is a genuine `locations` question.
 - **`courts` / `CourtRepository` are left untouched** and recorded here as unrelated dead code,
   per §3 ("mention it — don't delete it"). They may matter if match scheduling ever lands.
 
@@ -263,6 +380,7 @@ through no fault of this feature (§13).
   is editable before confirm; "@coach we're at Patch Reef" drafts a card rather than mutating; the
   confirmed card writes and posts the 📍 notice. Requires `npm run dev:worker` (§8 — `JOB_QUEUE=bullmq`
   routes @coach replies through the queue).
+- **EXTEND** for D16: the organizer venue-edit + announcement cases are listed in D16's own test bullet.
 - **ADD** the selection-map row to `e2e-scenarios.md` §"Test Organization" in the same change (§8).
 - **jest:** `/geo/*` routes, `GeocoderAdapter` against the mock, haversine + bbox math (pure and
   the most error-prone part), the publish-gate guard, and place-id upsert dedupe.
@@ -352,6 +470,115 @@ ever wanted, it needs its own grill.
 *Required in the same change:* `docs/assistant-help.md` — @coach's capabilities change, and that
 file is loaded into its system prompt (§9).
 
+### D16 — The public write path: organizer-authed PATCH, and a change announces itself
+
+D14 gave the unlisted side a complete write story. The public side had none: D7 resolves a place and
+§4 adds `tournaments.location_id`, but nothing said which route attaches one to the other — and D2
+deliberately lets an organizer create a draft *before* the venue is settled, which makes an edit path
+mandatory rather than optional.
+
+**No new route is needed.** `POST /tournaments` accepts an optional `locationId`; `PATCH
+/tournaments/:id` (`routes/tournaments.ts:1663`) gains `locationId` and `locationText` alongside its
+existing `name` / `maxPlayers` / `description` allowlist. This is the **mirror image of D14**: the two
+guards that made `PATCH` unusable for a group session — `requireOrganizerAuth` (members hold player
+tokens) and `assertOrganizerOwnsTournament(creator_id)` (only the creator passes) — are exactly what a
+public tournament wants, because a public venue is the organizer's to declare and nobody else's.
+
+The FE flow is D7's two calls plus a third: `GET /geo/autocomplete` → `POST /geo/resolve` (upserts the
+shared `locations` row, returns it) → `PATCH /tournaments/:id {locationId}`. `location_id` is only ever
+set by reference to an already-persisted row, so the FK is the whole of the validation.
+
+⚠ **`locationId` on an `unlisted` tournament is a `400`.** D1's "never geocoded" is a privacy rule:
+accepting a resolved id here would persist precise coordinates for what is frequently a residence.
+Per D1's scope call the check is stable — visibility is immutable, so it cannot be dodged by setting
+a venue and then flipping.
+
+**A change to a *published* tournament announces itself:**
+
+| Tournament state | On location change |
+|---|---|
+| `draft` | Silent — nobody is registered, there is nothing to announce |
+| `registration_open` and beyond | Posts an **announcement** to the tournament conversation, which emails every registered player |
+
+**It must be an `announcement`, not a `system` message** — the load-bearing detail, and the point
+where D14's mechanism deliberately does *not* transfer. `group-notify-selector.ts` maps `system → no
+notifications`. That silence is right for D14: eight people in a live group chat who will see the 📍
+line anyway. It is wrong here, where the audience is strangers who registered weeks ago and are not
+watching a feed. Announcements are push-eligible.
+
+**No new machinery.** `POST /tournaments/:id/announcements` (`routes/messages.ts:35`) already performs
+the entire fan-out: `messageRepo.sendBroadcast` computes recipients, then one `messaging.notify` job
+per recipient (`routes/messages.ts:96`) hands off to `processMessagingNotify`, which coalesces N
+unread into one email each and already respects P9 quiet hours. The location change calls that same
+primitive with a generated body (`📍 Location changed to …`), mirroring D14's wording. No new job
+type, no new email template, no new worker registration. (Note `sendBroadcast` takes `senderPlayerId:
+payload.sub` — an organizer id in a player-named field. That is the existing route's behavior, not
+something this decision introduces.)
+
+**Only a real change fires it.** Compare resolved `location_id` / `location_text` before and after, so
+a PATCH touching only `name` sends nothing. The existing `jobId: notify-${conversationId}-${recipientId}`
+dedup (`routes/messages.ts:98`) already collapses an organizer fiddling with the venue several times
+into one email per recipient.
+
+**The confirmation email carries the location** — the fix at the source. `sendMagicLinkEmail`
+(`email-adapter.ts:91`, subject *"You're registered for X"*) today contains the tournament name and a
+magic link and nothing else, so a player registering for a public tournament is never told where it is
+in the one artifact that actually reaches them. It gains a location line, rendered by `place_precision`
+per D9's table.
+
+*Rejected:* a dedicated `tournament.location_changed` job type + template — `messaging.notify` already
+coalesces per recipient and honors quiet hours; a parallel path would have to re-earn both. An
+organizer opt-out on the announcement — a venue move is precisely the thing a registrant must not
+miss; if it proves noisy the fix is the change-detection above, not a switch.
+
+*Test surface (extends D13):*
+- **e2e** in `location-discovery.spec.ts`: organizer patches a published tournament's venue → a
+  registered player sees the announcement; the same patch on a `draft` posts nothing; `locationId` on
+  an unlisted tournament is rejected.
+- **jest:** the PATCH allowlist additions, the unlisted-rejection guard, change-detection (no
+  announcement when only `name` changes), and the location line in `sendMagicLinkEmail`.
+
+### D17 — Browse contract: one method, two orderings; unlocated rows sink but never vanish
+
+**Unlocated tournaments sort last — they are never filtered out.** §4's "no backfill" is deliberate,
+but read with the original wording ("excluded from the distance sort") it recreated exactly the
+failure D9 rejected a radius filter to avoid. The publish gate (D2) fires only on *future*
+`draft → registration_open` transitions, so on day one **every** already-published tournament has
+`location_id = NULL`. Excluding them means tapping "📍 Near me" at launch shows only tournaments
+published after the feature shipped — possibly none, which reads as a broken app. Sorting them last
+degrades gracefully and keeps the chip useful from the first deploy.
+
+**One method, not two.** `listPublic` (`db.ts:291`) gains optional `lat` / `lng`. Because nothing is
+filtered out, "Near me" returns the *same rows* as the default view — same `total`, same `hasMore`,
+same population. It is not a different set of tournaments, only a different sequence, so a separate
+`findNearbyTournaments` would be a second name for one query:
+
+| | shared | differs |
+|---|---|---|
+| `publishedStatuses` (ISSUE-9), `visibility='public'`, `deleted_at`, optional `sport`, `registered_count` subquery (ISSUE-10), `COUNT(*)`, `LIMIT`/`OFFSET` | ✓ byte-identical | — |
+| `LEFT JOIN locations`, `distance_km` in `SELECT`, `ORDER BY` | — | ✓ |
+
+Duplicating four pieces of shared logic — with the ISSUE-9 status list the most likely to drift — to
+avoid one optional parameter is the wrong trade. The chip toggles a query param, not an endpoint,
+which also keeps both orderings on one cacheable URL shape.
+
+**The client always passes explicit `lat`/`lng`; the server never infers from the session.** D8 wants
+the response CDN-cacheable on a coarse grid, and a server-side "use this player's home area" lookup
+makes every response user-specific and uncacheable. `home_location_id`'s coordinates ride along in
+the settings payload and the client passes them like any other parameter. The server rounds
+defensively to 2 dp — a client sending full precision would fragment the cache grid.
+
+```
+GET /tournaments/public?lat=26.37&lng=-80.13&offset=0&limit=10
+```
+
+Each row gains `location: { name, precision, distanceMi } | null`; the client applies D9's
+precision table. `total` / `hasMore` are unaffected — only `ORDER BY` changes, the `WHERE` clause is
+identical — so pagination stays stable across both sorts and the chip needs no page reset.
+
+*The full chain:* `navigator.geolocation` → round to 2 dp (D8) → `GET /tournaments/public?lat=&lng=`
+→ `listPublic({lat, lng, …})` → D10's query → `location` on each row → D9's render table.
+
 ## 4. Schema
 
 ```sql
@@ -379,15 +606,35 @@ ALTER TABLE public.tournaments
 ALTER TABLE public.player_groups
   ADD COLUMN default_location_text TEXT NULL;
 
+-- the player's coarse home area — a pointer, never coordinates (D8)
+ALTER TABLE public.player_settings
+  ADD COLUMN home_location_id TEXT NULL REFERENCES public.locations(id);
+-- precision is enforced in PATCH /api/auth/me/settings ('city'|'region' only):
+-- a cross-table CHECK is not expressible, and without the guard a player can
+-- store their home *club* — a ~10 m address — as their "area" (D8)
+
 CREATE INDEX idx_locations_coords ON public.locations(latitude, longitude);
 ```
+
+**`name` stays `NOT NULL`** — AWS `GetPlace` returns a `Title` defined for every place type (POI name
+· formatted address · locality · admin area), so `name` means "the string you display" at all four
+precisions and D9's render table needs no `COALESCE` branch. `address_label` holds the full formatted
+address and merely duplicates `name` for `address`-precision rows, which is harmless.
+
+⚠ **Widen the TypeScript types with the columns.** Dropping `NOT NULL` on `sport` / `total_courts` in
+the DB while `LocationRow` (`db.ts:1433`) still types them `sport: string` / `total_courts: number`
+would have every geocoded row carry `null` at runtime under a type asserting otherwise. So
+`sport: string | null`, `total_courts: number | null`, and both optional on `CreateLocationInput`
+(`db.ts:1619`). Blast radius is the test suite only — D12's zero production callers — and the 49
+existing tests pass untouched because they always supply both. `findBySport` excluding geocoded rows
+then falls out correctly: a geocoded county is not a tennis venue.
 
 `public` ⇒ `location_id` required at publish (D2); `location_text` may carry extra detail.
 `unlisted` ⇒ `location_id` NULL, `location_text` only.
 
 **No backfill.** Existing rows get `location_id = NULL`. The publish gate only fires on *future*
 `draft → registration_open` transitions, so already-published tournaments keep working; they render
-"Location not specified" and are excluded from the distance sort. `location_text` on an unlisted
+"Location not specified" and **sort last** under "Near me" — never excluded (D17). `location_text` on an unlisted
 tournament is free text that may reference a residence — it is never geocoded, and inherits
 whatever DSR treatment the tournament row already has.
 
@@ -395,21 +642,23 @@ whatever DSR treatment the tournament row already has.
 
 | # | Decision | Note |
 |---|---|---|
-| D1 | Gate on `visibility`, not `mode` | `public` ⇒ findable; `unlisted` ⇒ text, never geocoded |
+| D1 | Gate on `visibility`, not `mode` | `public` ⇒ findable; `unlisted` ⇒ text, never geocoded. **v1 builds no visibility control** — creation path already determines it |
 | D2 | Enforce at `draft → registration_open` | Verified the only path ⇒ every Browse row has a location |
 | D3 | Shared, ownerless, address-keyed, immutable venues | Provider place id = identity ⇒ no owner/moderation needed |
 | D4 | One input box; precision derived from provider type | Regions same table; provider bbox = extent |
 | D5 | AWS Location `geo-places`, adapter + mock | Google's 30-day lat/lng cap disqualifies a durable table |
 | D6 | Completes PERSONALIZATION P1c venue tz | tz arrives free in the `Stored` call |
-| D7 | Proxy all provider calls through the API | ⚠ register the `/geo/*` CloudFront behavior |
-| D8 | Player position coarsened to ~1.1 km, never stored | Optional coarse home area in `player_settings` |
+| D7 | Proxy all provider calls through the API. **Both routes public**, split per-IP limits (60/20 per 15 min), cache-first resolve, 4 client gates | ⚠ register the `/geo/*` CloudFront behavior. ⚠ autocomplete responses are `SingleUse` — no server-side cache, ever |
+| D8 | Player position coarsened to ~1.1 km, never stored. Home area = `home_location_id` FK + **city/region precision guard** | Guard is load-bearing (a home *club* is a 10 m address). Precedence: geo → account → localStorage → prompt. ⚠ `logout` must clear the local key |
 | D9 | Opt-in "Near me" **sort**, not a filter | Empty-catalog launch state decides it |
-| D10 | SQL haversine + bbox, zero extensions | PostGIS only if regions ever need polygons |
+| D10 | SQL haversine as a pure `ORDER BY`; **no bbox prefilter**; extent as a distance correction | Prefilter contradicted D17 twice over. ⚠ clamp the `acos` arg or Postgres throws |
 | D11 | ⚖ One location per tournament; region covers multi-site | Deletes the join table; matches have no dates anyway |
-| D12 | Fix `findNearby` in place; leave `courts` alone | 49 existing tests stay green; no floor change |
+| D12 | **Leave `findNearby` alone** (revised); leave `courts` alone | It returns venues and orders by `created_at` — not the predecessor of anything here. 49 tests stay green; two defects recorded as dead-code debt |
 | D13 | New `location-discovery.spec.ts` + extend browse | `GEOCODER=mock`, deterministic fixtures |
 | D14 | Group default seeds the session; **any member** may edit it; change posts to group chat | Poll auto-launch is a worker — nobody to type one. Needs its own player-authed route: `PATCH /:id` is organizer+creator-only |
 | D15 | @coach: location field on the launch sheet + `propose_location_change` card. **Addressed-only, card-gated** | Registry wall intact; no ambient chat reading (breaches all 3 assistant principles). Authority = membership, unlike `propose_casual_launch`'s poll-creator rule |
+| D16 | Public write path = `POST`/`PATCH /tournaments/:id` (no new route); a change on a published tournament posts an **announcement**; confirmation email carries the location | Mirror image of D14 — organizer+creator guards are correct here. `system` messages don't notify, announcements do. Reuses `sendBroadcast` + `messaging.notify` wholesale |
+| D17 | Unlocated rows **sort last, never filtered**; `listPublic` gains optional `lat`/`lng` — one method, two orderings | Day one every published row is unlocated, so excluding them recreates D9's blank page. Same rows ⇒ same `total`/`hasMore` ⇒ a second method would only duplicate ISSUE-9/ISSUE-10 logic |
 
 ## 6. Follow-on / out of scope
 
