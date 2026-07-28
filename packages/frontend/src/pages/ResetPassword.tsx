@@ -311,7 +311,7 @@ export const ResetPassword: React.FC = () => {
               textAlign: 'center',
             }}
           >
-            Password updated.
+            Password updated
           </div>
           <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5, textAlign: 'center' }}>
             Your password has been successfully reset. Redirecting to login...
@@ -431,10 +431,10 @@ export const ResetPassword: React.FC = () => {
             marginBottom: 10,
           }}
         >
-          Reset your password.
+          Reset your password
         </div>
         <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5, marginBottom: 8 }}>
-          Enter the code we sent to your email and choose a new password.
+          Enter the code we sent to your email and choose a new password
         </div>
 
         {/* Error message */}

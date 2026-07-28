@@ -184,10 +184,10 @@ export const ForgotPassword: React.FC = () => {
               marginBottom: 10,
             }}
           >
-            ✓ Code sent.
+            ✓ Code sent
           </div>
           <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5 }}>
-            We've sent a 6-digit code to your email address.
+            We've sent a 6-digit code to your email address
           </div>
 
           {/* Success message box */}
@@ -344,10 +344,10 @@ export const ForgotPassword: React.FC = () => {
             marginBottom: 10,
           }}
         >
-          Reset your password.
+          Reset your password
         </div>
         <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5 }}>
-          Enter your email address and we'll send you a code to reset your password.
+          Enter your email address and we'll send you a code to reset your password
         </div>
 
         {/* Error message */}

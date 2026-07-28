@@ -79,10 +79,10 @@ const MobileLanding = () => (
           <LogoMark size={88} color="#A8D5FF" accent="#7BC3FF" />
         </div>
         <div style={{ fontSize: 44, fontWeight: 600, letterSpacing: '-0.03em', color: '#FFFFFF', lineHeight: 1.05, marginBottom: 16 }}>
-          See you at the court.
+          See you at the court
         </div>
         <div style={{ marginTop: 16, fontSize: 16, color: 'rgba(255,255,255,0.72)', lineHeight: 1.5, maxWidth: 320 }}>
-          Find drop-in nights, join your club's leagues, and run friendly tournaments — all on the sideline.
+          Find drop-in nights, join your club's leagues, and run friendly tournaments — all on the sideline
         </div>
       </div>
 
@@ -92,7 +92,7 @@ const MobileLanding = () => (
           Browse tournaments
         </Button>
         <div style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 6 }}>
-          New here? An account creates itself when you join your first night.
+          New here? An account creates itself when you join your first night
         </div>
       </div>
     </div>

@@ -106,7 +106,7 @@ describe('ISSUE-6 — auth back buttons use true history-back', () => {
     fireEvent.change(screen.getByPlaceholderText(/enter a new password/i), { target: { value: 'password123' } })
     fireEvent.change(screen.getByPlaceholderText(/confirm your password/i), { target: { value: 'password123' } })
     fireEvent.click(screen.getByRole('button', { name: /update password/i }))
-    await waitFor(() => expect(screen.getByText(/password updated\./i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/password updated/i)).toBeInTheDocument())
 
     fireEvent.click(screen.getByTestId('back-button'))
     expect(mockNavigate).toHaveBeenCalledWith('/login')

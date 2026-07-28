@@ -193,10 +193,10 @@ export const Login: React.FC = () => {
             marginBottom: 10,
           }}
         >
-          Welcome back.
+          Sign in
         </div>
         <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5 }}>
-          Sign in to see your matches, standings, and tonight's tournaments.
+          See your matches, standings, and tonight's tournaments
         </div>
 
         {/* Error message */}

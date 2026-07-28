@@ -78,7 +78,7 @@ describe('ISSUE-5 — no fake status bar on real auth pages', () => {
     fireEvent.change(screen.getByPlaceholderText(/confirm your password/i), { target: { value: 'password123' } })
     fireEvent.click(screen.getByRole('button', { name: /update password/i }))
 
-    await waitFor(() => expect(screen.getByText(/password updated\./i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/password updated/i)).toBeInTheDocument())
     expect(screen.queryByText('9:41')).not.toBeInTheDocument()
   })
 })

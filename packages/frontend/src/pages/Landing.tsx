@@ -43,12 +43,12 @@ export const Landing: React.FC = () => {
 
             {/* Heading */}
             <h1 className="text-[2.75rem] font-bold text-white leading-[1.05] mb-4">
-              See you at the court.
+              See you at the court
             </h1>
 
             {/* Subtitle */}
             <p className="text-base text-white/72 leading-relaxed max-w-xs mb-8">
-              Find drop-in nights, join your club's leagues, and run friendly tournaments — all on the sideline.
+              Find drop-in nights, join your club's leagues, and run friendly tournaments — all on the sideline
             </p>
           </div>
 
@@ -71,7 +71,7 @@ export const Landing: React.FC = () => {
               Browse tournaments
             </Button>
             <p className="text-center text-xs text-white/50 mt-1.5">
-              New here? An account creates itself when you join your first night.
+              New here? An account creates itself when you join your first night
             </p>
           </div>
         </div>
