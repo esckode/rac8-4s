@@ -10,9 +10,10 @@
 
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter, Routes, Route, useParams } from 'react-router-dom'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { PublicRoute } from '../components/PublicRoute'
+import { TournamentDetailRedirect } from '../App'
 import * as useAuthHook from '../hooks/useAuth'
 
 // Mock components for testing
@@ -285,5 +286,30 @@ describe('Auth Gating Integration', () => {
     // After auth complete with authenticated user, should redirect (Navigate component)
     // Content doesn't show because of redirect
     expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
+  })
+})
+
+// ISSUE-30: /tournament/:id used to redirect to the literal, unsubstituted
+// string '/tournament/:tournamentId/standings' because the old inline
+// <Navigate> used a template literal with no interpolation. Verifies the
+// real id is substituted into the target path.
+describe('TournamentDetailRedirect (ISSUE-30)', () => {
+  const TabMarker: React.FC = () => {
+    const { tournamentId, tab } = useParams()
+    return <div>Resolved: {tournamentId}/{tab}</div>
+  }
+
+  it('substitutes the real tournament id into the standings redirect', () => {
+    render(
+      <MemoryRouter initialEntries={['/tournament/real-tid-123']}>
+        <Routes>
+          <Route path="/tournament/:tournamentId" element={<TournamentDetailRedirect />} />
+          <Route path="/tournament/:tournamentId/:tab" element={<TabMarker />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('Resolved: real-tid-123/standings')).toBeInTheDocument()
+    expect(screen.queryByText(/:tournamentId/)).not.toBeInTheDocument()
   })
 })
