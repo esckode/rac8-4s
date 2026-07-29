@@ -1738,6 +1738,13 @@ tournaments and a player id for group-launched ones — that column-level fix is
 
 ## ISSUE-33 — `tournaments.creator_id` holds two different id types 🟠 {#issue-33}
 
+> **⚠ The shipped fix is deliberately interim.** Ownership branches on `group_id` because
+> `MONETIZATION_DESIGN.md` §7.1 **O4** (every account is always a player) is not built — measured
+> 2026-07-29, only 1 of 2,866 organizer accounts had a linked `player_id`, so there was nothing to
+> normalise `creator_id` onto. **When O4 lands, delete the branch**: `creator_id` becomes uniformly a
+> player id and the polymorphism this issue works around ceases to exist. The reminder also lives on
+> O4's own row in `MONETIZATION_DESIGN.md`, which is where it will actually be seen.
+
 **✅ Resolved** (2026-07-29, `1fe498c`/`9398e04`): `group_id IS NULL` and `group_id IS NOT NULL`
 fully discriminate the two creation paths (measured across all 3,836 rows at decision time, no
 exceptions), so no migration or new column was needed. A new `assertTournamentAccess` helper

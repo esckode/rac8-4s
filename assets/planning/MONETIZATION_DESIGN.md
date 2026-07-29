@@ -156,7 +156,25 @@ the settled half should be built regardless and is cheap only if built at the ri
 | O1 | **The gate is the `OPEN_REGISTRATION` transition**, not the organizer role | `core-logic/src/state-machine.ts:36` — `DRAFT: ['OPEN_REGISTRATION']` is the only way out of draft, and nothing else in the codebase writes `registration_open`. One check, one seam |
 | O2 | **Draft mode is free and permanent** — no trial, no timer, no card to start | Draft publishes nothing (no listing, no email, no registration), so there is no value to leak and nothing for a timer to protect. The real forcing function is the organizer's own event date |
 | O3 | **Group casual launch stays free forever** | Group launches go `draft → registration_closed` directly (`player-groups.ts:~951`), bypassing `OPEN_REGISTRATION` — so they are outside the gate *by construction*, not by a carve-out |
-| O4 | **Every account is always a player**; organizer is a layered entitlement, never an exclusive role | Today `role` is a single exclusive column and organizers have `player_id = NULL`, which *is* [ISSUE-24](./UAT_ISSUES.md#issue-24). Layering fixes it by construction and lets an organizer play in their own league |
+| O4 | **Every account is always a player**; organizer is a layered entitlement, never an exclusive role | Today `role` is a single exclusive column and organizers have `player_id = NULL`, which *is* [ISSUE-24](./COMPLETED_UAT_ISSUES.md#issue-24). Layering fixes it by construction and lets an organizer play in their own league |
+
+> **⚠ O4 has debt waiting on it — delete this when you build it.**
+> `tournaments.creator_id` is **polymorphic** because O4 is not built: it holds an *account* id for
+> organizer-created tournaments (`tournaments.ts:259`) and a *player* id for group-launched ones
+> (`player-groups.ts:941`). [ISSUE-33](./COMPLETED_UAT_ISSUES.md#issue-33) shipped a **deliberate
+> interim workaround** — ownership checks branch on `group_id` — because there was nothing to
+> normalise onto. Measured 2026-07-29:
+>
+> | `auth.accounts.role` | rows | with linked `player_id` |
+> |---|---|---|
+> | `player` | 9,962 | 1,826 |
+> | `organizer` | 2,866 | **1** |
+> | `admin` | 156 | 0 |
+>
+> Once O4 lands and every account carries a `player_id`, `creator_id` should become **uniformly a
+> player id**, the second namespace disappears, and ISSUE-33's `group_id` branch collapses to a
+> single comparison plus the group-membership rule. **Remove the branch rather than leaving it** —
+> otherwise it survives as unexplained complexity long after the reason for it is gone.
 | O5 | **App decides eligibility; Stripe computes money** | Refines "no custom state" (#6). The app may hold arbitrarily rich eligibility rules and *express* them as Stripe objects — it must never independently compute an amount. Proration, tax base and dunning stay Stripe's |
 | O6 | **Grant/audit log** records who was granted what, by whom, when and why, pointing at Stripe IDs | Stripe records the financial fact; only the app can record the business reason. Same table serves organizer-capability grants and comps |
 | O7 | **Lapse reuses the player state machine unchanged** (#6, #6b, #10a, #10c) | No new states. In-flight tournaments run on, drafts persist, publish shows a resubscribe wall |
