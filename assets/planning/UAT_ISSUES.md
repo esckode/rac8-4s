@@ -62,12 +62,22 @@ The knob **already exists** — `config.ts:686` reads
 
 ### Fix
 
-Set the override for the e2e environment — **in `scripts/e2e-setup.js`**, so it cannot be forgotten
-the way a `.env` line can when someone sets up a fresh checkout. Add it to `.env.example` with a
-comment too.
+**Set it in `.env` and `.env.example`** — that is the reliable place, because the API reads it at
+boot and the API is usually already running.
+
+⚠ **`scripts/e2e-setup.js` alone is not sufficient**, despite being the obvious home. It only spawns
+the API under `--auto-start` (`:59`, gated at `:118`); when the server is already up — the normal
+case — anything it sets in its own environment never reaches that process. Put it in `e2e-setup.js`
+*as well* if you like, but `.env.example` is what makes it survive a fresh checkout.
+
+**Value: set it high enough to be effectively off for e2e — 10000.** Do not try to compute the exact
+requirement: the sweep is ~427 tests across two browser projects, fixtures register several players
+each, and the number moves whenever a spec is added. A precise value would silently become wrong
+again. The cap's purpose is abuse prevention, which is meaningless in a test environment.
 
 **Do NOT raise the production default.** The 25/15min cap is ISSUE-11's defence against using public
-registration as an email-bombing vector. This is a test-environment override only.
+registration as an email-bombing vector. This is a test-environment override only — the default in
+`config.ts:534` must stay 25.
 
 ### Verify
 
@@ -104,8 +114,20 @@ throws. Identical shape to [ISSUE-24](COMPLETED_UAT_ISSUES.md#issue-24) and
 **Red:** an integration test asserting a registered account JWT is accepted by `POST /api/analytics/events`,
 alongside the guest-session case so the fix does not trade one for the other.
 
-**Green:** resolve the player through the same dual-auth path those two issues established, rather
-than hand-rolling a third variant.
+**Green — extract a shared resolver first; there is nothing importable today.** ⚠ Both existing
+resolvers are **local functions inside their route factories** — `player.ts:19` `resolvePlayerId` and
+`tournaments.ts:178` `resolveTournamentPlayer` — closing over `deps`. **Neither is exported**, so
+"reuse the existing one" is not currently possible.
+
+Extract the shared part to its own module (e.g. `auth/resolve-player.ts`) taking `deps` explicitly,
+and have `player.ts`, `tournaments.ts` and `analytics.ts` all use it. **This is the point of the
+issue, not incidental refactoring:** three hand-rolled copies of dual-auth are precisely how
+[ISSUE-32](COMPLETED_UAT_ISSUES.md#issue-32) happened — a route that used neither resolver and so was
+missed when both were fixed. A fourth copy guarantees a fourth ISSUE-32.
+
+Note the two differ: `resolveTournamentPlayer` additionally asserts *registration in a tournament*.
+Analytics needs only the identity half, so extract that as the shared primitive and let the
+tournament-scoped check layer on top.
 
 **Consider while here:** analytics ingestion is fire-and-forget from the client. Decide whether an
 unauthenticated or unresolvable caller should 401 at all, or be silently dropped — a 401 on every
