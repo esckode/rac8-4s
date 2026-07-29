@@ -25,6 +25,8 @@ import { PrivacyPolicy } from './pages/PrivacyPolicy'
 import { PartnerRequestConfirm } from './pages/PartnerRequestConfirm'
 import { OrganizerManage } from './pages/OrganizerManage'
 import { OrganizerDashboard } from './pages/OrganizerDashboard'
+import { About } from './pages/About'
+import { Settings } from './pages/Settings'
 import { ServiceUnavailable } from './pages/ServiceUnavailable'
 import { useServiceUnavailable } from './context/ServiceUnavailableContext'
 import { AppConfigProvider, useAppConfig } from './context/AppConfigContext'
@@ -237,6 +239,29 @@ export const App: React.FC = () => {
               <ProtectedRoute>
                 <ResponsiveLayout showHeader showNav>
                   <CoachChat />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
+          {/* ISSUE-36: the More menu's Account/Settings/About items had no
+              matching route at all — Account is repointed at /profile below,
+              About and Settings are new. */}
+          <Route
+            path={ROUTES.ABOUT}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <About />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.SETTINGS}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <Settings />
                 </ResponsiveLayout>
               </ProtectedRoute>
             }

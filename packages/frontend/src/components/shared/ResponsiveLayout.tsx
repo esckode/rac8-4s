@@ -6,6 +6,7 @@ import { useNotificationUnread } from '../../hooks/useNotificationUnread'
 import { usePendingActions } from '../../hooks/usePendingActions'
 import { useAppConfig } from '../../context/AppConfigContext'
 import { MyGroupsUnreadBadge } from '../GroupChatPanel'
+import { ROUTES } from '../../constants/routes'
 import {
   TrophyIcon,
   TennisBallIcon,
@@ -49,10 +50,12 @@ const MORE_ITEMS: Array<{
   path: string
   organizerOnly?: boolean
 }> = [
-  { label: 'Account', Icon: UserIcon, path: '/account' },
-  { label: 'Organizer Dashboard', Icon: BuildingIcon, path: '/organizer', organizerOnly: true },
-  { label: 'Settings', Icon: SettingsIcon, path: '/settings' },
-  { label: 'About', Icon: InfoIcon, path: '/about' },
+  // ISSUE-36: Account/Settings/About had no matching route at all. Account
+  // repoints at the existing /profile rather than building a second page.
+  { label: 'Account', Icon: UserIcon, path: ROUTES.PROFILE },
+  { label: 'Organizer Dashboard', Icon: BuildingIcon, path: ROUTES.ORGANIZER, organizerOnly: true },
+  { label: 'Settings', Icon: SettingsIcon, path: ROUTES.SETTINGS },
+  { label: 'About', Icon: InfoIcon, path: ROUTES.ABOUT },
 ]
 
 const MoreSheet: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
@@ -105,6 +108,7 @@ const MoreSheet: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen,
         {MORE_ITEMS.filter(item => !item.organizerOnly || user?.role === 'organizer').map(item => (
           <button
             key={item.path}
+            data-testid={`more-item-${item.path.replace(/^\//, '')}`}
             onClick={() => navigate(item.path)}
             style={{
               display: 'flex', alignItems: 'center', gap: 14,
@@ -126,6 +130,7 @@ const MoreSheet: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen,
 
         {/* Sign out */}
         <button
+          data-testid="more-item-signout"
           onClick={() => navigate('/signout')}
           style={{
             display: 'flex', alignItems: 'center', gap: 14,
@@ -259,6 +264,7 @@ const BottomNav = () => {
         {isAuthenticated && (
           <button
             className="responsive-bottom-nav-item"
+            data-testid="nav-more"
             onClick={() => setIsMoreOpen(true)}
             aria-haspopup="dialog"
           >

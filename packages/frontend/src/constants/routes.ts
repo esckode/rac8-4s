@@ -35,4 +35,6 @@ export const ROUTES = {
   PROFILE: '/profile',
   COACH: '/coach',
   PRIVACY: '/privacy',
+  ABOUT: '/about',
+  SETTINGS: '/settings',
 }
