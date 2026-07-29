@@ -2,6 +2,7 @@
 import { spawn } from 'child_process'
 import http from 'http'
 import { execSync } from 'child_process'
+import { readFileSync } from 'fs'
 
 const API_PORT = 3001
 const FRONTEND_PORT = 5173
@@ -49,6 +50,22 @@ function checkWorkerProcess() {
     return result.trim().length > 0
   } catch {
     return false
+  }
+}
+
+// UAT ISSUE-34: the e2e sweep self-DoSes on ISSUE-11's per-IP registration
+// cap (default 25/15min) unless this override is set in the file the API
+// server actually reads its env from (packages/api/.env, not the repo root).
+// Reads the file directly rather than process.env, since this script doesn't
+// load dotenv and the value only matters to the already-running API process.
+function checkRateLimitOverride() {
+  try {
+    const contents = readFileSync('packages/api/.env', 'utf8')
+    const match = contents.match(/^APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS=(\d+)/m)
+    if (!match) return { set: false, value: null }
+    return { set: true, value: parseInt(match[1], 10) }
+  } catch {
+    return { set: false, value: null }
   }
 }
 
@@ -213,8 +230,25 @@ async function main() {
     }
   }
 
+  // Check the e2e rate-limit override (UAT ISSUE-34)
+  log('\n5️⃣  Checking e2e registration rate-limit override...', 'blue')
+  const rateLimitOverride = checkRateLimitOverride()
+  if (rateLimitOverride.set && rateLimitOverride.value >= 1000) {
+    log(`✅ Override in effect: APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS=${rateLimitOverride.value}`, 'green')
+  } else if (rateLimitOverride.set) {
+    log(`⚠️  Override set but low (${rateLimitOverride.value}) — the e2e sweep may still hit RATE_LIMITED`, 'yellow')
+  } else {
+    log('❌ Override not set in packages/api/.env — the e2e sweep will self-DoS on its own', 'red')
+    log('   fixtures (ISSUE-11\'s 25/15min per-IP cap). Add:', 'red')
+    log('   APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS=10000', 'red')
+  }
+  if (apiRunning) {
+    log('   ⚠️  API server was already running — restart it if you just added this,', 'yellow')
+    log('      it only reads env vars at boot.', 'yellow')
+  }
+
   // Validate browser
-  log('\n5️⃣  Validating frontend with persistent browser...', 'blue')
+  log('\n6️⃣  Validating frontend with persistent browser...', 'blue')
   if (frontendRunning) {
     try {
       const result = execSync('node scripts/browser.js', { encoding: 'utf8', stdio: 'inherit' })
@@ -233,6 +267,7 @@ async function main() {
   log(`  API Server (3001): ${apiRunning ? '✅' : '❌'}`, 'blue')
   log(`  Frontend Server (5173): ${frontendRunning ? '✅' : '❌'}`, 'blue')
   log(`  Worker: ${workerRunning ? '✅' : '❌ (only needed for assistant/coach/sweep/doubles-groups specs)'}`, 'blue')
+  log(`  Rate-limit override: ${rateLimitOverride.set && rateLimitOverride.value >= 1000 ? '✅' : '❌ (full test:e2e sweep will hit RATE_LIMITED)'}`, 'blue')
 
   if (apiRunning && frontendRunning) {
     log('\n✅ Core prerequisites met! Ready to run E2E tests.', 'green')
