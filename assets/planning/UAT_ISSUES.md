@@ -33,41 +33,208 @@ what each shipped. Number new issues from 34.
 | [ISSUE-31](COMPLETED_UAT_ISSUES.md#issue-31) | ✅ Resolved | 🔴 | A group-launched casual tournament **never generates matches** — there is nothing to play | api |
 | [ISSUE-32](COMPLETED_UAT_ISSUES.md#issue-32) | ✅ Resolved | 🟠 | SSE `/tournaments/:id/events` 403s for registered accounts — live updates dead for participants | api |
 | [ISSUE-33](COMPLETED_UAT_ISSUES.md#issue-33) | ✅ Resolved | 🟠 | `tournaments.creator_id` is polymorphic — account id or player id by creation path | api · data |
+| [ISSUE-34](#issue-34) | 🔲 Open | 🟠 | e2e merge gate unusable — the register rate-limit override exists but is never set | scripts · test |
+| [ISSUE-35](#issue-35) | 🔲 Open | 🟠 | `POST /api/analytics/events` 401s for registered accounts — no analytics for account holders | api |
+| [ISSUE-36](#issue-36) | 🔲 Open | 🟠 | Three of four More-menu items are dead links; no About/Contact/Settings pages exist | frontend |
+| [ISSUE-37](#issue-37) | 🔲 Open | 🟡 | Auth page titles are styled `<div>`s, not headings — no page heading for screen readers | frontend · a11y |
+| [ISSUE-38](#issue-38) | 🔲 Open | 🟡 | `real-time-updates.spec.ts` reconnect test fails consistently; a second test is flaky | test |
+
+---
+
+## ISSUE-34 — e2e merge gate unusable: the rate-limit override is never set 🟠 {#issue-34}
+
+### Symptom
+
+`npm run test:e2e` produces ~142 failures / 267 passed, overwhelmingly `RATE_LIMITED` raised by the
+fixtures' own `POST /:id/register` calls. A 427-test both-browser sweep from one IP exhausts
+ISSUE-11's per-IP cap within the first few multi-player fixtures; everything after fails to seed.
+**So CLAUDE.md §11's "full run before merging" is not a real gate**, and per-spec runs are the only
+signal.
+
+### Root cause
+
+The knob **already exists** — `config.ts:686` reads
+`APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS`, defaulting to 25 (`:534`). It is simply
+**never set** for dev or e2e: not in `.env`, `.env.example`, `scripts/e2e-setup.js`, or
+`playwright.config.ts` (verified 2026-07-29).
+
+### Fix
+
+Set the override for the e2e environment — **in `scripts/e2e-setup.js`**, so it cannot be forgotten
+the way a `.env` line can when someone sets up a fresh checkout. Add it to `.env.example` with a
+comment too.
+
+**Do NOT raise the production default.** The 25/15min cap is ISSUE-11's defence against using public
+registration as an email-bombing vector. This is a test-environment override only.
+
+### Verify
+
+```bash
+node scripts/e2e-setup.js          # should report the override in effect
+npm run test:e2e -- --reporter=line
+```
+The sweep should complete without `RATE_LIMITED`. Expect other pre-existing failures to remain —
+notably [ISSUE-38](#issue-38); this issue is about removing the seeding wall, not turning the suite
+green.
+
+---
+
+## ISSUE-35 — `POST /api/analytics/events` 401s for registered accounts 🟠 {#issue-35}
+
+### Symptom
+
+Every authenticated page view by an account holder logs a 401. Observed live 2026-07-29 on every
+page during a walkthrough. **No analytics are recorded for registered users at all** — only guest
+sessions get through.
+
+This matters more than it looks: the beta exists to produce the field data the organizer pricing was
+parked on (`MONETIZATION_DESIGN.md` §7.1 — players per event, events per organizer per year). That
+data is being dropped for exactly the cohort that has accounts.
+
+### Root cause
+
+`analytics.ts:23` calls `requirePlayerSessionAuth` directly with no fallback, so an account JWT
+throws. Identical shape to [ISSUE-24](COMPLETED_UAT_ISSUES.md#issue-24) and
+[ISSUE-32](COMPLETED_UAT_ISSUES.md#issue-32), both of which are now shipped and can be copied.
+
+### Fix — TDD (§4)
+
+**Red:** an integration test asserting a registered account JWT is accepted by `POST /api/analytics/events`,
+alongside the guest-session case so the fix does not trade one for the other.
+
+**Green:** resolve the player through the same dual-auth path those two issues established, rather
+than hand-rolling a third variant.
+
+**Consider while here:** analytics ingestion is fire-and-forget from the client. Decide whether an
+unauthenticated or unresolvable caller should 401 at all, or be silently dropped — a 401 on every
+page view is noise in the logs even once the auth is fixed.
+
+### Verify
+
+`npm --workspace=packages/api exec -- jest --findRelatedTests packages/api/src/routes/analytics.ts --bail`,
+then sign in with a **registered account**, load any authenticated page, and confirm no 401 on
+`/api/analytics/events`.
+
+---
+
+## ISSUE-36 — Three of four More-menu items are dead links 🟠 {#issue-36}
+
+### Symptom
+
+Opening **More** and tapping **Account**, **Settings** or **About** lands on the NotFound page.
+Only **Organizer Dashboard** resolves.
+
+Verified 2026-07-29: `ResponsiveLayout.tsx:52,54,55` link to `/account`, `/settings` and `/about`,
+and **none of those paths is registered in `App.tsx`**. `ROUTES` has no `ACCOUNT`, `SETTINGS` or
+`ABOUT` constant either — the paths are hardcoded strings in the menu.
+
+Newly *visible* because [ISSUE-29](COMPLETED_UAT_ISSUES.md#issue-29) added the `path="*"` catch-all;
+before that they rendered a blank outlet, which is worse but less obvious.
+
+### Fix — includes the support model
+
+**`/profile` already exists and is registered.** "Account" almost certainly means it — repoint rather
+than build a second page. Confirm before assuming.
+
+**Build `/about`, and put Contact on it.** Owner decision 2026-07-29 — support is two-tier:
+
+| Kind of problem | Goes to |
+|---|---|
+| **Technical / the webapp itself** | the Contact route on the About page |
+| **Non-technical** (fixtures, membership, "can I join", scheduling) | **the group owners**, in the group |
+
+This closes the two dangling "contact support" promises: `ServiceUnavailable.tsx:14`, and ISSUE-24's
+`PLAYER_NOT_LINKED` copy, which had to drop the phrase because there was nowhere to send people.
+Both should now link to the Contact route.
+
+**`/settings`** — decide whether it is a real page or should be removed from the menu. `/profile`
+already carries the personalization settings (`PERSONALIZATION_DESIGN.md`), so a separate Settings
+entry may be redundant. **Removing a menu item is a valid fix** — do not build a page to justify a
+link.
+
+**Do NOT leave a hardcoded path in the menu.** Add `ROUTES` constants for whatever survives, so the
+next dead link fails at the type level rather than at runtime.
+
+### Verify
+
+`npx playwright test mobile accessibility --project=chromium --reporter=line`, plus manually opening
+every More-menu item and confirming each resolves. Add a test asserting every menu `path` matches a
+registered route — that is the guard that stops this recurring.
+
+---
+
+## ISSUE-37 — Auth page titles are not headings 🟡 {#issue-37}
+
+### Symptom
+
+`Login.tsx` contains **zero** `<h1>` elements (verified 2026-07-29) — its 34px title is a styled
+`<div>` (`:187`). `ForgotPassword.tsx` and `ResetPassword.tsx` are the same. `Signup.tsx` and
+`Landing.tsx` use a real `<h1>`.
+
+So a screen-reader user gets no page heading on three of the five auth screens, and heading
+navigation skips them entirely.
+
+### Fix
+
+Promote the title to `<h1>` on the three pages, keeping the existing inline styles so nothing moves
+visually. `Signup.tsx:260` is the reference — same visual weight, correct element.
+
+**Do this via a shared page-header component if convenient** — five hand-rolled titles is what let
+them drift apart, and it would give
+[ISSUE-22](COMPLETED_UAT_ISSUES.md#issue-22)'s no-trailing-full-stop convention something structural
+to enforce it. Not required; the three-element fix is legitimate on its own.
+
+### Verify
+
+`npx playwright test accessibility --project=chromium --reporter=line`, and
+`npm --workspace=packages/frontend exec -- jest --findRelatedTests packages/frontend/src/pages/Login.tsx --bail`.
+Assert exactly one `<h1>` per auth page.
+
+---
+
+## ISSUE-38 — `real-time-updates.spec.ts` reconnect test fails consistently 🟡 {#issue-38}
+
+### Symptom
+
+Reproduced 2026-07-29: **1 failed, 2 passed**.
+
+- *"standings refresh on reconnect after an SSE disconnect"* (`:137`) fails on the initial attempt
+  **and both retries** — `expect(wonCells(page)).toHaveCount(1, { timeout: 20000 })`.
+- *"see synchronized standings"* (`:92`) errors then passes on retry — **flaky**, worth fixing at the
+  same time.
+
+**Pre-existing and not auth-related.** Confirmed on three independent grounds: the implementer of
+ISSUE-32/33 reproduced it on `main` before their changes via `git stash`; the run logs **zero**
+401/403 occurrences; and the test authenticates with `fx.playerToken`, the guest-session path that
+already worked before ISSUE-32 touched only the account-JWT branch.
+
+### Root cause — unknown, one lead
+
+The test drops the network (`context.setOffline(true)`), submits a score out-of-band, restores the
+network, and expects the reconnect to refetch the authoritative bundle.
+
+*Lead, unverified:* `/tournaments/:id/bundle` is a **venue-read (network-first) pattern** in the
+service worker (`sw-lib/routing.ts:4`), so a reconnect refetch could be served stale from cache.
+**Check whether the service worker is even registered under Playwright before chasing this** — if it
+is not, the lead is void and the cause is elsewhere (likely the hook's reconnect-refetch trigger).
+
+### Fix
+
+Diagnose first; the fix is not known. **Do not paper over it by raising the timeout** — it fails at
+20s across three attempts, which is a behaviour failure, not a slow one.
+
+### Verify
+
+```bash
+npx playwright test real-time-updates --project=chromium --reporter=line
+```
+All three tests green on the **first** attempt — a pass that only happens on retry means the flake at
+`:92` is still there.
 
 ---
 
 ## Not yet triaged / follow-ups
 
-- **`real-time-updates.spec.ts` "standings refresh on reconnect after an SSE disconnect" fails
-  consistently** — reported by the ISSUE-32/33 implementer and independently reproduced 2026-07-29:
-  fails on the initial attempt *and* both retries, at `:137`
-  `expect(wonCells(page)).toHaveCount(1, { timeout: 20000 })`. **Pre-existing and not auth-related** —
-  the run logs zero 401/403s, and the test authenticates with `fx.playerToken`, the guest-session
-  path that already worked before ISSUE-32 touched the account-JWT branch.
-  The mechanism is `context.setOffline(true)` → submit a score → `setOffline(false)` → expect the
-  reconnect to refetch the authoritative bundle.
-  *Unverified lead:* `/tournaments/:id/bundle` is a **venue-read (network-first) pattern** in the
-  service worker (`sw-lib/routing.ts:4`), so a reconnect refetch could plausibly be served stale from
-  cache. Worth checking whether the SW is even active under Playwright before chasing it.
-  A second test in the same file (`:92`, "see synchronized standings") errored on its first attempt
-  but passed on retry — flaky rather than broken, and worth a look at the same time.
-
-- **`POST /api/analytics/events` returns 401 for a registered player** — confirmed live 2026-07-27,
-  on every authenticated page. This is the `analytics.ts:23` dual-auth gap already listed below, now
-  observed rather than inferred: it fires on each page view, so every authenticated session logs a
-  401 and no analytics are recorded for account holders.
-- **The app has no support destination.** No `mailto:`, no `support@`, no `/support` route anywhere
-  (verified 2026-07-27). `ServiceUnavailable.tsx:14` already tells users to "contact support" with
-  nowhere to go, and [ISSUE-24](COMPLETED_UAT_ISSUES.md#issue-24) had to drop the same phrase from its copy for this reason.
-  Either add a real destination or stop promising one — small, but it is currently a dead end at
-  exactly the moments a user is already stuck.
-- **Auth page titles are not headings.** `Login.tsx:186` renders its title as a styled `<div>`,
-  as do `ForgotPassword.tsx` and `ResetPassword.tsx`; `Signup.tsx:260` and `Landing.tsx:45` use a
-  real `<h1>`. A screen reader gets no page heading on three of the five auth screens. Noticed
-  while scoping ISSUE-22 and deliberately left out of it (§3 — surgical); needs its own issue, and
-  the fix is a shared page-header component rather than five hand-rolled titles, which would also
-  give ISSUE-22's convention something to enforce it structurally. ISSUE-23's `.auth-shell` is the
-  natural home for it — if all three land, do this one last so it builds on that shell.
 - **`pages/DesignSpec.tsx` is dead code** — imported by no route, test, or module; it hand-mirrors
   `Landing.tsx`'s hero copy and has to be kept in sync manually (ISSUE-22 does exactly that).
   Flagged, not deleted (§3). Decide whether it still earns its place.
