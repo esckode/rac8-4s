@@ -182,7 +182,7 @@ export const Login: React.FC = () => {
           minHeight: 0,
         }}
       >
-        <div
+        <h1
           style={{
             fontSize: 34,
             fontWeight: 600,
@@ -190,10 +190,11 @@ export const Login: React.FC = () => {
             lineHeight: 1.05,
             color: 'var(--auth-glass-text)',
             marginBottom: 10,
+            margin: '0 0 10px 0',
           }}
         >
           Sign in
-        </div>
+        </h1>
         <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5 }}>
           See your matches, standings, and tonight's tournaments
         </div>

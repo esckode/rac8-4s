@@ -173,7 +173,7 @@ export const ForgotPassword: React.FC = () => {
             minHeight: 0,
           }}
         >
-          <div
+          <h1
             style={{
               fontSize: 34,
               fontWeight: 600,
@@ -181,10 +181,11 @@ export const ForgotPassword: React.FC = () => {
               lineHeight: 1.05,
               color: 'var(--auth-glass-text)',
               marginBottom: 10,
+              margin: '0 0 10px 0',
             }}
           >
             ✓ Code sent
-          </div>
+          </h1>
           <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5 }}>
             We've sent a 6-digit code to your email address
           </div>
@@ -332,7 +333,7 @@ export const ForgotPassword: React.FC = () => {
           minHeight: 0,
         }}
       >
-        <div
+        <h1
           style={{
             fontSize: 34,
             fontWeight: 600,
@@ -340,10 +341,11 @@ export const ForgotPassword: React.FC = () => {
             lineHeight: 1.05,
             color: 'var(--auth-glass-text)',
             marginBottom: 10,
+            margin: '0 0 10px 0',
           }}
         >
           Reset your password
-        </div>
+        </h1>
         <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5 }}>
           Enter your email address and we'll send you a code to reset your password
         </div>

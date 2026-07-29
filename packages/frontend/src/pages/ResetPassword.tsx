@@ -299,7 +299,7 @@ export const ResetPassword: React.FC = () => {
           >
             ✓
           </div>
-          <div
+          <h1
             style={{
               fontSize: 34,
               fontWeight: 600,
@@ -307,11 +307,12 @@ export const ResetPassword: React.FC = () => {
               lineHeight: 1.05,
               color: 'var(--auth-glass-text)',
               marginBottom: 10,
+              margin: '0 0 10px 0',
               textAlign: 'center',
             }}
           >
             Password updated
-          </div>
+          </h1>
           <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5, textAlign: 'center' }}>
             Your password has been successfully reset. Redirecting to login...
           </div>
@@ -419,7 +420,7 @@ export const ResetPassword: React.FC = () => {
           overflow: 'auto',
         }}
       >
-        <div
+        <h1
           style={{
             fontSize: 34,
             fontWeight: 600,
@@ -427,10 +428,11 @@ export const ResetPassword: React.FC = () => {
             lineHeight: 1.05,
             color: 'var(--auth-glass-text)',
             marginBottom: 10,
+            margin: '0 0 10px 0',
           }}
         >
           Reset your password
-        </div>
+        </h1>
         <div style={{ fontSize: 15, color: 'var(--auth-glass-text-muted)', lineHeight: 1.5, marginBottom: 8 }}>
           Enter the code we sent to your email and choose a new password
         </div>
