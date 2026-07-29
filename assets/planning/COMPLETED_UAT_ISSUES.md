@@ -36,6 +36,7 @@ including follow-ups these issues surfaced — lives in `UAT_ISSUES.md`.
 | [ISSUE-24](#issue-24) | 🟠 | An account with no linked player gets `TOKEN_INVALID` + "sign in again" — an unbreakable loop | api + frontend |
 | [ISSUE-25](#issue-25) | 🟡 | `seed-test-accounts.ts` creates accounts with no linked player — every seeded login hits ISSUE-24 | scripts · dev |
 | [ISSUE-26](#issue-26) | 🟠 | Bottom nav labels clip off-screen at every phone width (6 items don't fit under ~444px) | frontend · layout |
+| [ISSUE-27](#issue-27) | 🟡 | Dark entry vs light app is intentional — document the boundary; replace the emoji icons | frontend · design |
 | [ISSUE-28](#issue-28) | 🟠 | Nav: collapse Standings + Matches into one "Play" hub; four items | frontend + api |
 | [ISSUE-29](#issue-29) | 🟠 | Temporarily block public browse + public registration; keep both invite paths working | frontend + api |
 | [ISSUE-30](#issue-30) | 🔴 | `/tournament/:id` redirects to a literal unsubstituted path — group launch's payoff step is broken | frontend |
@@ -1508,12 +1509,13 @@ outcomes.
 
 ## 2026-07-26/27 local walkthrough queue (ISSUE-22 – ISSUE-31) {#walkthrough-queue-2}
 
-**Nine of ten resolved 2026-07-28/29, branch-per-issue, fast-forwarded to `main` in the prescribed
+**All ten resolved 2026-07-28/29, branch-per-issue, fast-forwarded to `main` in the prescribed
 order** from `UAT_ISSUES.md`'s "Before you start" table: **31 → 30 → {22, 25} → 28 → 26 → 23 → 29 →
-24**. Only ISSUE-27 remains open — see `UAT_ISSUES.md`. 31 and 30 shipped first because group
-launch is the product and its payoff step was broken; 28 unblocked 26 (its geometry guard asserts
-28's four-item nav) and 29 (`/play` is where 29's two broken redirects point); 24 shipped any time
-before an organizer-grant route, per its own severity note.
+24 → 27**. `UAT_ISSUES.md` now carries no open work from this queue. 31 and 30 shipped first because
+group launch is the product and its payoff step was broken; 28 unblocked 26 (its geometry guard
+asserts 28's four-item nav) and 29 (`/play` is where 29's two broken redirects point); 24 shipped
+any time before an organizer-grant route, per its own severity note; 27 shipped last since it needed
+28's final four-item tab set before drawing icons.
 
 ## ISSUE-22 — Login greets guests with "Welcome back."; page titles/descriptions end in full stops 🟡 {#issue-22}
 
@@ -1593,6 +1595,27 @@ confirm the guard actually fails on the old geometry before confirming it passes
 four-item bar (58px worst case in a 90px cell — 32px of slack, versus 99px in a 60px cell before).
 The actual fix, as the issue specified, was ISSUE-28's item-count reduction — no fix landed here in
 isolation.
+
+---
+
+## ISSUE-27 — Dark entry vs light app: document the boundary, replace the emoji icons 🟡 {#issue-27}
+
+**✅ Resolved** (2026-07-29, two-part): **Part 1** (`f3f5bf3`) — the dark-entry-vs-light-app split was
+written down in `DESIGN_SYSTEM.md` §2.5 as a deliberate, owner-confirmed pattern with a rule for new
+pages, rather than existing only as a coincidence of build order. Documentation only, no test, as the
+issue specified.
+
+**Part 2** (`2578e46`/`cd50357`) — a 12-icon set (`components/shared/icons/`, 24x24 stroke grammar
+matching Feather/Lucide's visual style, `currentColor`, following the `LogoMark.tsx` hand-rolled-SVG
+pattern) replaces the emoji in the bottom nav, the More sheet, and the tournament detail tabs.
+`stroke="currentColor"` means each nav item's existing active/inactive `color` CSS rule drives the
+icon for free — verified live via screenshot that the active tab renders its icon in court-blue and
+inactive ones in ink-600, the one thing emoji structurally cannot do. Two more locations needed
+icons than the issue's own table named — Sign out in the More sheet, and Details/Messages in the
+tournament detail tabs — found by reading the components being touched rather than trusting the
+enumerated list, the same gap-finding pattern that recurred across this whole queue (ISSUE-24,
+ISSUE-29). Licensing: these are original path data, not retyped from Lucide/Feather, sidestepping
+the issue's own "hand-rolled is not automatically licence-free" warning entirely.
 
 ---
 
