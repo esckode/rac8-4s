@@ -13,6 +13,7 @@ import {
   createTournamentWithOpenRegistration,
   defaultAgeAttestation,
   getOrganizerToken,
+  skipIfPublicDiscoveryDisabled,
 } from './fixtures'
 
 // ============================================================================
@@ -22,6 +23,7 @@ import {
 test.describe('Tournament Discovery & Registration E2E', () => {
   // Before each test: clear auth state
   test.beforeEach(async ({ page }) => {
+    await skipIfPublicDiscoveryDisabled()
     await page.goto(ROUTES.LOGIN)
     await clearAuthState(page)
   })
@@ -47,7 +49,8 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       await page.fill(SELECTORS.EMAIL_INPUT, user.email)
       await page.fill(SELECTORS.PASSWORD_INPUT, user.password)
       await page.click(SELECTORS.SIGN_IN_BUTTON())
-      await page.waitForURL(ROUTES.BROWSE, { timeout: TIMEOUTS.PAGE_LOAD })
+      // Post-login destination is /play (ISSUE-28/29), not /browse.
+      await page.waitForURL(ROUTES.PLAY, { timeout: TIMEOUTS.PAGE_LOAD })
 
       // When: I navigate to /browse
       await page.goto(ROUTES.BROWSE, { waitUntil: 'domcontentloaded' })
@@ -85,7 +88,8 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       await page.fill(SELECTORS.EMAIL_INPUT, user.email)
       await page.fill(SELECTORS.PASSWORD_INPUT, user.password)
       await page.click(SELECTORS.SIGN_IN_BUTTON())
-      await page.waitForURL(ROUTES.BROWSE, { timeout: TIMEOUTS.PAGE_LOAD })
+      // Post-login destination is /play (ISSUE-28/29), not /browse.
+      await page.waitForURL(ROUTES.PLAY, { timeout: TIMEOUTS.PAGE_LOAD })
 
       // When: I navigate to /browse
       await page.goto(ROUTES.BROWSE, { waitUntil: 'domcontentloaded' })
@@ -126,7 +130,8 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       await page.fill(SELECTORS.EMAIL_INPUT, user.email)
       await page.fill(SELECTORS.PASSWORD_INPUT, user.password)
       await page.click(SELECTORS.SIGN_IN_BUTTON())
-      await page.waitForURL(ROUTES.BROWSE, { timeout: TIMEOUTS.PAGE_LOAD })
+      // Post-login destination is /play (ISSUE-28/29), not /browse.
+      await page.waitForURL(ROUTES.PLAY, { timeout: TIMEOUTS.PAGE_LOAD })
 
       await page.goto(ROUTES.BROWSE, { waitUntil: 'networkidle' })
 
@@ -168,7 +173,8 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       await page.fill(SELECTORS.EMAIL_INPUT, user.email)
       await page.fill(SELECTORS.PASSWORD_INPUT, user.password)
       await page.click(SELECTORS.SIGN_IN_BUTTON())
-      await page.waitForURL(ROUTES.BROWSE, { timeout: TIMEOUTS.PAGE_LOAD })
+      // Post-login destination is /play (ISSUE-28/29), not /browse.
+      await page.waitForURL(ROUTES.PLAY, { timeout: TIMEOUTS.PAGE_LOAD })
 
       await page.goto(ROUTES.BROWSE, { waitUntil: 'networkidle' })
 
@@ -484,8 +490,8 @@ test.describe('Tournament Discovery & Registration E2E', () => {
         const token = await getTokenFromPage(page)
         expect(token).toBeTruthy()
 
-        // And: I should be redirected to /tournament/:id/standings or /browse
-        await expect(page).toHaveURL(/\/tournament\/[^/]+\/standings|\/browse/, {
+        // And: I should be redirected to /tournament/:id/standings or /play (ISSUE-29)
+        await expect(page).toHaveURL(/\/tournament\/[^/]+\/standings|\/play/, {
           timeout: TIMEOUTS.PAGE_LOAD,
         })
       }
@@ -538,7 +544,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       expect(token).toBeTruthy()
     })
 
-    test('Scenario: Guest join shows a re-registration path on an invalid token', async ({ page }) => {
+    test('Scenario: Guest join shows an error on an invalid token, no "register again" link (ISSUE-29 — /browse is blocked)', async ({ page }) => {
       const organizerEmail = 'organizer@test.com'
       const organizerPassword = 'testpass123'
       const loginResponse = await apiCall(API_ENDPOINTS.AUTH.LOGIN, 'POST', {
@@ -556,10 +562,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       await page.goto(`/tournament/${tournamentId}/join?token=not-a-real-token`, { waitUntil: 'networkidle' })
 
       await expect(page.getByRole('alert')).toBeVisible({ timeout: TIMEOUTS.PAGE_LOAD })
-      await expect(page.getByRole('link', { name: /register again/i })).toHaveAttribute(
-        'href',
-        `/tournament/${tournamentId}/browse`
-      )
+      await expect(page.getByRole('link', { name: /register again/i })).not.toBeVisible()
     })
 
     test('Scenario: Completes signup via magic link for doubles tournament', async ({ page }) => {
@@ -640,9 +643,9 @@ test.describe('Tournament Discovery & Registration E2E', () => {
         const token = await getTokenFromPage(page)
         expect(token).toBeTruthy()
 
-        // And: I should be redirected to /browse or tournament page
+        // And: I should be redirected to /play or a tournament page
         const currentUrl = page.url()
-        expect(currentUrl).toMatch(/browse|tournament|standings/i)
+        expect(currentUrl).toMatch(/play|tournament|standings/i)
       }
     })
   })

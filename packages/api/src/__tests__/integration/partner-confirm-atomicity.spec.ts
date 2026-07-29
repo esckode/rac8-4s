@@ -39,7 +39,7 @@ describe('ISSUE-18 — confirmPartner atomicity + accept-time guard', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } })
     app = deps.app
     jwtConfig = deps.jwtConfig
     tokenStore = deps.tokenStore

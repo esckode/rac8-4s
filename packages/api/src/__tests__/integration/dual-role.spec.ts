@@ -36,7 +36,7 @@ describe('Dual-role: organizer-as-participant', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } })
     app = deps.app
     jwtConfig = deps.jwtConfig
     void (deps.tokenStore as InMemoryTokenStore)

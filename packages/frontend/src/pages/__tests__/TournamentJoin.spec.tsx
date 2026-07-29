@@ -75,7 +75,7 @@ describe('ISSUE-14 — TournamentJoin (guest magic-link landing)', () => {
     await waitFor(() => expect(window.location.href).toBe('/matches'))
   })
 
-  it('shows an error with a path back to registration on an invalid/expired token', async () => {
+  it('shows an error on an invalid/expired token, with no "register again" link (ISSUE-29 — /browse is blocked)', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,
@@ -85,7 +85,7 @@ describe('ISSUE-14 — TournamentJoin (guest magic-link landing)', () => {
     renderAt('/tournament/t1/join?token=expired')
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
-    expect(screen.getByRole('link', { name: /register again/i })).toHaveAttribute('href', '/tournament/t1/browse')
+    expect(screen.queryByRole('link', { name: /register again/i })).not.toBeInTheDocument()
     expect(localStorage.getItem('auth_token')).toBeNull()
   })
 

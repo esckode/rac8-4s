@@ -27,6 +27,7 @@ export const ROUTES = {
 
   // Protected pages
   BROWSE: '/browse',
+  PLAY: '/play', // ISSUE-28/29: post-login/signup destination; replaced /browse
   DASHBOARD: '/dashboard',
 
   // Tournament pages

@@ -31,7 +31,7 @@ describe('ISSUE-11 — POST /:tournamentId/register rate limiting', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } })
     app = deps.app
   })
 

@@ -45,7 +45,7 @@ describe('Landing', () => {
     expect(screen.getByText(/Find drop-in nights/)).toBeInTheDocument()
   })
 
-  it('renders Browse tournaments button', () => {
+  it('does not render a Browse tournaments CTA (ISSUE-29 — discovery is blocked by default)', () => {
     mockUseAuth.mockReturnValue({
       user: null,
       isAuthenticated: false,
@@ -54,7 +54,7 @@ describe('Landing', () => {
 
     renderWithRouter(<Landing />)
 
-    expect(screen.getByText('Browse tournaments')).toBeInTheDocument()
+    expect(screen.queryByText('Browse tournaments')).not.toBeInTheDocument()
   })
 
   it('renders sign up prompt', () => {
@@ -113,7 +113,7 @@ describe('Landing', () => {
     expect(screen.getByText('See you at the court')).toBeInTheDocument()
   })
 
-  it('renders navigation buttons for both authenticated and unauthenticated users', () => {
+  it('renders the sign-in entry point', () => {
     mockUseAuth.mockReturnValue({
       user: null,
       isAuthenticated: false,
@@ -123,6 +123,5 @@ describe('Landing', () => {
     renderWithRouter(<Landing />)
 
     expect(screen.getByText('Continue with email')).toBeInTheDocument()
-    expect(screen.getByText('Browse tournaments')).toBeInTheDocument()
   })
 })

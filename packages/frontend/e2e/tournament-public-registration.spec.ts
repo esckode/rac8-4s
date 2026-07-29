@@ -7,6 +7,7 @@ import {
   createTestTournament,
   defaultAgeAttestation,
   completeAgeGateIfPresent,
+  skipIfPublicDiscoveryDisabled,
 } from './fixtures'
 
 /**
@@ -28,6 +29,7 @@ test.describe('Public Tournament Registration (guest)', () => {
   })
 
   test.beforeEach(async ({ page }) => {
+    await skipIfPublicDiscoveryDisabled()
     await page.goto(ROUTES.HOME)
     await page.evaluate(() => localStorage.clear())
     await page.goto(ROUTES.TOURNAMENT_BROWSE(tournament.id))

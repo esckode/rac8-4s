@@ -43,7 +43,7 @@ describe('ISSUE-16 — invite-is-a-claim model', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } })
     app = deps.app
     jwtConfig = deps.jwtConfig
     tokenStore = deps.tokenStore

@@ -55,7 +55,7 @@ describe('ISSUE-21 — unconfirmed claims are swept at group creation', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } })
     app = deps.app
     jwtConfig = deps.jwtConfig
     tokenStore = deps.tokenStore

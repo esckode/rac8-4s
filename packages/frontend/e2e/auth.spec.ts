@@ -6,6 +6,7 @@ import {
   createTestUser,
   signupViaApi,
   completeAgeGateIfPresent,
+  skipIfPublicDiscoveryDisabled,
 } from './fixtures'
 
 test.describe('Authentication E2E', () => {
@@ -32,8 +33,8 @@ test.describe('Authentication E2E', () => {
       await page.click('button:has-text("Create Account")')
       await completeAgeGateIfPresent(page)
 
-      // Then: I should be redirected to /browse or /dashboard
-      await expect(page).toHaveURL(/\/browse|\/dashboard/)
+      // Then: I should be redirected to /play or /dashboard
+      await expect(page).toHaveURL(/\/play|\/dashboard/)
 
       // And: auth_token should be stored in localStorage
       const token = await getTokenFromPage(page)
@@ -149,8 +150,8 @@ test.describe('Authentication E2E', () => {
       // And: I click the "Sign In" button
       await page.click('button:has-text("Sign In"), button:has-text("Log In")')
 
-      // Then: I should be redirected to /browse or /dashboard
-      await expect(page).toHaveURL(/\/browse|\/dashboard/)
+      // Then: I should be redirected to /play or /dashboard
+      await expect(page).toHaveURL(/\/play|\/dashboard/)
 
       // And: auth_token should be stored in localStorage
       const token = await getTokenFromPage(page)
@@ -427,7 +428,7 @@ test.describe('Authentication E2E', () => {
       await completeAgeGateIfPresent(page)
 
       // Wait for redirect to protected route
-      await expect(page).toHaveURL(/\/browse|\/dashboard/)
+      await expect(page).toHaveURL(/\/play|\/dashboard/)
 
       // When: I navigate to /matches (a protected route — ISSUE-28: redirects
       // to /play, which replaced MyTournamentsHub as the nav destination)
@@ -442,6 +443,9 @@ test.describe('Authentication E2E', () => {
     })
 
     test('Scenario: Unauthenticated user can access /browse (public discovery)', async ({ page }) => {
+      // ISSUE-29: /browse is gated behind publicDiscoveryEnabled — skip cleanly
+      // (not a failure) when the flag is off, same as the dedicated discovery specs.
+      await skipIfPublicDiscoveryDisabled()
       // Given: I am not authenticated
       await page.goto('/login')
       await clearAuthState(page)
@@ -473,9 +477,9 @@ test.describe('Authentication E2E', () => {
       // Navigate to login
       await page.goto('/login', { waitUntil: 'networkidle' })
 
-      // Then: I should be redirected to /browse or /dashboard
+      // Then: I should be redirected to /play or /dashboard
       // (authenticated users are redirected away from public login page)
-      await expect(page).toHaveURL(/\/browse|\/dashboard|\/login/)
+      await expect(page).toHaveURL(/\/play|\/dashboard|\/login/)
     })
   })
 
@@ -493,7 +497,7 @@ test.describe('Authentication E2E', () => {
       await completeAgeGateIfPresent(page)
 
       // Wait for redirect to /browse
-      await expect(page).toHaveURL(/\/browse|\/dashboard/)
+      await expect(page).toHaveURL(/\/play|\/dashboard/)
 
       // And: I am on /browse
       // Get token before refresh
@@ -509,7 +513,7 @@ test.describe('Authentication E2E', () => {
       expect(tokenAfter).toBe(tokenBefore)
 
       // Should still be on protected page (not redirected to login)
-      await expect(page).toHaveURL(/\/browse|\/dashboard/)
+      await expect(page).toHaveURL(/\/play|\/dashboard/)
     })
 
     test('Scenario: User session persists across navigation', async ({ page }) => {
@@ -524,8 +528,8 @@ test.describe('Authentication E2E', () => {
       await page.click('button:has-text("Create Account")')
       await completeAgeGateIfPresent(page)
 
-      // Wait for redirect to browse/dashboard
-      await expect(page).toHaveURL(/\/browse|\/dashboard/)
+      // Wait for redirect to /play
+      await expect(page).toHaveURL(/\/play|\/dashboard/)
 
       // Get token
       const token = await getTokenFromPage(page)
@@ -539,7 +543,7 @@ test.describe('Authentication E2E', () => {
       expect(tokenAfterNav).toBe(token)
 
       // And: authenticated pages should not redirect to /login
-      await expect(page).toHaveURL(/\/browse|\/dashboard|\/login/)
+      await expect(page).toHaveURL(/\/play|\/dashboard|\/login/)
 
       // Navigate to browse explicitly
       await page.goto('/browse', { waitUntil: 'networkidle' })
@@ -564,7 +568,7 @@ test.describe('Authentication E2E', () => {
       await page.click('button:has-text("Sign In"), button:has-text("Log In")')
 
       // Wait for redirect to protected route
-      await page.waitForURL(/\/browse|\/dashboard/, { timeout: 10000 })
+      await page.waitForURL(/\/play|\/dashboard/, { timeout: 10000 })
 
       // Verify token exists before logout
       const tokenBefore = await getTokenFromPage(page)
@@ -690,7 +694,7 @@ test.describe('Authentication E2E', () => {
       await page.click('button:has-text("Create Account")')
       await completeAgeGateIfPresent(page)
 
-      await expect(page).toHaveURL(/\/browse|\/dashboard/)
+      await expect(page).toHaveURL(/\/play|\/dashboard/)
 
       // When: I check localStorage
       const localStorageData = await page.evaluate(() => {
@@ -724,7 +728,7 @@ test.describe('Authentication E2E', () => {
       await page.fill('input[type="password"]', user.password)
       await page.click('button:has-text("Sign In"), button:has-text("Log In")')
 
-      await page.waitForURL(/\/browse|\/dashboard/, { timeout: 10000 })
+      await page.waitForURL(/\/play|\/dashboard/, { timeout: 10000 })
 
       // When: I retrieve the auth_token from localStorage
       const token = await getTokenFromPage(page)

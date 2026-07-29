@@ -50,7 +50,7 @@ describe('ISSUE-19 — team formation notifications', () => {
   beforeEach(() => {
     clearRateLimitStore()
     jobQueue = new InMemoryJobQueue()
-    const deps = createTestApp(pool, { jobQueue })
+    const deps = createTestApp(pool, { jobQueue, config: { publicDiscoveryEnabled: true } })
     app = deps.app
     jwtConfig = deps.jwtConfig
     tokenStore = deps.tokenStore

@@ -50,7 +50,7 @@ describe('ISSUE-15 — doubles partner invite by email', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } })
     app = deps.app
     tokenStore = deps.tokenStore
     emailAdapter = deps.emailAdapter

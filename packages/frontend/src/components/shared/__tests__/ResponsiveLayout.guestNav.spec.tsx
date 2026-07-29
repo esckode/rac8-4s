@@ -10,6 +10,7 @@ import React from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '../../../hooks/useAuth'
+import { AppConfigProvider } from '../../../context/AppConfigContext'
 import { ResponsiveLayout } from '../ResponsiveLayout'
 
 const mockFetch = jest.fn()
@@ -25,25 +26,47 @@ function meResponse() {
   }
 }
 
-function renderLayout() {
+// ISSUE-29: Browse is gated behind publicDiscoveryEnabled, default false.
+function configResponse(publicDiscoveryEnabled: boolean) {
+  return { ok: true, json: async () => ({ publicDiscoveryEnabled }) }
+}
+
+function renderLayout(publicDiscoveryEnabled = false) {
+  mockFetch.mockImplementation((url: string) => {
+    if (url.includes('/api/config')) return Promise.resolve(configResponse(publicDiscoveryEnabled))
+    return Promise.resolve({ ok: false, json: async () => ({}) })
+  })
   return render(
     <BrowserRouter>
-      <AuthProvider>
-        <ResponsiveLayout showNav>
-          <div>Content</div>
-        </ResponsiveLayout>
-      </AuthProvider>
+      <AppConfigProvider>
+        <AuthProvider>
+          <ResponsiveLayout showNav>
+            <div>Content</div>
+          </ResponsiveLayout>
+        </AuthProvider>
+      </AppConfigProvider>
     </BrowserRouter>
   )
 }
 
-async function renderAuthenticated() {
+async function renderAuthenticated(publicDiscoveryEnabled = false) {
   localStorage.setItem('auth_token', 'test-token')
   mockFetch.mockImplementation((url: string) => {
     if (url.includes('/api/auth/me')) return Promise.resolve(meResponse())
+    if (url.includes('/api/config')) return Promise.resolve(configResponse(publicDiscoveryEnabled))
     return Promise.resolve({ ok: false, json: async () => ({}) })
   })
-  const result = renderLayout()
+  const result = render(
+    <BrowserRouter>
+      <AppConfigProvider>
+        <AuthProvider>
+          <ResponsiveLayout showNav>
+            <div>Content</div>
+          </ResponsiveLayout>
+        </AuthProvider>
+      </AppConfigProvider>
+    </BrowserRouter>
+  )
   await waitFor(() => expect(screen.getByTestId('nav-play')).toBeInTheDocument())
   return result
 }
@@ -55,10 +78,10 @@ describe('ISSUE-7 — guest nav does not leak auth-gated tabs', () => {
   })
 
   describe('BottomNav (mobile)', () => {
-    it('guest sees Tournaments + a sign-in item, not Play/Groups/Alerts (ISSUE-28)', () => {
+    it('guest collapses to just a sign-in item — Browse is blocked by default (ISSUE-29)', () => {
       renderLayout()
 
-      expect(screen.getByTestId('nav-browse')).toBeInTheDocument()
+      expect(screen.queryByTestId('nav-browse')).not.toBeInTheDocument()
       expect(screen.getByTestId('nav-signin')).toBeInTheDocument()
       expect(screen.queryByTestId('nav-play')).not.toBeInTheDocument()
       expect(screen.queryByTestId('nav-groups')).not.toBeInTheDocument()
@@ -70,10 +93,17 @@ describe('ISSUE-7 — guest nav does not leak auth-gated tabs', () => {
       expect(screen.getByTestId('nav-signin').closest('a')).toHaveAttribute('href', '/login')
     })
 
-    it('authenticated user sees the full tab set unchanged, no sign-in item', async () => {
+    it('shows Browse for a guest when publicDiscoveryEnabled is true — the dormant testid reappears unchanged', async () => {
+      renderLayout(true)
+
+      await waitFor(() => expect(screen.getByTestId('nav-browse')).toBeInTheDocument())
+      expect(screen.getByTestId('nav-signin')).toBeInTheDocument()
+    })
+
+    it('authenticated user sees Play/Groups/Alerts, no Browse by default, no sign-in item', async () => {
       await renderAuthenticated()
 
-      expect(screen.getByTestId('nav-browse')).toBeInTheDocument()
+      expect(screen.queryByTestId('nav-browse')).not.toBeInTheDocument()
       expect(screen.getByTestId('nav-play')).toBeInTheDocument()
       expect(screen.getByTestId('nav-groups')).toBeInTheDocument()
       expect(screen.getByTestId('nav-notifications')).toBeInTheDocument()

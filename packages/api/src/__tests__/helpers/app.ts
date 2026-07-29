@@ -2,7 +2,7 @@ import { Express } from 'express'
 import { Pool } from 'pg'
 import { createApp } from '../../app'
 import { InMemoryTokenStore } from '../../auth/token-store'
-import { DEFAULT_APP_CONFIG } from '../../config'
+import { DEFAULT_APP_CONFIG, AppConfig } from '../../config'
 import { InMemoryEmailAdapter } from '../../email-adapter'
 import type { BroadcastBus } from '../../broadcast-bus'
 import type { JobQueue } from '@worker/job-queue'
@@ -27,7 +27,7 @@ export interface TestAppDeps {
  */
 export function createTestApp(
   pool: Pool,
-  overrides: { broadcastBus?: BroadcastBus; jobQueue?: JobQueue } = {}
+  overrides: { broadcastBus?: BroadcastBus; jobQueue?: JobQueue; config?: Partial<AppConfig> } = {}
 ): TestAppDeps {
   const tokenStore = new InMemoryTokenStore()
   const emailAdapter = new InMemoryEmailAdapter()
@@ -43,7 +43,7 @@ export function createTestApp(
     db: connection,
     jwtConfig,
     tokenStore,
-    config: DEFAULT_APP_CONFIG,
+    config: { ...DEFAULT_APP_CONFIG, ...overrides.config },
     emailAdapter,
     broadcastBus: overrides.broadcastBus,
     jobQueue: overrides.jobQueue,

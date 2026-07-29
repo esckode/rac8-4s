@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { ROUTES } from './config'
-import { apiCall, getOrganizerToken, createTournamentWithOpenRegistration, createTestTournament } from './fixtures'
+import {
+  apiCall,
+  getOrganizerToken,
+  createTournamentWithOpenRegistration,
+  createTestTournament,
+  skipIfPublicDiscoveryDisabled,
+} from './fixtures'
 
 /**
  * Public Tournament Discovery (per rac8-4s-HL.md "Tournament Discovery & Registration Flow").
@@ -25,6 +31,7 @@ test.describe('Browse Tournaments E2E (public discovery)', () => {
   })
 
   test.beforeEach(async ({ page }) => {
+    await skipIfPublicDiscoveryDisabled()
     // Browse as a guest: ensure there is no auth state.
     await page.goto(ROUTES.HOME)
     await page.evaluate(() => localStorage.clear())

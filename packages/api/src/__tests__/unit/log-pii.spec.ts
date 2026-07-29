@@ -57,7 +57,7 @@ describe('No PII in logs (P0.9)', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool) as any
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } }) as any
     app = deps.app
     jwtConfig = deps.jwtConfig
 

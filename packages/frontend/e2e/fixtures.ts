@@ -11,6 +11,7 @@
  *   import { apiCall, createTournamentWithOpenRegistration, ... } from './fixtures'
  */
 
+import { test } from '@playwright/test'
 import { API_CONFIG, API_ENDPOINTS } from './config'
 
 // ============================================================================
@@ -34,6 +35,19 @@ export async function apiCall(path: string, method: string, body?: unknown, toke
     body: body ? JSON.stringify(body) : undefined,
   })
   return response
+}
+
+/**
+ * UAT ISSUE-29 — public discovery is blocked in production by default.
+ * Call this in a beforeEach/beforeAll for any spec that exercises /browse,
+ * /tournament/:id/browse, or POST /tournaments/:id/register directly, so
+ * the suite skips cleanly (not a failure) rather than being deleted when
+ * the flag is off, and keeps proving the machinery works when it's on.
+ */
+export async function skipIfPublicDiscoveryDisabled(): Promise<void> {
+  const res = await apiCall('/api/config', 'GET')
+  const { publicDiscoveryEnabled } = await res.json()
+  test.skip(!publicDiscoveryEnabled, 'Public discovery is disabled (PUBLIC_DISCOVERY_ENABLED=false) — UAT ISSUE-29')
 }
 
 // ============================================================================

@@ -46,7 +46,7 @@ describe('age gate: entry path 1 — public tournament registration', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } })
     app = deps.app
 
     const organizerId = OrganizerFactory.id()
@@ -122,7 +122,7 @@ describe('age gate: entry path 2 — account signup', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } })
     app = deps.app
   })
 

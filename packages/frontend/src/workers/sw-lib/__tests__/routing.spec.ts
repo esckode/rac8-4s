@@ -107,6 +107,9 @@ describe('classifyRequest', () => {
       ['POST', '/tournaments/abc-123/advance'],
       ['POST', '/tournaments/abc-123/partner-requests'],
       ['POST', '/api/billing/charge'],
+      // ISSUE-29: /api/config must never be cached or replay-queued, or an
+      // installed PWA keeps serving a stale feature flag after a flip.
+      ['GET', '/api/config'],
     ])('%s %s classifies passthrough', (method, path) => {
       expect(classifyRequest(method, new URL(`https://example.com${path}`), 'same-origin')).toBe(
         'passthrough'

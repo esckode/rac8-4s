@@ -18,7 +18,9 @@ describe('Tournament Lifecycle Workflows', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool) as any
+    // ISSUE-29: publicDiscoveryEnabled defaults to false; this suite exercises
+    // POST /:tournamentId/register directly and needs it live.
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } }) as any
     app = deps.app
     jwtConfig = deps.jwtConfig
     tokenStore = deps.tokenStore

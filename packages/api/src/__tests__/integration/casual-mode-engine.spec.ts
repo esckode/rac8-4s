@@ -79,7 +79,7 @@ describe('G4.2 casual mode engine', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool) as any
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } }) as any
     app = deps.app
     jwtConfig = deps.jwtConfig
     tokenStore = deps.tokenStore

@@ -9,11 +9,12 @@
  */
 
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { BrowserRouter, MemoryRouter, Routes, Route, useParams } from 'react-router-dom'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { PublicRoute } from '../components/PublicRoute'
-import { TournamentDetailRedirect } from '../App'
+import { TournamentDetailRedirect, DiscoveryGate } from '../App'
+import { AppConfigProvider } from '../context/AppConfigContext'
 import * as useAuthHook from '../hooks/useAuth'
 
 // Mock components for testing
@@ -135,7 +136,7 @@ describe('PublicRoute', () => {
     expect(screen.getByText('Public Auth Page')).toBeInTheDocument()
   })
 
-  it('should redirect to /browse when user is authenticated', () => {
+  it('should redirect to /play when user is authenticated (ISSUE-29 — /browse is blocked by default)', () => {
     jest.spyOn(useAuthHook, 'useAuth').mockReturnValue({
       user: { id: 'user-1', email: 'test@example.com', role: 'player' },
       isAuthenticated: true,
@@ -145,7 +146,7 @@ describe('PublicRoute', () => {
     render(
       <BrowserRouter>
         <Routes>
-          <Route path="/browse" element={<BrowseComponent />} />
+          <Route path="/play" element={<BrowseComponent />} />
           <Route
             path="/login"
             element={
@@ -311,5 +312,53 @@ describe('TournamentDetailRedirect (ISSUE-30)', () => {
 
     expect(screen.getByText('Resolved: real-tid-123/standings')).toBeInTheDocument()
     expect(screen.queryByText(/:tournamentId/)).not.toBeInTheDocument()
+  })
+})
+
+// ISSUE-29: /browse and /tournament/:id/browse render NotFound instead of
+// the real page while publicDiscoveryEnabled is off (default) — blocked
+// routes are gated, not deleted, so they come back with one flag flip.
+describe('DiscoveryGate (ISSUE-29)', () => {
+  const mockFetch = (publicDiscoveryEnabled: boolean) => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ publicDiscoveryEnabled }),
+    }) as any
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('renders NotFound when publicDiscoveryEnabled is false', async () => {
+    mockFetch(false)
+    render(
+      <AppConfigProvider>
+        <MemoryRouter initialEntries={['/browse']}>
+          <Routes>
+            <Route path="/browse" element={<DiscoveryGate><div>Browse Page</div></DiscoveryGate>} />
+          </Routes>
+        </MemoryRouter>
+      </AppConfigProvider>
+    )
+
+    await waitFor(() => expect(screen.getByText('Page not found')).toBeInTheDocument())
+    expect(screen.queryByText('Browse Page')).not.toBeInTheDocument()
+  })
+
+  it('renders the real page when publicDiscoveryEnabled is true', async () => {
+    mockFetch(true)
+    render(
+      <AppConfigProvider>
+        <MemoryRouter initialEntries={['/browse']}>
+          <Routes>
+            <Route path="/browse" element={<DiscoveryGate><div>Browse Page</div></DiscoveryGate>} />
+          </Routes>
+        </MemoryRouter>
+      </AppConfigProvider>
+    )
+
+    await waitFor(() => expect(screen.getByText('Browse Page')).toBeInTheDocument())
+    expect(screen.queryByText('Page not found')).not.toBeInTheDocument()
   })
 })

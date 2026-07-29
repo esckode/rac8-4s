@@ -21,7 +21,7 @@ describe('Phase 4: Group Stage - Doubles', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } })
     app = deps.app
     tokenStore = deps.tokenStore
     jwtConfig = deps.jwtConfig

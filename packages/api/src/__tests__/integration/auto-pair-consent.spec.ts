@@ -36,7 +36,7 @@ describe('ISSUE-17 — per-registration auto-pair consent', () => {
   beforeAll(async () => {
     pool = await getTestPool()
     await beginTransaction(pool)
-    const deps = createTestApp(pool)
+    const deps = createTestApp(pool, { config: { publicDiscoveryEnabled: true } })
     app = deps.app
     jwtConfig = deps.jwtConfig
     playerRepo = new PlayerRepository(pool)
