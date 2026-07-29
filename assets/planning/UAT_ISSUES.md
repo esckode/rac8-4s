@@ -17,7 +17,8 @@ ISSUE-1–21 and the 2026-07-26/27 walkthrough batch (ISSUE-22–31) are all res
 [the walkthrough-queue summary](COMPLETED_UAT_ISSUES.md#walkthrough-queue-2) for the ship order and
 what each shipped. **Open: [ISSUE-32](#issue-32) and [ISSUE-33](#issue-33)**, both found on
 2026-07-29 while verifying that batch — 32 is the user-visible symptom, 33 the data-model cause
-underneath it. Number new issues from 34.
+underneath it. Both are implementable; 33 carries one narrow owner call, flagged in place. Number
+new issues from 34.
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -32,7 +33,7 @@ underneath it. Number new issues from 34.
 | [ISSUE-30](COMPLETED_UAT_ISSUES.md#issue-30) | ✅ Resolved | 🔴 | `/tournament/:id` redirects to a **literal** unsubstituted path — group launch's payoff step is broken | frontend |
 | [ISSUE-31](COMPLETED_UAT_ISSUES.md#issue-31) | ✅ Resolved | 🔴 | A group-launched casual tournament **never generates matches** — there is nothing to play | api |
 | [ISSUE-32](#issue-32) | 🔲 Open | 🟠 | SSE `/tournaments/:id/events` 403s for registered accounts — live updates dead for participants | api |
-| [ISSUE-33](#issue-33) | ⛔ Blocked | 🟠 | `tournaments.creator_id` is polymorphic — account id or player id by creation path *(needs an approach decision; not implementable yet)* | api · data |
+| [ISSUE-33](#issue-33) | 🔲 Open | 🟠 | `tournaments.creator_id` is polymorphic — account id or player id by creation path | api · data |
 
 ---
 
@@ -245,32 +246,52 @@ ISSUE-32 fixes the three affected routes by resolving through `resolveTournament
 correct and sufficient there. But the column stays ambiguous, so the next ownership check written
 against it inherits the same bug. **Fixing routes does not fix the column.**
 
-### ⛔ Not ready to implement — needs an owner decision first
+### Fix — branch on `group_id`; no migration needed
 
-**Do not hand this to an implementer yet.** Unlike the rest of this queue, the approach is not
-decided, and the leading candidate depends on work that does not exist. [ISSUE-32](#issue-32) is
-independently implementable and mitigates the user-visible symptom, so nothing is blocked by this
-sitting open.
+**`group_id` already tells you which namespace `creator_id` is in.** Measured 2026-07-29 across all
+3,836 rows — the correlation is total, with no exceptions to handle:
 
-What is settled: the defect, its measurement (2,627 organizer-created rows whose creator is not a
-registered participant), and that it fails closed. What is not: which of the three fixes below, and
-when.
+| kind | rows | with `group_id` |
+|---|---|---|
+| organizer-created (`creator_id` = account) | 2,627 | **0** |
+| group-launched (`creator_id` = player) | 1,209 | **1,209** |
 
-### Fix — needs a decision
+So `group_id IS NULL` ⟺ organizer-created ⟺ `creator_id` is an account id. **No migration, no
+backfill, no new column** — the discriminator exists and is fully populated.
 
-1. **Split the column** — `creator_account_id` / `creator_player_id`, exactly one non-null. Most
-   explicit; needs a migration and a backfill that infers intent from the existing prefix.
-2. **Normalise on player id** — organizer-created tournaments store the organizer's linked
-   `player_id` too. Aligns with `MONETIZATION_DESIGN.md` §7.1 **O4** (every account is always a
-   player, organizer layered on top), which makes a player id the universal identity.
-3. **Resolve both spaces at the check** — leave the column, teach ownership checks to accept either.
-   Smallest change, keeps the ambiguity.
+Ownership therefore branches:
 
-**(2) is the most coherent with the direction already set by O4**, but it depends on that work
-landing, so sequence accordingly.
+```
+group_id IS NULL      → organizer-owned. Compare organizerPayload.sub to creator_id.
+                        (today's behaviour, and correct for these 2,627 rows)
 
-**Do NOT backfill by guessing.** The prefix (`account_` vs `player_`) is a reliable discriminator
-today — use it explicitly and assert the result rather than inferring from creation date or mode.
+group_id IS NOT NULL  → group-owned. Ownership is GROUP MEMBERSHIP, not creator identity.
+                        Check the caller against the owning group.
+```
+
+**The second branch is also the conceptually right model**, which is the real argument for it: a
+group's casual tournament belongs to *the group*, not to whoever happened to tap launch. Keying it to
+`creator_id` means the tournament becomes unownable the moment that person leaves the group — a bug
+waiting to happen that the current design has simply not hit yet.
+
+*(Three earlier candidates — splitting the column, normalising on player id, or teaching the check to
+accept either namespace — are all superseded by this. Normalising on player id would additionally
+have depended on `MONETIZATION_DESIGN.md` §7.1 O4, which is not built.)*
+
+**⚠ One narrow product call for the owner — everything else is decided.** For a group-owned
+tournament, *which* members pass the ownership check?
+
+- **Group owners plus the launcher** *(recommended)* — mirrors the existing split, where launching is
+  creator-gated (`player-groups.ts:909`) and moderation is owner-gated.
+- Any group member — simplest, and defensible for a casual social session.
+- The launcher only — closest to today, but reintroduces the leaves-the-group problem.
+
+This affects `end-session` and little else; the events/groups reads could reasonably allow any
+member. **Pick one before implementing**, but it does not block the rest of the design.
+
+**Do NOT re-derive the namespace from the id prefix** (`account_` vs `player_`) even though it works
+today. `group_id` is a real, indexed column expressing the actual relationship; string-prefix
+sniffing is an accident of the id format that will break the day id generation changes.
 
 ### Verify
 
