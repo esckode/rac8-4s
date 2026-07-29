@@ -181,7 +181,7 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 | **Public registration (guest, no account)** | 4 | `tournament-public-registration.spec.ts` | `npx playwright test tournament-public-registration` |
 | **Browse tournaments (public discovery)** | 8 | `browse-tournaments.spec.ts` | `npx playwright test browse-tournaments` |
 | **Play hub (/play, /standings + /matches redirect here)** | 8 | `play-hub.spec.ts` | `npx playwright test play-hub` |
-| **Bottom nav label geometry (ISSUE-26)** | 3 | `layout.spec.ts` | `npx playwright test layout` |
+| **Layout geometry — bottom nav labels (ISSUE-26) + auth-page shell (ISSUE-23)** | 8 | `layout.spec.ts` | `npx playwright test layout` |
 | **Group Stage - Singles** | 4 | `group-stage-singles.spec.ts` | `npx playwright test group-stage-singles.spec` |
 | **Group Stage - Singles (Player view)** | 2 | `group-stage-singles-player.spec.ts` | `npx playwright test group-stage-singles-player` |
 | **Group Stage - Singles (Score submission)** | 4 | `group-stage-singles-score.spec.ts` | `npx playwright test group-stage-singles-score` |

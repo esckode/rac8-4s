@@ -63,3 +63,57 @@ test.describe('Bottom nav label geometry (ISSUE-26)', () => {
     })
   }
 })
+
+/**
+ * ISSUE-23 — auth pages hardcoded a 390x844 design-mockup frame (inline
+ * `width: 390, height: 844`) instead of joining the responsive system,
+ * causing clipped content below 390px and a fixed phone-shaped column
+ * with white gutters above it. `.auth-shell` (responsive.css) replaces
+ * it: fluid below the 640px breakpoint the nav already switches at,
+ * capped at 448px (the existing .max-w-md constant) and centred above.
+ *
+ * Login/Signup/ForgotPassword/ResetPassword all render the shell via
+ * `data-testid="auth-shell"` — assert on that, not the class name.
+ */
+const AUTH_ROUTES = ['/login', '/signup', '/forgot-password', '/reset-password']
+
+test.describe('Auth page shell geometry (ISSUE-23)', () => {
+  for (const route of AUTH_ROUTES) {
+    test(`${route} shell is fluid below 640px and capped above it`, async ({ page }) => {
+      await page.goto(route, { waitUntil: 'networkidle' })
+      const shell = page.getByTestId('auth-shell')
+
+      await page.setViewportSize({ width: 360, height: 740 })
+      let box = await shell.boundingBox()
+      expect(box).not.toBeNull()
+      expect(Math.round(box!.width)).toBe(360)
+      expect(Math.round(box!.x)).toBe(0)
+
+      await page.setViewportSize({ width: 440, height: 880 })
+      box = await shell.boundingBox()
+      expect(box).not.toBeNull()
+      expect(Math.round(box!.width)).toBe(440)
+      expect(Math.round(box!.x)).toBe(0)
+
+      await page.setViewportSize({ width: 1024, height: 900 })
+      box = await shell.boundingBox()
+      expect(box).not.toBeNull()
+      expect(Math.round(box!.width)).toBe(448)
+      // Centred: equal gutters on both sides.
+      const rightGutter = 1024 - (box!.x + box!.width)
+      expect(Math.abs(box!.x - rightGutter)).toBeLessThanOrEqual(1)
+    })
+  }
+
+  test('Login: no content clips at any width — the footer link stays inside the viewport', async ({ page }) => {
+    for (const width of [360, 440, 640, 1024]) {
+      await page.setViewportSize({ width, height: 760 })
+      await page.goto('/login', { waitUntil: 'networkidle' })
+      const footerLink = page.getByRole('button', { name: /create an account/i })
+      const box = await footerLink.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width)
+    }
+  })
+})

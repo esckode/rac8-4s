@@ -221,9 +221,9 @@ export const ResetPassword: React.FC = () => {
   if (successMessage) {
     return (
       <div
+        className="auth-shell"
+        data-testid="auth-shell"
         style={{
-          width: 390,
-          height: 844,
           background: 'linear-gradient(180deg, var(--auth-bg-top) 0%, var(--auth-bg-bottom) 100%)',
           fontFamily: 'var(--font-ui)',
           color: 'var(--auth-glass-text)',
@@ -231,12 +231,11 @@ export const ResetPassword: React.FC = () => {
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          margin: '0 auto',
         }}
       >
         {/* Decorative blobs */}
         <div style={{ position: 'absolute', inset: 0, opacity: 0.18, pointerEvents: 'none', filter: 'blur(0.5px)' }}>
-          <svg width="100%" height="100%" viewBox="0 0 390 844" preserveAspectRatio="none">
+          <svg width="100%" height="100%" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
             <circle cx="320" cy="120" r="180" fill="var(--court-400)" opacity="0.5" />
             <circle cx="60" cy="500" r="200" fill="var(--lavender-400)" opacity="0.4" />
           </svg>
@@ -351,9 +350,9 @@ export const ResetPassword: React.FC = () => {
   // Form state
   return (
     <div
+      className="auth-shell"
+      data-testid="auth-shell"
       style={{
-        width: 390,
-        height: 844,
         background: 'linear-gradient(180deg, var(--auth-bg-top) 0%, var(--auth-bg-bottom) 100%)',
         fontFamily: 'var(--font-ui)',
         color: 'var(--auth-glass-text)',
@@ -361,12 +360,11 @@ export const ResetPassword: React.FC = () => {
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        margin: '0 auto',
       }}
     >
       {/* Decorative blobs */}
       <div style={{ position: 'absolute', inset: 0, opacity: 0.18, pointerEvents: 'none', filter: 'blur(0.5px)' }}>
-        <svg width="100%" height="100%" viewBox="0 0 390 844" preserveAspectRatio="none">
+        <svg width="100%" height="100%" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
           <circle cx="320" cy="120" r="180" fill="var(--court-400)" opacity="0.5" />
           <circle cx="60" cy="500" r="200" fill="var(--lavender-400)" opacity="0.4" />
         </svg>

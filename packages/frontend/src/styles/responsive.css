@@ -243,6 +243,23 @@ html, body {
   overflow-x: hidden;
 }
 
+/* Auth pages (ISSUE-23) — fluid shell replacing the hardcoded 390x844 mockup
+   frame. Below 640px the shell fills the viewport; above it, it caps at a
+   form-column width rather than stretching full-bleed. 640px matches the
+   breakpoint the nav already switches at, so "mobile" means one thing
+   app-wide. 448px is the existing .max-w-md constant, not a new number. */
+.auth-shell {
+  width: 100%;
+  min-height: 100dvh;
+}
+
+@media (min-width: 640px) {
+  .auth-shell {
+    max-width: 448px;
+    margin: 0 auto;
+  }
+}
+
 /* Responsive tables */
 .responsive-table {
   width: 100%;

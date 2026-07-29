@@ -195,14 +195,13 @@ export function Signup() {
 
   return (
     <div
+      className="auth-shell"
+      data-testid="auth-shell"
       style={{
-        width: 390,
-        height: 844,
         background: 'linear-gradient(180deg, var(--auth-bg-top) 0%, var(--auth-bg-bottom) 100%)',
         display: 'flex',
         flexDirection: 'column',
         padding: '16px',
-        margin: '0 auto',
         overflow: 'hidden',
         position: 'relative',
       }}
@@ -558,6 +557,7 @@ export function Signup() {
           <button
             type="button"
             onClick={() => navigate('/login')}
+            onMouseDown={(e) => e.preventDefault()}
             tabIndex={-1}
             style={{
               background: 'none',

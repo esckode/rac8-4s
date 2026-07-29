@@ -57,14 +57,18 @@ export function DobScreen({ onConfirm, onBack }: DobScreenProps) {
 
   return (
     <div
+      className="auth-shell"
+      data-testid="auth-shell"
       style={{
-        width: 390,
+        // Width-only bug (UAT ISSUE-23) — this interstitial is intentionally
+        // shorter than a full auth screen, so minHeight stays 400 rather than
+        // taking .auth-shell's 100dvh; the inline style wins over the class
+        // for this one property regardless of the class's media query.
         minHeight: 400,
         background: 'linear-gradient(180deg, var(--auth-bg-top) 0%, var(--auth-bg-bottom) 100%)',
         display: 'flex',
         flexDirection: 'column',
         padding: '24px 16px',
-        margin: '0 auto',
       }}
     >
       {/* Back button */}
