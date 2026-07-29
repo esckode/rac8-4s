@@ -68,4 +68,16 @@ describe('PartnerRequestConfirm', () => {
 
     await waitFor(() => expect(screen.getByTestId('confirm-error')).toBeInTheDocument())
   })
+
+  it('shows the shared PLAYER_NOT_LINKED copy, not a re-authentication prompt (ISSUE-24)', async () => {
+    mockConfirm.mockRejectedValueOnce(apiError('PLAYER_NOT_LINKED', 403))
+
+    renderAt('reg_1')
+
+    fireEvent.click(screen.getByTestId('confirm-partnership-button'))
+
+    const errorEl = await screen.findByTestId('confirm-error')
+    expect(errorEl).toHaveTextContent("This account isn't set up to play yet.")
+    expect(errorEl).not.toHaveTextContent(/sign in again/i)
+  })
 })

@@ -165,6 +165,26 @@ describe('GroupList', () => {
     expect(screen.queryByTestId('group-list-error')).not.toBeInTheDocument()
   })
 
+  it('shows the shared PLAYER_NOT_LINKED copy on 403, not a re-authentication prompt (ISSUE-24)', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ code: 'PLAYER_NOT_LINKED', message: "This account isn't set up to play yet." }),
+    })
+
+    render(
+      <MemoryRouter>
+        <GroupList />
+      </MemoryRouter>
+    )
+
+    const el = await screen.findByTestId('group-list-player-not-linked')
+    expect(el).toHaveTextContent("This account isn't set up to play yet.")
+    expect(el).not.toHaveTextContent(/sign in again/i)
+    expect(screen.queryByTestId('group-list-unauthorized')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('group-list-error')).not.toBeInTheDocument()
+  })
+
   it('shows a "Create your first group" CTA on the empty state', async () => {
     render(
       <MemoryRouter>

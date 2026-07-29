@@ -82,6 +82,20 @@ describe('PartnerFinder', () => {
     await waitFor(() => expect(screen.getByTestId('partner-error')).toBeInTheDocument())
   })
 
+  it('shows the shared PLAYER_NOT_LINKED copy, not a re-authentication prompt (ISSUE-24)', async () => {
+    mockFetchAvailable.mockResolvedValueOnce([{ id: 'p2', name: 'Bea' }])
+    mockSendRequest.mockRejectedValueOnce(apiError('PLAYER_NOT_LINKED', 403))
+
+    render(<PartnerFinder tournamentId="t1" />)
+
+    await waitFor(() => expect(screen.getByTestId('request-partner-button')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('request-partner-button'))
+
+    const errorEl = await screen.findByTestId('partner-error')
+    expect(errorEl).toHaveTextContent("This account isn't set up to play yet.")
+    expect(errorEl).not.toHaveTextContent(/sign in again/i)
+  })
+
   // ISSUE-15 follow-up: a requester who invited a partner by email had no way
   // to see or undo that invite once signed in — a typo'd address locked them
   // out of re-inviting and held a capacity slot until the invite expired.
@@ -151,6 +165,25 @@ describe('PartnerFinder', () => {
 
       await waitFor(() => expect(screen.getByTestId('partner-error')).toBeInTheDocument())
       expect(screen.getByTestId('partner-invite-pending')).toBeInTheDocument()
+    })
+
+    it('shows the shared PLAYER_NOT_LINKED copy on cancel, not a re-authentication prompt (ISSUE-24)', async () => {
+      mockFetchInvite.mockResolvedValueOnce({
+        pending: true,
+        registrationId: 'reg1',
+        partnerName: null,
+        expiresAt: '2026-07-24T00:00:00.000Z',
+      })
+      mockCancelInvite.mockRejectedValueOnce(apiError('PLAYER_NOT_LINKED', 403))
+
+      render(<PartnerFinder tournamentId="t1" />)
+
+      await waitFor(() => expect(screen.getByTestId('cancel-partner-invite-button')).toBeInTheDocument())
+      fireEvent.click(screen.getByTestId('cancel-partner-invite-button'))
+
+      const errorEl = await screen.findByTestId('partner-error')
+      expect(errorEl).toHaveTextContent("This account isn't set up to play yet.")
+      expect(errorEl).not.toHaveTextContent(/sign in again/i)
     })
   })
 

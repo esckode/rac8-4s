@@ -87,6 +87,19 @@ describe('ScoreSubmitForm', () => {
     expect(onSuccess).not.toHaveBeenCalled()
   })
 
+  it('shows the shared PLAYER_NOT_LINKED copy, not a re-authentication prompt (ISSUE-24)', async () => {
+    mockSubmitScore.mockRejectedValueOnce({ code: 'PLAYER_NOT_LINKED', message: 'API error: PLAYER_NOT_LINKED', status: 403 })
+
+    render(<ScoreSubmitForm tournamentId="tourn_1" match={pendingMatch} onSuccess={jest.fn()} onClose={jest.fn()} />)
+
+    fireEvent.change(screen.getByTestId('score-input'), { target: { value: '11-9, 11-7' } })
+    fireEvent.click(screen.getByTestId('score-submit'))
+
+    const errorEl = await screen.findByTestId('score-error')
+    expect(errorEl).toHaveTextContent("This account isn't set up to play yet.")
+    expect(errorEl).not.toHaveTextContent(/sign in again/i)
+  })
+
   it('shows a deadline message when the backend reports DEADLINE_PASSED', async () => {
     mockSubmitScore.mockRejectedValueOnce(apiError('DEADLINE_PASSED'))
 

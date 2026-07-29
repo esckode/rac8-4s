@@ -63,7 +63,7 @@ describe('ISSUE-1 — player-groups dual-auth', () => {
     expect(Array.isArray(res.body.groups)).toBe(true)
   })
 
-  it('still rejects an account JWT with no linked playerId', async () => {
+  it('rejects an account JWT with no linked playerId with a distinct code (ISSUE-24)', async () => {
     const accountToken = issueOrganizerToken(
       { sub: crypto.randomUUID(), email: `no-player-${uid()}@test.local` },
       jwtConfig
@@ -73,7 +73,8 @@ describe('ISSUE-1 — player-groups dual-auth', () => {
       .get('/player/groups')
       .set('Authorization', `Bearer ${accountToken}`)
 
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(403)
+    expect(res.body.code).toBe('PLAYER_NOT_LINKED')
   })
 
   it('still rejects requests with no token at all', async () => {
