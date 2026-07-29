@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
 import { PlayerRepository } from '../db'
 import { requirePlayerSessionAuth, requireOrganizerAuth } from '../auth'
+import { PlayerNotLinkedError } from '../auth/errors'
 import { buildCoachToolContext } from '../assistant/tools'
 import { buildPlayerSnapshot } from '../assistant/player-snapshot'
 import { getLogger } from '../logger'
@@ -31,7 +32,10 @@ export default function playerRouter(deps: AppDependencies) {
       if (account.playerId) {
         return account.playerId
       }
-      throw sessionErr
+      // ISSUE-24: the token is genuinely valid — the account just has no
+      // linked player. That is not "your session expired", so it must not
+      // reuse the session branch's TOKEN_INVALID.
+      throw new PlayerNotLinkedError()
     }
   }
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { confirmPartner } from '../api/client'
+import { PLAYER_NOT_LINKED_MESSAGE } from '../constants/errorMessages'
 import '../styles/globals.css'
 
 /**
@@ -16,6 +17,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   FORBIDDEN: 'Only the requested partner can confirm this partnership.',
   INVALID_STATE: 'This partnership request is no longer pending.',
   NOT_FOUND: "We couldn't find that partnership request.",
+  PLAYER_NOT_LINKED: PLAYER_NOT_LINKED_MESSAGE,
 }
 
 function messageFor(code?: string): string {

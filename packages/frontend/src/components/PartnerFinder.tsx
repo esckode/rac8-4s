@@ -7,6 +7,7 @@ import {
   type AvailablePartner,
   type MyPartnerInvite,
 } from '../api/client'
+import { PLAYER_NOT_LINKED_MESSAGE } from '../constants/errorMessages'
 
 /**
  * PartnerFinder — a solo doubles registrant finds another solo registrant in the
@@ -30,11 +31,13 @@ const ERROR_MESSAGES: Record<string, string> = {
   INVALID_STATE: 'That player already has a partner. Pick someone else.',
   NOT_FOUND: "That player isn't available anymore.",
   VALIDATION_ERROR: "That request isn't valid.",
+  PLAYER_NOT_LINKED: PLAYER_NOT_LINKED_MESSAGE,
 }
 
 const CANCEL_ERROR_MESSAGES: Record<string, string> = {
   INVALID_STATE: 'That invite is no longer pending — refresh to see the latest.',
   FORBIDDEN: 'Only the player who sent the invite can cancel it.',
+  PLAYER_NOT_LINKED: PLAYER_NOT_LINKED_MESSAGE,
 }
 
 function messageFor(code?: string): string {

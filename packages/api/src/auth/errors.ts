@@ -46,3 +46,12 @@ export class ForbiddenError extends AuthError {
     )
   }
 }
+
+// ISSUE-24: an authenticated account JWT with no linked playerId is not a bad
+// token — re-authenticating cannot fix it. Distinct from TOKEN_INVALID so the
+// frontend can stop offering "sign in again" as the remedy.
+export class PlayerNotLinkedError extends AuthError {
+  constructor() {
+    super('Account has no linked player', 'PLAYER_NOT_LINKED')
+  }
+}

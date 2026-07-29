@@ -20,16 +20,19 @@ export interface UseGroupListResult {
   loading: boolean
   error: string | null
   unauthorized: boolean
+  playerNotLinked: boolean
   refetch: () => void
 }
 
 const UNAUTHORIZED_MARKER = 'unauthorized'
+const PLAYER_NOT_LINKED_MARKER = 'player-not-linked'
 
 export function useGroupList(): UseGroupListResult {
   const [groups, setGroups] = useState<GroupSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [unauthorized, setUnauthorized] = useState(false)
+  const [playerNotLinked, setPlayerNotLinked] = useState(false)
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
@@ -37,6 +40,7 @@ export function useGroupList(): UseGroupListResult {
     setLoading(true)
     setError(null)
     setUnauthorized(false)
+    setPlayerNotLinked(false)
 
     const token = localStorage.getItem('auth_token')
     fetch('/player/groups', {
@@ -45,10 +49,19 @@ export function useGroupList(): UseGroupListResult {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     })
-      .then(res => {
+      .then(async res => {
         if (res.status === 401) {
           if (!cancelled) setUnauthorized(true)
           throw new Error(UNAUTHORIZED_MARKER)
+        }
+        // ISSUE-24: a valid token with no linked player is 403 PLAYER_NOT_LINKED,
+        // not 401 — re-authenticating cannot fix it, so it needs its own state.
+        if (res.status === 403) {
+          const body = await res.json().catch(() => ({}))
+          if (body.code === 'PLAYER_NOT_LINKED') {
+            if (!cancelled) setPlayerNotLinked(true)
+            throw new Error(PLAYER_NOT_LINKED_MARKER)
+          }
         }
         if (!res.ok) throw new Error('Failed to load groups')
         return res.json()
@@ -59,7 +72,7 @@ export function useGroupList(): UseGroupListResult {
         }
       })
       .catch((err: Error) => {
-        if (cancelled || err.message === UNAUTHORIZED_MARKER) return
+        if (cancelled || err.message === UNAUTHORIZED_MARKER || err.message === PLAYER_NOT_LINKED_MARKER) return
         setError('Failed to load groups')
       })
       .finally(() => {
@@ -76,6 +89,7 @@ export function useGroupList(): UseGroupListResult {
     loading,
     error,
     unauthorized,
+    playerNotLinked,
     refetch: () => setTick(t => t + 1),
   }
 }

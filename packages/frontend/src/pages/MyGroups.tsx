@@ -13,6 +13,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { useGroupList } from '../hooks/useGroupList'
 import { useAuth } from '../hooks/useAuth'
+import { PLAYER_NOT_LINKED_MESSAGE } from '../constants/errorMessages'
 import { GroupChatPanel, MembersPanel, type MemberSummary } from '../components/GroupChatPanel'
 import { NotifyLevelControl, type NotifyLevel } from '../components/NotifyLevelControl'
 import { LeaderboardPanel, type IndividualRow } from '../components/LeaderboardPanel'
@@ -133,13 +134,24 @@ export const CreateGroupCta: React.FC<{ onCreated: () => void }> = ({ onCreated 
 }
 
 export const GroupList: React.FC = () => {
-  const { groups, loading, error, unauthorized, refetch } = useGroupList()
+  const { groups, loading, error, unauthorized, playerNotLinked, refetch } = useGroupList()
 
   if (loading) {
     return (
       <div className="p-4 space-y-[--s-3]">
         <CoachEntryLink />
         <p className="text-[--ink-600]">Loading your groups…</p>
+      </div>
+    )
+  }
+
+  if (playerNotLinked) {
+    return (
+      <div className="p-4 space-y-[--s-3]">
+        <CoachEntryLink />
+        <p data-testid="group-list-player-not-linked" role="alert" className="text-[--rose-700]">
+          {PLAYER_NOT_LINKED_MESSAGE}
+        </p>
       </div>
     )
   }

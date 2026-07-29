@@ -2,7 +2,7 @@ import express, { Express, Request, Response, NextFunction } from 'express'
 import { Pool, PoolClient } from 'pg'
 import { randomUUID } from 'node:crypto'
 import { JwtConfig, TokenStore } from './auth'
-import { AuthError, ForbiddenError, MissingTokenError, TokenExpiredError } from './auth/errors'
+import { AuthError, ForbiddenError, MissingTokenError, PlayerNotLinkedError, TokenExpiredError } from './auth/errors'
 import {
   DatabaseError,
   ConstraintViolationError,
@@ -549,6 +549,10 @@ export function createApp(deps: AppDependencies): Express {
 
     // Auth errors
     if (err instanceof ForbiddenError) {
+      httpLog.warn('forbidden', { code: err.code })
+      return res.status(403).json({ code: err.code, message: err.message })
+    }
+    if (err instanceof PlayerNotLinkedError) {
       httpLog.warn('forbidden', { code: err.code })
       return res.status(403).json({ code: err.code, message: err.message })
     }

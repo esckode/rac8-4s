@@ -16,7 +16,7 @@ import {
   generatePartnerInviteToken,
   validatePartnerInviteToken,
 } from '../auth'
-import { ForbiddenError } from '../auth/errors'
+import { ForbiddenError, PlayerNotLinkedError } from '../auth/errors'
 import { TournamentStateMachine, type TournamentState, type TransitionAction } from '@core/state-machine'
 import { calculateStandings, generateBracket } from '@core/index'
 import { parseScore, type SportFormat } from '@core/score-parser'
@@ -190,7 +190,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
       // Participation is a capability of having a linked playerId (+ registration),
       // independent of authority role — an organizer who also plays qualifies.
       if (!account.playerId) {
-        throw sessionErr
+        // ISSUE-24: a valid token with no linked player is not TOKEN_INVALID.
+        throw new PlayerNotLinkedError()
       }
       const reg = await playerRepo.findRegistration(account.playerId, tournamentId)
       if (!reg) {
@@ -224,7 +225,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
         throw sessionErr
       }
       if (!account.playerId) {
-        throw sessionErr
+        // ISSUE-24: a valid token with no linked player is not TOKEN_INVALID.
+        throw new PlayerNotLinkedError()
       }
       return { playerId: account.playerId }
     }

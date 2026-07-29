@@ -23,6 +23,7 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
 import { requirePlayerSessionAuth, requireOrganizerAuth } from '../auth'
+import { PlayerNotLinkedError } from '../auth/errors'
 import { ForbiddenError, TokenInvalidError } from '../auth/errors'
 import { GroupRepository, LastOwnerError } from '../repositories/group-repository'
 import { PlayerRepository, AgeAttestationRequiredError, UnderAgeError } from '../db'
@@ -112,7 +113,8 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
       if (account.playerId) {
         return { playerId: account.playerId }
       }
-      throw sessionErr
+      // ISSUE-24: a valid token with no linked player is not TOKEN_INVALID.
+      throw new PlayerNotLinkedError()
     }
   }
 

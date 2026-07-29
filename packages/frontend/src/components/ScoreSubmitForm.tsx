@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { submitScore, editScore } from '../api/client'
 import { subscribeReplayResults } from '../pwa/sw-bridge'
+import { PLAYER_NOT_LINKED_MESSAGE } from '../constants/errorMessages'
 import type { ReplayNotification } from '../workers/sw-lib/sync-queue'
 
 /**
@@ -35,6 +36,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   VALIDATION_ERROR: 'Please enter a score, e.g. 11-9, 11-7.',
   ALREADY_SCORED: 'This match was already scored. You can edit the existing score instead.',
   FORBIDDEN: "You're not a participant in this match.",
+  PLAYER_NOT_LINKED: PLAYER_NOT_LINKED_MESSAGE,
 }
 
 function messageFor(code?: string): string {
