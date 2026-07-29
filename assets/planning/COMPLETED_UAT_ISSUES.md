@@ -41,6 +41,8 @@ including follow-ups these issues surfaced — lives in `UAT_ISSUES.md`.
 | [ISSUE-29](#issue-29) | 🟠 | Temporarily block public browse + public registration; keep both invite paths working | frontend + api |
 | [ISSUE-30](#issue-30) | 🔴 | `/tournament/:id` redirects to a literal unsubstituted path — group launch's payoff step is broken | frontend |
 | [ISSUE-31](#issue-31) | 🔴 | A group-launched casual tournament never generates matches — there is nothing to play | api |
+| [ISSUE-32](#issue-32) | 🟠 | SSE `/tournaments/:id/events` 403s for registered accounts — live updates dead for participants | api |
+| [ISSUE-33](#issue-33) | 🟠 | `tournaments.creator_id` is polymorphic — account id or player id by creation path | api · data |
 
 **The doubles-pairing cluster (ISSUE-16–21) is fully resolved.** Ship order, schema/migration notes,
 and the grill outcomes behind it are in [the cluster section](#doubles-pairing-cluster).
@@ -1697,4 +1699,60 @@ New integration coverage (`group-launch.spec.ts`, `auto-launch-hook.spec.ts`) pl
 `casual-tournament.spec.ts` e2e scenario asserting real matches exist post-launch, replacing a
 version that intercepted the launch request with `page.route(...)` and asserted only that the call
 was made — which is why the original suite stayed green while this flow dead-ended in production.
+
+---
+
+## Post-walkthrough audit (ISSUE-32 – ISSUE-33) {#post-walkthrough-audit}
+
+**Both resolved 2026-07-29, branch-per-issue, fast-forwarded to `main` in the prescribed order: 32 →
+33** (33 supersedes the workaround 32 applies, so it had to land second). Found while verifying the
+2026-07-26/27 walkthrough batch above — group launch (ISSUE-31) was the first time a registered
+account's own tournament actually got exercised end-to-end, and it surfaced a dual-auth gap none of
+ISSUE-1's or ISSUE-24's fixes had reached.
+
+## ISSUE-32 — SSE `/tournaments/:id/events` 403s for registered accounts 🟠 {#issue-32}
+
+**✅ Resolved** (2026-07-29, `c7a38c2`/`852a527`): `GET /:id/events`, `POST /:id/end-session`, and
+`GET /:id/groups` each hand-rolled their own dual-auth and ran `assertOrganizerOwnsTournament`
+against *any* account JWT — `requireOrganizerAuth` doesn't check role, so a registered player's
+account JWT reached the ownership check too, and always failed it. Each route now checks
+`payload.role === 'organizer'` first, exactly like the score-submission route (`:674`) already did
+correctly: organizer-role tokens are still held to ownership (2,627 organizer-created tournaments
+unaffected), anything else falls back to `resolveTournamentPlayer`'s registered-participant check.
+Explicitly **not** routed through `resolveTournamentPlayer` alone, which requires a registration and
+would have denied every organizer who isn't also a registered participant in their own tournament.
+
+The events route additionally maps `PlayerNotLinkedError` to its own `403 PLAYER_NOT_LINKED`
+(ISSUE-24) instead of collapsing it into a generic `FORBIDDEN`, and keys its per-user SSE
+connection cap on the resolved `playerId` rather than the account id when falling back to the
+participant path. New `OrganizerFactory.playerRoleToken` test helper — `issueOrganizerToken`
+hardcodes `role: 'organizer'` and so cannot represent a real registered player's account JWT, the
+exact shape this bug needed. The events route's success-path tests use a raw `http.get` against a
+real listening server rather than supertest, since the route never ends its response on success (an
+open SSE stream) and a normal request/response round-trip would hang forever.
+
+Does not touch `tournament.creator_id` itself, which still holds an account id for organizer-created
+tournaments and a player id for group-launched ones — that column-level fix is ISSUE-33.
+
+---
+
+## ISSUE-33 — `tournaments.creator_id` holds two different id types 🟠 {#issue-33}
+
+**✅ Resolved** (2026-07-29, `1fe498c`/`9398e04`): `group_id IS NULL` and `group_id IS NOT NULL`
+fully discriminate the two creation paths (measured across all 3,836 rows at decision time, no
+exceptions), so no migration or new column was needed. A new `assertTournamentAccess` helper
+replaces the direct `assertOrganizerOwnsTournament` calls on the three routes ISSUE-32 touched:
+when a tournament's `group_id` is set, ownership is **group membership** (via the player-groups
+repository's `getMemberRole`, imported into `tournaments.ts` under a `PlayerGroupRepository` alias to
+avoid colliding with `db.ts`'s unrelated tournament-groups `GroupRepository` of the same name) rather
+than creator identity — **any group member passes**, not just owners or the original launcher,
+per the owner's "casual session is a small trust-based group" framing. This check runs *before* the
+organizer-role/participant branching ISSUE-32 added, since membership grants access regardless of
+role or of holding a registration — the genuinely new capability here: a group member who joined
+*after* the tournament launched, and so was never auto-registered, can now still act on it (e.g. end
+the session), which ISSUE-32's registration-based fallback alone could never grant.
+
+`assertOrganizerOwnsTournament` itself is unchanged — still a plain two-string comparison, still used
+exactly as before whenever `group_id IS NULL`. The new branching lives entirely in the call sites'
+shared helper, which is the only place with a database connection to look up membership with.
 
