@@ -256,7 +256,8 @@ scores, standings) always appear in the app in real time regardless of notificat
 
 - On Android/desktop Chrome, an **install prompt** appears in the address bar or menu — tap
   **Install** to add the app to your home screen or apps list, no app store needed. On iPhone/iPad,
-  open the site in Safari, tap **Share**, then **Add to Home Screen**.
+  open the site in Safari, tap **Share**, then **Add to Home Screen**. An **Install app** button also
+  appears on the **Settings** page (More → Settings) once your browser has offered to install it.
 - Once installed, it opens full-screen with its own icon and name — no browser address bar.
 - **At a court with bad signal**, four views still work offline if you loaded them at least once
   while you had signal: **Matches, Standings, Bracket, and Details**. Anything else (chat, Coach,
@@ -273,6 +274,14 @@ scores, standings) always appear in the app in real time regardless of notificat
 - You'll stay signed in through an offline reload at a venue, even if the app can't reach the
   server to check your session — it revalidates automatically once you're back online.
 - **Signing out clears all offline data** on that device — saved snapshots and anything still
-  waiting to send.
+  waiting to send. You can also clear it manually any time from **Settings** (More → Settings →
+  Clear cached data), without signing out.
 - When an update to the app is available, you'll see an **"Update available"** toast — tap it to
   refresh and apply the update on your own schedule (it never force-reloads a page you're using).
+
+## Getting help
+
+- For anything about games, fixtures, or membership — "can I join", scheduling, who's playing —
+  **message your group owners in the group**. The **About** page (More → About) has a link to your
+  groups for exactly this.
+- There's no separate technical-support contact in the app yet.
