@@ -14,6 +14,7 @@ jest.mock('../../logger', () => ({
 import { validateEmailJobPayload } from '../../validation/email-job-validator'
 
 const testConfig: AppConfig = {
+  publicDiscoveryEnabled: false,
   auth: {
     magicLinkTtlSeconds: 86400,
     sessionTtlSeconds: 86400,

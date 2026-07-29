@@ -15,6 +15,7 @@ import { InMemoryJobQueue } from '@worker/job-queue'
 import { QueueMonitor } from '../../queue-monitor'
 
 const testConfig: AppConfig = {
+  publicDiscoveryEnabled: false,
   auth: {
     magicLinkTtlSeconds: 86400,
     sessionTtlSeconds: 86400,
