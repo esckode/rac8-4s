@@ -160,16 +160,31 @@ before that they rendered a blank outlet, which is worse but less obvious.
 **`/profile` already exists and is registered.** "Account" almost certainly means it — repoint rather
 than build a second page. Confirm before assuming.
 
-**Build `/about`, and put Contact on it.** Owner decision 2026-07-29 — support is two-tier:
+**Build `/about` with a Support section on it.** Owner decision 2026-07-29 — support is two-tier:
 
 | Kind of problem | Goes to |
 |---|---|
 | **Technical / the webapp itself** | the Contact route on the About page |
 | **Non-technical** (fixtures, membership, "can I join", scheduling) | **the group owners**, in the group |
 
-This closes the two dangling "contact support" promises: `ServiceUnavailable.tsx:14`, and ISSUE-24's
-`PLAYER_NOT_LINKED` copy, which had to drop the phrase because there was nowhere to send people.
-Both should now link to the Contact route.
+**Ship the half that is real; omit the half that is not** *(owner, 2026-07-29 — contact details to
+follow)*:
+
+- ✅ **Build the group-owner guidance now.** It needs no address and no backend: *"For anything about
+  games, fixtures or membership, message your group owners in the group."* Link it to the user's
+  groups. This is genuinely useful on day one.
+- ⛔ **Do not render a technical-contact block until there is a real destination.** No email address,
+  form backend, or operator identity exists in the app today (verified 2026-07-29). **A "contact us —
+  TBD" placeholder is worse than nothing** — it promises help at the exact moment someone is already
+  stuck, and placeholders like this are what never get filled in.
+
+So the two dangling "contact support" promises — `ServiceUnavailable.tsx:14` and ISSUE-24's
+`PLAYER_NOT_LINKED` copy — **stay unresolved by this issue**. Do not point them at a Support section
+that cannot help them. Reword them to stop promising support, or leave them until the address exists.
+
+⚠ **Raise a follow-up for the technical contact** when this ships, so the missing half is tracked
+rather than remembered. It needs one owner input: a publishable email address (→ a `mailto:` link,
+zero build) or a contact form (→ a backend endpoint that does not exist and is not budgeted).
 
 **`/settings` is a real page and must be built** *(owner decision 2026-07-29 — an earlier draft of
 this issue wrongly suggested it might be redundant with `/profile`)*. **App settings are distinct
@@ -284,6 +299,13 @@ All three tests green on the **first** attempt — a pass that only happens on r
   ([ISSUE-29](COMPLETED_UAT_ISSUES.md#issue-29)).
 
 **Still open:**
+
+- **No technical support destination exists** — no email, form backend, or operator identity in the
+  app (verified 2026-07-29). [ISSUE-36](#issue-36) deliberately ships the Support section *without* a
+  technical-contact block rather than a placeholder. **Blocked on one owner input:** a publishable
+  email address (a `mailto:`, zero build) or a contact form (a backend endpoint that does not exist).
+  Until then `ServiceUnavailable.tsx:14` and ISSUE-24's `PLAYER_NOT_LINKED` copy keep promising
+  support with nowhere to send people.
 
 - **Tournament lifecycle has no automatic status transitions** (surfaced by ISSUE-9) — **moved to
   `BACKLOG.md` § Deferred on 2026-07-27**, since its urgency came from stale tournaments lingering in
