@@ -31,6 +31,14 @@ including follow-ups these issues surfaced — lives in `UAT_ISSUES.md`.
 | [ISSUE-19](#issue-19) | 🟠 | No notification fires when a doubles team is formed, by any path | api |
 | [ISSUE-20](#issue-20) | 🟠 | Withdrawal never dissolves a team, and no query filters withdrawn registrations | api · data |
 | [ISSUE-21](#issue-21) | 🔴 | An invite nobody answered becomes a real team at group creation | api · data |
+| [ISSUE-22](#issue-22) | 🟡 | Login greets guests with "Welcome back."; page titles/descriptions end in full stops | frontend · copy |
+| [ISSUE-23](#issue-23) | 🟠 | Auth pages hardcode a 390×844 phone frame — clipped below 390, gutters above | frontend · layout |
+| [ISSUE-25](#issue-25) | 🟡 | `seed-test-accounts.ts` creates accounts with no linked player — every seeded login hits ISSUE-24 | scripts · dev |
+| [ISSUE-26](#issue-26) | 🟠 | Bottom nav labels clip off-screen at every phone width (6 items don't fit under ~444px) | frontend · layout |
+| [ISSUE-28](#issue-28) | 🟠 | Nav: collapse Standings + Matches into one "Play" hub; four items | frontend + api |
+| [ISSUE-29](#issue-29) | 🟠 | Temporarily block public browse + public registration; keep both invite paths working | frontend + api |
+| [ISSUE-30](#issue-30) | 🔴 | `/tournament/:id` redirects to a literal unsubstituted path — group launch's payoff step is broken | frontend |
+| [ISSUE-31](#issue-31) | 🔴 | A group-launched casual tournament never generates matches — there is nothing to play | api |
 
 **The doubles-pairing cluster (ISSUE-16–21) is fully resolved.** Ship order, schema/migration notes,
 and the grill outcomes behind it are in [the cluster section](#doubles-pairing-cluster).
@@ -1494,4 +1502,150 @@ not actually matching this page's real success copy ("Check your email to confir
 **This closes the doubles-pairing cluster** — see
 [the cluster summary](#doubles-pairing-cluster) above for the full ISSUE-16–21 ship order and grill
 outcomes.
+
+---
+
+## 2026-07-26/27 local walkthrough queue (ISSUE-22 – ISSUE-31) {#walkthrough-queue-2}
+
+**All eight resolved 2026-07-28, branch-per-issue, fast-forwarded to `main` in the prescribed
+order** from `UAT_ISSUES.md`'s "Before you start" table: **31 → 30 → {22, 25} → 28 → 26 → 23 → 29**.
+ISSUE-24 and ISSUE-27 remain open — see `UAT_ISSUES.md`. 31 and 30 shipped first because group
+launch is the product and its payoff step was broken; 28 unblocked 26 (its geometry guard asserts
+28's four-item nav) and 29 (`/play` is where 29's two broken redirects point).
+
+## ISSUE-22 — Login greets guests with "Welcome back."; page titles/descriptions end in full stops 🟡 {#issue-22}
+
+**✅ Resolved** (2026-07-28, `aa4fbfc`/`a43641f`): Login's headline became "Sign in" and its subhead
+dropped the now-repeated "Sign in to…" opener. Every page title/description across `Login`,
+`ForgotPassword`, `ResetPassword`, `Landing` and `DesignSpec` lost its trailing full stop per the
+owner's app-wide, no-exceptions rule — including the two state-gated success strings ("Code sent",
+"Password updated"), which only render after an action and are the ones most likely to drift back.
+Added `page-copy-convention.spec.tsx` as a durable RTL guard (renders all five pages, asserts no
+title/description matches `/\.$/`), and fixed two now-stale assertions in `AuthStatusBar.spec.tsx`
+and `AuthBackButton.spec.tsx` that still expected `/password updated\./i`. No e2e spec added — the
+issue's own stated deviation, since a copy-only convention has no browser-only signal.
+
+---
+
+## ISSUE-23 — Auth pages hardcode a 390×844 phone frame 🟠 {#issue-23}
+
+**✅ Resolved** (2026-07-28, `284edb4`): auth pages (`Login`, `Signup`, `ForgotPassword`,
+`ResetPassword`, `DobScreen`) traded the hardcoded 390×844 frame for a new `.auth-shell` class
+(`responsive.css`) — fluid full-width below 390px, capped and centered above it — plus
+`data-testid="auth-shell"` for the geometry guard. Fixed the blob decoration SVGs'
+`preserveAspectRatio` so they scale with the fluid shell instead of stretching. `layout.spec.ts`
+(shared with ISSUE-26, per that issue's own coordination note) gained an "Auth page shell geometry"
+describe block asserting no overflow at 360/400/430/900px.
+
+Verification surfaced one unrelated bug, fixed in the same change: `Signup.tsx`'s "Sign in" footer
+button lost focus mid-click under Playwright's coordinate-based click — a validation error appearing
+mid-interaction shifted the DOM between `mousedown` and `mouseup`, so they landed on different
+elements. Fixed with `onMouseDown={(e) => e.preventDefault()}`.
+
+---
+
+## ISSUE-25 — `seed-test-accounts.ts` creates accounts with no linked player 🟡 {#issue-25}
+
+**✅ Resolved** (2026-07-28, `f114b1d`/`21685dc`): `seed-test-accounts.ts` and `seed-tournaments.ts`
+now mirror the real signup sequence — `findOrCreatePlayerByEmail` before `accountRepo.create` — so
+seeded accounts link a durable player exactly as a real signup would. Added a repair path, since the
+seeder's own idempotency (skip if the account already exists) would otherwise leave a developer's
+already-broken local DB unrepaired by the very script that fixes the bug. New
+`seed-test-accounts.spec.ts` asserts against `auth.accounts` (not `public.accounts` — CLAUDE.md §7's
+two-schema split) that the seeded account's `playerId` is non-null.
+
+---
+
+## ISSUE-26 — Bottom nav labels clip off-screen at every phone width 🟠 {#issue-26}
+
+**✅ Resolved** (2026-07-28, `3281b1b`, alongside ISSUE-28): the geometry guard this issue specified
+— Playwright asserting every `.responsive-bottom-nav-item` label's `boundingBox()` sits inside its
+cell and inside the viewport (`x >= 0`), never text presence, since the clipped label was always
+present in the DOM — landed as a new `layout.spec.ts` "Bottom nav label geometry" describe block.
+Verified against a temporary git-content revert of the pre-28 six-item `ResponsiveLayout.tsx`, to
+confirm the guard actually fails on the old geometry before confirming it passes on the new
+four-item bar (58px worst case in a 90px cell — 32px of slack, versus 99px in a 60px cell before).
+The actual fix, as the issue specified, was ISSUE-28's item-count reduction — no fix landed here in
+isolation.
+
+---
+
+## ISSUE-28 — Nav: collapse Standings + Matches into one "Play" hub; four items 🟠 {#issue-28}
+
+**✅ Resolved** (2026-07-28, `ef3f8c3`/`c367c02`): nav collapsed from six items to four
+(Play/Groups/Alerts/More); `/standings` and `/matches` now redirect to `/play` instead of rendering
+`MyTournamentsHub`, which is deleted. The new Play hub renders a next-match card, the existing
+my-tournaments list (minus its 1-tournament auto-redirect — there is now something worth showing
+even with one tournament), and recent results, plus the two group-membership-keyed empty states and
+the carried-over guest-upgrade CTA specified in the issue.
+
+Backend: `buildPlayerSnapshot` (`assistant/player-snapshot.ts`) split into pure data-gathering
+(returns `PlayerSnapshotData`) and the existing `formatPlayerSnapshot` string formatter, which stays
+byte-identical for the coach — verified by a regression test pinning the formatted string across the
+refactor. New `GET /player/snapshot` exposes the data to the hub. `docs/assistant-help.md` and
+`e2e-scenarios.md` updated in the same change per §8/§9; `play-hub.spec.ts` replaces the deleted
+`my-tournaments-hub.spec.ts`.
+
+---
+
+## ISSUE-29 — Temporarily block public browse + public registration 🟠 {#issue-29}
+
+**✅ Resolved** (2026-07-28, `b667c16`/`7583e2e`): `publicDiscoveryEnabled` added to `AppConfig` (env
+`PUBLIC_DISCOVERY_ENABLED`, default off), surfaced via new `GET /api/config` and consumed on the
+frontend through `AppConfigProvider`/`useAppConfig`, exactly per the `BILLING_ENABLED`-pattern
+mechanism the issue specified. `POST /:tournamentId/register` 404s when the flag is off;
+`/browse` and `/tournament/:id/browse` render through a `DiscoveryGate` that falls back to a new
+`NotFound` page — none existed before this, so any typo'd URL previously rendered a blank router
+outlet, a pre-existing gap this closed as a side effect. The nav's Browse tab is conditional on the
+flag.
+
+All six inbound `/browse` links from the issue's own table were repointed to `/play` or removed, plus
+two more surfaced only by actually running the e2e suite rather than relying on that table:
+`PublicRoute.tsx`'s post-login redirect, and a stale `waitForURL`/`toHaveURL` assertion in
+`tournament-discovery-registration.spec.ts` expecting the pre-flag `/browse` landing. The "six links"
+count undercounted by two — worth flagging since the same gap-finding pattern (spec-table vs. actual
+run) will recur on future scope-table issues.
+
+Verified both directions live: flag on runs all 26 e2e tests across the three discovery specs; flag
+off skips all 26 cleanly via a new `skipIfPublicDiscoveryDisabled()` fixture helper, and
+`POST /register` returns 404 (confirmed by direct `curl`, not just the spec). The 15 pre-existing
+integration specs whose fixtures registered through the now-gated route were each given an explicit
+`{ config: { publicDiscoveryEnabled: true } }` override to `createTestApp` — the blast radius the
+issue's default-off choice implied but did not enumerate.
+
+**Known pre-existing, out-of-scope failure surfaced during verification, not fixed here:**
+`tournament-public-registration.spec.ts` has 2 tests failing because `TournamentBrowse.tsx` renders
+the abbreviated badge "Reg Open" while the tests search for `text=/registration open/i`. Confirmed
+via `git diff`/`git log` that this predates this change (last touched by the unrelated, already-
+closed ISSUE-17) — flagged for whoever picks it up next, not silently left unfixed.
+
+---
+
+## ISSUE-30 — `/tournament/:id` redirects to a literal, unsubstituted path 🔴 {#issue-30}
+
+**✅ Resolved** (2026-07-28, `f324cc4`/`4de026c`): `App.tsx`'s bare `/tournament/:id` route redirected
+to the literal, uninterpolated string `` `/tournament/:tournamentId/standings` `` — a template
+literal with no `${}` inside it — so every group-launch payoff landed on an `UNAUTHORIZED` error
+page instead of the tournament. Fixed with an exported `TournamentDetailRedirect` component that
+reads `useParams()` and substitutes the real id via `ROUTES.TOURNAMENT_TAB`, so the target path
+cannot drift from the route table again. Covered by a new `route-protection.spec.tsx` describe block
+and verified live against the real group-launch flow, since that is the payoff step this broke.
+
+---
+
+## ISSUE-31 — A group-launched casual tournament never generates matches 🔴 {#issue-31}
+
+**✅ Resolved** (2026-07-28, `97760ef`/`3d1ee25`): a group-launched casual tournament registered its
+In-voters, set `registration_closed`, and stopped — nothing called the round-robin/doubles-group
+generator, because its only reachable path (`START_GROUP_STAGE`) is organizer-authed and a group has
+no organizer. Per the settled framing — "a state transition with no decision behind it," not "social
+tournaments need an organizer" — the launch handler (`player-groups.ts`) and the auto-close processor
+(`auto-close-processor.ts`) now call group/match creation directly once at least 2 In-voters exist,
+skipping the ceremonial organizer transition entirely: the roster and format were already locked at
+poll close, so there is nothing left for an organizer to decide by the time the tournament exists.
+
+New integration coverage (`group-launch.spec.ts`, `auto-launch-hook.spec.ts`) plus a rewritten
+`casual-tournament.spec.ts` e2e scenario asserting real matches exist post-launch, replacing a
+version that intercepted the launch request with `page.route(...)` and asserted only that the call
+was made — which is why the original suite stayed green while this flow dead-ended in production.
 
