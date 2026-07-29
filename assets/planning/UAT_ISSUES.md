@@ -30,6 +30,7 @@ the ship order and what each shipped. Number new issues from where the archive e
 | [ISSUE-30](COMPLETED_UAT_ISSUES.md#issue-30) | ✅ Resolved | 🔴 | `/tournament/:id` redirects to a **literal** unsubstituted path — group launch's payoff step is broken | frontend |
 | [ISSUE-31](COMPLETED_UAT_ISSUES.md#issue-31) | ✅ Resolved | 🔴 | A group-launched casual tournament **never generates matches** — there is nothing to play | api |
 | [ISSUE-32](#issue-32) | 🔲 Open | 🟠 | SSE `/tournaments/:id/events` 403s for registered accounts — live updates dead for participants | api |
+| [ISSUE-33](#issue-33) | 🔲 Open | 🟠 | `tournaments.creator_id` is polymorphic — account id or player id by creation path | api · data |
 
 ---
 
@@ -130,11 +131,110 @@ confirm no 403 on `/tournaments/:id/events`.
 test must use a registered account**, not the existing fixture token, or it will pass against the
 broken code.
 
-**Also worth checking while here:** the same `if (playerPayload) … else assertOrganizerOwnsTournament`
-shape may appear on other routes. The follow-up list already flags `tournaments.ts` lines ~367, 930,
-1800, 1845, 1924, 2015 as calling `requirePlayerSessionAuth` directly with no fallback — grep for
-`assertOrganizerOwnsTournament` and check whether any of them compare `.sub` against a player-id
-column the same way. **Do not fix them in this issue**; list what you find so they can be triaged.
+### Audit of the other call sites — done 2026-07-29, results below
+
+All 17 `assertOrganizerOwnsTournament` sites were checked and the reachable ones tested live against
+a real group-launched tournament, signed in as the player who launched it.
+
+**The underlying defect is not the `if/else` shape — it is that `tournament.creator_id` is
+polymorphic:**
+
+| Creation path | `creator_id` holds | Set at |
+|---|---|---|
+| Organizer-created (`POST /tournaments`) | **account** id (`account_…`) | `tournaments.ts:259`, `creatorId: payload.sub` |
+| Group-launched (poll → casual) | **player** id (`player_…`) | `player-groups.ts:941`, `creatorId: session.playerId` |
+
+`assertOrganizerOwnsTournament` is `organizerPayload.sub !== tournamentOrganizerId` — an account id
+compared to a column that sometimes holds a player id. **Every ownership check against a
+group-launched tournament therefore fails, always.** It fails *closed* (denies), so this is a
+functionality defect and not a security hole — but no amount of per-route patching fixes the column.
+
+Compounding it: **`requireOrganizerAuth` does not check the role** (`auth/middleware.ts:~40` — it
+verifies the JWT and the logout denylist, nothing more), so any registered account passes it and
+reaches the ownership check. The name is misleading; it is effectively `requireAccountAuth`.
+
+**Verified broken — same defect, fix together with the events route:**
+
+| Route | Assert | Status |
+|---|---|---|
+| `GET /:id/events` | :2651 | **403** — user-visible, the symptom above |
+| `POST /:id/end-session` | :1832 | **403** — and it is a *casual-only* route (`mode !== 'casual'` → error), so a group-launched tournament can **never** be ended. No UI caller yet, so latent |
+| `GET /:id/groups` | :486 | **403** — not user-visible today; the frontend reads `/tournaments/:id/bundle` (`useTournament.ts:46`) instead |
+
+**Verified correct — use it as the reference implementation:**
+`PATCH /:id/matches/:matchId/score` (:674) is the one site that gets this right. It checks
+`orgPayload.role === 'organizer'` *and* falls through to `resolveTournamentPlayer` when the ownership
+assert throws. Tested live: returns `400 SCORE_INVALID` on a malformed score, i.e. **auth passed**.
+Copy this shape.
+
+**Not applicable to casual play** (organizer operations on organizer-created tournaments, left
+alone): `:287` advance, `:346` pairing-preview, `:370` POST groups, `:840` bracket/generate, `:957`
+PATCH bracket, `:1030` bracket/publish, `:1177` knockout score, `:1686` PATCH, `:1741` DELETE. Worth
+a second look only if a group is ever given rename/delete over its own casual tournament.
+
+**Scope call for the implementer:** fixing the three routes above by routing them through
+`resolveTournamentPlayer` is correct and sufficient for this issue. **The polymorphic `creator_id`
+column is the deeper problem and should be its own issue** — either split the column
+(`creator_account_id` / `creator_player_id`) or make ownership checks resolve both id spaces. Do not
+attempt that here.
+
+---
+
+## ISSUE-33 — `tournaments.creator_id` holds two different id types 🟠 {#issue-33}
+
+*Found 2026-07-29 during the [ISSUE-32](#issue-32) audit. This is the root cause underneath it.*
+
+### Symptom
+
+One column, two id namespaces, depending on how the tournament was created:
+
+| Creation path | `creator_id` holds | Set at |
+|---|---|---|
+| Organizer-created (`POST /tournaments`) | **account** id (`account_…`) | `tournaments.ts:259` |
+| Group-launched (poll → casual) | **player** id (`player_…`) | `player-groups.ts:941` |
+
+Any code comparing an authenticated identity against this column is therefore correct for one
+creation path and wrong for the other. `assertOrganizerOwnsTournament`
+(`auth/middleware.ts:66-73`) is a plain `!==`, so it silently denies every group-launched
+tournament — see ISSUE-32 for three routes where that surfaces.
+
+It fails **closed**, so this is a functionality defect rather than a security hole. The two id
+spaces use distinct prefixes, so a false *match* is not possible.
+
+### Why it is its own issue
+
+ISSUE-32 fixes the three affected routes by resolving through `resolveTournamentPlayer`, which is
+correct and sufficient there. But the column stays ambiguous, so the next ownership check written
+against it inherits the same bug. **Fixing routes does not fix the column.**
+
+### Fix — needs a decision
+
+1. **Split the column** — `creator_account_id` / `creator_player_id`, exactly one non-null. Most
+   explicit; needs a migration and a backfill that infers intent from the existing prefix.
+2. **Normalise on player id** — organizer-created tournaments store the organizer's linked
+   `player_id` too. Aligns with `MONETIZATION_DESIGN.md` §7.1 **O4** (every account is always a
+   player, organizer layered on top), which makes a player id the universal identity.
+3. **Resolve both spaces at the check** — leave the column, teach ownership checks to accept either.
+   Smallest change, keeps the ambiguity.
+
+**(2) is the most coherent with the direction already set by O4**, but it depends on that work
+landing, so sequence accordingly.
+
+**Do NOT backfill by guessing.** The prefix (`account_` vs `player_`) is a reliable discriminator
+today — use it explicitly and assert the result rather than inferring from creation date or mode.
+
+### Verify
+
+```bash
+SCRATCH=/tmp
+npm --workspace=packages/api exec -- jest \
+  --findRelatedTests packages/api/src/routes/tournaments.ts packages/api/src/auth/middleware.ts \
+  --bail > "$SCRATCH/api.log" 2>&1
+grep -E "Tests:|Suites:|✕" "$SCRATCH/api.log" | head -40
+```
+
+Confirm both creation paths still authorize their own creator, and that a group-launched tournament's
+launcher can now pass an ownership check — the case that is impossible today.
 
 ---
 
