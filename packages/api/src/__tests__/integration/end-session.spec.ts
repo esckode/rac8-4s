@@ -23,6 +23,7 @@ import { OrganizerFactory, PlayerFactory } from '../factories'
 import { TournamentRepository, PlayerRepository, GroupRepository } from '../../db'
 import { InMemoryTokenStore } from '../../auth/token-store'
 import { sweepIdleCasualTournaments } from '../../casual-idle-sweep'
+import { defaultAdultAttestation } from '../factories/player.factory'
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -269,6 +270,39 @@ describe('G4.6 end-session route and idle auto-archive sweep', () => {
       .set('Authorization', `Bearer ${orgToken}`)
 
     expect(res.status).toBe(400)
+  })
+
+  // ISSUE-32: group-launched tournaments store a PLAYER id in creator_id, not
+  // an account id (player-groups.ts:941) — assertOrganizerOwnsTournament
+  // compares an account id against it and always fails, so the launcher (or
+  // any other registered participant) could never end their own session.
+  it('POST /end-session on a group-launched tournament, called by a registered participant → 200 (ISSUE-32; 403 today)', async () => {
+    const playerRepo = new PlayerRepository(pool)
+    const email = `issue32-endsession-${uid()}@test.local`
+    const launcher = await playerRepo.findOrCreatePlayerByEmail(
+      email, 'Issue32 Launcher', undefined, undefined, defaultAdultAttestation()
+    )
+
+    // creator_id = a player id, matching the real group-launch shape.
+    const tournamentId = await createCasualTournament(pool, launcher.id)
+    await playerRepo.createRegistration(launcher.id, tournamentId)
+    const p2 = await registerPlayer(pool, tournamentId)
+
+    const groupRepo = new GroupRepository(pool)
+    await groupRepo.createGroups(tournamentId, 1, 1, [launcher.id, p2])
+    await pool.query(
+      `UPDATE public.group_matches SET status = 'completed', updated_at = now() WHERE tournament_id = $1`,
+      [tournamentId]
+    )
+
+    const { accessToken } = OrganizerFactory.playerRoleToken(jwtConfig, { email, playerId: launcher.id })
+
+    const res = await request(app)
+      .post(`/tournaments/${tournamentId}/end-session`)
+      .set('Authorization', `Bearer ${accessToken}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.status).toBe('completed')
   })
 
   // ── 6. Idle sweep: backdated tournament is swept ──────────────────────────

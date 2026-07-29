@@ -6,6 +6,7 @@ import { createTestApp, JwtConfig } from '../helpers/app'
 import { TournamentFactory, PlayerFactory, OrganizerFactory } from '../factories'
 import { InMemoryTokenStore } from '../../auth/token-store'
 import { generatePlayerSession } from '../../auth/magic-link'
+import { PlayerRepository } from '../../db'
 
 describe('Groups API', () => {
   let pool: Pool
@@ -281,6 +282,29 @@ describe('Groups API', () => {
       expect(res.status).toBe(200)
       expect(Array.isArray(res.body.groups)).toBe(true)
       expect(res.body.groups.length).toBe(0)
+    })
+
+    // ISSUE-32: group-launched tournaments store a PLAYER id in creator_id,
+    // not an account id, so assertOrganizerOwnsTournament always fails for a
+    // registered participant's account JWT there — even though every other
+    // test in this block already proves the organizer-created path is fine.
+    it('lets a registered participant list groups on a group-launched tournament → 200 (ISSUE-32; 403 today)', async () => {
+      const player = await PlayerFactory.create(pool)
+      // creator_id = a player id, matching the real group-launch shape
+      // (player-groups.ts:941) rather than an organizer-created tournament's.
+      const tournament = await TournamentFactory.create(pool, player.id)
+      await new PlayerRepository(pool).createRegistration(player.id, tournament.id)
+      const { accessToken } = OrganizerFactory.playerRoleToken(jwtConfig, {
+        email: player.email,
+        playerId: player.id,
+      })
+
+      const res = await request(app)
+        .get(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${accessToken}`)
+
+      expect(res.status).toBe(200)
+      expect(Array.isArray(res.body.groups)).toBe(true)
     })
   })
 
