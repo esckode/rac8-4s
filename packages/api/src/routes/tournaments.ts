@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
 import { TournamentRepository, PlayerRepository, GroupRepository, KnockoutRepository, AccountRepository, RegistrationRow, PlayerRow, GroupMatchRow, AgeAttestation, AgeAttestationRequiredError, UnderAgeError } from '../db'
 import { LeaderboardRepository } from '../repositories/leaderboard-repository'
+import { GroupRepository as PlayerGroupRepository } from '../repositories/group-repository'
 import {
   requireOrganizerAuth,
   assertOrganizerOwnsTournament,
@@ -15,6 +16,7 @@ import {
   TokenInvalidError,
   generatePartnerInviteToken,
   validatePartnerInviteToken,
+  type OrganizerPayload,
 } from '../auth'
 import { ForbiddenError, PlayerNotLinkedError } from '../auth/errors'
 import { TournamentStateMachine, type TournamentState, type TransitionAction } from '@core/state-machine'
@@ -92,6 +94,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
   const repo = new TournamentRepository(deps.db)
   const playerRepo = new PlayerRepository(deps.db)
   const groupRepo = new GroupRepository(deps.db)
+  const playerGroupRepo = new PlayerGroupRepository(deps.db as any)
   const knockoutRepo = new KnockoutRepository(deps.db)
   const accountRepo = new AccountRepository(deps.db)
   const conversationRepo = new ConversationRepository(deps.db as any)
@@ -199,6 +202,37 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
       return { playerId: account.playerId }
     }
+  }
+
+  // ISSUE-33: tournament.creator_id is polymorphic — an account id for an
+  // organizer-created tournament (group_id IS NULL), a player id for a
+  // group-launched one (group_id IS NOT NULL). Comparing an account id
+  // against a player-id column always fails, so a group-launched
+  // tournament's ownership check must branch on group_id instead:
+  // ownership there is GROUP MEMBERSHIP (owner decision: any member
+  // passes), not creator identity. Checked before the organizer-role
+  // branch since membership grants access regardless of role or of
+  // being a registered participant — the case resolveTournamentPlayer's
+  // registration check cannot grant (e.g. a member who joined the group
+  // after the tournament launched).
+  async function assertTournamentAccess(
+    authHeader: string | undefined,
+    tournamentId: string,
+    payload: OrganizerPayload,
+    tournament: { creator_id: string; group_id?: string | null }
+  ): Promise<string | undefined> {
+    if (tournament.group_id && payload.playerId) {
+      const role = await playerGroupRepo.getMemberRole(deps.db, tournament.group_id, payload.playerId)
+      if (role !== null) {
+        return payload.playerId
+      }
+    }
+    if (payload.role === 'organizer') {
+      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+      return undefined
+    }
+    const resolved = await resolveTournamentPlayer(authHeader, tournamentId)
+    return resolved.playerId
   }
 
   // ISSUE-16: like resolveTournamentPlayer, but for the one caller where the
@@ -483,15 +517,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
       }
 
-      // ISSUE-32: an account JWT is not necessarily an organizer — a
-      // registered player's account JWT also passes requireOrganizerAuth
-      // (it does not check role). Only an organizer-role token is held to
-      // ownership; anything else must be a registered participant instead.
-      if (payload.role === 'organizer') {
-        assertOrganizerOwnsTournament(payload, tournament.creator_id)
-      } else {
-        await resolveTournamentPlayer(req.headers.authorization, id)
-      }
+      // ISSUE-32/33: an account JWT is not necessarily an organizer, and
+      // ownership itself is polymorphic — see assertTournamentAccess.
+      await assertTournamentAccess(req.headers.authorization, id, payload, tournament)
 
       const groups = await groupRepo.findGroupsByTournament(id)
 
@@ -1837,14 +1865,8 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
       }
 
-      // ISSUE-32: same dual-auth gap as GET /:id/groups above — an account
-      // JWT that is not organizer-role must be verified as a registered
-      // participant instead of held to ownership it was never meant to have.
-      if (payload.role === 'organizer') {
-        assertOrganizerOwnsTournament(payload, tournament.creator_id)
-      } else {
-        await resolveTournamentPlayer(req.headers.authorization, tournamentId)
-      }
+      // ISSUE-32/33: same gap as GET /:id/groups above — see assertTournamentAccess.
+      await assertTournamentAccess(req.headers.authorization, tournamentId, payload, tournament)
 
       if (tournament.mode !== 'casual') {
         return res.status(400).json({ code: 'NOT_CASUAL', message: 'end-session is only available for casual tournaments' })
@@ -2659,19 +2681,14 @@ export default function tournamentsRouter(deps: AppDependencies) {
     }
 
     // Phase 2: verify tournament membership. An account JWT is not
-    // necessarily an organizer — requireOrganizerAuth does not check role,
-    // so a registered player's account JWT reaches here too (ISSUE-32).
-    // Only an organizer-role token is held to ownership; anything else must
-    // be a registered participant instead.
+    // necessarily an organizer, and ownership itself is polymorphic — see
+    // assertTournamentAccess (ISSUE-32/33).
     let actingPlayerId: string | undefined
     try {
       if (playerPayload) {
         assertPlayerInTournament(playerPayload, tournamentId)
-      } else if (organizerPayload.role === 'organizer') {
-        assertOrganizerOwnsTournament(organizerPayload, tournament.creator_id)
       } else {
-        const resolved = await resolveTournamentPlayer(authHeader, tournamentId)
-        actingPlayerId = resolved.playerId
+        actingPlayerId = await assertTournamentAccess(authHeader, tournamentId, organizerPayload, tournament)
       }
     } catch (err) {
       if (err instanceof PlayerNotLinkedError) {
