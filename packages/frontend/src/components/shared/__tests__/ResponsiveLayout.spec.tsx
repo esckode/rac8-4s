@@ -1,12 +1,23 @@
 /// <reference types="@testing-library/jest-dom" />
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '../../../hooks/useAuth'
 import { ResponsiveLayout } from '../ResponsiveLayout'
 
 const mockFetch = jest.fn()
 global.fetch = mockFetch
+
+// Plain codepoint scan rather than a Unicode regex range — avoids the
+// security/detect-unsafe-regex false positive on \u{1F300}-\u{1FAFF} ranges.
+function containsEmoji(text: string | null): boolean {
+  if (!text) return false
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0
+    if ((cp >= 0x1f300 && cp <= 0x1faff) || (cp >= 0x2600 && cp <= 0x27bf)) return true
+  }
+  return false
+}
 
 function meResponse() {
   return {
@@ -108,6 +119,27 @@ describe('ResponsiveLayout', () => {
     // TopNav is desktop-only; at least one "Groups" link should exist
     const groupLinks = screen.getAllByRole('link', { name: /groups/i })
     expect(groupLinks.some(l => l.getAttribute('href') === '/groups')).toBe(true)
+  })
+
+  // ISSUE-27: the More menu (Account/Organizer Dashboard/Settings/About) and
+  // Sign out used emoji, which cannot be recoloured and render differently
+  // per platform — replaced with hand-rolled SVGs.
+  it('renders SVG icons (not emoji text) for the More menu items and Sign out', async () => {
+    await renderAuthenticated(
+      <ResponsiveLayout showNav>
+        <div>Content</div>
+      </ResponsiveLayout>
+    )
+
+    const moreButton = screen.getByRole('button', { name: 'More' })
+    moreButton.click()
+
+    const dialog = await screen.findByRole('dialog', { name: 'More options' })
+    for (const label of ['Account', 'Settings', 'About', 'Sign out']) {
+      const item = within(dialog).getByText(label).closest('button') as HTMLElement
+      expect(item.querySelector('svg')).toBeInTheDocument()
+      expect(containsEmoji(item.textContent)).toBe(false)
+    }
   })
 
   it('has a profile link in the header (Player Personalization P0)', () => {

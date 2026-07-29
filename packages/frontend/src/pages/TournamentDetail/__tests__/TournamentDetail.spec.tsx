@@ -9,6 +9,17 @@ import { TournamentDetail } from '../index'
 const mockFetch = jest.fn()
 global.fetch = mockFetch as any
 
+// Plain codepoint scan rather than a Unicode regex range — avoids the
+// security/detect-unsafe-regex false positive on \u{1F300}-\u{1FAFF} ranges.
+function containsEmoji(text: string | null): boolean {
+  if (!text) return false
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0
+    if ((cp >= 0x1f300 && cp <= 0x1faff) || (cp >= 0x2600 && cp <= 0x27bf)) return true
+  }
+  return false
+}
+
 // Mock ReconnectingEventSource
 jest.mock('reconnecting-eventsource', () => {
   return jest.fn(() => ({
@@ -154,6 +165,19 @@ describe('TournamentDetail', () => {
     expect(matchesElements.length).toBeGreaterThan(0)
     expect(bracketElements.length).toBeGreaterThan(0)
     expect(detailsElements.length).toBeGreaterThan(0)
+  })
+
+  // ISSUE-27: tab icons were emoji, which cannot be recoloured for the
+  // active/inactive tab state — replaced with hand-rolled SVGs.
+  it('renders an SVG icon (not emoji text) for every tab', () => {
+    window.history.pushState({}, 'Test', '/tournament/tournament-1/standings')
+    renderWithRouter(<TournamentDetail />)
+
+    for (const tabId of ['standings', 'matches', 'bracket', 'details', 'messages']) {
+      const tab = screen.getByTestId(`tab-${tabId}`)
+      expect(tab.querySelector('svg')).toBeInTheDocument()
+      expect(containsEmoji(tab.textContent)).toBe(false)
+    }
   })
 
   it('renders back button', () => {
