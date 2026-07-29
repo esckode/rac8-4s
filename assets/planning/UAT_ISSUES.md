@@ -17,8 +17,9 @@ ISSUE-1–21 and the 2026-07-26/27 walkthrough batch (ISSUE-22–31) are all res
 [the walkthrough-queue summary](COMPLETED_UAT_ISSUES.md#walkthrough-queue-2) for the ship order and
 what each shipped. **Open: [ISSUE-32](#issue-32) and [ISSUE-33](#issue-33)**, both found on
 2026-07-29 while verifying that batch — 32 is the user-visible symptom, 33 the data-model cause
-underneath it. Both are implementable; 33 carries one narrow owner call, flagged in place. Number
-new issues from 34.
+underneath it. **Both are fully decided and implementable** — no open questions remain in either.
+32 is independent; 33 supersedes the workaround 32 applies, so 32 first, then 33. Number new issues
+from 34.
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
