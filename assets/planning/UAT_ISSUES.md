@@ -278,20 +278,48 @@ waiting to happen that the current design has simply not hit yet.
 accept either namespace — are all superseded by this. Normalising on player id would additionally
 have depended on `MONETIZATION_DESIGN.md` §7.1 O4, which is not built.)*
 
-**⚠ One narrow product call for the owner — everything else is decided.** For a group-owned
-tournament, *which* members pass the ownership check?
+**Owner decision 2026-07-29: any group member passes.** Not owners-only, not launcher-only — a casual
+session is a small trust-based group, and the app already reserves owner-gating for the things that
+genuinely need it (moderation, member management).
 
-- **Group owners plus the launcher** *(recommended)* — mirrors the existing split, where launching is
-  creator-gated (`player-groups.ts:909`) and moderation is owner-gated.
-- Any group member — simplest, and defensible for a casual social session.
-- The launcher only — closest to today, but reintroduces the leaves-the-group problem.
+It is also the simplest check to write and the least to go wrong: one membership lookup, no role
+comparison, no launcher identity to carry. Use the same helper the poll routes use —
+`groupRepo.getMemberRole(db, groupId, playerId)`, treating any non-`null` as a pass
+(`player-groups.ts:~854` is the existing precedent).
 
-This affects `end-session` and little else; the events/groups reads could reasonably allow any
-member. **Pick one before implementing**, but it does not block the rest of the design.
+```
+group_id IS NOT NULL  →  getMemberRole(db, tournament.group_id, callerPlayerId) !== null
+```
+
+*Consequence, accepted:* any member can end a casual session, including one others are mid-way
+through. That is the trade for simplicity in a group where everyone already shares a chat.
 
 **Do NOT re-derive the namespace from the id prefix** (`account_` vs `player_`) even though it works
 today. `group_id` is a real, indexed column expressing the actual relationship; string-prefix
 sniffing is an accident of the id format that will break the day id generation changes.
+
+### Fix — TDD (CLAUDE.md §4, commit red separately per §11)
+
+**Red:** an integration test matrix over the two creation paths, since the whole point is that one
+column behaves differently in each:
+
+| Tournament | Caller | Expected |
+|---|---|---|
+| organizer-created (`group_id IS NULL`) | its creator (account) | ✅ pass — must not regress |
+| organizer-created | an unrelated account | ❌ deny |
+| group-launched (`group_id` set) | a group member | ✅ pass — **impossible today** |
+| group-launched | the launcher specifically | ✅ pass (a member by definition) |
+| group-launched | a non-member account | ❌ deny |
+
+The last row matters: widening to "any member" must not widen to "anyone".
+
+**Green:** branch `assertOrganizerOwnsTournament`'s callers on `group_id` as above. Prefer changing
+the **call sites' shared helper** over the assert itself — the assert is a pure two-string comparison
+used correctly by the organizer path, and it has no DB access to look up membership with.
+
+**Do NOT** widen the existing assert to "accept either namespace" — that was a rejected earlier
+approach and it would let an account id match a player id column by coincidence of value rather than
+by relationship.
 
 ### Verify
 
@@ -303,11 +331,14 @@ npm --workspace=packages/api exec -- jest \
 grep -E "Tests:|Suites:|✕" "$SCRATCH/api.log" | head -40
 ```
 
-Confirm both creation paths still authorize their own creator, and that a group-launched tournament's
-launcher can now pass an ownership check — the case that is impossible today.
+Expect a wide selection — §11 notes api specs import the express app, so touching an auth helper
+pulls in most of the suite. That is the correct answer, not a slow one.
+
+Manual, against a real group-launched tournament (the ISSUE-31 Verify block has the API sequence to
+create one): as a group member who is **not** the launcher, confirm `POST /:id/end-session` succeeds
+where it returns 403 today, and that a non-member still gets 403.
 
 ---
-
 ## Not yet triaged / follow-ups
 
 - **`POST /api/analytics/events` returns 401 for a registered player** — confirmed live 2026-07-27,
