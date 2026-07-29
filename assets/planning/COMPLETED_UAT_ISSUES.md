@@ -33,6 +33,7 @@ including follow-ups these issues surfaced — lives in `UAT_ISSUES.md`.
 | [ISSUE-21](#issue-21) | 🔴 | An invite nobody answered becomes a real team at group creation | api · data |
 | [ISSUE-22](#issue-22) | 🟡 | Login greets guests with "Welcome back."; page titles/descriptions end in full stops | frontend · copy |
 | [ISSUE-23](#issue-23) | 🟠 | Auth pages hardcode a 390×844 phone frame — clipped below 390, gutters above | frontend · layout |
+| [ISSUE-24](#issue-24) | 🟠 | An account with no linked player gets `TOKEN_INVALID` + "sign in again" — an unbreakable loop | api + frontend |
 | [ISSUE-25](#issue-25) | 🟡 | `seed-test-accounts.ts` creates accounts with no linked player — every seeded login hits ISSUE-24 | scripts · dev |
 | [ISSUE-26](#issue-26) | 🟠 | Bottom nav labels clip off-screen at every phone width (6 items don't fit under ~444px) | frontend · layout |
 | [ISSUE-28](#issue-28) | 🟠 | Nav: collapse Standings + Matches into one "Play" hub; four items | frontend + api |
@@ -1507,11 +1508,12 @@ outcomes.
 
 ## 2026-07-26/27 local walkthrough queue (ISSUE-22 – ISSUE-31) {#walkthrough-queue-2}
 
-**All eight resolved 2026-07-28, branch-per-issue, fast-forwarded to `main` in the prescribed
-order** from `UAT_ISSUES.md`'s "Before you start" table: **31 → 30 → {22, 25} → 28 → 26 → 23 → 29**.
-ISSUE-24 and ISSUE-27 remain open — see `UAT_ISSUES.md`. 31 and 30 shipped first because group
+**Nine of ten resolved 2026-07-28/29, branch-per-issue, fast-forwarded to `main` in the prescribed
+order** from `UAT_ISSUES.md`'s "Before you start" table: **31 → 30 → {22, 25} → 28 → 26 → 23 → 29 →
+24**. Only ISSUE-27 remains open — see `UAT_ISSUES.md`. 31 and 30 shipped first because group
 launch is the product and its payoff step was broken; 28 unblocked 26 (its geometry guard asserts
-28's four-item nav) and 29 (`/play` is where 29's two broken redirects point).
+28's four-item nav) and 29 (`/play` is where 29's two broken redirects point); 24 shipped any time
+before an organizer-grant route, per its own severity note.
 
 ## ISSUE-22 — Login greets guests with "Welcome back."; page titles/descriptions end in full stops 🟡 {#issue-22}
 
@@ -1541,6 +1543,30 @@ Verification surfaced one unrelated bug, fixed in the same change: `Signup.tsx`'
 button lost focus mid-click under Playwright's coordinate-based click — a validation error appearing
 mid-interaction shifted the DOM between `mousedown` and `mouseup`, so they landed on different
 elements. Fixed with `onMouseDown={(e) => e.preventDefault()}`.
+
+---
+
+## ISSUE-24 — An account with no linked player gets `TOKEN_INVALID` + "sign in again" 🟠 {#issue-24}
+
+**✅ Resolved** (2026-07-29, `57f1449`/`c1ac844`): a new `PlayerNotLinkedError` (403
+`PLAYER_NOT_LINKED`) replaces the reused `TOKEN_INVALID` in all four dual-auth resolvers that fall
+back from a magic-link session to an account JWT and then check for a linked `playerId` —
+`resolvePlayerId` (`player.ts`) and `resolveTournamentPlayer` (`tournaments.ts`), both named in the
+original report, plus two the report missed: `resolveConfirmingPlayer` (`tournaments.ts`, backing
+the partner-confirm route) and `resolvePlayerSession` (`player-groups.ts`, backing `/player/groups` —
+the exact `/groups` symptom the report's own repro described). All four share the identical
+`if (!account.playerId) { throw sessionErr }` shape; fixing only the two named resolvers would have
+left the confirm-partner and groups pages still looping.
+
+Frontend: a shared `PLAYER_NOT_LINKED_MESSAGE` constant ("This account isn't set up to play yet.")
+reused at all five copy sites (`MyGroups`, `PartnerRequestConfirm`, `ScoreSubmitForm`,
+`PartnerFinder` ×2) instead of five near-duplicate strings, deliberately without a "sign in again"
+action. `useGroupList` gained a `playerNotLinked` flag alongside its existing `unauthorized` one,
+since a 403 here doesn't hit its old `res.status === 401` check. Manual verification via the seeded
+`organizer@test.com` account (as the issue specified) turned out moot — ISSUE-25's fix plus a reseed
+had already linked that account by the time this shipped, which is itself confirmation ISSUE-25
+landed; the unlinked-account path is instead covered deterministically by an integration spec minting
+a JWT with no `playerId`.
 
 ---
 

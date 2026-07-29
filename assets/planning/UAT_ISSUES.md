@@ -11,20 +11,20 @@ Severity: 🔴 blocks a user-facing feature · 🟠 real defect, limited blast r
 
 ## Before you start
 
-**Only two issues remain open: 24 and 27.** ISSUE-22, 23, 25, 26, 28, 29, 30 and 31 are resolved —
-see [the walkthrough-queue summary](COMPLETED_UAT_ISSUES.md#walkthrough-queue-2) for the ship order
-and what each shipped. **24 any time**, but before the organizer-grant route exists. **27 needs
-28's final four-item tab set before drawing icons** — 28 is done, so 27 is unblocked.
+**Only one issue remains open: 27.** ISSUE-22, 23, 24, 25, 26, 28, 29, 30 and 31 are resolved — see
+[the walkthrough-queue summary](COMPLETED_UAT_ISSUES.md#walkthrough-queue-2) for the ship order and
+what each shipped. **27 needs 28's final four-item tab set before drawing icons** — 28 is done, so
+27 is unblocked.
 
 **Servers.** API 3001, frontend 5173, Postgres/Redis via Docker, **plus
 `npm run dev:worker --workspace=packages/api`** for anything touching assistant/coach/nudge or the
 auto-launch path (§8). `node scripts/e2e-setup.js` checks all of it.
 
-**⚠ Do not test with the seeded accounts.** `organizer@test.com` / `player@test.com` have
-`player_id = NULL` and hit [ISSUE-24](#issue-24)'s loop on every player-scoped page — you will think
-you broke something. `npm run seed:accounts` now links a player correctly (ISSUE-25, resolved), but
-any *pre-existing* seeded row in a developer's DB predates that fix and needs re-seeding. **Sign up a
-fresh account instead** if in doubt; real signup always links a player. Signup needs
+**Seeded accounts should now work out of the box.** `npm run seed:accounts` links a player correctly
+(ISSUE-25, resolved), and an account that somehow still has no linked player gets a clear
+`PLAYER_NOT_LINKED` message instead of an unbreakable re-auth loop (ISSUE-24, resolved). If
+`organizer@test.com` / `player@test.com` still misbehave, the row predates both fixes — re-seed, or
+**sign up a fresh account instead**; real signup always links a player. Signup needs
 `dob_attestation: { dateOfBirth: 'YYYY-MM-DD', policyVersion: '1.0' }` or it 400s on the age gate.
 
 **⚠ The full e2e sweep cannot pass as configured** — ~142 failures from `RATE_LIMITED`, documented in
@@ -44,16 +44,16 @@ editing the gate to hide a regression.
 chain and is how every geometry number in 23/26/28 was measured. Re-measure with it rather than
 eyeballing screenshots.
 
-**ISSUE-1 – ISSUE-21, and now ISSUE-22, 23, 25, 26, 28, 29, 30 and 31, are all resolved and have been
-moved, index and bodies, to [`COMPLETED_UAT_ISSUES.md`](./COMPLETED_UAT_ISSUES.md)** (CLAUDE.md §12
-— working the open queue shouldn't cost a read of every closed issue). This file carries only open
-work (ISSUE-24, ISSUE-27) plus the follow-ups below. Number new issues from where the archive ends.
+**ISSUE-1 – ISSUE-21, and now ISSUE-22, 23, 24, 25, 26, 28, 29, 30 and 31, are all resolved and have
+been moved, index and bodies, to [`COMPLETED_UAT_ISSUES.md`](./COMPLETED_UAT_ISSUES.md)** (CLAUDE.md
+§12 — working the open queue shouldn't cost a read of every closed issue). This file carries only
+open work (ISSUE-27) plus the follow-ups below. Number new issues from where the archive ends.
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
 | [ISSUE-22](COMPLETED_UAT_ISSUES.md#issue-22) | ✅ Resolved | 🟡 | Login greets guests with "Welcome back."; page titles/descriptions end in full stops | frontend · copy |
 | [ISSUE-23](COMPLETED_UAT_ISSUES.md#issue-23) | ✅ Resolved | 🟠 | Auth pages hardcode a 390×844 phone frame — clipped below 390, gutters above | frontend · layout |
-| [ISSUE-24](#issue-24) | 🔲 Open | 🟡→🟠 | An account with no linked player gets `TOKEN_INVALID` + "sign in again" — an unbreakable loop (🟡 today, 🟠 once organizers can be created) | api + frontend |
+| [ISSUE-24](COMPLETED_UAT_ISSUES.md#issue-24) | ✅ Resolved | 🟠 | An account with no linked player gets `TOKEN_INVALID` + "sign in again" — an unbreakable loop | api + frontend |
 | [ISSUE-25](COMPLETED_UAT_ISSUES.md#issue-25) | ✅ Resolved | 🟡 | `seed-test-accounts.ts` creates accounts with no linked player — every seeded login hits ISSUE-24 | scripts · dev |
 | [ISSUE-26](COMPLETED_UAT_ISSUES.md#issue-26) | ✅ Resolved | 🟠 | Bottom nav labels clip off-screen at every phone width (6 items don't fit under ~444px) | frontend · layout |
 | [ISSUE-27](#issue-27) | 🔲 Open | 🟡 | Dark entry vs light app is intentional — document the boundary; replace the emoji icons | frontend · design |
@@ -61,160 +61,6 @@ work (ISSUE-24, ISSUE-27) plus the follow-ups below. Number new issues from wher
 | [ISSUE-29](COMPLETED_UAT_ISSUES.md#issue-29) | ✅ Resolved | 🟠 | Temporarily block public browse + public registration; keep both invite paths working | frontend + api |
 | [ISSUE-30](COMPLETED_UAT_ISSUES.md#issue-30) | ✅ Resolved | 🔴 | `/tournament/:id` redirects to a **literal** unsubstituted path — group launch's payoff step is broken | frontend |
 | [ISSUE-31](COMPLETED_UAT_ISSUES.md#issue-31) | ✅ Resolved | 🔴 | A group-launched casual tournament **never generates matches** — there is nothing to play | api |
-
----
-
-## ISSUE-24 — An account with no linked player gets `TOKEN_INVALID` + "sign in again" 🟠 {#issue-24}
-
-*Found during the 2026-07-26 local walkthrough.*
-
-### Symptom
-
-Signed in with a valid account, every player-scoped page fails: `/standings` and `/matches` show
-"Failed to load your tournaments", `/notifications` shows "Failed to load notifications", `/groups`
-shows **"You need to sign in again."** with a Sign in button.
-
-**Signing in again cannot fix it.** The token is valid and the session is real — measured against a
-live login as `player@test.com`:
-
-```
-GET /api/auth/me        → 200   (token valid; body includes "playerId": null)
-GET /player/tournaments → 401   {"code":"TOKEN_INVALID", ...}
-GET /player/groups      → 401   {"code":"TOKEN_INVALID", ...}
-```
-
-So the user is told their session expired, sent to re-authenticate, and lands right back in the same
-state — indefinitely.
-
-### Root cause
-
-`packages/api/src/routes/player.ts:16-30`, `resolvePlayerId()`. It tries the guest magic-link session
-first, then falls back to the account JWT:
-
-```ts
-const session = await requirePlayerSessionAuth(authHeader, deps.tokenStore)  // throws for account JWTs
-return session.playerId
-// …fallback:
-if (account.playerId) { return account.playerId }
-```
-
-When the account resolves but `account.playerId` is **null**, neither branch returns, and what
-propagates is the *session* path's error — `TOKEN_INVALID`. The dual-auth shim itself is correct;
-the failure mode is that "this account has no linked player identity" is reported using the error
-code for "your token is bad." The frontend then renders its generic re-authentication prompt,
-because that is the correct response to `TOKEN_INVALID` — it is being told the wrong thing.
-
-**⚠ The same bug exists in a second resolver** (`tournaments.ts:175`, `resolveTournamentPlayer`) —
-found 2026-07-27, and easy to miss because the issue originally named only `player.ts`:
-
-```ts
-if (!account.playerId) {
-  throw sessionErr        // rethrows the SESSION error → TOKEN_INVALID
-}
-```
-
-**Fix both resolvers.** Fixing only `player.ts` makes `/player/*` correct while every tournament-
-scoped route keeps looping, and the tests would still pass.
-
-**Two defects, fix both layers:** the wrong error code in the API, and a frontend prompt that offers
-an action which provably cannot resolve the state.
-
-**The frontend copy lives in five places**, not one — all must be handled, or the loop simply
-reappears elsewhere:
-
-| File | Line |
-|---|---|
-| `pages/MyGroups.tsx` | 152 |
-| `pages/PartnerRequestConfirm.tsx` | 38 |
-| `components/ScoreSubmitForm.tsx` | 84 |
-| `components/PartnerFinder.tsx` | 86, 104 |
-
-Each currently says some variant of "You need to sign in again". They are correct responses to a
-genuine `TOKEN_INVALID`; they must stay correct for that case and only change behaviour for the new
-code.
-
-### Reachability — verify this FIRST, it sets the severity
-
-In production the only account-creation path is signup (`auth.ts:168`), which links a durable player
-immediately before it (`auth.ts:143-153`, `findOrCreatePlayerByEmail`). So a normally-signed-up
-player cannot reach this. The other three `accountRepo.create` call sites are all scripts —
-`seed-test-accounts.ts:35`, `seed-admin.ts:45`, `seed-tournaments.ts:105`.
-
-**Resolved 2026-07-27 by the organizer-tier grill** (`MONETIZATION_DESIGN.md` §7.1). `auth.ts:168`
-hardcodes role `'player'`, so organizers cannot be created through signup — and **no other
-production path exists**, so today this is unreachable outside seed data. That makes it **🟡 in
-practice right now**.
-
-**But it becomes 🟠 the moment the organizer-grant route is built**, which the beta requires. An
-organizer who signs in and taps Standings or Matches — both in the bottom nav for any authenticated
-user — lands straight in this loop. `organizer@test.com` reproduces it today.
-
-**Therefore: fix this before or alongside the organizer-grant route, never after.** The grill's O4
-already commits to the shape that prevents it — every account is always a player, with organizer
-layered on top rather than an exclusive role — so building the grant route on the current exclusive
-`role` column would ship this defect deliberately.
-
-*(Verified 2026-07-27: real signup does populate `playerId` — a live `POST /api/auth/signup` returned
-one — confirming the null-`player_id` accounts come from seeding, not from any user-reachable flow.
-See [ISSUE-25](COMPLETED_UAT_ISSUES.md#issue-25).)*
-
-### Fix — TDD (CLAUDE.md §4, commit red separately per §11)
-
-**Red:** an integration test in `packages/api/src/__tests__` asserting that an account JWT whose
-`playerId` is null gets a **distinct, accurate** error from `/player/tournaments` — not
-`TOKEN_INVALID`. Add a frontend test that this new code renders a message which does *not* offer
-re-authentication as the remedy.
-
-**Green:** give **both** `resolvePlayerId` (`player.ts:16-30`) and `resolveTournamentPlayer`
-(`tournaments.ts:175`) an explicit branch for "authenticated, but no linked player", returning
-**`403 PLAYER_NOT_LINKED`** — that is the decided code, not a suggestion. Map it in the frontend at
-all five copy sites listed above.
-
-**The copy — one shared constant, reused at all five sites** *(settled 2026-07-27)*:
-
-> **This account isn't set up to play yet.**
-
-Deliberately **no "contact support" clause**: verified 2026-07-27 that the app has *no* support
-destination anywhere — no `mailto:`, no `support@`, no `/support` route — so the phrase would point
-nowhere. (`ServiceUnavailable.tsx:14` already makes that empty promise; see the follow-up.)
-
-One string, not five variants: all five sites describe the same underlying state, so per-context
-wording would add words without adding information. Note this is a body/error message, so per
-[ISSUE-22](COMPLETED_UAT_ISSUES.md#issue-22) it **keeps** its full stop — that convention covers titles and descriptions
-only.
-
-**Do NOT fix this by having either resolver auto-create a player record** — that silently mints
-identities from any authenticated request and bypasses the age-attestation path in `auth.ts:143-153`.
-
-**Do NOT change the existing `TOKEN_INVALID` copy for real token failures.** Those five messages are
-correct when the token genuinely is invalid; only the new code gets new copy.
-
-Per §9, any user-visible message change here must update `docs/assistant-help.md` in the same change.
-
-### Verify
-
-```bash
-SCRATCH=/tmp   # or the session scratchpad
-npm --workspace=packages/api exec -- jest \
-  --findRelatedTests $(git diff --name-only main...HEAD -- 'packages/api/src/**') \
-  --bail > "$SCRATCH/api.log" 2>&1
-grep -E "Tests:|Suites:|✕" "$SCRATCH/api.log" | head -40
-
-npm --workspace=packages/frontend exec -- jest \
-  --findRelatedTests $(git diff --name-only main...HEAD -- 'packages/frontend/src/**') \
-  --bail > "$SCRATCH/fe.log" 2>&1
-grep -E "Tests:|Suites:|✕" "$SCRATCH/fe.log" | head -40
-```
-
-**Expect the api selection to be wide** — §11 warns that api specs import the express app, so
-touching a route resolver pulls in most of the suite. That is the correct answer, not a slow one.
-
-E2E, by the five copy sites (§11 — selection is by user-facing flow):
-`npx playwright test partner-requests player-groups group-stage-singles-score --project=chromium --reporter=line --max-failures=1`
-
-**Manual check that the loop is actually gone:** sign in as `organizer@test.com` / `testpass123`
-(unlinked by construction, see [ISSUE-25](COMPLETED_UAT_ISSUES.md#issue-25)) and open `/groups` — it must explain the real
-problem, not offer a Sign in button.
 
 ---
 
@@ -349,7 +195,7 @@ emoji span (`ResponsiveLayout.tsx:~197,~215`), so the replacement must preserve 
   401 and no analytics are recorded for account holders.
 - **The app has no support destination.** No `mailto:`, no `support@`, no `/support` route anywhere
   (verified 2026-07-27). `ServiceUnavailable.tsx:14` already tells users to "contact support" with
-  nowhere to go, and [ISSUE-24](#issue-24) had to drop the same phrase from its copy for this reason.
+  nowhere to go, and [ISSUE-24](COMPLETED_UAT_ISSUES.md#issue-24) had to drop the same phrase from its copy for this reason.
   Either add a real destination or stop promising one — small, but it is currently a dead end at
   exactly the moments a user is already stuck.
 - **Auth page titles are not headings.** `Login.tsx:186` renders its title as a styled `<div>`,
