@@ -6,6 +6,19 @@ import { useNotificationUnread } from '../../hooks/useNotificationUnread'
 import { usePendingActions } from '../../hooks/usePendingActions'
 import { useAppConfig } from '../../context/AppConfigContext'
 import { MyGroupsUnreadBadge } from '../GroupChatPanel'
+import {
+  TrophyIcon,
+  TennisBallIcon,
+  UsersIcon,
+  BellIcon,
+  KeyIcon,
+  UserIcon,
+  BuildingIcon,
+  SettingsIcon,
+  InfoIcon,
+  LogOutIcon,
+  type IconProps,
+} from './icons'
 import '../../styles/globals.css'
 
 export interface ResponsiveLayoutProps {
@@ -30,11 +43,16 @@ const NavCountBadge: React.FC<{ count: number; testId: string; corner?: 'top' | 
   )
 }
 
-const MORE_ITEMS = [
-  { label: 'Account', icon: '👤', path: '/account' },
-  { label: 'Organizer Dashboard', icon: '🏟️', path: '/organizer', organizerOnly: true },
-  { label: 'Settings', icon: '⚙️', path: '/settings' },
-  { label: 'About', icon: 'ℹ️', path: '/about' },
+const MORE_ITEMS: Array<{
+  label: string
+  Icon: React.FC<IconProps>
+  path: string
+  organizerOnly?: boolean
+}> = [
+  { label: 'Account', Icon: UserIcon, path: '/account' },
+  { label: 'Organizer Dashboard', Icon: BuildingIcon, path: '/organizer', organizerOnly: true },
+  { label: 'Settings', Icon: SettingsIcon, path: '/settings' },
+  { label: 'About', Icon: InfoIcon, path: '/about' },
 ]
 
 const MoreSheet: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
@@ -97,7 +115,9 @@ const MoreSheet: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen,
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--ink-50)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}
           >
-            <span style={{ fontSize: 20, width: 28, textAlign: 'center' }}>{item.icon}</span>
+            <span style={{ display: 'inline-flex', width: 28, justifyContent: 'center' }}>
+              <item.Icon size={20} />
+            </span>
             <span style={{ fontWeight: 500 }}>{item.label}</span>
           </button>
         ))}
@@ -116,7 +136,9 @@ const MoreSheet: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen,
           onMouseEnter={e => (e.currentTarget.style.background = 'var(--ink-50)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'none')}
         >
-          <span style={{ fontSize: 20, width: 28, textAlign: 'center' }}>🚪</span>
+          <span style={{ display: 'inline-flex', width: 28, justifyContent: 'center' }}>
+            <LogOutIcon size={20} />
+          </span>
           <span style={{ fontWeight: 500 }}>Sign out</span>
         </button>
 
@@ -141,10 +163,10 @@ const BottomNav = () => {
   // testid kept as 'nav-browse' so it's ready to reappear unchanged if the
   // flag is ever flipped back on.
   const tabs = publicDiscoveryEnabled
-    ? [{ path: '/browse', label: 'Browse', icon: '🏆', testId: 'nav-browse' }]
+    ? [{ path: '/browse', label: 'Browse', Icon: TrophyIcon, testId: 'nav-browse' }]
     : []
   const authOnlyTabs = [
-    { path: '/play', label: 'Play', icon: '🎾', testId: 'nav-play' },
+    { path: '/play', label: 'Play', Icon: TennisBallIcon, testId: 'nav-play' },
   ]
 
   return (
@@ -159,7 +181,7 @@ const BottomNav = () => {
             aria-current={isActive(tab.path) ? 'page' : undefined}
           >
             <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
-              {tab.icon}
+              <tab.Icon size={20} />
             </span>
             <span>{tab.label}</span>
           </a>
@@ -173,7 +195,7 @@ const BottomNav = () => {
             aria-current={isActive(tab.path) ? 'page' : undefined}
           >
             <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
-              {tab.icon}
+              <tab.Icon size={20} />
               {tab.testId === 'nav-play' && (
                 <NavCountBadge count={pendingActions.unscoredMatches.length} testId="nav-badge-matches" />
               )}
@@ -188,7 +210,7 @@ const BottomNav = () => {
             className={`responsive-bottom-nav-item ${isActive('/login') ? 'active' : ''}`}
             aria-current={isActive('/login') ? 'page' : undefined}
           >
-            <span aria-hidden="true">🔑</span>
+            <span aria-hidden="true"><KeyIcon size={20} /></span>
             <span>Sign in / Register</span>
           </a>
         )}
@@ -200,7 +222,7 @@ const BottomNav = () => {
             aria-current={isActive('/groups') ? 'page' : undefined}
           >
             <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
-              👥
+              <UsersIcon size={20} />
               {groupsUnread > 0 && (
                 <span style={{ position: 'absolute', top: -6, right: -6 }}>
                   <MyGroupsUnreadBadge count={groupsUnread} />
@@ -220,7 +242,7 @@ const BottomNav = () => {
             aria-label={notificationUnread > 0 ? `Alerts, ${notificationUnread} unread` : 'Alerts'}
           >
             <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
-              🔔
+              <BellIcon size={20} />
               {notificationUnread > 0 && (
                 <span
                   data-testid="notification-unread-badge"

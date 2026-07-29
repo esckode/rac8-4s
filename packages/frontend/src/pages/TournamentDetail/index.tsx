@@ -9,6 +9,13 @@ import { UnreadBadge } from '../../components/MessagePanel'
 import { MessageThreadPanel } from '../../components/MessageThreadPanel'
 import { Standings } from './Standings'
 import { SkeletonLoader } from '../../components/shared/SkeletonLoader'
+import {
+  BarChartIcon,
+  TennisBallIcon,
+  TrophyIcon,
+  InfoIcon,
+  MessageCircleIcon,
+} from '../../components/shared/icons'
 import '../../styles/globals.css'
 
 // Lazy-load non-critical tabs for code splitting
@@ -74,11 +81,11 @@ export const TournamentDetail: React.FC = () => {
   }
 
   const tabs = [
-    { id: 'standings', label: 'Standings', icon: '📊' },
-    { id: 'matches', label: 'Matches', icon: '🎾' },
-    { id: 'bracket', label: 'Bracket', icon: '🏆' },
-    { id: 'details', label: 'Details', icon: 'ℹ️' },
-    { id: 'messages', label: 'Messages', icon: '💬' },
+    { id: 'standings', label: 'Standings', Icon: BarChartIcon },
+    { id: 'matches', label: 'Matches', Icon: TennisBallIcon },
+    { id: 'bracket', label: 'Bracket', Icon: TrophyIcon },
+    { id: 'details', label: 'Details', Icon: InfoIcon },
+    { id: 'messages', label: 'Messages', Icon: MessageCircleIcon },
   ]
 
   const handleTabClick = (tabId: string) => {
@@ -214,7 +221,7 @@ export const TournamentDetail: React.FC = () => {
             aria-selected={currentTab === tab.id}
             aria-controls={`tab-${tab.id}`}
           >
-            <span className="text-lg" aria-hidden="true">{tab.icon}</span>
+            <span className="text-lg" aria-hidden="true"><tab.Icon size={18} /></span>
             <span className="responsive-hidden-mobile">{tab.label}</span>
             {tab.id === 'messages' && <UnreadBadge count={unreadCount} />}
           </button>
