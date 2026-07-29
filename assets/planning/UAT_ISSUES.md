@@ -38,6 +38,20 @@ what each shipped. Number new issues from 34.
 
 ## Not yet triaged / follow-ups
 
+- **`real-time-updates.spec.ts` "standings refresh on reconnect after an SSE disconnect" fails
+  consistently** — reported by the ISSUE-32/33 implementer and independently reproduced 2026-07-29:
+  fails on the initial attempt *and* both retries, at `:137`
+  `expect(wonCells(page)).toHaveCount(1, { timeout: 20000 })`. **Pre-existing and not auth-related** —
+  the run logs zero 401/403s, and the test authenticates with `fx.playerToken`, the guest-session
+  path that already worked before ISSUE-32 touched the account-JWT branch.
+  The mechanism is `context.setOffline(true)` → submit a score → `setOffline(false)` → expect the
+  reconnect to refetch the authoritative bundle.
+  *Unverified lead:* `/tournaments/:id/bundle` is a **venue-read (network-first) pattern** in the
+  service worker (`sw-lib/routing.ts:4`), so a reconnect refetch could plausibly be served stale from
+  cache. Worth checking whether the SW is even active under Playwright before chasing it.
+  A second test in the same file (`:92`, "see synchronized standings") errored on its first attempt
+  but passed on retry — flaky rather than broken, and worth a look at the same time.
+
 - **`POST /api/analytics/events` returns 401 for a registered player** — confirmed live 2026-07-27,
   on every authenticated page. This is the `analytics.ts:23` dual-auth gap already listed below, now
   observed rather than inferred: it fires on each page view, so every authenticated session logs a
