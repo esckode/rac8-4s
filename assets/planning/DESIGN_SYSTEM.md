@@ -41,6 +41,22 @@ Primitives: `Button`, `Badge`, `Modal`, `ErrorBanner` / `SuccessBanner`, `Loadin
 ### 2.4 Reference design
 `packages/reference_ui_design/cuatcourt` — the visual reference the tokens derive from.
 
+### 2.5 Dark entry vs. light app boundary
+The **pre-login funnel** (Landing + Login/Signup/ForgotPassword/ResetPassword) uses a dark navy
+gradient with glass-morphism panels, 34px display headings, and inline SVG ornament. Every
+**authenticated surface** (`/play`, `/groups`, `/notifications`, tournament detail, …) uses the flat
+`--ink-*` palette — plain bordered boxes, no gradient.
+
+This is a **deliberate, owner-confirmed pattern** (UAT ISSUE-27, 2026-07-27), not drift or an
+oversight. Verified: both families consume the same design tokens (one font family, the same
+`--ink-*`/court-blue values), and Landing's computed background is byte-identical to Login's — the
+split is which *treatment* a screen uses, not a break in the token system. **Do not "fix" this by
+unifying the palettes** — extending dark/glass into the app, or flattening the entry pages, were both
+considered and rejected (see ISSUE-27 in `COMPLETED_UAT_ISSUES.md` for the full reasoning).
+
+**Rule for new pages:** pre-login / entry surfaces → dark/glass treatment; authenticated surfaces →
+flat `--ink-*` palette. Without this written down, the next new page picks a side at random.
+
 ## 3. Known gaps (to confirm/scope when grilled)
 - **No design-system documentation** — no doc covering token meanings, scales, component APIs, or usage
   rules. Knowledge is tribal (lives in `tokens.css` + convention).
