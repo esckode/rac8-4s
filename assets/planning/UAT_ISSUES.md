@@ -29,16 +29,95 @@ the ship order and what each shipped. Number new issues from where the archive e
 | [ISSUE-29](COMPLETED_UAT_ISSUES.md#issue-29) | ✅ Resolved | 🟠 | Temporarily block public browse + public registration; keep both invite paths working | frontend + api |
 | [ISSUE-30](COMPLETED_UAT_ISSUES.md#issue-30) | ✅ Resolved | 🔴 | `/tournament/:id` redirects to a **literal** unsubstituted path — group launch's payoff step is broken | frontend |
 | [ISSUE-31](COMPLETED_UAT_ISSUES.md#issue-31) | ✅ Resolved | 🔴 | A group-launched casual tournament **never generates matches** — there is nothing to play | api |
+| [ISSUE-32](#issue-32) | 🔲 Open | 🟠 | SSE `/tournaments/:id/events` 403s for registered accounts — live updates dead for participants | api |
+
+---
+
+## ISSUE-32 — SSE `/tournaments/:id/events` 403s for registered accounts 🟠 {#issue-32}
+
+*Found 2026-07-29 while verifying the ISSUE-22→31 fixes. Promoted from a follow-up note after the
+re-check it asked for came back positive.*
+
+### Symptom
+
+A registered account holder who **is a participant** in a tournament gets `403 FORBIDDEN` from the
+tournament's SSE stream, so real-time updates are dead on every tournament page. Verified live
+against a freshly launched group tournament in which the caller is one of the two registered players:
+
+```
+GET /tournaments/<id>/events?token=<account JWT>
+  → 403  {"code":"FORBIDDEN","message":"Access denied"}
+```
+
+**This was previously logged as a follow-up with the note "may be a consequence of ISSUE-31 — no
+groups exist, so there may be nothing to subscribe to. Re-check after ISSUE-31 lands."** ISSUE-31 has
+landed, the tournament now has 1 group and 1 match and sits at `group_stage_active`, and the 403
+persists. It is a defect in its own right.
+
+### Root cause
+
+`tournaments.ts:~2603`, the events route, **hand-rolls its own dual-auth** instead of using the
+`resolveTournamentPlayer` helper that lives in the same file (`:175`):
+
+```
+requirePlayerSessionAuth(...)        → throws for an account JWT (it is for guest sessions)
+  ↓ catch
+requireOrganizerAuth(...)            → succeeds; account JWTs verify here
+  ↓
+participation check runs only `if (playerPayload)`
+  ↓ catch
+403 FORBIDDEN
+```
+
+So a **guest magic-link session works and a registered account does not** — the same
+registered-account-is-also-a-player gap as [ISSUE-1](COMPLETED_UAT_ISSUES.md#issue-1) and
+[ISSUE-24](#issue-24). It was missed by ISSUE-24 specifically **because it uses neither resolver**;
+that fix corrected `resolvePlayerId` and `resolveTournamentPlayer`, and this route calls neither.
+
+This is exactly the case the follow-up list flags for `tournaments.ts` — "several routes still call
+`requirePlayerSessionAuth` directly with no fallback… needs a case-by-case read". This is one of them,
+now confirmed rather than suspected.
+
+### Fix — TDD (CLAUDE.md §4, commit red separately per §11)
+
+**Red:** an integration test asserting a registered account holder who is a registered participant
+gets a successful SSE handshake (not 403), alongside the existing guest-session case so the fix does
+not trade one for the other.
+
+**Green:** route the events handler through **`resolveTournamentPlayer`** (`tournaments.ts:175`)
+rather than its own chain. That helper already handles both identities *and* asserts registration,
+which is the check this route is trying to perform.
+
+**Do NOT simply drop the participation check** to make the 403 go away — it is what stops a
+non-participant subscribing to another tournament's live stream.
+
+**Mind the connection-cap key.** The handler derives `userId` as
+`playerPayload?.playerId ?? organizerPayload.sub` for the per-user SSE connection limit
+(`sseMaxConnectionsPerUser`). Resolving through the helper should make that consistently a
+`playerId`; check the cap still behaves rather than silently keying on a different identity.
+
+### Verify
+
+```bash
+SCRATCH=/tmp
+npm --workspace=packages/api exec -- jest \
+  --findRelatedTests packages/api/src/routes/tournaments.ts --bail > "$SCRATCH/api.log" 2>&1
+grep -E "Tests:|Suites:|✕" "$SCRATCH/api.log" | head -40
+
+npx playwright test real-time-updates --project=chromium --reporter=line --max-failures=1
+```
+
+Manual, and the reproduction that found it: launch a group casual tournament, sign in as one of the
+participants with a **registered account** (not a guest magic link), open the tournament page and
+confirm no 403 on `/tournaments/:id/events`.
+
+**Why no test caught it:** `real-time-updates.spec.ts` exists but evidently exercises the guest-session
+path, which works. The account-JWT path is the broken one.
 
 ---
 
 ## Not yet triaged / follow-ups
 
-- **SSE `/tournaments/:id/events` returns 403 on every tournament page** — observed live 2026-07-27
-  on a group-launched casual tournament while signed in as a registered participant. Real-time
-  updates are therefore dead on those pages. Not yet triaged: it may be a consequence of
-  [ISSUE-31](COMPLETED_UAT_ISSUES.md#issue-31) (no groups exist, so there may be nothing to subscribe to) rather than an
-  auth defect in its own right. **Re-check after ISSUE-31 lands** before filing it separately.
 - **`POST /api/analytics/events` returns 401 for a registered player** — confirmed live 2026-07-27,
   on every authenticated page. This is the `analytics.ts:23` dual-auth gap already listed below, now
   observed rather than inferred: it fires on each page view, so every authenticated session logs a
