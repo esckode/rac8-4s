@@ -13,9 +13,11 @@ Severity: 🔴 blocks a user-facing feature · 🟠 real defect, limited blast r
 §12 — working the open queue shouldn't cost a read of every closed issue). The table below stays the
 full index: resolved rows link into the archive, open rows link to a section in this file.
 
-**No open issues right now** — ISSUE-1–21 and the 2026-07-26/27 walkthrough batch (ISSUE-22–31) are
-all resolved; see [the walkthrough-queue summary](COMPLETED_UAT_ISSUES.md#walkthrough-queue-2) for
-the ship order and what each shipped. Number new issues from where the archive ends (32).
+ISSUE-1–21 and the 2026-07-26/27 walkthrough batch (ISSUE-22–31) are all resolved; see
+[the walkthrough-queue summary](COMPLETED_UAT_ISSUES.md#walkthrough-queue-2) for the ship order and
+what each shipped. **Open: [ISSUE-32](#issue-32) and [ISSUE-33](#issue-33)**, both found on
+2026-07-29 while verifying that batch — 32 is the user-visible symptom, 33 the data-model cause
+underneath it. Number new issues from 34.
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
