@@ -2,15 +2,18 @@ import request from 'supertest'
 import { Pool } from 'pg'
 import { Express } from 'express'
 import { getTestPool, closeTestPool, beginTransaction, rollbackTransaction } from '../helpers/db'
-import { createTestApp } from '../helpers/app'
+import { createTestApp, JwtConfig } from '../helpers/app'
 import { PlayerFactory, TournamentFactory, OrganizerFactory, AnalyticsFactory } from '../factories'
 import { InMemoryTokenStore } from '../../auth/token-store'
 import { generatePlayerSession } from '../../auth/magic-link'
+import { PlayerRepository } from '../../db'
+import { defaultAdultAttestation } from '../factories/player.factory'
 
 describe('Analytics API', () => {
   let pool: Pool
   let app: Express
   let tokenStore: InMemoryTokenStore
+  let jwtConfig: JwtConfig
 
   beforeAll(async () => {
     pool = await getTestPool()
@@ -19,6 +22,7 @@ describe('Analytics API', () => {
     const testApp = createTestApp(pool)
     app = testApp.app
     tokenStore = testApp.tokenStore
+    jwtConfig = testApp.jwtConfig
   })
 
   afterAll(async () => {
@@ -78,6 +82,45 @@ describe('Analytics API', () => {
           .send(payload)
 
         expect(res.status).toBe(204)
+      })
+
+      // ISSUE-35: analytics.ts called requirePlayerSessionAuth directly with
+      // no fallback, so a registered account JWT (not a guest magic-link
+      // session) always 401ed — no analytics were ever recorded for
+      // account holders, the exact cohort the beta needs data from.
+      it('accepts a registered account JWT (ISSUE-35; 401 today)', async () => {
+        const playerRepo = new PlayerRepository(pool)
+        const email = `issue35-${Date.now()}@test.local`
+        const player = await playerRepo.findOrCreatePlayerByEmail(
+          email, 'Issue35 Player', undefined, undefined, defaultAdultAttestation()
+        )
+        const { accessToken } = OrganizerFactory.playerRoleToken(jwtConfig, { email, playerId: player.id })
+
+        const payload = AnalyticsFactory.batch(1)
+
+        const res = await request(app)
+          .post('/api/analytics/events')
+          .set('Authorization', `Bearer ${accessToken}`)
+          .send(payload)
+
+        expect(res.status).toBe(204)
+
+        const rows = await pool.query('SELECT user_id FROM public.user_events WHERE user_id = $1', [player.id])
+        expect(rows.rows.length).toBe(1)
+      })
+
+      it('still 401s an account JWT with no linked player (PLAYER_NOT_LINKED-eligible, but never 500s)', async () => {
+        const { accessToken } = OrganizerFactory.playerRoleToken(jwtConfig, {})
+
+        const payload = AnalyticsFactory.batch(1)
+
+        const res = await request(app)
+          .post('/api/analytics/events')
+          .set('Authorization', `Bearer ${accessToken}`)
+          .send(payload)
+
+        expect(res.status).toBe(403)
+        expect(res.body.code).toBe('PLAYER_NOT_LINKED')
       })
     })
 
