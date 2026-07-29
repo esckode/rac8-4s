@@ -110,3 +110,84 @@ describe('Page copy convention — no trailing period on titles/descriptions (IS
     expect(screen.getByText(/Redirecting to login/)).toBeInTheDocument()
   })
 })
+
+// ISSUE-37: Login, ForgotPassword and ResetPassword had zero <h1> elements —
+// their 34px titles were styled <div>s, so a screen reader got no page
+// heading on three of five auth screens and heading navigation skipped them
+// entirely. Signup and Landing already used a real <h1> (verified, untouched
+// here). Each page has two mutually-exclusive render states (default vs.
+// success, gated by an early `if (successState) return (...)`), so both are
+// checked to confirm neither ever renders two <h1>s at once.
+describe('Auth pages expose exactly one <h1> per screen (ISSUE-37)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockUseAuth.mockReturnValue({
+      user: null,
+      isAuthenticated: false,
+      loading: false,
+      login: jest.fn(),
+      signup: jest.fn(),
+    } as any)
+  })
+
+  it('Login has exactly one <h1>, reading "Sign in"', () => {
+    renderWithRouter(<Login />)
+
+    const headings = screen.getAllByRole('heading', { level: 1 })
+    expect(headings).toHaveLength(1)
+    expect(headings[0]).toHaveTextContent('Sign in')
+  })
+
+  it('ForgotPassword default state has exactly one <h1>', () => {
+    renderWithRouter(<ForgotPassword />)
+
+    const headings = screen.getAllByRole('heading', { level: 1 })
+    expect(headings).toHaveLength(1)
+    expect(headings[0]).toHaveTextContent('Reset your password')
+  })
+
+  it('ForgotPassword success state has exactly one <h1>', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as any
+
+    renderWithRouter(<ForgotPassword />)
+    fireEvent.change(screen.getByPlaceholderText('Enter your email'), {
+      target: { value: 'player@example.com' },
+    })
+    fireEvent.click(screen.getByText('Send reset code'))
+    await waitFor(() => expect(screen.getByText('✓ Code sent')).toBeInTheDocument())
+
+    const headings = screen.getAllByRole('heading', { level: 1 })
+    expect(headings).toHaveLength(1)
+    expect(headings[0]).toHaveTextContent('Code sent')
+  })
+
+  it('ResetPassword default state has exactly one <h1>', () => {
+    renderWithRouter(<ResetPassword />)
+
+    const headings = screen.getAllByRole('heading', { level: 1 })
+    expect(headings).toHaveLength(1)
+    expect(headings[0]).toHaveTextContent('Reset your password')
+  })
+
+  it('ResetPassword success state has exactly one <h1>', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as any
+
+    renderWithRouter(<ResetPassword />)
+    fireEvent.change(screen.getByPlaceholderText('Enter your email'), {
+      target: { value: 'player@example.com' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Reset code'), { target: { value: '123456' } })
+    fireEvent.change(screen.getByPlaceholderText('Enter a new password'), {
+      target: { value: 'newpass123' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Confirm your password'), {
+      target: { value: 'newpass123' },
+    })
+    fireEvent.click(screen.getByText('Update password'))
+    await waitFor(() => expect(screen.getByText('Password updated')).toBeInTheDocument())
+
+    const headings = screen.getAllByRole('heading', { level: 1 })
+    expect(headings).toHaveLength(1)
+    expect(headings[0]).toHaveTextContent('Password updated')
+  })
+})
