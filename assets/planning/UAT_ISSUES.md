@@ -32,7 +32,7 @@ underneath it. Number new issues from 34.
 | [ISSUE-30](COMPLETED_UAT_ISSUES.md#issue-30) | ✅ Resolved | 🔴 | `/tournament/:id` redirects to a **literal** unsubstituted path — group launch's payoff step is broken | frontend |
 | [ISSUE-31](COMPLETED_UAT_ISSUES.md#issue-31) | ✅ Resolved | 🔴 | A group-launched casual tournament **never generates matches** — there is nothing to play | api |
 | [ISSUE-32](#issue-32) | 🔲 Open | 🟠 | SSE `/tournaments/:id/events` 403s for registered accounts — live updates dead for participants | api |
-| [ISSUE-33](#issue-33) | 🔲 Open | 🟠 | `tournaments.creator_id` is polymorphic — account id or player id by creation path | api · data |
+| [ISSUE-33](#issue-33) | ⛔ Blocked | 🟠 | `tournaments.creator_id` is polymorphic — account id or player id by creation path *(needs an approach decision; not implementable yet)* | api · data |
 
 ---
 
@@ -96,16 +96,52 @@ now confirmed rather than suspected.
 
 ### Fix — TDD (CLAUDE.md §4, commit red separately per §11)
 
-**Red:** an integration test asserting a registered account holder who is a registered participant
-gets a successful SSE handshake (not 403), alongside the existing guest-session case so the fix does
-not trade one for the other.
+**Red:** integration tests covering **all three** identities on the events route, because the failure
+mode is trading one for another:
 
-**Green:** route the events handler through **`resolveTournamentPlayer`** (`tournaments.ts:175`)
-rather than its own chain. That helper already handles both identities *and* asserts registration,
-which is the check this route is trying to perform.
+| Caller | Expected |
+|---|---|
+| Guest magic-link session, registered | ✅ works today — must keep working |
+| Registered **account**, registered participant | ❌ 403 today — **this is the fix** |
+| Organizer who owns the tournament but is **not** registered | ✅ works today — must keep working (2,627 real rows) |
+| Registered account, **not** a participant and not the owner | ❌ 403 — must stay denied |
 
-**Do NOT simply drop the participation check** to make the 403 go away — it is what stops a
-non-participant subscribing to another tournament's live stream.
+The third row is the regression guard. Without it, the obvious fix passes its tests and silently
+breaks organizers.
+
+**Green:** replace the **exclusive `if/else`** with *try owner, then fall back to participant* —
+exactly the shape at `:674`:
+
+```ts
+try {
+  assertOrganizerOwnsTournament(orgPayload, tournament.creator_id)   // owner path
+} catch {
+  const resolved = await resolveTournamentPlayer(authHeader, tournamentId)  // participant path
+  actingPlayerId = resolved.playerId
+}
+```
+
+**⚠ Do NOT simply "route it through `resolveTournamentPlayer`" instead of its own chain** — an
+earlier draft of this issue said exactly that and it is **wrong**. That helper *requires a
+registration* (`findRegistration` → `ForbiddenError`, `:196-198`), and **2,627 organizer-created
+tournaments have a creator who is not a registered participant** (measured 2026-07-29). Swapping the
+chain for the helper would deny every one of those organizers access to their own tournament's
+stream. The owner path must survive.
+
+**Why `:674` works today even for group tournaments** — and this is worth understanding before
+copying it: its owner check *fails* on a group-launched tournament (the [ISSUE-33](#issue-33) id
+mismatch), and the fallback then succeeds because the launcher is registered. The correct outcome
+emerges from a broken check plus a working fallback. `end-session` and `events` have no fallback, so
+they simply fail. **You are restoring the fallback, not fixing the owner check** — that is
+[ISSUE-33](#issue-33).
+
+**Do NOT drop the participation check** to make the 403 go away — it is what stops a non-participant
+subscribing to another tournament's live stream.
+
+**Map the error codes deliberately.** `resolveTournamentPlayer` throws `PlayerNotLinkedError`
+(→ `403 PLAYER_NOT_LINKED`, per ISSUE-24), `ForbiddenError` (→ 403), or rethrows the session error
+(→ 401). The events route currently distinguishes 401 "Authentication required" from 403 "Access
+denied"; preserve that distinction rather than collapsing everything to 403.
 
 **Mind the connection-cap key.** The handler derives `userId` as
 `playerPayload?.playerId ?? organizerPayload.sub` for the per-user SSE connection limit
@@ -208,6 +244,17 @@ spaces use distinct prefixes, so a false *match* is not possible.
 ISSUE-32 fixes the three affected routes by resolving through `resolveTournamentPlayer`, which is
 correct and sufficient there. But the column stays ambiguous, so the next ownership check written
 against it inherits the same bug. **Fixing routes does not fix the column.**
+
+### ⛔ Not ready to implement — needs an owner decision first
+
+**Do not hand this to an implementer yet.** Unlike the rest of this queue, the approach is not
+decided, and the leading candidate depends on work that does not exist. [ISSUE-32](#issue-32) is
+independently implementable and mitigates the user-visible symptom, so nothing is blocked by this
+sitting open.
+
+What is settled: the defect, its measurement (2,627 organizer-created rows whose creator is not a
+registered participant), and that it fails closed. What is not: which of the three fixes below, and
+when.
 
 ### Fix — needs a decision
 
