@@ -324,6 +324,14 @@ export const SELECTORS = {
   NEXT_MATCH_CARD: '[data-testid="next-match-card"]',
   RECENT_RESULT_ROW: '[data-testid="recent-result-row"]',
 
+  // More menu — ISSUE-36
+  NAV_MORE: '[data-testid="nav-more"]',
+  MORE_ITEM_PROFILE: '[data-testid="more-item-profile"]',
+  MORE_ITEM_ORGANIZER: '[data-testid="more-item-organizer"]',
+  MORE_ITEM_SETTINGS: '[data-testid="more-item-settings"]',
+  MORE_ITEM_ABOUT: '[data-testid="more-item-about"]',
+  MORE_ITEM_SIGNOUT: '[data-testid="more-item-signout"]',
+
   // Groups — G2.5
   NAV_GROUPS: '[data-testid="nav-groups"]',
   GROUPS_UNREAD_BADGE: '[data-testid="groups-unread-badge"]',

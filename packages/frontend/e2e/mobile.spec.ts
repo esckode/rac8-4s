@@ -11,8 +11,8 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { apiCall, createTestUser, createTestTournament, getOrganizerToken } from './fixtures'
-import { API_CONFIG } from './config'
+import { apiCall, createTestUser, createTestTournament, getOrganizerToken, signupViaApi } from './fixtures'
+import { API_CONFIG, SELECTORS } from './config'
 
 // iPhone 14 Pro resolution — representative mobile viewport
 const MOBILE = { width: 390, height: 844 }
@@ -85,6 +85,32 @@ test.describe('Feature: Mobile & Responsive Design', () => {
         // Touch targets should be at least 44px (WCAG 2.5.5 recommends 44px)
         expect(box.height).toBeGreaterThanOrEqual(44)
       }
+    }
+  })
+
+  // ISSUE-36: three of four More-menu items had no matching route at all —
+  // this is the "assert every menu path matches a registered route" guard
+  // the issue itself asks for, checked by actually navigating rather than
+  // duplicating App.tsx's route table into a second, driftable list.
+  test('Scenario: every More-menu item resolves to a real page, not NotFound', async ({ page }) => {
+    const user = createTestUser()
+    const signupResponse = await signupViaApi(user)
+    const { token } = await signupResponse.json()
+
+    await page.goto('http://localhost:5173/')
+    await page.evaluate((t: string) => localStorage.setItem('auth_token', t), token)
+    await page.goto('http://localhost:5173/play')
+
+    const items = [
+      SELECTORS.MORE_ITEM_PROFILE,
+      SELECTORS.MORE_ITEM_SETTINGS,
+      SELECTORS.MORE_ITEM_ABOUT,
+    ]
+
+    for (const itemSelector of items) {
+      await page.locator(SELECTORS.NAV_MORE).click()
+      await page.locator(itemSelector).click()
+      await expect(page.getByText('Page not found')).toHaveCount(0)
     }
   })
 
