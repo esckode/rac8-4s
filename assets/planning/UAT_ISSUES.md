@@ -13,11 +13,13 @@ Severity: 🔴 blocks a user-facing feature · 🟠 real defect, limited blast r
 §12 — working the open queue shouldn't cost a read of every closed issue). The table below stays the
 full index: resolved rows link into the archive, open rows link to a section in this file.
 
-**No open issues right now** — ISSUE-1–21, the 2026-07-26/27 walkthrough batch (ISSUE-22–31), and the
-post-walkthrough audit (ISSUE-32–33) are all resolved; see
+ISSUE-1–21, the 2026-07-26/27 walkthrough batch (ISSUE-22–31) and the post-walkthrough audit
+(ISSUE-32–33) are all resolved; see
 [the walkthrough-queue summary](COMPLETED_UAT_ISSUES.md#walkthrough-queue-2) and
-[the post-walkthrough audit](COMPLETED_UAT_ISSUES.md#post-walkthrough-audit) for the ship order and
-what each shipped. Number new issues from 34.
+[the post-walkthrough audit](COMPLETED_UAT_ISSUES.md#post-walkthrough-audit) for what each shipped.
+**Open: [34](#issue-34)–[38](#issue-38)**, raised 2026-07-29 by promoting actionable follow-ups.
+Suggested order: **34** (nearly free, restores the merge gate), **35** (the beta needs the data),
+then 36, 37, 38. Number new issues from 39.
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -147,10 +149,23 @@ This closes the two dangling "contact support" promises: `ServiceUnavailable.tsx
 `PLAYER_NOT_LINKED` copy, which had to drop the phrase because there was nowhere to send people.
 Both should now link to the Contact route.
 
-**`/settings`** — decide whether it is a real page or should be removed from the menu. `/profile`
-already carries the personalization settings (`PERSONALIZATION_DESIGN.md`), so a separate Settings
-entry may be redundant. **Removing a menu item is a valid fix** — do not build a page to justify a
-link.
+**`/settings` is a real page and must be built** *(owner decision 2026-07-29 — an earlier draft of
+this issue wrongly suggested it might be redundant with `/profile`)*. **App settings are distinct
+from the player profile:**
+
+| | Scope | Today |
+|---|---|---|
+| `/profile` | **the player** — display density, notification toggles, quiet hours, availability (verified 2026-07-29) | built |
+| `/settings` | **the app** — device- and install-level concerns | **does not exist** |
+
+**Do NOT repoint `/settings` at `/profile`.** They answer different questions: "how do I want to be
+treated as a player" versus "how does this app behave on this device".
+
+⚠ **Its contents are not yet specified** — that is a genuine gap, not an omission to fill by
+guessing. Plausible candidates given what exists: PWA install/update state, offline and cached-data
+controls (`PWA_CACHING_DESIGN.md`), sign-out, data/privacy links (`/privacy` is already routed).
+**Agree the scope before building**, and keep anything player-scoped on `/profile` so the boundary
+above stays clean.
 
 **Do NOT leave a hardcoded path in the menu.** Add `ROUTES` constants for whatever survives, so the
 next dead link fails at the type level rather than at runtime.
@@ -235,28 +250,19 @@ All three tests green on the **first** attempt — a pass that only happens on r
 
 ## Not yet triaged / follow-ups
 
-- **`pages/DesignSpec.tsx` is dead code** — imported by no route, test, or module; it hand-mirrors
-  `Landing.tsx`'s hero copy and has to be kept in sync manually (ISSUE-22 does exactly that).
-  Flagged, not deleted (§3). Decide whether it still earns its place.
-- Any routes ISSUE-1's audit turns up with the same strict-auth-where-dual-intended gap
-  (add rows here, fix separately).
-  - **`analytics.ts:23`** (`POST /events`) — direct `requirePlayerSessionAuth`, no
-    dual-auth fallback. Same class as ISSUE-1: a registered-account JWT with a linked
-    playerId would 401 here today. Low severity (analytics ingestion, not user-facing
-    blocking UX) but same root cause — needs the same `resolvePlayerId`-style shim.
-  - **`messages.ts`** — mixed: several routes already call both
-    `requirePlayerSessionAuth` *and* `requireOrganizerAuth` (lines ~44/53, 127/136,
-    173/182, 329/338), suggesting dual-auth was hand-rolled per-route rather than via a
-    shared helper — worth confirming each actually falls back correctly (not just
-    calls both for different purposes). Two bare `requirePlayerSessionAuth` calls with
-    no organizer fallback at lines ~217, 234 — needs a closer read to tell whether
-    those are intentionally guest-only.
-  - **`tournaments.ts`** — has its own dual-auth helper (`resolveTournamentPlayer`,
-    ~line 100) used in most player-scoped routes, but several routes still call
-    `requirePlayerSessionAuth` directly with no fallback (lines ~367, 930, 1800, 1845,
-    1924, 2015). Needs a case-by-case read: some may be intentionally guest-session-only
-    (e.g. a magic-link-specific verify step), others may be the same missed-adoption gap.
-  - `player.ts` and `auth.ts` already have their own dual-auth resolvers — no gap found.
+**Decided, recorded so they are not re-raised:**
+
+- **`pages/DesignSpec.tsx` — keep it** *(owner, 2026-07-29)*. It is unreferenced by any route or
+  test, and has twice been flagged as dead code. It is retained deliberately as a design reference.
+  **Do not delete it, and do not re-raise it.** ⚠ It hand-mirrors `Landing.tsx`'s hero, so a change
+  to the Landing hero should be applied to both — that duplication is the real cost of keeping it.
+- **Public-discovery features stay deferred** *(owner, 2026-07-29 — reaffirmed)*. The cluster lives
+  in [`BACKLOG.md`](../../BACKLOG.md) § Deferred: the location/"Near me" design, the paid organizer
+  tier, and the tournament lifecycle sweep. Shared trigger: public tournaments are re-enabled
+  ([ISSUE-29](COMPLETED_UAT_ISSUES.md#issue-29)).
+
+**Still open:**
+
 - **Tournament lifecycle has no automatic status transitions** (surfaced by ISSUE-9) — **moved to
   `BACKLOG.md` § Deferred on 2026-07-27**, since its urgency came from stale tournaments lingering in
   Browse, and Browse is now blocked ([ISSUE-29](COMPLETED_UAT_ISSUES.md#issue-29)). Still a real correctness gap; the two
