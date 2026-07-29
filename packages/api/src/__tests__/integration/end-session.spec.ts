@@ -113,6 +113,20 @@ async function registerPlayer(pool: Pool, tournamentId: string): Promise<string>
   return player.id
 }
 
+/** Add a player_group_members row directly (createPlayerGroup above bypasses
+ * the repository, so it does not insert the creator's own membership row). */
+async function addGroupMember(
+  pool: Pool,
+  groupId: string,
+  playerId: string,
+  role: 'owner' | 'member' = 'member'
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO public.player_group_members (group_id, player_id, role) VALUES ($1, $2, $3)`,
+    [groupId, playerId, role]
+  )
+}
+
 describe('G4.6 end-session route and idle auto-archive sweep', () => {
   let pool: Pool
   let app: Express
@@ -303,6 +317,75 @@ describe('G4.6 end-session route and idle auto-archive sweep', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.status).toBe('completed')
+  })
+
+  // ISSUE-33: tournament.creator_id is polymorphic (account id or player id
+  // depending on creation path). Ownership of a group-launched tournament is
+  // group MEMBERSHIP, not creator identity — any group member passes, even
+  // one who joined the group after the tournament launched and so was never
+  // registered as a participant (impossible under ISSUE-32's fix alone,
+  // which only widens the *registered-participant* fallback).
+  it('lets a group member who is NOT a registered participant end a group-launched session → 200 (ISSUE-33; 403 today)', async () => {
+    const playerRepo = new PlayerRepository(pool)
+    const launcherEmail = `issue33-launcher-${uid()}@test.local`
+    const launcher = await playerRepo.findOrCreatePlayerByEmail(
+      launcherEmail, 'Issue33 Launcher', undefined, undefined, defaultAdultAttestation()
+    )
+    const groupId = await createPlayerGroup(pool, launcher.id)
+    await addGroupMember(pool, groupId, launcher.id, 'owner')
+
+    // A second group member who never registered for this tournament.
+    const memberEmail = `issue33-member-${uid()}@test.local`
+    const member = await playerRepo.findOrCreatePlayerByEmail(
+      memberEmail, 'Issue33 Member', undefined, undefined, defaultAdultAttestation()
+    )
+    await addGroupMember(pool, groupId, member.id, 'member')
+
+    const tournamentId = await createCasualTournament(pool, launcher.id)
+    await linkGroupToTournament(pool, tournamentId, groupId)
+    await playerRepo.createRegistration(launcher.id, tournamentId)
+    const groupRepo = new GroupRepository(pool)
+    await groupRepo.createGroups(tournamentId, 1, 1, [launcher.id, await registerPlayer(pool, tournamentId)])
+    await pool.query(
+      `UPDATE public.group_matches SET status = 'completed', updated_at = now() WHERE tournament_id = $1`,
+      [tournamentId]
+    )
+
+    const { accessToken } = OrganizerFactory.playerRoleToken(jwtConfig, { email: memberEmail, playerId: member.id })
+
+    const res = await request(app)
+      .post(`/tournaments/${tournamentId}/end-session`)
+      .set('Authorization', `Bearer ${accessToken}`)
+
+    expect(res.status).toBe(200)
+  })
+
+  it('still denies a non-member account on a group-launched tournament → 403 (ISSUE-33 regression guard)', async () => {
+    const playerRepo = new PlayerRepository(pool)
+    const launcherEmail = `issue33-outsider-launcher-${uid()}@test.local`
+    const launcher = await playerRepo.findOrCreatePlayerByEmail(
+      launcherEmail, 'Issue33 Outsider Launcher', undefined, undefined, defaultAdultAttestation()
+    )
+    const groupId = await createPlayerGroup(pool, launcher.id)
+    await addGroupMember(pool, groupId, launcher.id, 'owner')
+
+    const tournamentId = await createCasualTournament(pool, launcher.id)
+    await linkGroupToTournament(pool, tournamentId, groupId)
+    await playerRepo.createRegistration(launcher.id, tournamentId)
+
+    // A registered player in some OTHER tournament — has an account and a
+    // linked player, but is not a member of this group.
+    const outsiderEmail = `issue33-outsider-${uid()}@test.local`
+    const outsider = await playerRepo.findOrCreatePlayerByEmail(
+      outsiderEmail, 'Issue33 Outsider', undefined, undefined, defaultAdultAttestation()
+    )
+    const { accessToken } = OrganizerFactory.playerRoleToken(jwtConfig, { email: outsiderEmail, playerId: outsider.id })
+
+    const res = await request(app)
+      .post(`/tournaments/${tournamentId}/end-session`)
+      .set('Authorization', `Bearer ${accessToken}`)
+
+    expect(res.status).toBe(403)
   })
 
   // ── 6. Idle sweep: backdated tournament is swept ──────────────────────────
