@@ -16,6 +16,7 @@ import {
   TokenInvalidError,
   generatePartnerInviteToken,
   validatePartnerInviteToken,
+  resolvePlayerIdentity,
   type OrganizerPayload,
 } from '../auth'
 import { ForbiddenError, PlayerNotLinkedError } from '../auth/errors'
@@ -175,33 +176,25 @@ export default function tournamentsRouter(deps: AppDependencies) {
   // by DB registration, since account JWTs are not tournament-scoped). Throws
   // ForbiddenError if authenticated but not a participant, or rethrows the auth
   // error (→ 401) if neither path authenticates.
+  // ISSUE-35: delegates identity resolution to the shared resolver, layering
+  // the tournament-scoped check on top — this is the "tournament-scoped check
+  // layers on top of the identity primitive" split the issue describes.
   async function resolveTournamentPlayer(
     authHeader: string | undefined,
     tournamentId: string
   ): Promise<{ playerId: string }> {
-    try {
-      const session = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
-      assertPlayerInTournament(session, tournamentId)
-      return { playerId: session.playerId }
-    } catch (sessionErr) {
-      let account
-      try {
-        account = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
-      } catch {
-        throw sessionErr
-      }
-      // Participation is a capability of having a linked playerId (+ registration),
-      // independent of authority role — an organizer who also plays qualifies.
-      if (!account.playerId) {
-        // ISSUE-24: a valid token with no linked player is not TOKEN_INVALID.
-        throw new PlayerNotLinkedError()
-      }
-      const reg = await playerRepo.findRegistration(account.playerId, tournamentId)
-      if (!reg) {
-        throw new ForbiddenError('tournament')
-      }
-      return { playerId: account.playerId }
+    const resolved = await resolvePlayerIdentity(deps, authHeader)
+    if (resolved.via === 'session') {
+      assertPlayerInTournament(resolved.session, tournamentId)
+      return { playerId: resolved.playerId }
     }
+    // Account JWT — participation is a capability of having a linked
+    // playerId AND a registration, independent of authority role.
+    const reg = await playerRepo.findRegistration(resolved.playerId, tournamentId)
+    if (!reg) {
+      throw new ForbiddenError('tournament')
+    }
+    return { playerId: resolved.playerId }
   }
 
   // ISSUE-33: tournament.creator_id is polymorphic — an account id for an

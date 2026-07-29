@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
 import { getLogger } from '../logger'
-import { requirePlayerSessionAuth } from '../auth'
+import { resolvePlayerIdentity } from '../auth'
 
 const log = getLogger('analytics')
 
@@ -20,7 +20,10 @@ export default function analyticsRouter(deps: AppDependencies) {
 
   router.post('/events', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const payload = await requirePlayerSessionAuth(req.headers.authorization, deps.tokenStore)
+      // ISSUE-35: was requirePlayerSessionAuth only (guest magic-link sessions
+      // exclusively) — a registered account JWT always 401ed, so no analytics
+      // were ever recorded for the cohort that has accounts.
+      const resolved = await resolvePlayerIdentity(deps, req.headers.authorization)
 
       const { events } = req.body
 
@@ -47,7 +50,7 @@ export default function analyticsRouter(deps: AppDependencies) {
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
           [
             eventId,
-            payload.playerId,
+            resolved.playerId,
             typedEvent.eventType,
             typedEvent.screen || null,
             typedEvent.duration || null,
@@ -58,7 +61,7 @@ export default function analyticsRouter(deps: AppDependencies) {
       }
 
       log.info('analytics.batch_received', {
-        userId: payload.playerId,
+        userId: resolved.playerId,
         eventCount: events.length,
         eventTypes: Array.from(eventTypes).join(','),
       })

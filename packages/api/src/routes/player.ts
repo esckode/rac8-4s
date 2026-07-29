@@ -1,8 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { AppDependencies } from '../app'
 import { PlayerRepository } from '../db'
-import { requirePlayerSessionAuth, requireOrganizerAuth } from '../auth'
-import { PlayerNotLinkedError } from '../auth/errors'
+import { requirePlayerSessionAuth, resolvePlayerIdentity } from '../auth'
 import { buildCoachToolContext } from '../assistant/tools'
 import { buildPlayerSnapshot } from '../assistant/player-snapshot'
 import { getLogger } from '../logger'
@@ -16,27 +15,12 @@ export default function playerRouter(deps: AppDependencies) {
   // Resolve the acting player's id from either a magic-link player session or a
   // registered player's account JWT (role 'player', carries playerId). Used by
   // the cross-tournament player views, which aren't tournament-scoped.
+  // ISSUE-35: delegates to the shared identity resolver — this used to be a
+  // third hand-rolled copy of the same dual-auth logic duplicated in
+  // tournaments.ts and (until ISSUE-35) analytics.ts.
   async function resolvePlayerId(authHeader: string | undefined): Promise<string> {
-    try {
-      const session = await requirePlayerSessionAuth(authHeader, deps.tokenStore)
-      return session.playerId
-    } catch (sessionErr) {
-      let account
-      try {
-        account = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
-      } catch {
-        throw sessionErr
-      }
-      // Participation depends on a linked playerId, not the authority role —
-      // an organizer who also plays qualifies (dual-role).
-      if (account.playerId) {
-        return account.playerId
-      }
-      // ISSUE-24: the token is genuinely valid — the account just has no
-      // linked player. That is not "your session expired", so it must not
-      // reuse the session branch's TOKEN_INVALID.
-      throw new PlayerNotLinkedError()
-    }
+    const resolved = await resolvePlayerIdentity(deps, authHeader)
+    return resolved.playerId
   }
 
   // GET /player/session - validate a player-session token and return identity
