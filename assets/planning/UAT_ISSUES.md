@@ -56,23 +56,36 @@ persists. It is a defect in its own right.
 
 ### Root cause
 
-`tournaments.ts:~2603`, the events route, **hand-rolls its own dual-auth** instead of using the
-`resolveTournamentPlayer` helper that lives in the same file (`:175`):
+`tournaments.ts:2603` (`router.get('/:id/events', …)`) **hand-rolls its own dual-auth** instead of
+using the `resolveTournamentPlayer` helper that lives in the same file (`:175`). Its "Phase 2: verify
+tournament membership" block is where it fails:
 
-```
-requirePlayerSessionAuth(...)        → throws for an account JWT (it is for guest sessions)
-  ↓ catch
-requireOrganizerAuth(...)            → succeeds; account JWTs verify here
-  ↓
-participation check runs only `if (playerPayload)`
-  ↓ catch
-403 FORBIDDEN
+```ts
+if (playerPayload) {
+  assertPlayerInTournament(playerPayload, tournamentId)          // guest session → works
+} else {
+  assertOrganizerOwnsTournament(organizerPayload, tournament.creator_id)   // ← always throws
+}
 ```
 
-So a **guest magic-link session works and a registered account does not** — the same
-registered-account-is-also-a-player gap as [ISSUE-1](COMPLETED_UAT_ISSUES.md#issue-1) and
-[ISSUE-24](#issue-24). It was missed by ISSUE-24 specifically **because it uses neither resolver**;
-that fix corrected `resolvePlayerId` and `resolveTournamentPlayer`, and this route calls neither.
+**The else-branch assumes an account JWT means "organizer".** A registered player has no
+`playerPayload` (that is the guest-session shape), so they land in an *ownership* check they are not
+the subject of. And it cannot pass even in principle:
+
+| Value | Namespace | Source |
+|---|---|---|
+| `organizerPayload.sub` | **account** id (`account_…`) | the JWT subject |
+| `tournament.creator_id` | **player** id (`player_…`) | `player-groups.ts:941`, `creatorId: session.playerId` |
+
+`assertOrganizerOwnsTournament` is a plain inequality —
+`if (organizerPayload.sub !== tournamentOrganizerId) throw` (`auth/middleware.ts:66-73`) — comparing
+values from two different id spaces. **So even the player who launched the tournament cannot
+subscribe to it**, which is how this was found.
+
+Same registered-account-is-also-a-player gap as [ISSUE-1](COMPLETED_UAT_ISSUES.md#issue-1) and
+[ISSUE-24](COMPLETED_UAT_ISSUES.md#issue-24). Missed by ISSUE-24 specifically **because this route
+uses neither resolver** — that fix corrected `resolvePlayerId` and `resolveTournamentPlayer`, and
+this handler calls neither.
 
 This is exactly the case the follow-up list flags for `tournaments.ts` — "several routes still call
 `requirePlayerSessionAuth` directly with no fallback… needs a case-by-case read". This is one of them,
@@ -111,8 +124,17 @@ Manual, and the reproduction that found it: launch a group casual tournament, si
 participants with a **registered account** (not a guest magic link), open the tournament page and
 confirm no 403 on `/tournaments/:id/events`.
 
-**Why no test caught it:** `real-time-updates.spec.ts` exists but evidently exercises the guest-session
-path, which works. The account-JWT path is the broken one.
+**Why no test caught it — verified, not inferred.** `real-time-updates.spec.ts` authenticates with
+`fx.playerToken` (`:59, :77`), a player-session token, so every one of its assertions runs down the
+`assertPlayerInTournament` branch that works. The account-JWT branch has no coverage at all. **A new
+test must use a registered account**, not the existing fixture token, or it will pass against the
+broken code.
+
+**Also worth checking while here:** the same `if (playerPayload) … else assertOrganizerOwnsTournament`
+shape may appear on other routes. The follow-up list already flags `tournaments.ts` lines ~367, 930,
+1800, 1845, 1924, 2015 as calling `requirePlayerSessionAuth` directly with no fallback — grep for
+`assertOrganizerOwnsTournament` and check whether any of them compare `.sub` against a player-id
+column the same way. **Do not fix them in this issue**; list what you find so they can be triaged.
 
 ---
 
