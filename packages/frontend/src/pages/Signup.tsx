@@ -147,7 +147,7 @@ export function Signup() {
     setGeneralError('');
     try {
       await authSignup(formData.email, formData.name, formData.password, token || undefined, attestation);
-      navigate('/browse');
+      navigate('/play');
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === 'AGE_ATTESTATION_REQUIRED' || code === 'UNDER_AGE') {

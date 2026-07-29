@@ -1309,6 +1309,17 @@ export default function tournamentsRouter(deps: AppDependencies) {
 
   router.post(
     '/:tournamentId/register',
+    // UAT ISSUE-29: public self-serve registration is blocked while
+    // publicDiscoveryEnabled is off — checked before rate-limiting so a
+    // blocked request doesn't spend anyone's limit budget. Group launch
+    // (the remaining front door) auto-registers players internally and
+    // never calls this route.
+    (req: Request, res: Response, next: NextFunction) => {
+      if (!deps.config.publicDiscoveryEnabled) {
+        return res.status(404).json({ code: 'NOT_FOUND', message: 'Not found' })
+      }
+      next()
+    },
     createRateLimitMiddleware(registerEmailKey, {
       maxAttempts: deps.config.limits.rateLimit.registerPerEmailMaxAttempts,
       windowMs: deps.config.limits.rateLimit.registerPerEmailWindowMs,

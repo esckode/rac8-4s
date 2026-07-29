@@ -66,9 +66,6 @@ export const TournamentJoin: React.FC = () => {
     return (
       <div style={{ maxWidth: 480, margin: '0 auto', padding: 32, textAlign: 'center' }}>
         <p role="alert" style={{ color: 'var(--danger)', marginBottom: 16 }}>{error}</p>
-        <a href={`/tournament/${tournamentId}/browse`} style={{ color: 'var(--court-600)', fontWeight: 600 }}>
-          Register again
-        </a>
       </div>
     )
   }

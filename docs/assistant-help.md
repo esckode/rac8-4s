@@ -39,15 +39,18 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   play?" in a group chat and Coach will reply with a count like "4 of 6 free Saturday evening."
   Coach never says or implies which specific person is or isn't free at a slot.
 - Your **Play** and **Groups** tabs show a number badge when you have something waiting on
-  you (an unscored match, an open poll, a card to confirm) — it clears once you act. The top of
-  **Browse** shows the same items as an "up next" list when you have any. In a group chat, the
-  message box may suggest a one-tap action (report a score, cast a vote) based on what's
-  pending for you there.
+  you (an unscored match, an open poll, a card to confirm) — it clears once you act. In a group
+  chat, the message box may suggest a one-tap action (report a score, cast a vote) based on
+  what's pending for you there.
 
 ## Finding and joining tournaments
 
-- **Browse** is public — anyone can see open tournaments and their details without logging in.
-- To join, open a tournament and register with your email and name before the **registration
+- **Right now, entry is by group invite only** — there's no public tournament list to browse.
+  Get invited to a **group** (see **Groups** below), then join a tournament through a group poll:
+  vote **In**, and you're registered automatically once it launches. This is temporary — public
+  browsing may return later, and the mechanics below still apply if it does.
+- To join a tournament you can already see, open it and register with your email and name before
+  the **registration
   deadline**. After the deadline, registration closes and you can't join.
 - Some tournaments require the organizer to confirm your registration. You'll get an email
   either way.

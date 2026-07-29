@@ -1110,6 +1110,13 @@ tournament_complete
 
 #### 2.4 Browse Tournaments
 
+> ⚠ **Temporarily blocked (UAT ISSUE-29, 2026-07-27, reversible).** `/browse`,
+> `/tournament/:id/browse`, and `POST /tournaments/:id/register` are gated behind a
+> server-authoritative `PUBLIC_DISCOVERY_ENABLED` flag (default off) — the app is
+> invite-only via groups until public discovery has traction. The design below is the
+> machinery, kept intact and un-deleted; it's what a flag flip restores. See
+> `assets/planning/UAT_ISSUES.md` ISSUE-29.
+
 **Endpoint**
 ```
 GET /tournaments?page=1&limit=20&sport=pickleball&sort=createdAt

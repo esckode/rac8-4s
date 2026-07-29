@@ -484,6 +484,16 @@ export interface AppConfig {
   messaging: MessagingConfig
   redis: RedisConfig
   assistant: AssistantConfig
+  /**
+   * Public tournament discovery + self-serve registration (UAT ISSUE-29).
+   * Default: false — the app is a social/casual meetup product at heart;
+   * entry is by group invite until public discovery has traction. A
+   * single server-authoritative switch, read at boot, surfaced to the
+   * frontend via GET /api/config — never a build-time constant, so
+   * flipping it needs no client redeploy. Override via
+   * PUBLIC_DISCOVERY_ENABLED env var.
+   */
+  publicDiscoveryEnabled: boolean
 }
 
 /**
@@ -564,6 +574,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     dailyBudgetUsd: 5,         // Global daily spend kill-switch (design Q10)
     coachModel: 'claude-haiku-4-5', // 1:1 Coach model (COACH_1TO1_DESIGN.md §7 #3)
   },
+  publicDiscoveryEnabled: false, // Blocked by default (UAT ISSUE-29) — invite-only entry
 }
 
 /**
@@ -771,5 +782,6 @@ export function getAppConfig(): AppConfig {
       ),
       coachModel: process.env.COACH_MODEL ?? DEFAULT_APP_CONFIG.assistant.coachModel,
     },
+    publicDiscoveryEnabled: process.env.PUBLIC_DISCOVERY_ENABLED === 'true',
   }
 }

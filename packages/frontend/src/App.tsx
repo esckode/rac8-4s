@@ -27,6 +27,8 @@ import { OrganizerManage } from './pages/OrganizerManage'
 import { OrganizerDashboard } from './pages/OrganizerDashboard'
 import { ServiceUnavailable } from './pages/ServiceUnavailable'
 import { useServiceUnavailable } from './context/ServiceUnavailableContext'
+import { AppConfigProvider, useAppConfig } from './context/AppConfigContext'
+import { NotFound } from './pages/NotFound'
 import { OfflineBanner } from './pwa/OfflineBanner'
 import { UpdateToast } from './pwa/UpdateToast'
 import { ROUTES } from './constants/routes'
@@ -48,6 +50,17 @@ export const TournamentDetailRedirect: React.FC = () => {
   )
 }
 
+// UAT ISSUE-29: gates /browse and /tournament/:id/browse behind
+// publicDiscoveryEnabled. Renders nothing while the flag is still loading
+// (avoids a flash of the real page before the server-authoritative answer
+// arrives) — brief and blocking real content either way.
+export const DiscoveryGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { publicDiscoveryEnabled, loading } = useAppConfig()
+  if (loading) return null
+  if (!publicDiscoveryEnabled) return <NotFound />
+  return <>{children}</>
+}
+
 export const App: React.FC = () => {
   const { serviceUnavailable } = useServiceUnavailable()
 
@@ -59,6 +72,7 @@ export const App: React.FC = () => {
     <BrowserRouter>
       <OfflineBanner />
       <UpdateToast />
+      <AppConfigProvider>
       <AuthProvider>
         <Routes>
           {/* Public routes (no auth required) */}
@@ -74,18 +88,27 @@ export const App: React.FC = () => {
           <Route path={ROUTES.RESET_PASSWORD} element={<PublicRoute><ResetPassword /></PublicRoute>} />
           <Route path="/signout" element={<Signout />} />
 
-          {/* Public discovery (no auth required) — per rac8-4s-HL.md */}
+          {/* Public discovery (no auth required) — per rac8-4s-HL.md.
+              ISSUE-29: gated behind publicDiscoveryEnabled (default off) —
+              blocked routes render NotFound rather than being deleted, so
+              the machinery and its specs come back with one flag flip. */}
           <Route
             path={ROUTES.BROWSE}
             element={
-              <ResponsiveLayout showHeader showNav>
-                <BrowseTournaments />
-              </ResponsiveLayout>
+              <DiscoveryGate>
+                <ResponsiveLayout showHeader showNav>
+                  <BrowseTournaments />
+                </ResponsiveLayout>
+              </DiscoveryGate>
             }
           />
           <Route
             path="/tournament/:tournamentId/browse"
-            element={<TournamentBrowse />}
+            element={
+              <DiscoveryGate>
+                <TournamentBrowse />
+              </DiscoveryGate>
+            }
           />
           <Route
             path="/tournament/:tournamentId/join"
@@ -218,8 +241,13 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
+
+          {/* ISSUE-29: catch-all — previously no path="*" route existed at all,
+              so any typo'd or blocked URL rendered a blank router outlet. */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </AuthProvider>
+      </AppConfigProvider>
     </BrowserRouter>
   )
 }

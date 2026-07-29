@@ -214,6 +214,16 @@ export function createApp(deps: AppDependencies): Express {
   app.use('/api/analytics', analyticsRouter(appDeps))
   app.use('/api/auth', authRouter(appDeps))
 
+  // GET /api/config — server-authoritative feature flags (UAT ISSUE-29).
+  // Read-only, no auth required (the flag itself gates public routes, not
+  // this endpoint). Never cache: rides the existing /api/* CloudFront
+  // behavior (caching_disabled), and the service worker classifies it
+  // passthrough (never cached, never replay-queued) so an installed PWA
+  // never serves a stale flag.
+  app.get('/api/config', (_req: Request, res: Response) => {
+    res.json({ publicDiscoveryEnabled: appDeps.config.publicDiscoveryEnabled })
+  })
+
   // Test-only endpoint — creates/finds a player and returns an opaque player session token.
   // Disabled in production to prevent auth bypass.
   if (process.env.NODE_ENV !== 'production') {

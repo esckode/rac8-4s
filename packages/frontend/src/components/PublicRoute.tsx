@@ -1,7 +1,7 @@
 /**
  * PublicRoute - Route wrapper that prevents authenticated users from accessing auth pages
  *
- * Redirects authenticated users to /browse (dashboard).
+ * Redirects authenticated users to /play (their tournaments hub).
  * Shows loading spinner while auth state is being determined.
  * Allows anonymous users to access auth pages.
  * Prevents flash of auth pages when user is already logged in.
@@ -28,7 +28,7 @@ export const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/browse" replace />
+    return <Navigate to="/play" replace />
   }
 
   return <>{children}</>

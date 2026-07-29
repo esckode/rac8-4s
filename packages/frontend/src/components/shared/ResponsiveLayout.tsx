@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useGroupUnread } from '../../hooks/useGroupUnread'
 import { useNotificationUnread } from '../../hooks/useNotificationUnread'
 import { usePendingActions } from '../../hooks/usePendingActions'
+import { useAppConfig } from '../../context/AppConfigContext'
 import { MyGroupsUnreadBadge } from '../GroupChatPanel'
 import '../../styles/globals.css'
 
@@ -128,6 +129,7 @@ const MoreSheet: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen,
 const BottomNav = () => {
   const location = useLocation()
   const { isAuthenticated } = useAuth()
+  const { publicDiscoveryEnabled } = useAppConfig()
   const groupsUnread = useGroupUnread()
   const notificationUnread = useNotificationUnread()
   const pendingActions = usePendingActions()
@@ -135,9 +137,12 @@ const BottomNav = () => {
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const isActive = (path: string) => location.pathname.startsWith(path)
 
-  const tabs = [
-    { path: '/browse', label: 'Browse', icon: '🏆', testId: 'nav-browse' },
-  ]
+  // ISSUE-29: Browse is dropped entirely while discovery is blocked (default) —
+  // testid kept as 'nav-browse' so it's ready to reappear unchanged if the
+  // flag is ever flipped back on.
+  const tabs = publicDiscoveryEnabled
+    ? [{ path: '/browse', label: 'Browse', icon: '🏆', testId: 'nav-browse' }]
+    : []
   const authOnlyTabs = [
     { path: '/play', label: 'Play', icon: '🎾', testId: 'nav-play' },
   ]

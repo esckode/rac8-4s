@@ -62,14 +62,6 @@ export const Landing: React.FC = () => {
             >
               Continue with email
             </Button>
-            <Button
-              variant="ghost"
-              size="lg"
-              className="w-full bg-white/8 text-white border border-white/18 hover:bg-white/12"
-              onClick={() => navigate('/browse')}
-            >
-              Browse tournaments
-            </Button>
             <p className="text-center text-xs text-white/50 mt-1.5">
               New here? An account creates itself when you join your first night
             </p>

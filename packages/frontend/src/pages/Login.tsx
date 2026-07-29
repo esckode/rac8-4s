@@ -89,7 +89,7 @@ export const Login: React.FC = () => {
       await authLogin(formData.email, formData.password)
       // Clear form and redirect
       setFormData({ email: '', password: '' })
-      navigate('/browse')
+      navigate('/play')
     } catch (err) {
       const rateLimitErr = err as Error & { status?: number; retryAfterSeconds?: number }
       setLoading(false)
@@ -463,29 +463,6 @@ export const Login: React.FC = () => {
             )}
           </Button>
         </div>
-
-        {/* Divider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0 20px' }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--auth-glass-divider)' }} />
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--auth-glass-text-faint)', letterSpacing: '0.12em' }}>OR</span>
-          <div style={{ flex: 1, height: 1, background: 'var(--auth-glass-divider)' }} />
-        </div>
-
-        {/* Browse tournaments button */}
-        <Button
-          variant="ghost"
-          size="lg"
-          onClick={() => navigate('/browse')}
-          tabIndex={-1}
-          style={{
-            width: '100%',
-            background: 'var(--auth-glass-bg)',
-            color: 'var(--auth-glass-text)',
-            border: '1px solid var(--auth-glass-border-strong)',
-          }}
-        >
-          Browse tournaments
-        </Button>
 
         {/* Spacer */}
         <div style={{ flex: 1 }} />
