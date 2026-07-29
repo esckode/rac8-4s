@@ -483,7 +483,15 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
       }
 
-      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+      // ISSUE-32: an account JWT is not necessarily an organizer — a
+      // registered player's account JWT also passes requireOrganizerAuth
+      // (it does not check role). Only an organizer-role token is held to
+      // ownership; anything else must be a registered participant instead.
+      if (payload.role === 'organizer') {
+        assertOrganizerOwnsTournament(payload, tournament.creator_id)
+      } else {
+        await resolveTournamentPlayer(req.headers.authorization, id)
+      }
 
       const groups = await groupRepo.findGroupsByTournament(id)
 
@@ -1817,7 +1825,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
     }
   })
 
-  // POST /:id/end-session — manually terminate a casual tournament (organizer only)
+  // POST /:id/end-session — manually terminate a casual tournament (owner or a registered participant)
   // Registered before GET /:id so the literal suffix does not get consumed by the param.
   router.post('/:id/end-session', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1829,7 +1837,14 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(404).json({ code: 'NOT_FOUND', message: 'Tournament not found' })
       }
 
-      assertOrganizerOwnsTournament(payload, tournament.creator_id)
+      // ISSUE-32: same dual-auth gap as GET /:id/groups above — an account
+      // JWT that is not organizer-role must be verified as a registered
+      // participant instead of held to ownership it was never meant to have.
+      if (payload.role === 'organizer') {
+        assertOrganizerOwnsTournament(payload, tournament.creator_id)
+      } else {
+        await resolveTournamentPlayer(req.headers.authorization, tournamentId)
+      }
 
       if (tournament.mode !== 'casual') {
         return res.status(400).json({ code: 'NOT_CASUAL', message: 'end-session is only available for casual tournaments' })
@@ -2643,20 +2658,32 @@ export default function tournamentsRouter(deps: AppDependencies) {
       return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Authentication required' })
     }
 
-    // Phase 2: verify tournament membership
+    // Phase 2: verify tournament membership. An account JWT is not
+    // necessarily an organizer — requireOrganizerAuth does not check role,
+    // so a registered player's account JWT reaches here too (ISSUE-32).
+    // Only an organizer-role token is held to ownership; anything else must
+    // be a registered participant instead.
+    let actingPlayerId: string | undefined
     try {
       if (playerPayload) {
         assertPlayerInTournament(playerPayload, tournamentId)
-      } else {
+      } else if (organizerPayload.role === 'organizer') {
         assertOrganizerOwnsTournament(organizerPayload, tournament.creator_id)
+      } else {
+        const resolved = await resolveTournamentPlayer(authHeader, tournamentId)
+        actingPlayerId = resolved.playerId
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof PlayerNotLinkedError) {
+        log.warn('sse.forbidden', { tournamentId, code: err.code })
+        return res.status(403).json({ code: err.code, message: err.message })
+      }
       log.warn('sse.forbidden', { tournamentId })
       return res.status(403).json({ code: 'FORBIDDEN', message: 'Access denied' })
     }
 
     // Rate limit: cap concurrent SSE connections per user
-    const userId: string = playerPayload?.playerId ?? organizerPayload.sub
+    const userId: string = playerPayload?.playerId ?? actingPlayerId ?? organizerPayload.sub
     const current = sseConnectionCount.get(userId) ?? 0
     if (current >= deps.config.limits.sseMaxConnectionsPerUser) {
       log.warn('sse.rate.limited', { tournamentId, userId })
