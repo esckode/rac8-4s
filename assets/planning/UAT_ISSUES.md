@@ -515,6 +515,27 @@ CSS. Fixing 1,069 sites without fixing the rule buys time, not a solution.
   arbitrary values. This is the easy thing to get wrong: a pattern that catches `[--x]` but also
   catches `[44px]` will fail this and must not be "fixed" by deleting the fixture.
 
+**⚠ Found 2026-07-30 during 44b verification — the docs and the rule message still teach the broken
+form.** 44a+44b left the *code* clean, but a compiled-CSS check still showed 22 invalid declarations,
+which traced back to these. This is the actual regression mechanism and is part of 44c:
+
+- **`.eslintrc.json:77-82` — all 6 occurrences are inside the rule's own error message:**
+  *"Use a color token from tokens.css (e.g. `text-[--ink-900]`); raw color literals are banned."*
+  So the linter **instructs developers to write the broken syntax every time it fires** — a dev writes
+  `#fff`, is told to use `text-[--ink-900]`, and dutifully produces invalid CSS. Fix all 6 messages.
+- **`assets/planning/DESIGN_SYSTEM.md:32,76`** — documents the arbitrary-value utilities using the
+  broken form as the canonical examples (`px-[--s-4]`, `text-[--ink-900]`, `rounded-[--r-lg]`,
+  `border-[--border]`).
+- **`assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md:139,145`** — the "must pass" example and the quoted
+  rule message.
+- **`packages/frontend/src/components/ANIMATION_SPEC.md:91,100,171`** — component animation spec.
+
+**Do NOT rewrite `assets/planning/UAT_ISSUES.md`** — its ~11 occurrences of the broken form are
+deliberate: this document *describes* the bug and must keep quoting it verbatim.
+
+`packages/frontend/coverage/` also matches, but it is a gitignored build artifact holding pre-fix
+source snapshots; it regenerates and the classes it emits are dead. Leave it alone.
+
 #### ISSUE-44d — visual review (human, not an agent) {#issue-44d}
 
 Per the spacing finding above, ~380 dead spacing declarations start applying when 44a+44b land, so
