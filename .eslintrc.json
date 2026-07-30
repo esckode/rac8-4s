@@ -74,12 +74,14 @@
       ],
       "rules": {
         "no-restricted-syntax": ["error",
-          { "selector": "Literal[value=/#([0-9a-fA-F]{3}){1,2}/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
-          { "selector": "Literal[value=/rgba?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
-          { "selector": "Literal[value=/hsla?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
-          { "selector": "TemplateElement[value.raw=/#([0-9a-fA-F]{3}){1,2}/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
-          { "selector": "TemplateElement[value.raw=/rgba?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." },
-          { "selector": "TemplateElement[value.raw=/hsla?\\(/]", "message": "Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned." }
+          { "selector": "Literal[value=/#([0-9a-fA-F]{3}){1,2}/]", "message": "Use a color token from tokens.css (e.g. text-(--ink-900)); raw color literals are banned." },
+          { "selector": "Literal[value=/rgba?\\(/]", "message": "Use a color token from tokens.css (e.g. text-(--ink-900)); raw color literals are banned." },
+          { "selector": "Literal[value=/hsla?\\(/]", "message": "Use a color token from tokens.css (e.g. text-(--ink-900)); raw color literals are banned." },
+          { "selector": "TemplateElement[value.raw=/#([0-9a-fA-F]{3}){1,2}/]", "message": "Use a color token from tokens.css (e.g. text-(--ink-900)); raw color literals are banned." },
+          { "selector": "TemplateElement[value.raw=/rgba?\\(/]", "message": "Use a color token from tokens.css (e.g. text-(--ink-900)); raw color literals are banned." },
+          { "selector": "TemplateElement[value.raw=/hsla?\\(/]", "message": "Use a color token from tokens.css (e.g. text-(--ink-900)); raw color literals are banned." },
+          { "selector": "Literal[value=/-\\[--[a-zA-Z0-9-]+\\]/]", "message": "Use `-(--token)`; the `-[--token]` form emits invalid CSS in Tailwind v4." },
+          { "selector": "TemplateElement[value.raw=/-\\[--[a-zA-Z0-9-]+\\]/]", "message": "Use `-(--token)`; the `-[--token]` form emits invalid CSS in Tailwind v4." }
         ]
       }
     },

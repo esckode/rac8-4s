@@ -88,7 +88,7 @@
 - **Duration:** `--duration-normal` (200ms)
 - **Easing:** `--easing-snap`
 - **Details:**
-  - Background: `bg-white` / `bg-[--ink-50]` → `bg-[--court-50]`
+  - Background: `bg-white` / `bg-(--ink-50)` → `bg-(--court-50)`
   - Shadow: optional subtle box-shadow
 - **Use:** Indicate clickable row
 
@@ -97,7 +97,7 @@
 - **Duration:** `--duration-slow` (300ms)
 - **Easing:** `ease`
 - **Details:**
-  - Flash: `bg-white` → `bg-[--gold-200]` (150ms) → `bg-white` (150ms) → hold
+  - Flash: `bg-white` → `bg-(--gold-200)` (150ms) → `bg-white` (150ms) → hold
   - Total animation: 500ms total (150ms flash + 350ms fade back)
 - **Use:** Indicate row data changed from server
 - **Performance:** Use `background-color` (layout-safe), or optimize with CSS `::before` pseudo-element
@@ -168,7 +168,7 @@
 - **Duration:** none (immediate, but transition allowed on surrounding element)
 - **Easing:** none
 - **Details:**
-  - Style: `focus-visible:ring-2 focus-visible:ring-[--court-400] focus-visible:ring-offset-2`
+  - Style: `focus-visible:ring-2 focus-visible:ring-(--court-400) focus-visible:ring-offset-2`
   - Color: `--court-400` (bright blue from logo)
   - Offset: 2px (outline-offset)
   - Width: 2px

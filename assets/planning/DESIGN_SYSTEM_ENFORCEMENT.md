@@ -136,13 +136,13 @@ error is pushed (verify on a throwaway commit). **Commit.**
 **Tests (write first, commit red):** harness fixtures —
 - **must error:** `className="bg-[#fff]"`, `className="text-[#1a1a1a]"`, `style={{ color: '#FFF' }}`,
   `style={{ background: 'rgba(0,0,0,0.5)' }}`, `'hsl(210 100% 50%)'`.
-- **must pass:** `className="text-[--ink-900] bg-[--court-500]"`, `style={{ color: 'var(--ink-900)' }}`,
+- **must pass:** `className="text-(--ink-900) bg-(--court-500)"`, `style={{ color: 'var(--ink-900)' }}`,
   non-color arbitrary values `min-h-[44px]`, `max-h-[600px]`.
 *Fails first (no rule).*
 
 **Implementation:** add `no-restricted-syntax` selectors to `.eslintrc.json` matching hex (`#RGB`/`#RRGGBB`)
 and `rgb(`/`rgba(`/`hsl(`/`hsla(` inside `Literal`, `TemplateElement`, and JSX text — message:
-`"Use a color token from tokens.css (e.g. text-[--ink-900]); raw color literals are banned."` Scope to
+`"Use a color token from tokens.css (e.g. text-(--ink-900)); raw color literals are banned."` Scope to
 `packages/frontend/src/**/*.{ts,tsx}`.
 
 **Done when:** every must-error fixture errors, every must-pass fixture passes. **Commit** (rule + tests).

@@ -29,7 +29,7 @@ Structured token set on `:root` (branded "C U At Court"):
 
 ### 2.2 Delivery — Tailwind v4
 `globals.css` imports `tailwindcss` + `tokens.css` + `responsive.css`. Components consume tokens via
-arbitrary-value utilities (`px-[--s-4]`, `text-[--ink-900]`, `rounded-[--r-lg]`, `border-[--border]`).
+arbitrary-value utilities (`px-(--s-4)`, `text-(--ink-900)`, `rounded-(--r-lg)`, `border-(--border)`).
 Tokens are the source of truth; Tailwind applies them. (Tailwind 4.3 is hoisted to the **workspace-root**
 `package.json`, not the frontend package.)
 
@@ -73,7 +73,7 @@ flat `--ink-*` palette. Without this written down, the next new page picks a sid
 
 ### 3.1 Token governance (color)
 All color values in `packages/frontend/src/**/*.{ts,tsx}` must use CSS design tokens (e.g.,
-`text-[--ink-900]`, `var(--court-500)`). Raw hex, `rgb()/rgba()`, `hsl()/hsla()` literals are banned by an
+`text-(--ink-900)`, `var(--court-500)`). Raw hex, `rgb()/rgba()`, `hsl()/hsla()` literals are banned by an
 ESLint `no-restricted-syntax` rule that CI enforces at `--max-warnings 0`.
 
 **Permanent allowlist** (exempt forever): `Logo.tsx` / `LogoMark.tsx` (brand-mark SVG fills), `tokens.css`
