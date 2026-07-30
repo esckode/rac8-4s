@@ -269,7 +269,7 @@ tokens + their tests.
 
 ### E5.1 — Retrofit the auth cluster (244 literals, one commit per file)
 `ResetPassword.tsx`, `ForgotPassword.tsx`, `Login.tsx`, `Signup.tsx`. For **each** file: replace every
-hex/rgba with the mapped token (arbitrary-value utility `…-[--token]` or `var(--token)` in inline style),
+hex/rgba with the mapped token (arbitrary-value utility `…-(--token)` or `var(--token)` in inline style),
 remove the file from the baseline + its `TODO(token-debt)`, run `auth.spec.ts` + full lint
 `--max-warnings 0`. **One commit per file** (4 commits).
 **Done when:** all four files are off the baseline, `auth.spec.ts` green, lint green.
