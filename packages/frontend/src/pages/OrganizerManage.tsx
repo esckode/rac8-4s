@@ -53,14 +53,14 @@ export const OrganizerManage: React.FC = () => {
 
   if (!permissions.canManageGroups) {
     return (
-      <div data-testid="not-authorized" className="max-w-lg mx-auto mt-[--s-12] text-center text-[--ink-600]">
+      <div data-testid="not-authorized" className="max-w-lg mx-auto mt-(--s-12) text-center text-(--ink-600)">
         You don't have permission to manage this tournament.
       </div>
     )
   }
 
   if (!tournament) {
-    return <p className="text-[--ink-500]">Loading…</p>
+    return <p className="text-(--ink-500)">Loading…</p>
   }
 
   const token = () => localStorage.getItem('auth_token') || ''
@@ -107,7 +107,7 @@ export const OrganizerManage: React.FC = () => {
       data-testid={testid}
       onClick={onClick}
       disabled={busy}
-      className="px-[--s-4] py-[--s-3] text-sm font-medium bg-[--court-600] text-white rounded-[--r-md] disabled:opacity-60"
+      className="px-(--s-4) py-(--s-3) text-sm font-medium bg-(--court-600) text-white rounded-(--r-md) disabled:opacity-60"
     >
       {label}
     </button>
@@ -128,28 +128,28 @@ export const OrganizerManage: React.FC = () => {
       case 'knockout_active':
         return actionButton('complete-tournament-button', 'Complete tournament', () => runAdvance('COMPLETE_TOURNAMENT'))
       case 'tournament_complete':
-        return <p className="text-[--green-700]">This tournament is complete.</p>
+        return <p className="text-(--green-700)">This tournament is complete.</p>
       default:
         return null
     }
   }
 
   return (
-    <div className="max-w-2xl mx-auto mt-[--s-8] px-[--s-4] space-y-[--s-4]">
+    <div className="max-w-2xl mx-auto mt-(--s-8) px-(--s-4) space-y-(--s-4)">
       <div>
-        <h1 className="text-2xl font-bold text-[--ink-900]">Manage tournament</h1>
-        <p className="text-sm text-[--ink-600] mt-[--s-1]">{tournament.name}</p>
-        <p className="text-sm text-[--ink-500] mt-[--s-1]">
-          Status: <span data-testid="manage-status" className="font-medium text-[--ink-700]">{status}</span>
+        <h1 className="text-2xl font-bold text-(--ink-900)">Manage tournament</h1>
+        <p className="text-sm text-(--ink-600) mt-(--s-1)">{tournament.name}</p>
+        <p className="text-sm text-(--ink-500) mt-(--s-1)">
+          Status: <span data-testid="manage-status" className="font-medium text-(--ink-700)">{status}</span>
           {STATUS_LABELS[status] ? ` (${STATUS_LABELS[status]})` : ''}
         </p>
       </div>
 
-      <div className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-6] space-y-[--s-3]">
+      <div className="bg-white border border-(--border) rounded-(--r-lg) p-(--s-6) space-y-(--s-3)">
         {renderAction()}
 
         {error && (
-          <p data-testid="manage-error" role="alert" className="text-sm text-[--rose-700]">
+          <p data-testid="manage-error" role="alert" className="text-sm text-(--rose-700)">
             {error}
           </p>
         )}
@@ -160,7 +160,7 @@ export const OrganizerManage: React.FC = () => {
             data-testid="force-advance-button"
             onClick={() => runAdvance(forceableAction, true)}
             disabled={busy}
-            className="px-[--s-4] py-[--s-2] text-sm font-medium border border-[--rose-300] text-[--rose-700] rounded-[--r-md] disabled:opacity-60"
+            className="px-(--s-4) py-(--s-2) text-sm font-medium border border-(--rose-300) text-(--rose-700) rounded-(--r-md) disabled:opacity-60"
           >
             Force advance anyway
           </button>

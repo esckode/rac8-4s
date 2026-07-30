@@ -78,16 +78,16 @@ export const PollCard: React.FC<PollCardProps> = ({
   return (
     <div
       data-testid="poll-card"
-      className="rounded-lg border border-[--border] p-3 bg-[--ink-50] space-y-2"
+      className="rounded-lg border border-(--border) p-3 bg-(--ink-50) space-y-2"
     >
       {/* Question */}
-      <p data-testid="poll-question" className="text-sm font-semibold text-[--ink-900]">
+      <p data-testid="poll-question" className="text-sm font-semibold text-(--ink-900)">
         {question}
       </p>
 
       {/* Target time — absolute primary (browser tz), relative secondary (P4) */}
       {targetTime && (
-        <p data-testid="poll-target-time" className="text-xs text-[--ink-500]">
+        <p data-testid="poll-target-time" className="text-xs text-(--ink-500)">
           {formatTargetTime(targetTime)}
           <span data-testid="poll-target-time-relative"> · {formatLocal(targetTime).relative}</span>
         </p>
@@ -95,7 +95,7 @@ export const PollCard: React.FC<PollCardProps> = ({
 
       {/* Close-window banner — shown on open polls when autoCloseAt is set */}
       {!isClosed && autoCloseAt && (
-        <p data-testid="poll-close-window" className="text-xs text-[--ink-500] italic">
+        <p data-testid="poll-close-window" className="text-xs text-(--ink-500) italic">
           {formatCloseWindow(autoCloseAt, autoLaunch)}
         </p>
       )}
@@ -112,8 +112,8 @@ export const PollCard: React.FC<PollCardProps> = ({
               className={[
                 'flex-1 py-1.5 text-xs rounded border transition-colors',
                 currentUserVote === choice
-                  ? 'bg-[--court-500] text-white border-[--court-500]'
-                  : 'bg-white text-[--ink-700] border-[--border] hover:border-[--court-400]',
+                  ? 'bg-(--court-500) text-white border-(--court-500)'
+                  : 'bg-white text-(--ink-700) border-(--border) hover:border-(--court-400)',
               ].join(' ')}
             >
               {choice.charAt(0).toUpperCase() + choice.slice(1)}
@@ -123,7 +123,7 @@ export const PollCard: React.FC<PollCardProps> = ({
       )}
 
       {/* Tally */}
-      <p data-testid="poll-tally" className="text-xs text-[--ink-600]">
+      <p data-testid="poll-tally" className="text-xs text-(--ink-600)">
         {isClosed ? 'Final: ' : ''}
         {tally.in} in · {tally.out} out · {tally.maybe} maybe
       </p>
@@ -133,7 +133,7 @@ export const PollCard: React.FC<PollCardProps> = ({
         <button
           data-testid="poll-close-button"
           onClick={onClose}
-          className="text-xs text-[--ink-500] hover:text-[--rose-600] underline"
+          className="text-xs text-(--ink-500) hover:text-(--rose-600) underline"
         >
           Close poll
         </button>
@@ -144,7 +144,7 @@ export const PollCard: React.FC<PollCardProps> = ({
         <button
           data-testid="poll-launch-button"
           onClick={onLaunch}
-          className="text-xs text-[--court-600] hover:text-[--court-800] font-medium underline"
+          className="text-xs text-(--court-600) hover:text-(--court-800) font-medium underline"
         >
           Launch tournament from In-voters
         </button>

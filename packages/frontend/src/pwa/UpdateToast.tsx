@@ -14,13 +14,13 @@ export function UpdateToast(): React.ReactElement | null {
     <div
       data-testid="update-toast"
       role="status"
-      className="fixed bottom-[--s-4] left-1/2 -translate-x-1/2 flex items-center gap-[--s-3] bg-[--ink-900] text-white rounded-[--r-lg] px-[--s-4] py-[--s-3] shadow-lg z-50"
+      className="fixed bottom-(--s-4) left-1/2 -translate-x-1/2 flex items-center gap-(--s-3) bg-(--ink-900) text-white rounded-(--r-lg) px-(--s-4) py-(--s-3) shadow-lg z-50"
     >
       <span className="text-sm">Update available</span>
       <button
         type="button"
         onClick={() => applyUpdate()}
-        className="text-sm font-medium text-[--court-300] underline"
+        className="text-sm font-medium text-(--court-300) underline"
       >
         Refresh
       </button>

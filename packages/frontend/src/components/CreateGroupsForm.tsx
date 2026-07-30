@@ -61,13 +61,13 @@ export function CreateGroupsForm({ tournamentId, isDoubles, onCreated }: CreateG
     <form
       data-testid="create-groups-form"
       onSubmit={handleSubmit}
-      className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-4] space-y-[--s-3]"
+      className="bg-white border border-(--border) rounded-(--r-lg) p-(--s-4) space-y-(--s-3)"
     >
-      <h3 className="text-lg font-semibold text-[--ink-900]">Create groups</h3>
+      <h3 className="text-lg font-semibold text-(--ink-900)">Create groups</h3>
 
-      <div className="flex gap-[--s-4]">
-        <label className="flex-1 space-y-[--s-1]">
-          <span className="text-sm font-medium text-[--ink-700]">Number of groups</span>
+      <div className="flex gap-(--s-4)">
+        <label className="flex-1 space-y-(--s-1)">
+          <span className="text-sm font-medium text-(--ink-700)">Number of groups</span>
           <input
             data-testid="num-groups-input"
             type="number"
@@ -75,11 +75,11 @@ export function CreateGroupsForm({ tournamentId, isDoubles, onCreated }: CreateG
             value={numGroups}
             onChange={(e) => setNumGroups(e.target.value)}
             disabled={submitting}
-            className="w-full border border-[--border] rounded-[--r-md] px-[--s-3] py-[--s-2]"
+            className="w-full border border-(--border) rounded-(--r-md) px-(--s-3) py-(--s-2)"
           />
         </label>
-        <label className="flex-1 space-y-[--s-1]">
-          <span className="text-sm font-medium text-[--ink-700]">Advancing per group</span>
+        <label className="flex-1 space-y-(--s-1)">
+          <span className="text-sm font-medium text-(--ink-700)">Advancing per group</span>
           <input
             data-testid="advancing-input"
             type="number"
@@ -87,13 +87,13 @@ export function CreateGroupsForm({ tournamentId, isDoubles, onCreated }: CreateG
             value={advancing}
             onChange={(e) => setAdvancing(e.target.value)}
             disabled={submitting}
-            className="w-full border border-[--border] rounded-[--r-md] px-[--s-3] py-[--s-2]"
+            className="w-full border border-(--border) rounded-(--r-md) px-(--s-3) py-(--s-2)"
           />
         </label>
       </div>
 
       {isDoubles && (
-        <label className="flex items-center gap-[--s-2]">
+        <label className="flex items-center gap-(--s-2)">
           <input
             data-testid="pair-unpaired-toggle"
             type="checkbox"
@@ -101,14 +101,14 @@ export function CreateGroupsForm({ tournamentId, isDoubles, onCreated }: CreateG
             onChange={(e) => setPairUnpaired(e.target.checked)}
             disabled={submitting}
           />
-          <span className="text-sm text-[--ink-700]">
+          <span className="text-sm text-(--ink-700)">
             Auto-pair leftover solo registrants (uncheck to drop them)
           </span>
         </label>
       )}
 
       {error && (
-        <p data-testid="groups-error" role="alert" className="text-sm text-[--rose-700]">
+        <p data-testid="groups-error" role="alert" className="text-sm text-(--rose-700)">
           {error}
         </p>
       )}
@@ -117,7 +117,7 @@ export function CreateGroupsForm({ tournamentId, isDoubles, onCreated }: CreateG
         type="submit"
         data-testid="create-groups-submit"
         disabled={submitting}
-        className="px-[--s-4] py-[--s-2] text-sm font-medium bg-[--court-600] text-white rounded-[--r-md] disabled:opacity-60"
+        className="px-(--s-4) py-(--s-2) text-sm font-medium bg-(--court-600) text-white rounded-(--r-md) disabled:opacity-60"
       >
         {submitting ? 'Creating…' : 'Create groups'}
       </button>

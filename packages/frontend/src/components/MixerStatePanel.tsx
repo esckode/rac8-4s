@@ -16,15 +16,15 @@ export const MixerStatePanel: React.FC<MixerStatePanelProps> = ({
     .sort()
 
   return (
-    <div data-testid="mixer-state-panel" className="p-[--s-3] bg-[--surface-50] rounded-[--r-md]">
+    <div data-testid="mixer-state-panel" className="p-(--s-3) bg-(--surface-50) rounded-(--r-md)">
       {sittingOut.length === 0 ? (
-        <p data-testid="mixer-all-active" className="text-sm text-[--ink-500]">
+        <p data-testid="mixer-all-active" className="text-sm text-(--ink-500)">
           Everyone is playing
         </p>
       ) : (
         <div>
-          <p className="text-xs font-medium text-[--ink-600] mb-[--s-1]">Sitting out this round</p>
-          <ul data-testid="sitting-out-list" className="text-sm text-[--ink-700] flex flex-wrap gap-[--s-1]">
+          <p className="text-xs font-medium text-(--ink-600) mb-(--s-1)">Sitting out this round</p>
+          <ul data-testid="sitting-out-list" className="text-sm text-(--ink-700) flex flex-wrap gap-(--s-1)">
             {sittingOut.map(name => (
               <li key={name}>{name}</li>
             ))}

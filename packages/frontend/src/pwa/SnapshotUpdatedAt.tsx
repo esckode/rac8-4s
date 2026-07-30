@@ -7,7 +7,7 @@ export function SnapshotUpdatedAt({ updatedAt }: { updatedAt?: string }): React.
   if (!updatedAt) return null
 
   return (
-    <span data-testid="snapshot-updated-at" className="text-xs text-[--ink-500]">
+    <span data-testid="snapshot-updated-at" className="text-xs text-(--ink-500)">
       {formatUpdatedAt(updatedAt)}
     </span>
   )

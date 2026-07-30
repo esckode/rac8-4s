@@ -45,7 +45,7 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
       role="listbox"
       aria-label="Mention a member"
       onKeyDown={handleKeyDown}
-      className="absolute bottom-full left-0 mb-1 bg-[--surface] border border-[--border] rounded shadow-md w-48 max-h-40 overflow-y-auto z-10"
+      className="absolute bottom-full left-0 mb-1 bg-(--surface) border border-(--border) rounded shadow-md w-48 max-h-40 overflow-y-auto z-10"
     >
       {showAssistant && (
         <li
@@ -53,7 +53,7 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
           role="option"
           aria-selected={false}
           tabIndex={0}
-          className="px-3 py-2 text-sm cursor-pointer hover:bg-[--court-50] focus:bg-[--court-50] outline-none border-b border-[--border]"
+          className="px-3 py-2 text-sm cursor-pointer hover:bg-(--court-50) focus:bg-(--court-50) outline-none border-b border-(--border)"
           onClick={() => onSelect(ASSISTANT_DISPLAY_NAME)}
           onKeyDown={e => {
             if (e.key === 'Enter') {
@@ -65,8 +65,8 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
             }
           }}
         >
-          <span className="font-medium text-[--court-700]">{ASSISTANT_DISPLAY_NAME}</span>
-          <span className="block text-xs text-[--ink-500]">{ASSISTANT_HINT}</span>
+          <span className="font-medium text-(--court-700)">{ASSISTANT_DISPLAY_NAME}</span>
+          <span className="block text-xs text-(--ink-500)">{ASSISTANT_HINT}</span>
         </li>
       )}
       {filtered.map(m => (
@@ -76,7 +76,7 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
           role="option"
           aria-selected={false}
           tabIndex={0}
-          className="px-3 py-2 text-sm cursor-pointer hover:bg-[--ink-50] focus:bg-[--ink-50] outline-none"
+          className="px-3 py-2 text-sm cursor-pointer hover:bg-(--ink-50) focus:bg-(--ink-50) outline-none"
           onClick={() => onSelect(m.name)}
           onKeyDown={e => {
             if (e.key === 'Enter') {

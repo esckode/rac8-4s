@@ -21,15 +21,15 @@ export const Standings: React.FC = () => {
       <div
         className={`
           text-center
-          py-[--s-12]
-          rounded-[--r-lg]
+          py-(--s-12)
+          rounded-(--r-lg)
           border
           border-dashed
-          border-[--border]
-          bg-[--ink-50]
+          border-(--border)
+          bg-(--ink-50)
         `}
       >
-        <p className="text-lg text-[--ink-600]">Sign in to view standings</p>
+        <p className="text-lg text-(--ink-600)">Sign in to view standings</p>
       </div>
     )
   }
@@ -43,11 +43,11 @@ export const Standings: React.FC = () => {
   const userRole = organizerRole ? 'organizer' : 'player'
 
   return (
-    <div className="space-y-[--s-6]">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-[--s-4]">
+    <div className="space-y-(--s-6)">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-(--s-4)">
         <div>
-          <h2 className="text-2xl font-bold text-[--ink-900]">Standings</h2>
-          <p className="text-sm text-[--ink-600] mt-[--s-1]">
+          <h2 className="text-2xl font-bold text-(--ink-900)">Standings</h2>
+          <p className="text-sm text-(--ink-600) mt-(--s-1)">
             {standings.length > 0
               ? `${standings.length} ${standings.length === 1 ? 'player' : 'players'} registered`
               : 'Waiting for registrations'}
@@ -68,7 +68,7 @@ export const Standings: React.FC = () => {
       />
 
       {overrideInProgress && (
-        <div className="text-center text-sm text-[--ink-600]">
+        <div className="text-center text-sm text-(--ink-600)">
           Override in progress...
         </div>
       )}

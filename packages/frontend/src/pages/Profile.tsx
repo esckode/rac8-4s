@@ -174,12 +174,12 @@ export const Profile: React.FC = () => {
 
   return (
     <div data-testid="profile-page" className="p-4 space-y-6">
-      <h1 className="text-2xl font-bold text-[--ink-900]">Profile</h1>
+      <h1 className="text-2xl font-bold text-(--ink-900)">Profile</h1>
 
-      <section className="rounded-xl border border-[--border] p-4 bg-[--surface] space-y-3">
-        <h2 className="text-base font-semibold text-[--ink-800]">Display</h2>
+      <section className="rounded-xl border border-(--border) p-4 bg-(--surface) space-y-3">
+        <h2 className="text-base font-semibold text-(--ink-800)">Display</h2>
         <div className="flex items-center gap-3">
-          <label htmlFor="density-select" className="text-sm text-[--ink-700]">
+          <label htmlFor="density-select" className="text-sm text-(--ink-700)">
             Table density
           </label>
           <select
@@ -187,7 +187,7 @@ export const Profile: React.FC = () => {
             data-testid="density-select"
             value={settings?.tableDensity ?? 'comfortable'}
             onChange={handleDensityChange}
-            className="text-sm border border-[--border] rounded-lg px-3 py-2 text-[--ink-900] bg-[--surface] focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+            className="text-sm border border-(--border) rounded-lg px-3 py-2 text-(--ink-900) bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--court-400)"
           >
             <option value="comfortable">Comfortable</option>
             <option value="compact">Compact</option>
@@ -195,10 +195,10 @@ export const Profile: React.FC = () => {
         </div>
       </section>
 
-      <section className="rounded-xl border border-[--border] p-4 bg-[--surface] space-y-3">
-        <h2 className="text-base font-semibold text-[--ink-800]">Notifications</h2>
+      <section className="rounded-xl border border-(--border) p-4 bg-(--surface) space-y-3">
+        <h2 className="text-base font-semibold text-(--ink-800)">Notifications</h2>
 
-        <label className="flex items-center gap-3 text-sm text-[--ink-700]">
+        <label className="flex items-center gap-3 text-sm text-(--ink-700)">
           <input
             type="checkbox"
             data-testid="notify-mentions-toggle"
@@ -208,7 +208,7 @@ export const Profile: React.FC = () => {
           Notify me when I'm @mentioned
         </label>
 
-        <label className="flex items-center gap-3 text-sm text-[--ink-700]">
+        <label className="flex items-center gap-3 text-sm text-(--ink-700)">
           <input
             type="checkbox"
             data-testid="notify-polls-toggle"
@@ -218,7 +218,7 @@ export const Profile: React.FC = () => {
           Notify me about new polls
         </label>
 
-        <label className="flex items-center gap-3 text-sm text-[--ink-700]">
+        <label className="flex items-center gap-3 text-sm text-(--ink-700)">
           <input
             type="checkbox"
             data-testid="notify-nudges-toggle"
@@ -229,7 +229,7 @@ export const Profile: React.FC = () => {
         </label>
 
         <div className="flex items-center gap-3 pt-2">
-          <span className="text-sm text-[--ink-700]">Quiet hours</span>
+          <span className="text-sm text-(--ink-700)">Quiet hours</span>
           <label htmlFor="quiet-hours-start" className="sr-only">Quiet hours start</label>
           <input
             id="quiet-hours-start"
@@ -239,9 +239,9 @@ export const Profile: React.FC = () => {
             max={23}
             value={settings?.quietHoursStart ?? ''}
             onChange={e => handleQuietHoursChange('quietHoursStart', e.target.value)}
-            className="w-16 text-sm border border-[--border] rounded-lg px-2 py-1 text-[--ink-900] bg-[--surface]"
+            className="w-16 text-sm border border-(--border) rounded-lg px-2 py-1 text-(--ink-900) bg-(--surface)"
           />
-          <span className="text-sm text-[--ink-500]">to</span>
+          <span className="text-sm text-(--ink-500)">to</span>
           <label htmlFor="quiet-hours-end" className="sr-only">Quiet hours end</label>
           <input
             id="quiet-hours-end"
@@ -251,14 +251,14 @@ export const Profile: React.FC = () => {
             max={23}
             value={settings?.quietHoursEnd ?? ''}
             onChange={e => handleQuietHoursChange('quietHoursEnd', e.target.value)}
-            className="w-16 text-sm border border-[--border] rounded-lg px-2 py-1 text-[--ink-900] bg-[--surface]"
+            className="w-16 text-sm border border-(--border) rounded-lg px-2 py-1 text-(--ink-900) bg-(--surface)"
           />
         </div>
       </section>
 
-      <section className="rounded-xl border border-[--border] p-4 bg-[--surface] space-y-3">
-        <h2 className="text-base font-semibold text-[--ink-800]">Availability</h2>
-        <p className="text-xs text-[--ink-500]">
+      <section className="rounded-xl border border-(--border) p-4 bg-(--surface) space-y-3">
+        <h2 className="text-base font-semibold text-(--ink-800)">Availability</h2>
+        <p className="text-xs text-(--ink-500)">
           Used only to suggest times where most of a group is free — never shown per-person.
         </p>
 
@@ -267,14 +267,14 @@ export const Profile: React.FC = () => {
             <tr>
               <th />
               {WEEKDAYS.map(day => (
-                <th key={day} className="text-center font-medium text-[--ink-700] px-1">{day}</th>
+                <th key={day} className="text-center font-medium text-(--ink-700) px-1">{day}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {DAY_PARTS.map(dayPart => (
               <tr key={dayPart}>
-                <td className="text-[--ink-700] capitalize pr-2">{dayPart}</td>
+                <td className="text-(--ink-700) capitalize pr-2">{dayPart}</td>
                 {WEEKDAYS.map((_, weekday) => (
                   <td key={slotKey(weekday, dayPart)} className="text-center">
                     <input
@@ -291,21 +291,21 @@ export const Profile: React.FC = () => {
         </table>
 
         {availabilityUpdatedAt && (
-          <p data-testid="availability-last-updated" className="text-xs text-[--ink-500]">
+          <p data-testid="availability-last-updated" className="text-xs text-(--ink-500)">
             Last updated {new Date(availabilityUpdatedAt).toLocaleDateString()}
           </p>
         )}
         {needsReconfirm && (
-          <p data-testid="availability-reconfirm-prompt" className="text-xs text-[--gold-700] font-medium">
+          <p data-testid="availability-reconfirm-prompt" className="text-xs text-(--gold-700) font-medium">
             It's been a while — please confirm your availability is still accurate.
           </p>
         )}
       </section>
 
-      <section className="rounded-xl border border-[--border] p-4 bg-[--surface] space-y-3">
-        <h2 className="text-base font-semibold text-[--ink-800]">Coach</h2>
+      <section className="rounded-xl border border-(--border) p-4 bg-(--surface) space-y-3">
+        <h2 className="text-base font-semibold text-(--ink-800)">Coach</h2>
 
-        <label className="flex items-center gap-3 text-sm text-[--ink-700]">
+        <label className="flex items-center gap-3 text-sm text-(--ink-700)">
           <input
             type="checkbox"
             data-testid="coach-memory-toggle"
@@ -317,7 +317,7 @@ export const Profile: React.FC = () => {
 
         {memories.length > 0 && (
           <div className="space-y-2 pt-2">
-            <h3 className="text-xs font-semibold text-[--ink-700] uppercase tracking-wide">What Coach remembers</h3>
+            <h3 className="text-xs font-semibold text-(--ink-700) uppercase tracking-wide">What Coach remembers</h3>
             {memories.map(m => (
               <div
                 key={m.id}
@@ -325,14 +325,14 @@ export const Profile: React.FC = () => {
                 className="flex items-center justify-between gap-2 py-1"
               >
                 <div>
-                  <p className="text-sm text-[--ink-900]">{m.body}</p>
-                  <p className="text-xs text-[--ink-500]">{new Date(m.createdAt).toLocaleDateString()}</p>
+                  <p className="text-sm text-(--ink-900)">{m.body}</p>
+                  <p className="text-xs text-(--ink-500)">{new Date(m.createdAt).toLocaleDateString()}</p>
                 </div>
                 <button
                   data-testid="memory-delete"
                   onClick={() => handleDeleteMemory(m.id)}
                   aria-label={`Delete memory: ${m.body}`}
-                  className="text-xs font-medium text-[--rose-700] hover:text-[--rose-900] px-2 py-1 rounded hover:bg-[--rose-50] transition-colors"
+                  className="text-xs font-medium text-(--rose-700) hover:text-(--rose-900) px-2 py-1 rounded hover:bg-(--rose-50) transition-colors"
                 >
                   Delete
                 </button>
@@ -341,11 +341,11 @@ export const Profile: React.FC = () => {
           </div>
         )}
 
-        <div className="pt-2 border-t border-[--border]">
+        <div className="pt-2 border-t border-(--border)">
           <button
             data-testid="coach-clear"
             onClick={() => setShowClearConfirm(true)}
-            className="text-sm font-medium text-[--rose-700] hover:text-[--rose-900]"
+            className="text-sm font-medium text-(--rose-700) hover:text-(--rose-900)"
           >
             Clear conversation
           </button>
@@ -366,13 +366,13 @@ export const Profile: React.FC = () => {
           },
         ]}
       >
-        <p className="text-sm text-[--ink-700]">
+        <p className="text-sm text-(--ink-700)">
           This deletes your Coach conversation history. What Coach remembers about you is not affected.
         </p>
       </Modal>
 
       <footer className="text-center pt-2">
-        <a href="/privacy" className="text-xs text-[--ink-500] hover:text-[--ink-700] underline">
+        <a href="/privacy" className="text-xs text-(--ink-500) hover:text-(--ink-700) underline">
           Privacy Policy
         </a>
       </footer>

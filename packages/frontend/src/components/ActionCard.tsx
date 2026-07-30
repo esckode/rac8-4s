@@ -80,26 +80,26 @@ export const ActionCard: React.FC<ActionCardProps> = ({
   return (
     <div
       data-testid="action-card"
-      className="rounded-lg border border-[--court-200] p-3 bg-[--court-50] space-y-2"
+      className="rounded-lg border border-(--court-200) p-3 bg-(--court-50) space-y-2"
     >
-      <p data-testid="action-card-body" className="text-sm text-[--ink-900]">
+      <p data-testid="action-card-body" className="text-sm text-(--ink-900)">
         {body}
       </p>
 
       {action === 'propose_poll' && typeof args?.targetTime === 'string' && (
-        <p data-testid="action-card-target-time" className="text-xs text-[--ink-500]">
+        <p data-testid="action-card-target-time" className="text-xs text-(--ink-500)">
           {new Date(args.targetTime).toLocaleString()}
         </p>
       )}
 
       {status === 'pending' && !isExpired && (
-        <p data-testid="action-card-countdown" className="text-xs text-[--ink-500]">
+        <p data-testid="action-card-countdown" className="text-xs text-(--ink-500)">
           Expires in {formatCountdown(expiresAtMs - now)}
         </p>
       )}
 
       {statusLabel && (
-        <p data-testid="action-card-status" className="text-xs font-medium text-[--ink-600]">
+        <p data-testid="action-card-status" className="text-xs font-medium text-(--ink-600)">
           {statusLabel}
         </p>
       )}
@@ -110,7 +110,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({
             <button
               data-testid="action-card-launch-button"
               onClick={onLaunch}
-              className="flex-1 py-1.5 text-xs rounded bg-[--court-500] text-white font-medium hover:bg-[--court-600]"
+              className="flex-1 py-1.5 text-xs rounded bg-(--court-500) text-white font-medium hover:bg-(--court-600)"
             >
               Launch
             </button>
@@ -118,7 +118,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({
             <button
               data-testid="action-card-confirm-button"
               onClick={onConfirm}
-              className="flex-1 py-1.5 text-xs rounded bg-[--court-500] text-white font-medium hover:bg-[--court-600]"
+              className="flex-1 py-1.5 text-xs rounded bg-(--court-500) text-white font-medium hover:bg-(--court-600)"
             >
               Confirm
             </button>
@@ -126,7 +126,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({
           <button
             data-testid="action-card-dismiss-button"
             onClick={onDismiss}
-            className="flex-1 py-1.5 text-xs rounded border border-[--border] text-[--ink-700] hover:border-[--court-400]"
+            className="flex-1 py-1.5 text-xs rounded border border-(--border) text-(--ink-700) hover:border-(--court-400)"
           >
             Dismiss
           </button>

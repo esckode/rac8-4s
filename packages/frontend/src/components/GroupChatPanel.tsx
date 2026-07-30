@@ -275,7 +275,7 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
       {/* Message list */}
       <div className="flex-1 overflow-y-auto space-y-2 p-4">
         {messages.length === 0 && (
-          <p className="text-center text-sm text-[--ink-500] py-8">No messages yet</p>
+          <p className="text-center text-sm text-(--ink-500) py-8">No messages yet</p>
         )}
         {messages.map((m: GroupMessageRecord) => {
           if (m.type === 'system') {
@@ -284,13 +284,13 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
               <div
                 key={m.id}
                 data-testid="group-system-event"
-                className="text-center text-xs text-[--ink-500] italic py-1"
+                className="text-center text-xs text-(--ink-500) italic py-1"
               >
                 {tournamentId ? (
                   <a
                     data-testid="tournament-deep-link"
                     href={`/tournament/${tournamentId}`}
-                    className="underline hover:text-[--court-600]"
+                    className="underline hover:text-(--court-600)"
                   >
                     {m.body}
                   </a>
@@ -307,7 +307,7 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
               <div
                 key={m.id}
                 data-testid="assistant-message"
-                className="rounded-lg p-3 text-sm bg-[--court-50] border border-[--court-200] space-y-2"
+                className="rounded-lg p-3 text-sm bg-(--court-50) border border-(--court-200) space-y-2"
               >
                 {hasCard ? (
                   <ActionCard
@@ -331,9 +331,9 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
                     }}
                   />
                 ) : (
-                  <p className="text-[--ink-900]">{m.body}</p>
+                  <p className="text-(--ink-900)">{m.body}</p>
                 )}
-                <p className="text-xs text-[--court-700] font-medium">
+                <p className="text-xs text-(--court-700) font-medium">
                   Coach · {new Date(m.createdAt).toLocaleTimeString()}
                 </p>
               </div>
@@ -361,7 +361,7 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
                   onClose={() => handleClosePoll(m.id, m.pollId!)}
                   onLaunch={() => handleLaunch(m.id)}
                 />
-                <p className="text-xs text-[--ink-500] mt-1 px-1 flex items-center gap-1.5">
+                <p className="text-xs text-(--ink-500) mt-1 px-1 flex items-center gap-1.5">
                   {m.senderName != null ? (
                     <>
                       {m.playerId && <Avatar playerId={m.playerId} name={m.senderName} />}
@@ -379,9 +379,9 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
             <div
               key={m.id}
               data-testid="group-message-item"
-              className="rounded-lg p-3 text-sm bg-[--ink-50]"
+              className="rounded-lg p-3 text-sm bg-(--ink-50)"
             >
-              <p className="text-[--ink-900]">
+              <p className="text-(--ink-900)">
                 {parseMentions(m.body).map((seg, i) => {
                   if (seg.type === 'text') return <span key={i}>{seg.text}</span>
                   const isSelf = seg.name === user?.name
@@ -389,14 +389,14 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
                     <span
                       key={i}
                       data-testid={isSelf ? 'mention-chip-self' : 'mention-chip'}
-                      className={isSelf ? 'bg-[--gold-200] text-[--gold-900] rounded px-1 font-medium' : 'bg-[--court-100] text-[--court-800] rounded px-1 font-medium'}
+                      className={isSelf ? 'bg-(--gold-200) text-(--gold-900) rounded px-1 font-medium' : 'bg-(--court-100) text-(--court-800) rounded px-1 font-medium'}
                     >
                       {seg.name}
                     </span>
                   )
                 })}
               </p>
-              <p className="text-xs text-[--ink-500] mt-1 flex items-center gap-1.5">
+              <p className="text-xs text-(--ink-500) mt-1 flex items-center gap-1.5">
                 {m.senderName != null ? (
                   <>
                     {m.playerId && <Avatar playerId={m.playerId} name={m.senderName} />}
@@ -436,17 +436,17 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
 
       {/* Error */}
       {error && (
-        <p className="px-4 py-2 text-sm text-[--rose-700] bg-[--rose-50]">{error}</p>
+        <p className="px-4 py-2 text-sm text-(--rose-700) bg-(--rose-50)">{error}</p>
       )}
 
       {/* State-aware composer chip (P7) */}
       {composerChip && (
-        <div className="px-3 pt-2 border-t border-[--border]">
+        <div className="px-3 pt-2 border-t border-(--border)">
           <button
             type="button"
             data-testid="composer-chip"
             onClick={handleComposerChipClick}
-            className="px-3 py-1 text-xs font-medium rounded-full bg-[--court-100] text-[--court-800] hover:bg-[--court-200]"
+            className="px-3 py-1 text-xs font-medium rounded-full bg-(--court-100) text-(--court-800) hover:bg-(--court-200)"
           >
             {composerChip.label}
           </button>
@@ -454,7 +454,7 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
       )}
 
       {/* Send form */}
-      <form onSubmit={handleSend} className={`p-3 flex gap-2 relative ${composerChip ? '' : 'border-t border-[--border]'}`}>
+      <form onSubmit={handleSend} className={`p-3 flex gap-2 relative ${composerChip ? '' : 'border-t border-(--border)'}`}>
         {mentionQuery !== null && (
           <MentionAutocomplete
             members={members}
@@ -495,13 +495,13 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
           }}
           placeholder="Send a message…"
           disabled={sending}
-          className="flex-1 border border-[--border] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+          className="flex-1 border border-(--border) rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--court-400)"
         />
         <button
           data-testid="group-message-send-button"
           type="submit"
           disabled={!body.trim() || sending}
-          className="px-4 py-2 bg-[--court-500] text-white text-sm rounded disabled:opacity-50 hover:bg-[--court-600]"
+          className="px-4 py-2 bg-(--court-500) text-white text-sm rounded disabled:opacity-50 hover:bg-(--court-600)"
         >
           {sending ? '…' : 'Send'}
         </button>
@@ -590,17 +590,17 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({ groupId }) => {
     <div data-testid="members-panel" className="p-4 space-y-4">
       {/* Member list */}
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-[--ink-700] uppercase tracking-wide">Members</h3>
-        {loading && <p className="text-sm text-[--ink-500]">Loading…</p>}
+        <h3 className="text-sm font-semibold text-(--ink-700) uppercase tracking-wide">Members</h3>
+        {loading && <p className="text-sm text-(--ink-500)">Loading…</p>}
         {members.map(m => (
           <div
             key={m.playerId}
             data-testid="member-item"
-            className="flex items-center justify-between py-2 border-b border-[--border] last:border-0"
+            className="flex items-center justify-between py-2 border-b border-(--border) last:border-0"
           >
-            <span className="text-sm text-[--ink-900]">{m.name}</span>
+            <span className="text-sm text-(--ink-900)">{m.name}</span>
             {m.role === 'owner' && (
-              <span className="text-xs font-medium text-[--court-600]">Owner</span>
+              <span className="text-xs font-medium text-(--court-600)">Owner</span>
             )}
           </div>
         ))}
@@ -608,7 +608,7 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({ groupId }) => {
 
       {/* Invite form */}
       <div>
-        <h3 className="text-sm font-semibold text-[--ink-700] uppercase tracking-wide mb-2">Invite</h3>
+        <h3 className="text-sm font-semibold text-(--ink-700) uppercase tracking-wide mb-2">Invite</h3>
         <form onSubmit={handleInvite} className="flex gap-2">
           <input
             data-testid="invite-email-input"
@@ -617,22 +617,22 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({ groupId }) => {
             onChange={e => setInviteEmail(e.target.value)}
             placeholder="player@example.com"
             disabled={inviting}
-            className="flex-1 border border-[--border] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+            className="flex-1 border border-(--border) rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--court-400)"
           />
           <button
             data-testid="invite-send-button"
             type="submit"
             disabled={!inviteEmail.trim() || inviting}
-            className="px-4 py-2 bg-[--court-500] text-white text-sm rounded disabled:opacity-50 hover:bg-[--court-600]"
+            className="px-4 py-2 bg-(--court-500) text-white text-sm rounded disabled:opacity-50 hover:bg-(--court-600)"
           >
             {inviting ? '…' : 'Invite'}
           </button>
         </form>
         {inviteSuccess && (
-          <p data-testid="invite-success" className="text-sm text-[--court-700] mt-2">Invite sent!</p>
+          <p data-testid="invite-success" className="text-sm text-(--court-700) mt-2">Invite sent!</p>
         )}
         {inviteError && (
-          <p data-testid="invite-error" className="text-sm text-[--rose-700] mt-2">{inviteError}</p>
+          <p data-testid="invite-error" className="text-sm text-(--rose-700) mt-2">{inviteError}</p>
         )}
       </div>
     </div>
@@ -646,7 +646,7 @@ export const MyGroupsUnreadBadge: React.FC<{ count: number }> = ({ count }) => {
   return (
     <span
       data-testid="groups-unread-badge"
-      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-[--rose-500] text-white rounded-full"
+      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-(--rose-500) text-white rounded-full"
     >
       {count > 99 ? '99+' : count}
     </span>

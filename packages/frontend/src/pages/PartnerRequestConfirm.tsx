@@ -52,22 +52,22 @@ export const PartnerRequestConfirm: React.FC = () => {
   }
 
   return (
-    <div className="max-w-md mx-auto mt-[--s-12] px-[--s-4]">
-      <div className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-6] space-y-[--s-4]">
-        <h1 className="text-2xl font-bold text-[--ink-900]">Confirm Partnership</h1>
+    <div className="max-w-md mx-auto mt-(--s-12) px-(--s-4)">
+      <div className="bg-white border border-(--border) rounded-(--r-lg) p-(--s-6) space-y-(--s-4)">
+        <h1 className="text-2xl font-bold text-(--ink-900)">Confirm Partnership</h1>
 
         {status === 'done' ? (
-          <p data-testid="confirm-success" className="text-[--green-700]">
+          <p data-testid="confirm-success" className="text-(--green-700)">
             Partnership confirmed — you're now a team for this tournament.
           </p>
         ) : (
           <>
-            <p className="text-[--ink-600]">
+            <p className="text-(--ink-600)">
               A player has asked to be your doubles partner. Confirm to form your team.
             </p>
 
             {error && (
-              <p data-testid="confirm-error" role="alert" className="text-sm text-[--rose-700]">
+              <p data-testid="confirm-error" role="alert" className="text-sm text-(--rose-700)">
                 {error}
               </p>
             )}
@@ -77,7 +77,7 @@ export const PartnerRequestConfirm: React.FC = () => {
               data-testid="confirm-partnership-button"
               onClick={handleConfirm}
               disabled={status === 'confirming'}
-              className="w-full px-[--s-4] py-[--s-3] text-sm font-medium bg-[--court-600] text-white rounded-[--r-md] disabled:opacity-60"
+              className="w-full px-(--s-4) py-(--s-3) text-sm font-medium bg-(--court-600) text-white rounded-(--r-md) disabled:opacity-60"
             >
               {status === 'confirming' ? 'Confirming…' : 'Confirm Partnership'}
             </button>

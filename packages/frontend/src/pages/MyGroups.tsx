@@ -49,12 +49,12 @@ const CoachEntryLink: React.FC = () => (
   <Link
     to="/coach"
     data-testid="coach-entry"
-    className="flex items-center gap-3 p-4 bg-[--court-50] border border-[--court-200] rounded-xl hover:shadow-md transition-shadow"
+    className="flex items-center gap-3 p-4 bg-(--court-50) border border-(--court-200) rounded-xl hover:shadow-md transition-shadow"
   >
-    <span className="flex items-center justify-center w-10 h-10 rounded-full bg-[--court-500] text-white font-bold">C</span>
+    <span className="flex items-center justify-center w-10 h-10 rounded-full bg-(--court-500) text-white font-bold">C</span>
     <div>
-      <span className="font-semibold text-[--ink-900]">Coach</span>
-      <p className="text-xs text-[--ink-500]">Your private coach</p>
+      <span className="font-semibold text-(--ink-900)">Coach</span>
+      <p className="text-xs text-(--ink-500)">Your private coach</p>
     </div>
   </Link>
 )
@@ -98,7 +98,7 @@ export const CreateGroupCta: React.FC<{ onCreated: () => void }> = ({ onCreated 
       <button
         data-testid="create-group-cta"
         onClick={() => setOpen(true)}
-        className="w-full text-center text-sm font-medium text-[--court-600] hover:text-[--court-800] py-2 rounded-lg hover:bg-[--court-50] transition-colors"
+        className="w-full text-center text-sm font-medium text-(--court-600) hover:text-(--court-800) py-2 rounded-lg hover:bg-(--court-50) transition-colors"
       >
         Create your first group
       </button>
@@ -116,18 +116,18 @@ export const CreateGroupCta: React.FC<{ onCreated: () => void }> = ({ onCreated 
         value={name}
         onChange={e => setName(e.target.value)}
         placeholder="Group name"
-        className="flex-1 text-sm border border-[--border] rounded-lg px-3 py-2 text-[--ink-900] bg-[--surface] focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+        className="flex-1 text-sm border border-(--border) rounded-lg px-3 py-2 text-(--ink-900) bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--court-400)"
       />
       <button
         data-testid="create-group-submit"
         type="submit"
         disabled={submitting || !name.trim()}
-        className="text-sm font-medium text-white bg-[--court-600] hover:bg-[--court-800] px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+        className="text-sm font-medium text-white bg-(--court-600) hover:bg-(--court-800) px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
       >
         {submitting ? 'Creating…' : 'Create'}
       </button>
       {createError && (
-        <p className="text-xs text-[--rose-700]">{createError}</p>
+        <p className="text-xs text-(--rose-700)">{createError}</p>
       )}
     </form>
   )
@@ -138,18 +138,18 @@ export const GroupList: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-4 space-y-[--s-3]">
+      <div className="p-4 space-y-(--s-3)">
         <CoachEntryLink />
-        <p className="text-[--ink-600]">Loading your groups…</p>
+        <p className="text-(--ink-600)">Loading your groups…</p>
       </div>
     )
   }
 
   if (playerNotLinked) {
     return (
-      <div className="p-4 space-y-[--s-3]">
+      <div className="p-4 space-y-(--s-3)">
         <CoachEntryLink />
-        <p data-testid="group-list-player-not-linked" role="alert" className="text-[--rose-700]">
+        <p data-testid="group-list-player-not-linked" role="alert" className="text-(--rose-700)">
           {PLAYER_NOT_LINKED_MESSAGE}
         </p>
       </div>
@@ -158,12 +158,12 @@ export const GroupList: React.FC = () => {
 
   if (unauthorized) {
     return (
-      <div className="p-4 space-y-[--s-3]">
+      <div className="p-4 space-y-(--s-3)">
         <CoachEntryLink />
-        <p data-testid="group-list-unauthorized" className="text-[--rose-700]">
+        <p data-testid="group-list-unauthorized" className="text-(--rose-700)">
           You need to sign in again.
         </p>
-        <Link to="/login" className="text-sm font-medium text-[--court-600] hover:text-[--court-800]">
+        <Link to="/login" className="text-sm font-medium text-(--court-600) hover:text-(--court-800)">
           Sign in
         </Link>
       </div>
@@ -172,22 +172,22 @@ export const GroupList: React.FC = () => {
 
   if (error) {
     return (
-      <div className="p-4 space-y-[--s-3]">
+      <div className="p-4 space-y-(--s-3)">
         <CoachEntryLink />
-        <p data-testid="group-list-error" className="text-[--rose-700]">{error}</p>
+        <p data-testid="group-list-error" className="text-(--rose-700)">{error}</p>
       </div>
     )
   }
 
   return (
-    <div className="space-y-[--s-3] p-4">
-      <h1 className="text-2xl font-bold text-[--ink-900]">My Groups</h1>
+    <div className="space-y-(--s-3) p-4">
+      <h1 className="text-2xl font-bold text-(--ink-900)">My Groups</h1>
 
       <CoachEntryLink />
 
       {groups.length === 0 && (
         <div className="text-center pt-2 space-y-2">
-          <p data-testid="group-list-empty" className="text-[--ink-500]">
+          <p data-testid="group-list-empty" className="text-(--ink-500)">
             No groups yet. Ask a group owner to invite you, or start your own.
           </p>
           <CreateGroupCta onCreated={refetch} />
@@ -199,14 +199,14 @@ export const GroupList: React.FC = () => {
           key={g.id}
           to={`/groups/${g.id}`}
           data-testid="group-list-item"
-          className="flex items-center justify-between p-4 bg-white border border-[--border] rounded-xl hover:shadow-md transition-shadow"
+          className="flex items-center justify-between p-4 bg-white border border-(--border) rounded-xl hover:shadow-md transition-shadow"
         >
           <div>
-            <span className="font-semibold text-[--ink-900]">{g.name}</span>
-            <span className="ml-2 text-xs text-[--ink-500]">{g.memberCount} members</span>
+            <span className="font-semibold text-(--ink-900)">{g.name}</span>
+            <span className="ml-2 text-xs text-(--ink-500)">{g.memberCount} members</span>
           </div>
           {g.role === 'owner' && (
-            <span className="text-xs font-medium text-[--court-600]">Owner</span>
+            <span className="text-xs font-medium text-(--court-600)">Owner</span>
           )}
         </Link>
       ))}
@@ -248,39 +248,39 @@ export const GroupDetail: React.FC = () => {
       {/* Group header */}
       <header
         data-testid="group-detail-header"
-        className="flex items-center justify-between px-4 py-3 border-b border-[--border] bg-[--surface]"
+        className="flex items-center justify-between px-4 py-3 border-b border-(--border) bg-(--surface)"
       >
-        <h2 className="text-xl font-bold text-[--ink-900]">{groupName}</h2>
+        <h2 className="text-xl font-bold text-(--ink-900)">{groupName}</h2>
         <Link
           to={`/groups/${groupId}/settings`}
           data-testid="group-settings-gear"
           aria-label="Group settings"
-          className="p-2 rounded-full text-[--ink-500] hover:bg-[--ink-100] hover:text-[--ink-700] transition-colors"
+          className="p-2 rounded-full text-(--ink-500) hover:bg-(--ink-100) hover:text-(--ink-700) transition-colors"
         >
           <GearIcon className="w-5 h-5" />
         </Link>
       </header>
 
       {/* Tab bar */}
-      <div className="flex border-b border-[--border]">
+      <div className="flex border-b border-(--border)">
         <button
           data-testid="group-tab-chat"
           onClick={() => setActiveTab('chat')}
-          className={`flex-1 py-3 text-sm font-medium ${activeTab === 'chat' ? 'text-[--court-600] border-b-2 border-[--court-600]' : 'text-[--ink-500]'}`}
+          className={`flex-1 py-3 text-sm font-medium ${activeTab === 'chat' ? 'text-(--court-600) border-b-2 border-(--court-600)' : 'text-(--ink-500)'}`}
         >
           Chat
         </button>
         <button
           data-testid="group-tab-members"
           onClick={() => setActiveTab('members')}
-          className={`flex-1 py-3 text-sm font-medium ${activeTab === 'members' ? 'text-[--court-600] border-b-2 border-[--court-600]' : 'text-[--ink-500]'}`}
+          className={`flex-1 py-3 text-sm font-medium ${activeTab === 'members' ? 'text-(--court-600) border-b-2 border-(--court-600)' : 'text-(--ink-500)'}`}
         >
           Members
         </button>
         <button
           data-testid="group-tab-leaderboard"
           onClick={() => setActiveTab('leaderboard')}
-          className={`flex-1 py-3 text-sm font-medium ${activeTab === 'leaderboard' ? 'text-[--court-600] border-b-2 border-[--court-600]' : 'text-[--ink-500]'}`}
+          className={`flex-1 py-3 text-sm font-medium ${activeTab === 'leaderboard' ? 'text-(--court-600) border-b-2 border-(--court-600)' : 'text-(--ink-500)'}`}
         >
           Leaderboard
         </button>
@@ -351,7 +351,7 @@ const KickConfirmDialog: React.FC<KickConfirmDialogProps> = ({ memberName, onCon
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[--ink-900]/50"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-(--ink-900)/50"
       aria-modal="true"
       role="dialog"
       aria-labelledby="kick-dialog-title"
@@ -359,25 +359,25 @@ const KickConfirmDialog: React.FC<KickConfirmDialogProps> = ({ memberName, onCon
       onKeyDown={handleKeyDown}
       ref={dialogRef}
     >
-      <div className="bg-[--surface] rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
-        <h2 id="kick-dialog-title" className="text-base font-semibold text-[--ink-900]">
+      <div className="bg-(--surface) rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+        <h2 id="kick-dialog-title" className="text-base font-semibold text-(--ink-900)">
           Remove {memberName}?
         </h2>
-        <p className="text-sm text-[--ink-600]">
+        <p className="text-sm text-(--ink-600)">
           {memberName} will be removed from the group and lose access to all group content.
         </p>
         <div className="flex gap-3 justify-end">
           <button
             ref={cancelRef}
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-[--ink-700] hover:text-[--ink-900] rounded-lg hover:bg-[--ink-100] transition-colors"
+            className="px-4 py-2 text-sm font-medium text-(--ink-700) hover:text-(--ink-900) rounded-lg hover:bg-(--ink-100) transition-colors"
           >
             Cancel
           </button>
           <button
             data-testid="kick-confirm-button"
             onClick={onConfirm}
-            className="px-4 py-2 text-sm font-medium text-white bg-[--rose-700] hover:bg-[--rose-900] rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-(--rose-700) hover:bg-(--rose-900) rounded-lg transition-colors"
           >
             Remove
           </button>
@@ -454,12 +454,12 @@ const ManageMembersList: React.FC<ManageMembersListProps> = ({ groupId, selfPlay
   return (
     <>
       <div data-testid="manage-members-list" className="mt-4 space-y-2">
-        <h3 className="text-sm font-semibold text-[--ink-700] uppercase tracking-wide">Members</h3>
+        <h3 className="text-sm font-semibold text-(--ink-700) uppercase tracking-wide">Members</h3>
 
         {lastOwnerError && (
           <p
             data-testid="last-owner-error"
-            className="text-sm text-[--rose-700] bg-[--rose-50] rounded-lg px-3 py-2"
+            className="text-sm text-(--rose-700) bg-(--rose-50) rounded-lg px-3 py-2"
           >
             Can&apos;t remove the last owner — promote another member first
           </p>
@@ -469,12 +469,12 @@ const ManageMembersList: React.FC<ManageMembersListProps> = ({ groupId, selfPlay
           <div
             key={m.playerId}
             data-testid={`member-row-${m.playerId}`}
-            className="flex items-center justify-between py-2 px-1 border-b border-[--border] last:border-0"
+            className="flex items-center justify-between py-2 px-1 border-b border-(--border) last:border-0"
           >
             <div className="flex items-center gap-2">
-              <span className="text-sm text-[--ink-900]">{m.name}</span>
+              <span className="text-sm text-(--ink-900)">{m.name}</span>
               {m.role === 'owner' && (
-                <span className="text-xs font-medium text-[--court-600]">Owner</span>
+                <span className="text-xs font-medium text-(--court-600)">Owner</span>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -482,7 +482,7 @@ const ManageMembersList: React.FC<ManageMembersListProps> = ({ groupId, selfPlay
                 <button
                   data-testid="promote-button"
                   onClick={() => handlePromote(m.playerId)}
-                  className="text-xs font-medium text-[--court-600] hover:text-[--court-800] px-2 py-1 rounded hover:bg-[--court-50] transition-colors"
+                  className="text-xs font-medium text-(--court-600) hover:text-(--court-800) px-2 py-1 rounded hover:bg-(--court-50) transition-colors"
                   aria-label={`Promote ${m.name} to owner`}
                 >
                   Promote
@@ -492,7 +492,7 @@ const ManageMembersList: React.FC<ManageMembersListProps> = ({ groupId, selfPlay
                 <button
                   data-testid="demote-button"
                   onClick={() => handleDemote(m.playerId)}
-                  className="text-xs font-medium text-[--ink-500] hover:text-[--ink-700] px-2 py-1 rounded hover:bg-[--ink-100] transition-colors"
+                  className="text-xs font-medium text-(--ink-500) hover:text-(--ink-700) px-2 py-1 rounded hover:bg-(--ink-100) transition-colors"
                   aria-label={`Demote ${m.name} to member`}
                 >
                   Demote
@@ -501,7 +501,7 @@ const ManageMembersList: React.FC<ManageMembersListProps> = ({ groupId, selfPlay
               <button
                 data-testid="kick-button"
                 onClick={() => setKickTarget(m)}
-                className="text-xs font-medium text-[--rose-700] hover:text-[--rose-900] px-2 py-1 rounded hover:bg-[--rose-50] transition-colors"
+                className="text-xs font-medium text-(--rose-700) hover:text-(--rose-900) px-2 py-1 rounded hover:bg-(--rose-50) transition-colors"
                 aria-label={`Remove ${m.name} from group`}
               >
                 Remove
@@ -606,8 +606,8 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
   }
 
   return (
-    <div className="mt-6 pt-4 border-t border-[--border] space-y-4">
-      <h3 className="text-sm font-semibold text-[--ink-700] uppercase tracking-wide">Group Config</h3>
+    <div className="mt-6 pt-4 border-t border-(--border) space-y-4">
+      <h3 className="text-sm font-semibold text-(--ink-700) uppercase tracking-wide">Group Config</h3>
 
       {/* Rename */}
       <form onSubmit={handleSaveName} className="flex gap-2 items-center">
@@ -618,14 +618,14 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
           type="text"
           value={name}
           onChange={e => setName(e.target.value)}
-          className="flex-1 text-sm border border-[--border] rounded-lg px-3 py-2 text-[--ink-900] bg-[--surface] focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+          className="flex-1 text-sm border border-(--border) rounded-lg px-3 py-2 text-(--ink-900) bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--court-400)"
           aria-label="Group name"
         />
         <button
           data-testid="group-name-save"
           type="submit"
           disabled={saving || !name.trim()}
-          className="text-sm font-medium text-[--court-600] hover:text-[--court-800] px-3 py-2 rounded-lg hover:bg-[--court-50] transition-colors disabled:opacity-50"
+          className="text-sm font-medium text-(--court-600) hover:text-(--court-800) px-3 py-2 rounded-lg hover:bg-(--court-50) transition-colors disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
@@ -633,7 +633,7 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
 
       {/* Match format */}
       <div className="flex items-center gap-3">
-        <label htmlFor="match-format-select" className="text-sm text-[--ink-700]">
+        <label htmlFor="match-format-select" className="text-sm text-(--ink-700)">
           Default match format
         </label>
         <select
@@ -641,7 +641,7 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
           data-testid="match-format-select"
           defaultValue={initialFormat}
           onChange={handleFormatChange}
-          className="text-sm border border-[--border] rounded-lg px-3 py-2 text-[--ink-900] bg-[--surface] focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+          className="text-sm border border-(--border) rounded-lg px-3 py-2 text-(--ink-900) bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--court-400)"
         >
           <option value="singles">Singles</option>
           <option value="doubles">Doubles</option>
@@ -650,7 +650,7 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
 
       {/* Assistant toggle */}
       <div className="flex items-center gap-3">
-        <label htmlFor="assistant-toggle" className="text-sm text-[--ink-700]">
+        <label htmlFor="assistant-toggle" className="text-sm text-(--ink-700)">
           Coach assistant
         </label>
         <input
@@ -660,7 +660,7 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
           role="switch"
           checked={assistantEnabled}
           onChange={handleAssistantToggle}
-          className="h-5 w-5 accent-[--court-600]"
+          className="h-5 w-5 accent-(--court-600)"
           aria-label="Enable Coach assistant"
         />
       </div>
@@ -668,7 +668,7 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
       {/* Digest toggle — only meaningful while the assistant is enabled */}
       {assistantEnabled && (
         <div className="flex items-center gap-3">
-          <label htmlFor="digest-toggle" className="text-sm text-[--ink-700]">
+          <label htmlFor="digest-toggle" className="text-sm text-(--ink-700)">
             Weekly digest
           </label>
           <input
@@ -678,7 +678,7 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
             role="switch"
             checked={digestEnabled}
             onChange={handleDigestToggle}
-            className="h-5 w-5 accent-[--court-600]"
+            className="h-5 w-5 accent-(--court-600)"
             aria-label="Enable weekly digest"
           />
         </div>
@@ -727,14 +727,14 @@ export const GroupSettings: React.FC = () => {
 
   return (
     <div data-testid="group-settings-page" className="p-4 space-y-6">
-      <h1 className="text-2xl font-bold text-[--ink-900]">Group Settings</h1>
+      <h1 className="text-2xl font-bold text-(--ink-900)">Group Settings</h1>
 
       {/* Member-visible section — notify-level + leave */}
       <section
         data-testid="group-settings-member-section"
-        className="rounded-xl border border-[--border] p-4 bg-[--surface]"
+        className="rounded-xl border border-(--border) p-4 bg-(--surface)"
       >
-        <h2 className="text-base font-semibold text-[--ink-800]">Preferences</h2>
+        <h2 className="text-base font-semibold text-(--ink-800)">Preferences</h2>
 
         {playerId && (
           <NotifyLevelControl
@@ -744,12 +744,12 @@ export const GroupSettings: React.FC = () => {
           />
         )}
 
-        <div className="mt-6 pt-4 border-t border-[--border]">
+        <div className="mt-6 pt-4 border-t border-(--border)">
           <button
             data-testid="leave-group-button"
             onClick={handleLeave}
             disabled={leaving}
-            className="text-sm font-medium text-[--rose-700] hover:text-[--rose-900] disabled:opacity-50"
+            className="text-sm font-medium text-(--rose-700) hover:text-(--rose-900) disabled:opacity-50"
           >
             {leaving ? 'Leaving…' : 'Leave group'}
           </button>
@@ -760,9 +760,9 @@ export const GroupSettings: React.FC = () => {
       {isOwner && (
         <section
           data-testid="group-settings-owner-section"
-          className="rounded-xl border border-[--border] p-4 bg-[--surface]"
+          className="rounded-xl border border-(--border) p-4 bg-(--surface)"
         >
-          <h2 className="text-base font-semibold text-[--ink-800]">Group Management</h2>
+          <h2 className="text-base font-semibold text-(--ink-800)">Group Management</h2>
 
           <ManageMembersList groupId={groupId} selfPlayerId={playerId} />
 

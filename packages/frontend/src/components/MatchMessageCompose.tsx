@@ -69,25 +69,25 @@ export const MatchMessageCompose: React.FC<Props> = ({
   return (
     <div
       data-testid="match-message-compose"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-[--s-4]"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-(--s-4)"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-white rounded-[--r-lg] shadow-lg p-[--s-4]"
+        className="w-full max-w-md bg-white rounded-(--r-lg) shadow-lg p-(--s-4)"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-[--s-3]">
+        <div className="flex items-center justify-between mb-(--s-3)">
           <div data-testid="match-compose-context">
-            <p className="text-sm font-semibold text-[--ink-900]">
+            <p className="text-sm font-semibold text-(--ink-900)">
               Message opponent
             </p>
-            <p className="text-xs text-[--ink-500]">To: {opponentName}</p>
+            <p className="text-xs text-(--ink-500)">To: {opponentName}</p>
           </div>
           <button
             data-testid="match-compose-close"
             onClick={onClose}
-            className="text-[--ink-500] hover:text-[--ink-900] transition-colors"
+            className="text-(--ink-500) hover:text-(--ink-900) transition-colors"
             aria-label="Close"
           >
             ✕
@@ -95,19 +95,19 @@ export const MatchMessageCompose: React.FC<Props> = ({
         </div>
 
         {sent ? (
-          <div className="py-[--s-4] text-center">
-            <p className="text-sm text-[--ink-700]">Message sent!</p>
+          <div className="py-(--s-4) text-center">
+            <p className="text-sm text-(--ink-700)">Message sent!</p>
             <button
               onClick={onClose}
-              className="mt-[--s-3] text-sm text-[--court-600] hover:underline"
+              className="mt-(--s-3) text-sm text-(--court-600) hover:underline"
             >
               Close
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSend} className="flex flex-col gap-[--s-3]">
+          <form onSubmit={handleSend} className="flex flex-col gap-(--s-3)">
             {error && (
-              <p className="text-sm text-[--rose-700] bg-[--rose-50] px-3 py-2 rounded">
+              <p className="text-sm text-(--rose-700) bg-(--rose-50) px-3 py-2 rounded">
                 {error}
               </p>
             )}
@@ -118,13 +118,13 @@ export const MatchMessageCompose: React.FC<Props> = ({
               placeholder="Write a message to your opponent…"
               disabled={sending}
               rows={3}
-              className="w-full border border-[--border] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--court-400] resize-none"
+              className="w-full border border-(--border) rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--court-400) resize-none"
             />
-            <div className="flex gap-[--s-2] justify-end">
+            <div className="flex gap-(--s-2) justify-end">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-sm text-[--ink-700] hover:text-[--ink-900]"
+                className="px-4 py-2 text-sm text-(--ink-700) hover:text-(--ink-900)"
               >
                 Cancel
               </button>
@@ -132,7 +132,7 @@ export const MatchMessageCompose: React.FC<Props> = ({
                 data-testid="match-compose-send"
                 type="submit"
                 disabled={!body.trim() || sending}
-                className="px-4 py-2 bg-[--court-500] text-white text-sm rounded disabled:opacity-50 hover:bg-[--court-600]"
+                className="px-4 py-2 bg-(--court-500) text-white text-sm rounded disabled:opacity-50 hover:bg-(--court-600)"
               >
                 {sending ? '…' : 'Send'}
               </button>

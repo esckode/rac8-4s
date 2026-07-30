@@ -166,7 +166,7 @@ export const MessageThreadPanel: React.FC<Props> = ({
         {/* Message list */}
         <div className="flex-1 overflow-y-auto space-y-2 p-4">
           {messages.length === 0 && (
-            <p className="text-center text-sm text-[--ink-500] py-8">No messages yet</p>
+            <p className="text-center text-sm text-(--ink-500) py-8">No messages yet</p>
           )}
           {messages.map((m: MessageRecord) => (
             <div
@@ -174,25 +174,25 @@ export const MessageThreadPanel: React.FC<Props> = ({
               data-testid="message-item"
               className={`
                 rounded-lg p-3 text-sm
-                ${m.read_at === null ? 'bg-[--court-50] border border-[--court-200]' : 'bg-[--ink-50]'}
+                ${m.read_at === null ? 'bg-(--court-50) border border-(--court-200)' : 'bg-(--ink-50)'}
               `}
             >
-              <p className="text-[--ink-900]">{m.body}</p>
-              <p className="text-xs text-[--ink-500] mt-1">
+              <p className="text-(--ink-900)">{m.body}</p>
+              <p className="text-xs text-(--ink-500) mt-1">
                 {m.senderName != null ? (
                   <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
                 ) : (
                   new Date(m.createdAt).toLocaleTimeString()
                 )}
                 {m.recipientPlayerId === null && (
-                  <span className="ml-2 font-medium text-[--court-600]">📢 Announcement</span>
+                  <span className="ml-2 font-medium text-(--court-600)">📢 Announcement</span>
                 )}
               </p>
               {/* V6.1: Organizer ack count on broadcasts */}
               {m.recipientPlayerId === null && permissions.organizerRole && m.ackCount != null && (
                 <p
                   data-testid="broadcast-ack-count"
-                  className="text-xs text-[--ink-400] mt-1"
+                  className="text-xs text-(--ink-400) mt-1"
                 >
                   {m.ackCount.read} of {m.ackCount.total} read
                 </p>
@@ -201,7 +201,7 @@ export const MessageThreadPanel: React.FC<Props> = ({
               {m.recipientReadAt && (
                 <p
                   data-testid="dm-seen-indicator"
-                  className="text-xs text-[--court-600] mt-1"
+                  className="text-xs text-(--court-600) mt-1"
                 >
                   Seen
                 </p>
@@ -213,12 +213,12 @@ export const MessageThreadPanel: React.FC<Props> = ({
 
         {/* Error */}
         {error && (
-          <p className="px-4 py-2 text-sm text-[--rose-700] bg-[--rose-50]">{error}</p>
+          <p className="px-4 py-2 text-sm text-(--rose-700) bg-(--rose-50)">{error}</p>
         )}
 
         {/* Compose area */}
         {isAnnouncementsChannel && permissions.organizerRole && (
-          <form onSubmit={handleAnnounce} className="border-t border-[--border] p-3 flex gap-2">
+          <form onSubmit={handleAnnounce} className="border-t border-(--border) p-3 flex gap-2">
             <input
               data-testid="announce-input"
               type="text"
@@ -226,13 +226,13 @@ export const MessageThreadPanel: React.FC<Props> = ({
               onChange={e => setAnnounceBody(e.target.value)}
               placeholder="Broadcast announcement…"
               disabled={announcing}
-              className="flex-1 border border-[--border] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+              className="flex-1 border border-(--border) rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--court-400)"
             />
             <button
               data-testid="announce-button"
               type="submit"
               disabled={!announceBody.trim() || announcing}
-              className="px-4 py-2 bg-[--court-600] text-white text-sm rounded disabled:opacity-50 hover:bg-[--court-700]"
+              className="px-4 py-2 bg-(--court-600) text-white text-sm rounded disabled:opacity-50 hover:bg-(--court-700)"
             >
               {announcing ? '…' : 'Announce'}
             </button>
@@ -242,14 +242,14 @@ export const MessageThreadPanel: React.FC<Props> = ({
         {isAnnouncementsChannel && !permissions.organizerRole && (
           <div
             data-testid="announcements-readonly-notice"
-            className="border-t border-[--border] px-4 py-3 text-sm text-[--ink-500] text-center"
+            className="border-t border-(--border) px-4 py-3 text-sm text-(--ink-500) text-center"
           >
             Announcements are posted by the organizer
           </div>
         )}
 
         {canCompose && !isAnnouncementsChannel && (
-          <form onSubmit={handleSend} className="border-t border-[--border] p-3 flex gap-2">
+          <form onSubmit={handleSend} className="border-t border-(--border) p-3 flex gap-2">
             <input
               data-testid="message-input"
               type="text"
@@ -257,13 +257,13 @@ export const MessageThreadPanel: React.FC<Props> = ({
               onChange={e => setDmBody(e.target.value)}
               placeholder="Send a message…"
               disabled={sending}
-              className="flex-1 border border-[--border] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+              className="flex-1 border border-(--border) rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--court-400)"
             />
             <button
               data-testid="message-send-button"
               type="submit"
               disabled={!dmBody.trim() || sending}
-              className="px-4 py-2 bg-[--court-500] text-white text-sm rounded disabled:opacity-50 hover:bg-[--court-600]"
+              className="px-4 py-2 bg-(--court-500) text-white text-sm rounded disabled:opacity-50 hover:bg-(--court-600)"
             >
               {sending ? '…' : 'Send'}
             </button>

@@ -11,7 +11,7 @@ export function OfflineBanner(): React.ReactElement | null {
     <div
       data-testid="offline-banner"
       role="status"
-      className="bg-[--ink-100] border-b border-[--ink-300] text-[--ink-800] text-sm text-center py-[--s-2]"
+      className="bg-(--ink-100) border-b border-(--ink-300) text-(--ink-800) text-sm text-center py-(--s-2)"
     >
       Offline — showing saved data
     </div>

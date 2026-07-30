@@ -98,7 +98,7 @@ export const MessagePanel: React.FC<Props> = ({ tournamentId, active = false }) 
       {/* Message list */}
       <div className="flex-1 overflow-y-auto space-y-2 p-4">
         {messages.length === 0 && (
-          <p className="text-center text-sm text-[--ink-500] py-8">No messages yet</p>
+          <p className="text-center text-sm text-(--ink-500) py-8">No messages yet</p>
         )}
         {messages.map((m: MessageRecord) => (
           <div
@@ -106,18 +106,18 @@ export const MessagePanel: React.FC<Props> = ({ tournamentId, active = false }) 
             data-testid="message-item"
             className={`
               rounded-lg p-3 text-sm
-              ${m.read_at === null ? 'bg-[--court-50] border border-[--court-200]' : 'bg-[--ink-50]'}
+              ${m.read_at === null ? 'bg-(--court-50) border border-(--court-200)' : 'bg-(--ink-50)'}
             `}
           >
-            <p className="text-[--ink-900]">{m.body}</p>
-            <p className="text-xs text-[--ink-500] mt-1">
+            <p className="text-(--ink-900)">{m.body}</p>
+            <p className="text-xs text-(--ink-500) mt-1">
               {m.senderName != null ? (
                 <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
               ) : (
                 new Date(m.createdAt).toLocaleTimeString()
               )}
               {m.recipientPlayerId === null && (
-                <span className="ml-2 font-medium text-[--court-600]">📢 Announcement</span>
+                <span className="ml-2 font-medium text-(--court-600)">📢 Announcement</span>
               )}
             </p>
           </div>
@@ -127,12 +127,12 @@ export const MessagePanel: React.FC<Props> = ({ tournamentId, active = false }) 
 
       {/* Error */}
       {error && (
-        <p className="px-4 py-2 text-sm text-[--rose-700] bg-[--rose-50]">{error}</p>
+        <p className="px-4 py-2 text-sm text-(--rose-700) bg-(--rose-50)">{error}</p>
       )}
 
       {/* Organizer: broadcast input */}
       {permissions.organizerRole && (
-        <form onSubmit={handleAnnounce} className="border-t border-[--border] p-3 flex gap-2">
+        <form onSubmit={handleAnnounce} className="border-t border-(--border) p-3 flex gap-2">
           <input
             data-testid="announce-input"
             type="text"
@@ -140,13 +140,13 @@ export const MessagePanel: React.FC<Props> = ({ tournamentId, active = false }) 
             onChange={e => setAnnounceBody(e.target.value)}
             placeholder="Broadcast announcement…"
             disabled={announcing}
-            className="flex-1 border border-[--border] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+            className="flex-1 border border-(--border) rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--court-400)"
           />
           <button
             data-testid="announce-button"
             type="submit"
             disabled={!announceBody.trim() || announcing}
-            className="px-4 py-2 bg-[--court-600] text-white text-sm rounded disabled:opacity-50 hover:bg-[--court-700]"
+            className="px-4 py-2 bg-(--court-600) text-white text-sm rounded disabled:opacity-50 hover:bg-(--court-700)"
           >
             {announcing ? '…' : 'Announce'}
           </button>
@@ -154,7 +154,7 @@ export const MessagePanel: React.FC<Props> = ({ tournamentId, active = false }) 
       )}
 
       {/* Player: DM input */}
-      <form onSubmit={handleSend} className="border-t border-[--border] p-3 flex gap-2">
+      <form onSubmit={handleSend} className="border-t border-(--border) p-3 flex gap-2">
         <input
           data-testid="message-input"
           type="text"
@@ -162,13 +162,13 @@ export const MessagePanel: React.FC<Props> = ({ tournamentId, active = false }) 
           onChange={e => setDmBody(e.target.value)}
           placeholder="Send a message…"
           disabled={sending}
-          className="flex-1 border border-[--border] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+          className="flex-1 border border-(--border) rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--court-400)"
         />
         <button
           data-testid="message-send-button"
           type="submit"
           disabled={!dmBody.trim() || sending}
-          className="px-4 py-2 bg-[--court-500] text-white text-sm rounded disabled:opacity-50 hover:bg-[--court-600]"
+          className="px-4 py-2 bg-(--court-500) text-white text-sm rounded disabled:opacity-50 hover:bg-(--court-600)"
         >
           {sending ? '…' : 'Send'}
         </button>
@@ -189,7 +189,7 @@ export const UnreadBadge: React.FC<{ count: number }> = ({ count }) => {
   return (
     <span
       data-testid="messages-unread-badge"
-      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-[--rose-500] text-white rounded-full"
+      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-(--rose-500) text-white rounded-full"
     >
       {count > 99 ? '99+' : count}
     </span>

@@ -113,10 +113,10 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
     return (
       <div
         data-testid="score-submit-form"
-        className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-4] space-y-[--s-3]"
+        className="bg-white border border-(--border) rounded-(--r-lg) p-(--s-4) space-y-(--s-3)"
       >
         {(!replayOutcome || replayOutcome === 'needs-auth') && (
-          <p data-testid="score-pending-badge" className="text-sm font-medium text-[--ink-700]">
+          <p data-testid="score-pending-badge" className="text-sm font-medium text-(--ink-700)">
             Saved offline — will send when connected
           </p>
         )}
@@ -125,18 +125,18 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
           <p
             data-testid={`score-${replayOutcome}`}
             role="alert"
-            className="text-sm text-[--rose-700]"
+            className="text-sm text-(--rose-700)"
           >
             {REPLAY_NOTICES[replayOutcome]}
             {replayOutcome === 'rejected' && replayDetail ? ` ${replayDetail}` : ''}
           </p>
         )}
 
-        <div className="flex gap-[--s-2] justify-end">
+        <div className="flex gap-(--s-2) justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-[--s-3] py-[--s-2] text-sm text-[--ink-600]"
+            className="px-(--s-3) py-(--s-2) text-sm text-(--ink-600)"
           >
             Close
           </button>
@@ -149,14 +149,14 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
     <form
       data-testid="score-submit-form"
       onSubmit={handleSubmit}
-      className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-4] space-y-[--s-3]"
+      className="bg-white border border-(--border) rounded-(--r-lg) p-(--s-4) space-y-(--s-3)"
     >
-      <h3 className="text-lg font-semibold text-[--ink-900]">
+      <h3 className="text-lg font-semibold text-(--ink-900)">
         {isEdit ? 'Edit Score' : 'Submit Score'}
       </h3>
 
-      <div className="space-y-[--s-1]">
-        <label htmlFor="score-input" className="text-sm font-medium text-[--ink-700]">
+      <div className="space-y-(--s-1)">
+        <label htmlFor="score-input" className="text-sm font-medium text-(--ink-700)">
           Score
         </label>
         <input
@@ -167,13 +167,13 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
           placeholder="e.g. 11-9, 11-7"
           onChange={(e) => setScore(e.target.value)}
           disabled={submitting}
-          className="w-full border border-[--border] rounded-[--r-md] px-[--s-3] py-[--s-2]"
+          className="w-full border border-(--border) rounded-(--r-md) px-(--s-3) py-(--s-2)"
         />
-        <p className="text-xs text-[--ink-500]">Games per set, comma-separated. e.g. 11-9, 11-7</p>
+        <p className="text-xs text-(--ink-500)">Games per set, comma-separated. e.g. 11-9, 11-7</p>
       </div>
 
       {error && (
-        <p data-testid="score-error" role="alert" className="text-sm text-[--rose-700]">
+        <p data-testid="score-error" role="alert" className="text-sm text-(--rose-700)">
           {error}
         </p>
       )}
@@ -187,18 +187,18 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
             setError(null)
             setOfferEdit(false)
           }}
-          className="text-sm text-[--court-700] underline"
+          className="text-sm text-(--court-700) underline"
         >
           Edit existing score
         </button>
       )}
 
-      <div className="flex gap-[--s-2] justify-end">
+      <div className="flex gap-(--s-2) justify-end">
         <button
           type="button"
           onClick={onClose}
           disabled={submitting}
-          className="px-[--s-3] py-[--s-2] text-sm text-[--ink-600]"
+          className="px-(--s-3) py-(--s-2) text-sm text-(--ink-600)"
         >
           Cancel
         </button>
@@ -206,7 +206,7 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
           type="submit"
           data-testid="score-submit"
           disabled={submitting}
-          className="px-[--s-4] py-[--s-2] text-sm font-medium bg-[--court-600] text-white rounded-[--r-md] disabled:opacity-60"
+          className="px-(--s-4) py-(--s-2) text-sm font-medium bg-(--court-600) text-white rounded-(--r-md) disabled:opacity-60"
         >
           {submitting ? 'Saving…' : isEdit ? 'Save Score' : 'Submit Score'}
         </button>

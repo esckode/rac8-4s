@@ -77,14 +77,14 @@ export const CoachChat: React.FC = () => {
 
   return (
     <div data-testid="coach-chat-page" className="flex flex-col h-full min-h-[300px]">
-      <header className="flex items-center gap-2 px-4 py-3 border-b border-[--border] bg-[--surface]">
-        <h2 className="text-xl font-bold text-[--ink-900]">Coach</h2>
-        <span className="text-xs text-[--ink-500]">Your private space</span>
+      <header className="flex items-center gap-2 px-4 py-3 border-b border-(--border) bg-(--surface)">
+        <h2 className="text-xl font-bold text-(--ink-900)">Coach</h2>
+        <span className="text-xs text-(--ink-500)">Your private space</span>
       </header>
 
       <div className="flex-1 overflow-y-auto space-y-2 p-4">
         {messages.length === 0 && (
-          <p className="text-center text-sm text-[--ink-500] py-8">No messages yet</p>
+          <p className="text-center text-sm text-(--ink-500) py-8">No messages yet</p>
         )}
         {messages.map((m: GroupMessageRecord) => {
           if (m.type === 'assistant') {
@@ -93,7 +93,7 @@ export const CoachChat: React.FC = () => {
               <div
                 key={m.id}
                 data-testid="coach-assistant-bubble"
-                className="mr-auto max-w-[85%] rounded-lg p-3 text-sm bg-[--court-50] border border-[--court-200] space-y-2"
+                className="mr-auto max-w-[85%] rounded-lg p-3 text-sm bg-(--court-50) border border-(--court-200) space-y-2"
               >
                 {hasCard ? (
                   <ActionCard
@@ -108,9 +108,9 @@ export const CoachChat: React.FC = () => {
                     args={m.cardArgs ?? undefined}
                   />
                 ) : (
-                  <p className="text-[--ink-900]">{m.body}</p>
+                  <p className="text-(--ink-900)">{m.body}</p>
                 )}
-                <p className="text-xs text-[--court-700] font-medium">
+                <p className="text-xs text-(--court-700) font-medium">
                   Coach · {new Date(m.createdAt).toLocaleTimeString()}
                 </p>
               </div>
@@ -121,10 +121,10 @@ export const CoachChat: React.FC = () => {
             <div
               key={m.id}
               data-testid="coach-player-bubble"
-              className="ml-auto max-w-[85%] rounded-lg p-3 text-sm bg-[--ink-50]"
+              className="ml-auto max-w-[85%] rounded-lg p-3 text-sm bg-(--ink-50)"
             >
-              <p className="text-[--ink-900]">{m.body}</p>
-              <p className="text-xs text-[--ink-500] mt-1 text-right">
+              <p className="text-(--ink-900)">{m.body}</p>
+              <p className="text-xs text-(--ink-500) mt-1 text-right">
                 {new Date(m.createdAt).toLocaleTimeString()}
               </p>
             </div>
@@ -136,10 +136,10 @@ export const CoachChat: React.FC = () => {
       <ReconnectingIndicator visible={reconnecting} />
 
       {error && (
-        <p className="px-4 py-2 text-sm text-[--rose-700] bg-[--rose-50]">{error}</p>
+        <p className="px-4 py-2 text-sm text-(--rose-700) bg-(--rose-50)">{error}</p>
       )}
 
-      <form onSubmit={handleSend} className="p-3 flex gap-2 border-t border-[--border]">
+      <form onSubmit={handleSend} className="p-3 flex gap-2 border-t border-(--border)">
         <input
           data-testid="coach-message-input"
           type="text"
@@ -147,13 +147,13 @@ export const CoachChat: React.FC = () => {
           onChange={e => setBody(e.target.value)}
           placeholder="Ask Coach anything…"
           disabled={sending}
-          className="flex-1 border border-[--border] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--court-400]"
+          className="flex-1 border border-(--border) rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--court-400)"
         />
         <button
           data-testid="coach-message-send-button"
           type="submit"
           disabled={!body.trim() || sending}
-          className="px-4 py-2 bg-[--court-500] text-white text-sm rounded disabled:opacity-50 hover:bg-[--court-600]"
+          className="px-4 py-2 bg-(--court-500) text-white text-sm rounded disabled:opacity-50 hover:bg-(--court-600)"
         >
           {sending ? '…' : 'Send'}
         </button>

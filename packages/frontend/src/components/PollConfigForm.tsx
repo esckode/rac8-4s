@@ -40,13 +40,13 @@ export const PollConfigForm: React.FC<PollConfigFormProps> = ({ value, onChange 
   return (
     <div data-testid="poll-config-form" className="space-y-2">
       <div>
-        <label className="text-xs text-[--ink-600]">Auto-close at</label>
+        <label className="text-xs text-(--ink-600)">Auto-close at</label>
         <input
           data-testid="poll-auto-close-input"
           type="datetime-local"
           value={value.autoCloseAt ? value.autoCloseAt.slice(0, 16) : ''}
           onChange={handleCloseAtChange}
-          className="block w-full text-sm border border-[--border] rounded px-2 py-1 mt-0.5"
+          className="block w-full text-sm border border-(--border) rounded px-2 py-1 mt-0.5"
         />
       </div>
 
@@ -59,7 +59,7 @@ export const PollConfigForm: React.FC<PollConfigFormProps> = ({ value, onChange 
           checked={value.autoLaunch}
           onChange={handleAutoLaunchChange}
         />
-        <label htmlFor="auto-launch" className="text-xs text-[--ink-700]">
+        <label htmlFor="auto-launch" className="text-xs text-(--ink-700)">
           Auto-start tournament when poll closes
         </label>
       </div>
@@ -67,24 +67,24 @@ export const PollConfigForm: React.FC<PollConfigFormProps> = ({ value, onChange 
       {value.autoLaunch && (
         <>
           <div>
-            <label className="text-xs text-[--ink-600]">Min players (optional)</label>
+            <label className="text-xs text-(--ink-600)">Min players (optional)</label>
             <input
               data-testid="poll-min-players-input"
               type="number"
               min="1"
               value={value.minPlayers ?? ''}
               onChange={handleMinPlayersChange}
-              className="block w-full text-sm border border-[--border] rounded px-2 py-1 mt-0.5"
+              className="block w-full text-sm border border-(--border) rounded px-2 py-1 mt-0.5"
             />
           </div>
 
           <div>
-            <label className="text-xs text-[--ink-600]">Format</label>
+            <label className="text-xs text-(--ink-600)">Format</label>
             <select
               data-testid="poll-launch-format-select"
               value={value.launchMatchFormat ?? ''}
               onChange={handleFormatChange}
-              className="block w-full text-sm border border-[--border] rounded px-2 py-1 mt-0.5"
+              className="block w-full text-sm border border-(--border) rounded px-2 py-1 mt-0.5"
             >
               <option value="">Group default</option>
               <option value="singles">Singles</option>

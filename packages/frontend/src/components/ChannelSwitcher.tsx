@@ -42,7 +42,7 @@ export const ChannelSwitcher: React.FC<ChannelSwitcherProps> = ({
   return (
     <nav
       data-testid="channel-switcher"
-      className="flex flex-col gap-0.5 p-2 border-r border-[--border] min-w-[160px] bg-[--ink-50]"
+      className="flex flex-col gap-0.5 p-2 border-r border-(--border) min-w-[160px] bg-(--ink-50)"
     >
       {/* Announcements channel */}
       <button
@@ -52,8 +52,8 @@ export const ChannelSwitcher: React.FC<ChannelSwitcherProps> = ({
         className={`
           w-full text-left px-3 py-2 rounded text-sm font-medium transition-colors
           ${activeThread === 'announcements'
-            ? 'bg-[--court-100] text-[--court-700]'
-            : 'text-[--ink-700] hover:bg-[--ink-100]'}
+            ? 'bg-(--court-100) text-(--court-700)'
+            : 'text-(--ink-700) hover:bg-(--ink-100)'}
         `}
       >
         📢 Announcements
@@ -62,7 +62,7 @@ export const ChannelSwitcher: React.FC<ChannelSwitcherProps> = ({
       {/* DM threads */}
       {dmThreads.length > 0 && (
         <>
-          <p className="px-3 pt-3 pb-1 text-xs font-semibold text-[--ink-500] uppercase tracking-wide">
+          <p className="px-3 pt-3 pb-1 text-xs font-semibold text-(--ink-500) uppercase tracking-wide">
             Direct
           </p>
           {dmThreads.map(({ playerId, displayName }) => {
@@ -76,8 +76,8 @@ export const ChannelSwitcher: React.FC<ChannelSwitcherProps> = ({
                 className={`
                   w-full text-left px-3 py-2 rounded text-sm transition-colors
                   ${activeThread === key
-                    ? 'bg-[--court-100] text-[--court-700]'
-                    : 'text-[--ink-700] hover:bg-[--ink-100]'}
+                    ? 'bg-(--court-100) text-(--court-700)'
+                    : 'text-(--ink-700) hover:bg-(--ink-100)'}
                 `}
               >
                 {displayName}
@@ -90,7 +90,7 @@ export const ChannelSwitcher: React.FC<ChannelSwitcherProps> = ({
       {/* Match threads */}
       {matchThreads.length > 0 && (
         <>
-          <p className="px-3 pt-3 pb-1 text-xs font-semibold text-[--ink-500] uppercase tracking-wide">
+          <p className="px-3 pt-3 pb-1 text-xs font-semibold text-(--ink-500) uppercase tracking-wide">
             Matches
           </p>
           {matchThreads.map(({ matchId, label }) => {
@@ -104,8 +104,8 @@ export const ChannelSwitcher: React.FC<ChannelSwitcherProps> = ({
                 className={`
                   w-full text-left px-3 py-2 rounded text-sm transition-colors
                   ${activeThread === key
-                    ? 'bg-[--court-100] text-[--court-700]'
-                    : 'text-[--ink-700] hover:bg-[--ink-100]'}
+                    ? 'bg-(--court-100) text-(--court-700)'
+                    : 'text-(--ink-700) hover:bg-(--ink-100)'}
                 `}
               >
                 {label}

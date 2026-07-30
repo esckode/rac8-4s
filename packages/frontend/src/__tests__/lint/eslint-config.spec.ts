@@ -83,7 +83,7 @@ const RGBA_STYLE_FIXTURE = `const d = <div style={{ background: 'rgba(0,0,0,0.5)
 const HSL_STRING_FIXTURE = `const e = 'hsl(210 100% 50%)'
 `
 
-const CSS_VAR_CLASSNAME_FIXTURE = `const f = <div className="text-[--ink-900] bg-[--court-500]" />
+const CSS_VAR_CLASSNAME_FIXTURE = `const f = <div className="text-(--ink-900) bg-(--court-500)" />
 `
 
 const CSS_VAR_STYLE_FIXTURE = `const g = <div style={{ color: 'var(--ink-900)' }} />

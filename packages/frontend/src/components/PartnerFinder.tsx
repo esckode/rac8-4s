@@ -119,26 +119,26 @@ export function PartnerFinder({ tournamentId }: PartnerFinderProps) {
   return (
     <div
       data-testid="partner-finder"
-      className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-4] space-y-[--s-3]"
+      className="bg-white border border-(--border) rounded-(--r-lg) p-(--s-4) space-y-(--s-3)"
     >
       <div>
-        <h3 className="text-lg font-semibold text-[--ink-900]">Find a partner</h3>
-        <p className="text-sm text-[--ink-600]">
+        <h3 className="text-lg font-semibold text-(--ink-900)">Find a partner</h3>
+        <p className="text-sm text-(--ink-600)">
           Request another solo registrant to team up for this doubles tournament.
         </p>
       </div>
 
       {error && (
-        <p data-testid="partner-error" role="alert" className="text-sm text-[--rose-700]">
+        <p data-testid="partner-error" role="alert" className="text-sm text-(--rose-700)">
           {error}
         </p>
       )}
 
       {loading ? (
-        <p className="text-sm text-[--ink-500]">Loading available partners…</p>
+        <p className="text-sm text-(--ink-500)">Loading available partners…</p>
       ) : pendingInvite ? (
-        <div data-testid="partner-invite-pending" className="space-y-[--s-2]">
-          <p className="text-sm text-[--ink-700]">
+        <div data-testid="partner-invite-pending" className="space-y-(--s-2)">
+          <p className="text-sm text-(--ink-700)">
             {pendingInvite.partnerName
               ? `Waiting for ${pendingInvite.partnerName} to accept your invite.`
               : 'Waiting for your invited partner to accept.'}
@@ -147,31 +147,31 @@ export function PartnerFinder({ tournamentId }: PartnerFinderProps) {
             type="button"
             data-testid="cancel-partner-invite-button"
             onClick={handleCancelInvite}
-            className="px-[--s-3] py-[--s-2] text-sm font-medium border border-[--border] text-[--ink-700] rounded-[--r-md]"
+            className="px-(--s-3) py-(--s-2) text-sm font-medium border border-(--border) text-(--ink-700) rounded-(--r-md)"
           >
             Cancel invite
           </button>
         </div>
       ) : partners.length === 0 ? (
-        <p className="text-sm text-[--ink-500]">No available partners right now.</p>
+        <p className="text-sm text-(--ink-500)">No available partners right now.</p>
       ) : (
-        <ul className="space-y-[--s-2]">
+        <ul className="space-y-(--s-2)">
           {partners.map((partner) => (
             <li
               key={partner.id}
               data-testid="partner-row"
-              className="flex items-center justify-between gap-[--s-3] border border-[--border] rounded-[--r-md] px-[--s-3] py-[--s-2]"
+              className="flex items-center justify-between gap-(--s-3) border border-(--border) rounded-(--r-md) px-(--s-3) py-(--s-2)"
             >
-              <span className="text-[--ink-900]">{partner.name}</span>
+              <span className="text-(--ink-900)">{partner.name}</span>
               {requestedId === partner.id ? (
-                <span className="text-sm text-[--ink-500]">Request pending</span>
+                <span className="text-sm text-(--ink-500)">Request pending</span>
               ) : (
                 <button
                   type="button"
                   data-testid="request-partner-button"
                   onClick={() => handleRequest(partner.id)}
                   disabled={requestedId !== null}
-                  className="px-[--s-3] py-[--s-2] text-sm font-medium bg-[--court-600] text-white rounded-[--r-md] disabled:opacity-60"
+                  className="px-(--s-3) py-(--s-2) text-sm font-medium bg-(--court-600) text-white rounded-(--r-md) disabled:opacity-60"
                 >
                   Request
                 </button>

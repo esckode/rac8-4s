@@ -11,23 +11,23 @@ export const Details: React.FC = () => {
 
   if (isLoading && !tournament) {
     return (
-      <div className="space-y-[--s-6]">
-        <h2 className="text-2xl font-bold text-[--ink-900]">Tournament Details</h2>
-        <p className="text-[--ink-600]">Loading tournament details...</p>
+      <div className="space-y-(--s-6)">
+        <h2 className="text-2xl font-bold text-(--ink-900)">Tournament Details</h2>
+        <p className="text-(--ink-600)">Loading tournament details...</p>
       </div>
     )
   }
 
   if (error || !tournament) {
     return (
-      <div className="space-y-[--s-6]">
-        <h2 className="text-2xl font-bold text-[--ink-900]">Tournament Details</h2>
-        <div className="bg-[--rose-50] border border-[--rose-200] rounded-[--r-lg] p-[--s-4] text-[--rose-800]">
+      <div className="space-y-(--s-6)">
+        <h2 className="text-2xl font-bold text-(--ink-900)">Tournament Details</h2>
+        <div className="bg-(--rose-50) border border-(--rose-200) rounded-(--r-lg) p-(--s-4) text-(--rose-800)">
           <p className="font-medium">Failed to load tournament details</p>
-          {error && <p className="text-sm mt-[--s-2]">{error.message}</p>}
+          {error && <p className="text-sm mt-(--s-2)">{error.message}</p>}
           <button
             onClick={refetch}
-            className="text-sm text-[--rose-700] hover:text-[--rose-900] mt-[--s-3] underline"
+            className="text-sm text-(--rose-700) hover:text-(--rose-900) mt-(--s-3) underline"
           >
             Try again
           </button>
@@ -39,13 +39,13 @@ export const Details: React.FC = () => {
   // P4 — absolute time in the viewer's browser tz (primary), relative
   // phrasing demoted to secondary.
   const renderDeadline = (date: string | Date | undefined) => {
-    if (!date) return <p className="text-lg text-[--ink-900]">Not set</p>
+    if (!date) return <p className="text-lg text-(--ink-900)">Not set</p>
     const iso = typeof date === 'string' ? date : date.toISOString()
     const { absolute, relative } = formatLocal(iso)
     return (
-      <p className="text-lg text-[--ink-900]" data-testid="deadline-value">
+      <p className="text-lg text-(--ink-900)" data-testid="deadline-value">
         {absolute}
-        <span className="block text-sm font-normal text-[--ink-500]" data-testid="deadline-relative">
+        <span className="block text-sm font-normal text-(--ink-500)" data-testid="deadline-relative">
           {relative}
         </span>
       </p>
@@ -78,10 +78,10 @@ export const Details: React.FC = () => {
   }
 
   return (
-    <div className="space-y-[--s-6]">
+    <div className="space-y-(--s-6)">
       <div>
-        <h2 className="text-2xl font-bold text-[--ink-900]">Tournament Details</h2>
-        <p className="text-sm text-[--ink-600] mt-[--s-1]">{tournament.name}</p>
+        <h2 className="text-2xl font-bold text-(--ink-900)">Tournament Details</h2>
+        <p className="text-sm text-(--ink-600) mt-(--s-1)">{tournament.name}</p>
       </div>
 
       {/* Partner finder — doubles only, while registration is open */}
@@ -90,45 +90,45 @@ export const Details: React.FC = () => {
       )}
 
       {/* Tournament Info Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-[--s-4]">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-(--s-4)">
         {/* Basic Info */}
-        <div className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-4] space-y-[--s-4]">
+        <div className="bg-white border border-(--border) rounded-(--r-lg) p-(--s-4) space-y-(--s-4)">
           <div>
-            <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Tournament Name</h3>
-            <p className="text-lg font-medium text-[--ink-900]">{tournament.name}</p>
+            <h3 className="text-sm font-semibold text-(--ink-600) mb-(--s-2)">Tournament Name</h3>
+            <p className="text-lg font-medium text-(--ink-900)">{tournament.name}</p>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Sport</h3>
-            <p className="text-lg text-[--ink-900]">{tournament.sport || 'Tennis'}</p>
+            <h3 className="text-sm font-semibold text-(--ink-600) mb-(--s-2)">Sport</h3>
+            <p className="text-lg text-(--ink-900)">{tournament.sport || 'Tennis'}</p>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Match Format</h3>
-            <p className="text-lg text-[--ink-900]">
+            <h3 className="text-sm font-semibold text-(--ink-600) mb-(--s-2)">Match Format</h3>
+            <p className="text-lg text-(--ink-900)">
               {tournament.matchFormat ? tournament.matchFormat.charAt(0).toUpperCase() + tournament.matchFormat.slice(1) : 'Singles'}
             </p>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Max Players</h3>
-            <p className="text-lg text-[--ink-900]">{tournament.maxPlayers || 'Unlimited'}</p>
+            <h3 className="text-sm font-semibold text-(--ink-600) mb-(--s-2)">Max Players</h3>
+            <p className="text-lg text-(--ink-900)">{tournament.maxPlayers || 'Unlimited'}</p>
           </div>
         </div>
 
         {/* Status & Dates */}
-        <div className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-4] space-y-[--s-4]">
+        <div className="bg-white border border-(--border) rounded-(--r-lg) p-(--s-4) space-y-(--s-4)">
           <div>
-            <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Status</h3>
+            <h3 className="text-sm font-semibold text-(--ink-600) mb-(--s-2)">Status</h3>
             <div className="inline-block">
               <span
                 className={`
-                  px-[--s-3]
-                  py-[--s-2]
+                  px-(--s-3)
+                  py-(--s-2)
                   rounded-full
                   text-sm
                   font-medium
                   ${
                     isCompleted(tournament.status)
-                      ? 'bg-[--green-50] text-[--green-700]'
-                      : 'bg-[--court-50] text-[--court-600]'
+                      ? 'bg-(--green-50) text-(--green-700)'
+                      : 'bg-(--court-50) text-(--court-600)'
                   }
                 `}
               >
@@ -137,15 +137,15 @@ export const Details: React.FC = () => {
             </div>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Registration Deadline</h3>
+            <h3 className="text-sm font-semibold text-(--ink-600) mb-(--s-2)">Registration Deadline</h3>
             {renderDeadline(tournament.registrationDeadline)}
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Group Stage Deadline</h3>
+            <h3 className="text-sm font-semibold text-(--ink-600) mb-(--s-2)">Group Stage Deadline</h3>
             {renderDeadline(tournament.groupStageDeadline)}
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Knockout Stage Deadline</h3>
+            <h3 className="text-sm font-semibold text-(--ink-600) mb-(--s-2)">Knockout Stage Deadline</h3>
             {renderDeadline(tournament.knockoutStageDeadline)}
           </div>
         </div>
@@ -153,16 +153,16 @@ export const Details: React.FC = () => {
 
       {/* Description */}
       {tournament.description && (
-        <div className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-4]">
-          <h3 className="text-lg font-semibold text-[--ink-900] mb-[--s-3]">Description</h3>
-          <p className="text-[--ink-700] leading-relaxed whitespace-pre-wrap">{tournament.description}</p>
+        <div className="bg-white border border-(--border) rounded-(--r-lg) p-(--s-4)">
+          <h3 className="text-lg font-semibold text-(--ink-900) mb-(--s-3)">Description</h3>
+          <p className="text-(--ink-700) leading-relaxed whitespace-pre-wrap">{tournament.description}</p>
         </div>
       )}
 
       {/* Tournament ID (for reference) */}
-      <div className="bg-[--ink-50] border border-[--border] rounded-[--r-lg] p-[--s-4]">
-        <h3 className="text-sm font-semibold text-[--ink-600] mb-[--s-2]">Tournament ID</h3>
-        <p className="font-mono text-sm text-[--ink-700]">{tournament.id}</p>
+      <div className="bg-(--ink-50) border border-(--border) rounded-(--r-lg) p-(--s-4)">
+        <h3 className="text-sm font-semibold text-(--ink-600) mb-(--s-2)">Tournament ID</h3>
+        <p className="font-mono text-sm text-(--ink-700)">{tournament.id}</p>
       </div>
     </div>
   )

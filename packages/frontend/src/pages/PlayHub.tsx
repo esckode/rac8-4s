@@ -69,8 +69,8 @@ export const PlayHub: React.FC = () => {
 
   if (!isAuthenticated) {
     return (
-      <div className="text-center py-[--s-12] rounded-[--r-lg] border border-dashed border-[--border] bg-[--ink-50]">
-        <p className="text-lg text-[--ink-600]">Sign in to view your tournaments</p>
+      <div className="text-center py-(--s-12) rounded-(--r-lg) border border-dashed border-(--border) bg-(--ink-50)">
+        <p className="text-lg text-(--ink-600)">Sign in to view your tournaments</p>
       </div>
     )
   }
@@ -78,27 +78,27 @@ export const PlayHub: React.FC = () => {
   const hasGroups = groups.length > 0
 
   return (
-    <div className="space-y-[--s-6]" data-testid="my-tournaments">
-      <div className="space-y-[--s-1]">
-        <h1 className="text-3xl font-bold text-[--ink-900]">Play</h1>
+    <div className="space-y-(--s-6)" data-testid="my-tournaments">
+      <div className="space-y-(--s-1)">
+        <h1 className="text-3xl font-bold text-(--ink-900)">Play</h1>
         <SnapshotUpdatedAt updatedAt={updatedAtFor('/player/tournaments')} />
       </div>
 
       {isGuest && (
         <div
           data-testid="guest-upgrade-cta"
-          className="p-[--s-4] bg-[--ink-50] border border-[--border] rounded-[--r-lg]"
+          className="p-(--s-4) bg-(--ink-50) border border-(--border) rounded-(--r-lg)"
         >
-          <Link to="/signup" className="text-sm font-medium text-[--court-600] underline">
+          <Link to="/signup" className="text-sm font-medium text-(--court-600) underline">
             Create a password to save your account
           </Link>
         </div>
       )}
 
-      {loading && <p className="text-[--ink-600]">Loading your tournaments...</p>}
+      {loading && <p className="text-(--ink-600)">Loading your tournaments...</p>}
 
       {error && (
-        <div className="bg-[--rose-50] border border-[--rose-200] rounded-[--r-lg] p-[--s-4] text-[--rose-800]">
+        <div className="bg-(--rose-50) border border-(--rose-200) rounded-(--r-lg) p-(--s-4) text-(--rose-800)">
           <p className="text-sm">{error}</p>
         </div>
       )}
@@ -106,21 +106,21 @@ export const PlayHub: React.FC = () => {
       {!loading && !error && snapshot?.nextMatch && (
         <div
           data-testid="next-match-card"
-          className="p-[--s-4] bg-white border border-[--border] rounded-[--r-xl] shadow-sm"
+          className="p-(--s-4) bg-white border border-(--border) rounded-(--r-xl) shadow-sm"
         >
-          <p className="text-xs font-semibold text-[--ink-500] uppercase tracking-wide">Next match</p>
-          <p className="text-lg font-semibold text-[--ink-900] mt-1">vs {snapshot.nextMatch.opponentName}</p>
-          <p className="text-sm text-[--ink-600]">{snapshot.nextMatch.tournamentName}</p>
+          <p className="text-xs font-semibold text-(--ink-500) uppercase tracking-wide">Next match</p>
+          <p className="text-lg font-semibold text-(--ink-900) mt-1">vs {snapshot.nextMatch.opponentName}</p>
+          <p className="text-sm text-(--ink-600)">{snapshot.nextMatch.tournamentName}</p>
         </div>
       )}
 
       {!loading && !error && tournaments.length === 0 && !groupsLoading && !hasGroups && (
         <div
           data-testid="empty-state"
-          className="text-center py-[--s-12] rounded-[--r-lg] border border-dashed border-[--border] bg-[--ink-50]"
+          className="text-center py-(--s-12) rounded-(--r-lg) border border-dashed border-(--border) bg-(--ink-50)"
         >
-          <p className="text-lg text-[--ink-600]">Create a group to start playing</p>
-          <div className="mt-[--s-3] max-w-xs mx-auto">
+          <p className="text-lg text-(--ink-600)">Create a group to start playing</p>
+          <div className="mt-(--s-3) max-w-xs mx-auto">
             <CreateGroupCta onCreated={() => window.location.reload()} />
           </div>
         </div>
@@ -129,11 +129,11 @@ export const PlayHub: React.FC = () => {
       {!loading && !error && tournaments.length === 0 && !groupsLoading && hasGroups && (
         <div
           data-testid="empty-state"
-          className="text-center py-[--s-12] rounded-[--r-lg] border border-dashed border-[--border] bg-[--ink-50]"
+          className="text-center py-(--s-12) rounded-(--r-lg) border border-dashed border-(--border) bg-(--ink-50)"
         >
           <Link
             to={`/groups/${groups[0].id}`}
-            className="text-lg font-medium text-[--court-600] underline"
+            className="text-lg font-medium text-(--court-600) underline"
           >
             No games yet — start a poll in your group
           </Link>
@@ -141,18 +141,18 @@ export const PlayHub: React.FC = () => {
       )}
 
       {!loading && !error && tournaments.length > 0 && (
-        <div className="space-y-[--s-2]">
-          <p className="text-xs font-semibold text-[--ink-500] uppercase tracking-wide">Your tournaments</p>
-          <div className="flex flex-col gap-[--s-3]">
+        <div className="space-y-(--s-2)">
+          <p className="text-xs font-semibold text-(--ink-500) uppercase tracking-wide">Your tournaments</p>
+          <div className="flex flex-col gap-(--s-3)">
             {tournaments.map(t => (
               <Link
                 key={t.id}
                 to={`/tournament/${t.id}/standings`}
                 data-testid="tournament-row"
-                className="flex items-center justify-between p-[--s-4] bg-white border border-[--border] rounded-[--r-xl] hover:shadow-md transition-shadow"
+                className="flex items-center justify-between p-(--s-4) bg-white border border-(--border) rounded-(--r-xl) hover:shadow-md transition-shadow"
               >
-                <span className="font-semibold text-[--ink-900]">{t.name}</span>
-                <span className="text-xs font-semibold text-[--ink-500] uppercase">
+                <span className="font-semibold text-(--ink-900)">{t.name}</span>
+                <span className="text-xs font-semibold text-(--ink-500) uppercase">
                   {STATUS_LABEL[t.status] ?? t.status}
                 </span>
               </Link>
@@ -162,19 +162,19 @@ export const PlayHub: React.FC = () => {
       )}
 
       {!loading && !error && snapshot && snapshot.lastResults.length > 0 && (
-        <div className="space-y-[--s-2]">
-          <p className="text-xs font-semibold text-[--ink-500] uppercase tracking-wide">Recent results</p>
-          <div className="flex flex-col gap-[--s-2]">
+        <div className="space-y-(--s-2)">
+          <p className="text-xs font-semibold text-(--ink-500) uppercase tracking-wide">Recent results</p>
+          <div className="flex flex-col gap-(--s-2)">
             {snapshot.lastResults.map((r, i) => (
               <div
                 key={i}
                 data-testid="recent-result-row"
-                className="flex items-center justify-between p-[--s-3] bg-white border border-[--border] rounded-[--r-lg]"
+                className="flex items-center justify-between p-(--s-3) bg-white border border-(--border) rounded-(--r-lg)"
               >
-                <span className="text-sm text-[--ink-900]">
+                <span className="text-sm text-(--ink-900)">
                   {r.won ? 'W' : 'L'} vs {r.opponentName}
                 </span>
-                <span className="text-xs text-[--ink-500]">{r.score}</span>
+                <span className="text-xs text-(--ink-500)">{r.score}</span>
               </div>
             ))}
           </div>

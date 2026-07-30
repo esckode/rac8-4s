@@ -50,7 +50,7 @@ export const NotifyLevelControl: React.FC<NotifyLevelControlProps> = ({
 
   return (
     <fieldset data-testid="notify-level-control" className="mt-3">
-      <legend className="text-sm font-medium text-[--ink-700]">Notifications</legend>
+      <legend className="text-sm font-medium text-(--ink-700)">Notifications</legend>
       <div className="mt-2 space-y-2">
         {OPTIONS.map(opt => (
           <label
@@ -65,11 +65,11 @@ export const NotifyLevelControl: React.FC<NotifyLevelControlProps> = ({
               checked={selected === opt.value}
               onChange={() => handleChange(opt.value)}
               disabled={saving}
-              className="mt-0.5 accent-[--court-600]"
+              className="mt-0.5 accent-(--court-600)"
             />
             <span className="flex flex-col">
-              <span className="text-sm font-medium text-[--ink-800]">{opt.label}</span>
-              <span className="text-xs text-[--ink-500]">{opt.description}</span>
+              <span className="text-sm font-medium text-(--ink-800)">{opt.label}</span>
+              <span className="text-xs text-(--ink-500)">{opt.description}</span>
             </span>
           </label>
         ))}

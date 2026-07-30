@@ -49,15 +49,15 @@ export const TournamentDetail: React.FC = () => {
       <div
         className={`
           text-center
-          py-[--s-12]
-          rounded-[--r-lg]
+          py-(--s-12)
+          rounded-(--r-lg)
           border
           border-dashed
-          border-[--border]
-          bg-[--ink-50]
+          border-(--border)
+          bg-(--ink-50)
         `}
       >
-        <p className="text-lg text-[--ink-600]">Tournament not found</p>
+        <p className="text-lg text-(--ink-600)">Tournament not found</p>
       </div>
     )
   }
@@ -67,15 +67,15 @@ export const TournamentDetail: React.FC = () => {
       <div
         className={`
           text-center
-          py-[--s-12]
-          rounded-[--r-lg]
+          py-(--s-12)
+          rounded-(--r-lg)
           border
           border-dashed
-          border-[--border]
-          bg-[--ink-50]
+          border-(--border)
+          bg-(--ink-50)
         `}
       >
-        <p className="text-lg text-[--ink-600]">Sign in to view tournament details</p>
+        <p className="text-lg text-(--ink-600)">Sign in to view tournament details</p>
       </div>
     )
   }
@@ -126,30 +126,30 @@ export const TournamentDetail: React.FC = () => {
   }
 
   return (
-    <div className="space-y-[--s-6]">
+    <div className="space-y-(--s-6)">
       {/* Header */}
-      <div className="flex items-center gap-[--s-4]">
+      <div className="flex items-center gap-(--s-4)">
         <button
           onClick={handleBackClick}
           className={`
-            px-[--s-3]
-            py-[--s-2]
-            text-[--ink-600]
-            hover:text-[--ink-900]
-            hover:bg-[--ink-100]
-            rounded-[--r-md]
+            px-(--s-3)
+            py-(--s-2)
+            text-(--ink-600)
+            hover:text-(--ink-900)
+            hover:bg-(--ink-100)
+            rounded-(--r-md)
             transition-colors
-            duration-[--duration-normal]
+            duration-(--duration-normal)
             focus:outline-none
             focus:ring-2
-            focus:ring-[--court-400]
+            focus:ring-(--court-400)
             focus:ring-offset-2
           `}
           aria-label="Go back"
         >
           ← Back
         </button>
-        <h1 className="responsive-heading text-[--ink-900]">
+        <h1 className="responsive-heading text-(--ink-900)">
           Tournament Details
         </h1>
         {permissions.canManageGroups && (
@@ -158,17 +158,17 @@ export const TournamentDetail: React.FC = () => {
             onClick={() => navigate(`/tournament/${tournamentId}/manage`)}
             className={`
               ml-auto
-              px-[--s-3]
-              py-[--s-2]
+              px-(--s-3)
+              py-(--s-2)
               text-sm
               font-medium
-              bg-[--court-600]
+              bg-(--court-600)
               text-white
-              rounded-[--r-md]
-              hover:bg-[--court-700]
+              rounded-(--r-md)
+              hover:bg-(--court-700)
               focus:outline-none
               focus:ring-2
-              focus:ring-[--court-400]
+              focus:ring-(--court-400)
               focus:ring-offset-2
             `}
             aria-label="Manage tournament"
@@ -182,11 +182,11 @@ export const TournamentDetail: React.FC = () => {
       <div
         className={`
           flex
-          gap-[--s-2]
+          gap-(--s-2)
           overflow-x-auto
           border-b
-          border-[--border]
-          pb-[--s-2]
+          border-(--border)
+          pb-(--s-2)
         `}
         role="tablist"
       >
@@ -198,23 +198,23 @@ export const TournamentDetail: React.FC = () => {
             className={`
               flex
               items-center
-              gap-[--s-2]
-              px-[--s-4]
-              py-[--s-3]
+              gap-(--s-2)
+              px-(--s-4)
+              py-(--s-3)
               font-medium
-              rounded-t-[--r-md]
+              rounded-t-(--r-md)
               transition-all
-              duration-[--duration-normal]
+              duration-(--duration-normal)
               whitespace-nowrap
               responsive-tab-label
               ${
                 currentTab === tab.id
-                  ? 'bg-[--court-50] text-[--court-600] border-b-2 border-[--court-500]'
-                  : 'text-[--ink-600] hover:text-[--ink-900] hover:bg-[--ink-50]'
+                  ? 'bg-(--court-50) text-(--court-600) border-b-2 border-(--court-500)'
+                  : 'text-(--ink-600) hover:text-(--ink-900) hover:bg-(--ink-50)'
               }
               focus:outline-none
               focus:ring-2
-              focus:ring-[--court-400]
+              focus:ring-(--court-400)
               focus:ring-offset-2
             `}
             role="tab"
@@ -230,26 +230,26 @@ export const TournamentDetail: React.FC = () => {
 
       {/* Error Banner with Auto-Retry */}
       {error && (
-        <div role="alert" className="bg-[--rose-50] border border-[--rose-200] rounded-[--r-lg] p-[--s-4] flex items-center justify-between gap-[--s-4]">
+        <div role="alert" className="bg-(--rose-50) border border-(--rose-200) rounded-(--r-lg) p-(--s-4) flex items-center justify-between gap-(--s-4)">
           <div>
-            <p className="font-medium text-[--rose-800]">Failed to load tournament data</p>
-            <p className="text-sm text-[--rose-700] mt-[--s-1]">{error.message}</p>
+            <p className="font-medium text-(--rose-800)">Failed to load tournament data</p>
+            <p className="text-sm text-(--rose-700) mt-(--s-1)">{error.message}</p>
             {retryIn !== null && (
-              <p className="text-xs text-[--rose-600] mt-[--s-1]">Auto-retry in {retryIn}s</p>
+              <p className="text-xs text-(--rose-600) mt-(--s-1)">Auto-retry in {retryIn}s</p>
             )}
           </div>
-          <div className="flex gap-[--s-2] flex-shrink-0">
+          <div className="flex gap-(--s-2) flex-shrink-0">
             {retryIn !== null && (
               <button
                 onClick={cancelAutoRetry}
-                className="text-sm text-[--rose-700] hover:text-[--rose-900]"
+                className="text-sm text-(--rose-700) hover:text-(--rose-900)"
               >
                 Cancel
               </button>
             )}
             <button
               onClick={refetch}
-              className="text-sm font-medium text-[--rose-700] underline hover:text-[--rose-900]"
+              className="text-sm font-medium text-(--rose-700) underline hover:text-(--rose-900)"
             >
               Retry now
             </button>
@@ -261,17 +261,17 @@ export const TournamentDetail: React.FC = () => {
       <div
         id={`tab-${currentTab}`}
         className={`
-          rounded-[--r-lg]
+          rounded-(--r-lg)
           border
-          border-[--border]
-          p-[--s-6]
+          border-(--border)
+          p-(--s-6)
           min-h-[400px]
           bg-white
         `}
         role="tabpanel"
       >
         {sseState.error && (
-          <div className="bg-[--rose-50] border border-[--rose-200] rounded-[--r-lg] p-[--s-4] text-[--rose-800] mb-[--s-4]">
+          <div className="bg-(--rose-50) border border-(--rose-200) rounded-(--r-lg) p-(--s-4) text-(--rose-800) mb-(--s-4)">
             <p className="text-sm">SSE Connection Error: {sseState.error}</p>
           </div>
         )}
@@ -282,14 +282,14 @@ export const TournamentDetail: React.FC = () => {
       {(process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true') && (
         <div
           className={`
-            rounded-[--r-lg]
+            rounded-(--r-lg)
             border
-            border-[--lavender-200]
-            p-[--s-4]
-            bg-[--lavender-50]
+            border-(--lavender-200)
+            p-(--s-4)
+            bg-(--lavender-50)
             text-xs
-            text-[--ink-600]
-            space-y-[--s-1]
+            text-(--ink-600)
+            space-y-(--s-1)
           `}
         >
           <p className="font-medium">Debug Info</p>
