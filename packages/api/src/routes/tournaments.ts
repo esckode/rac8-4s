@@ -773,9 +773,9 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       if (isOrganizer) {
-        log.info('score.overridden', { tournamentId, matchId, score: req.body.score, winnerId })
+        log.info('score.overridden', { tournamentId, matchId, score: req.body.score, winnerId, organizerId: orgPayload?.sub })
       } else {
-        log.info('score.edited', { tournamentId, matchId, score: req.body.score, winnerId })
+        log.info('score.edited', { tournamentId, matchId, score: req.body.score, winnerId, playerId: actingPlayerId })
       }
 
       res.json({
