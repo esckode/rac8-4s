@@ -2705,6 +2705,13 @@ export default function tournamentsRouter(deps: AppDependencies) {
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
     res.flushHeaders()
+    // ISSUE-38: flushHeaders() alone isn't enough — verified live that Vite's
+    // dev proxy withholds the response, headers included, from the client
+    // until the upstream writes a body byte. Without a broadcast, a client
+    // could sit in EventSource readyState CONNECTING indefinitely. A leading
+    // ':' is an SSE comment line — ignored by EventSource's message parsing,
+    // its only job is to force everything flushed through immediately.
+    res.write(': connected\n\n')
 
     // Resolve the tournament's conversation_id — the bus is keyed on conversation_id
     // so all subscribers and emitters use a stable, non-tournament-ID key.
