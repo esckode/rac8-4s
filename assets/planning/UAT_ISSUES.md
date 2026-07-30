@@ -54,7 +54,7 @@ shipped.
 | ├ [44c](#issue-44c) | ✅ Resolved | 🟠 | Add the lint guard so the broken form cannot regress | frontend · lint |
 | └ [44d](#issue-44d) | 🔲 Open | 🟠 | Visual review of the app-wide layout shift (human, not an agent) | frontend · design |
 | [ISSUE-45](#issue-45) | 🔲 Open | 🟠 | `seed-test-accounts.spec.ts` fails on a FK violation — test isolation is leaking | test · db |
-| [ISSUE-46](#issue-46) | 🔲 Open | 🟠 | Organizer "Override" on a not-yet-played match posts as a submit and fails | frontend |
+| [ISSUE-46](#issue-46) | 🔲 Open | 🔴 | Organizer score override only partially built — Standings button is a placebo | frontend |
 
 **Implementation status, 2026-07-30.** ISSUE-39/40/41/42 and 44a/44b/44c are implemented on branch
 `fix/uat-issues-39-44`, each TDD (failing test committed before implementation). Verified: full
@@ -628,44 +628,69 @@ confirm they are unchanged.
 
 ---
 
-## ISSUE-46 — Organizer "Override" on a not-yet-played match posts as a submit and fails 🟠 {#issue-46}
+## ISSUE-46 — Organizer score override is only partially built 🔴 {#issue-46}
 
-*Found 2026-07-30 while implementing [ISSUE-40](#issue-40), which is also what made it reachable.*
+*Found 2026-07-30 while implementing [ISSUE-40](#issue-40). **Scope corrected the same day** — first
+filed as a narrow routing bug on one entry point, which understated it: the feature has two entry
+points and neither is finished.*
 
 ### Symptom
 
-An organizer sees the **Override** button on *every* match, including `pending` ones that have no score
-yet. Clicking it on a pending match opens the score form, but submitting fails — the request is sent to
-the wrong endpoint and the organizer is not authorised for it.
+Score override is a **documented organizer capability** (`REQUIREMENTS.md` § Audit Logging assumes it,
+and [ISSUE-40](#issue-40) just made a `reason` mandatory on it), but it does not actually work end to
+end from either place an organizer would reach for it.
 
-### Root cause
+**Entry point A — Standings tab: the button is a placebo.** `StandingsTable.tsx:206` renders an
+**Override** button for organizers, wired through `onOverride` to `Standings.tsx:37`:
+```typescript
+const handleOverride = (playerId: string) => {
+  setOverrideInProgress(true)
+  // TODO: Implement score override modal (Task 4.6e)
+  setTimeout(() => setOverrideInProgress(false), 500)
+}
+```
+It sets a flag, waits 500 ms, clears it. The organizer sees a spinner and **nothing happens** — no
+modal, no request, no error. This is the same failure class as the report that opened
+[ISSUE-44](#issue-44): a visible, correctly-labelled control that does nothing, which is
+indistinguishable from a broken app to the user.
 
-Two independent conditions combine:
+**Entry point B — Matches tab: works, except on unplayed matches.** `MatchCard.tsx:73` is
+`const canOverride = userRole === 'organizer'` with **no match-status condition**, so Override renders
+on `pending` matches too. But `ScoreSubmitForm.tsx:60` derives `const [isEdit] = useState(match.status
+=== 'completed')`, so for a pending match `isEdit` is `false` and line 103 routes to `submitScore`
+(**POST**, the participant submit path) instead of `editScore` (**PATCH**). An organizer is not a
+participant, so it fails authorisation.
 
-- `components/shared/MatchCard.tsx:73` — `const canOverride = userRole === 'organizer'`. **No match-status
-  gate at all**, so Override renders on pending matches as readily as completed ones.
-- `components/ScoreSubmitForm.tsx:60` — `const [isEdit, setIsEdit] = useState(match.status === 'completed')`.
-  For a pending match `isEdit` is `false`, so line 103 routes to `submitScore` (**POST**) instead of
-  `editScore` (**PATCH**). POST is the participant submit path, and an organizer is not a participant in
-  the match, so it fails authorisation.
+### Why this surfaced now
 
-**This was latent until ISSUE-40.** Before that change `Matches.tsx`'s `handleOverride` was a dead
-`// TODO: Task 4.6e` stub — the button rendered but did nothing, so the broken route was never taken.
-ISSUE-40 wired the button to the real form (correctly — otherwise its new mandatory reason field would
-have been unreachable), which made this path live. It is an incomplete feature now exposed, not a
-regression in ISSUE-40's own logic.
+Both entry points were dead `// TODO: Task 4.6e` stubs. [ISSUE-40](#issue-40) wired **B** to the real
+form — correctly, since otherwise its new mandatory `reason` field would have been unreachable and the
+ticket's own manual-verification step impossible. That made B mostly work and exposed its pending-match
+hole. **A was not touched and remains a stub.** So ISSUE-40's logic is not at fault; it revealed that
+the feature underneath it was never finished.
 
-### Fix — pick one, they are not equivalent
+### Fix
 
-1. **Gate the button** — add a status condition to `canOverride` so Override only appears where there is
-   a score to override. Smallest change; leaves organizers with no way to enter a score for a match that
-   was never played.
-2. **Route on role, not match status** — have `ScoreSubmitForm` choose PATCH vs POST from whether the
-   actor is the organizer rather than from `match.status`. Larger, but it is the option that lets an
-   organizer record a result for a match the players never submitted, which is plausibly the real
-   requirement.
+**A — build the Standings override path.** Route it to the same `ScoreSubmitForm` modal that B now uses,
+so there is one override implementation rather than two. Note A's handler currently receives a
+`playerId`, not a `matchId` — a standings row is a player, and an override needs a specific match, so
+this needs a match-selection step or the button belongs on the match, not the row. **Resolve that before
+coding; it may be the reason the stub was never finished.**
 
-Decide which behaviour is wanted before coding — (1) and (2) ship different products.
+**B — decide the pending-match behaviour.** Two options that ship different products:
+1. **Gate the button** — add a status condition to `canOverride` so Override only appears where a score
+   exists. Smallest change; leaves organizers unable to record a result for a match players never
+   submitted.
+2. **Route on role, not match status** — have `ScoreSubmitForm` pick PATCH vs POST from whether the actor
+   is the organizer. Larger, but it is what enables an organizer to enter a result for an unplayed match,
+   which is plausibly the actual requirement.
+
+### Verify
+
+Reproduce both first. **A:** as organizer on the Standings tab, click Override — confirm the spinner and
+that nothing else happens. **B:** as organizer, click Override on a `pending` match and submit — confirm
+the failure. Then confirm the chosen fixes, including that a successful override logs `score.overridden`
+with `organizerId` and `reason` (per [ISSUE-39](#issue-39) and [ISSUE-40](#issue-40)).
 
 ### Verify
 
@@ -689,6 +714,12 @@ submission succeeds and logs `score.overridden` with `organizerId` and `reason`.
   ([ISSUE-29](COMPLETED_UAT_ISSUES.md#issue-29)).
 
 **Still open:**
+
+- **`Matches.tsx:60` — `// TODO: Open MatchDetails modal (Task 4.6e)`** is still a dead stub, found
+  2026-07-30 alongside [ISSUE-46](#issue-46). Not filed as a numbered issue because, unlike ISSUE-46's
+  Override button, it is **not** wired to a rendered control that promises the user something — the
+  match-click handler simply does nothing extra. Verify that before building: if some path does surface
+  it, it becomes the same placebo-control defect as ISSUE-46 and should be filed.
 
 - **`REQUIREMENTS.md`'s "2FA changes" audit item describes a feature that doesn't exist** — verified
   2026-07-30, no `2fa`/`mfa`/`otp`/`twoFactor` reference anywhere in `packages/api/src`. Not filed as a
