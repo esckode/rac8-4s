@@ -6,6 +6,7 @@ import {
   fetchBracket,
   fetchPlayerTournaments,
   submitScore,
+  editScore,
 } from '../api/client'
 import * as OfflineSnapshot from '../pwa/OfflineSnapshotContext'
 import type { ApiError, PublicTournamentListResponse, OrganizerTournamentListResponse, GroupStandingsResponse, PlayerMatchesResponse, BracketData } from '../types'
@@ -472,6 +473,56 @@ describe('API Client', () => {
       )
 
       const result = await submitScore('tour_123', 'match_1', '11-9, 11-7', 'token_abc')
+
+      expect(result).toEqual({ queued: true })
+    })
+  })
+
+  describe('editScore', () => {
+    // ISSUE-40 Trap 2: a reason omitted here is gone forever once queued for
+    // offline replay (sync-queue.ts stores the raw serialized body), so this
+    // guards that editScore actually forwards it.
+    it('includes reason in the request body when the caller passes one (organizer override)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ match: {} }), { status: 200 })
+      )
+
+      await editScore('tour_123', 'match_1', '7-5, 6-2', 'org_token', 'group', 'Scorer recorded the wrong set count')
+
+      const [, fetchOptions] = (global.fetch as jest.Mock).mock.calls[0]
+      expect(JSON.parse(fetchOptions.body)).toEqual({
+        score: '7-5, 6-2',
+        reason: 'Scorer recorded the wrong set count',
+      })
+    })
+
+    it('omits reason from the request body when the caller does not pass one (participant self-edit)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ match: {} }), { status: 200 })
+      )
+
+      await editScore('tour_123', 'match_1', '6-4, 6-3', 'player_token')
+
+      const [, fetchOptions] = (global.fetch as jest.Mock).mock.calls[0]
+      expect(JSON.parse(fetchOptions.body)).toEqual({ score: '6-4, 6-3' })
+    })
+
+    it('returns { queued: false } on a normal 200 success', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ match: {} }), { status: 200 })
+      )
+
+      const result = await editScore('tour_123', 'match_1', '11-9, 11-7', 'token_abc')
+
+      expect(result).toEqual({ queued: false })
+    })
+
+    it('returns { queued: true } on a 202 with code QUEUED (offline, SW-synthesized)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ code: 'QUEUED', id: 'q-1' }), { status: 202 })
+      )
+
+      const result = await editScore('tour_123', 'match_1', '11-9, 11-7', 'token_abc')
 
       expect(result).toEqual({ queued: true })
     })

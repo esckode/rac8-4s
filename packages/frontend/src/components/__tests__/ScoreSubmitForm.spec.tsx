@@ -148,6 +148,58 @@ describe('ScoreSubmitForm', () => {
     expect(mockSubmitScore).not.toHaveBeenCalled()
   })
 
+  describe('organizer override (ISSUE-40)', () => {
+    it('does not render a reason input for a participant self-edit', () => {
+      render(<ScoreSubmitForm tournamentId="tourn_1" match={completedMatch} onSuccess={jest.fn()} onClose={jest.fn()} />)
+      expect(screen.queryByTestId('score-reason-input')).not.toBeInTheDocument()
+    })
+
+    it('renders a reason input when isOrganizer is set', () => {
+      render(
+        <ScoreSubmitForm tournamentId="tourn_1" match={completedMatch} onSuccess={jest.fn()} onClose={jest.fn()} isOrganizer />
+      )
+      expect(screen.getByTestId('score-reason-input')).toBeInTheDocument()
+    })
+
+    it('blocks submit and shows an error when the organizer leaves reason empty', async () => {
+      const onSuccess = jest.fn()
+
+      render(
+        <ScoreSubmitForm tournamentId="tourn_1" match={completedMatch} onSuccess={onSuccess} onClose={jest.fn()} isOrganizer />
+      )
+
+      fireEvent.change(screen.getByTestId('score-input'), { target: { value: '11-9, 11-5' } })
+      fireEvent.click(screen.getByTestId('score-submit'))
+
+      await waitFor(() => expect(screen.getByTestId('score-error')).toBeInTheDocument())
+      expect(mockEditScore).not.toHaveBeenCalled()
+      expect(onSuccess).not.toHaveBeenCalled()
+    })
+
+    it('forwards the trimmed reason to editScore on override', async () => {
+      mockEditScore.mockResolvedValueOnce({ queued: false })
+      const onSuccess = jest.fn()
+
+      render(
+        <ScoreSubmitForm tournamentId="tourn_1" match={completedMatch} onSuccess={onSuccess} onClose={jest.fn()} isOrganizer />
+      )
+
+      fireEvent.change(screen.getByTestId('score-input'), { target: { value: '11-9, 11-5' } })
+      fireEvent.change(screen.getByTestId('score-reason-input'), { target: { value: '  Wrong set count entered  ' } })
+      fireEvent.click(screen.getByTestId('score-submit'))
+
+      await waitFor(() => expect(onSuccess).toHaveBeenCalled())
+      expect(mockEditScore).toHaveBeenCalledWith(
+        'tourn_1',
+        'match_1',
+        '11-9, 11-5',
+        'player-token',
+        'group',
+        'Wrong set count entered'
+      )
+    })
+  })
+
   describe('offline queued submission (D8)', () => {
     it('renders the pending badge instead of success when submitScore resolves queued:true', async () => {
       mockSubmitScore.mockResolvedValueOnce({ queued: true })

@@ -817,7 +817,7 @@ describe('Bracket API', () => {
       const res = await request(app)
         .patch(`/tournaments/${tournament.id}/knockout/${match.id}/score`)
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({ score: 'definitely-invalid-score-format' })
+        .send({ score: 'definitely-invalid-score-format', reason: 'Testing invalid score format' })
 
       expect(res.status).toBe(400)
       expect(res.body.code).toBe('SCORE_INVALID')
