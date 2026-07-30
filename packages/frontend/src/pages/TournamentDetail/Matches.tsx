@@ -67,7 +67,7 @@ export const Matches: React.FC = () => {
   const scoringMatch = allMatches.find((m) => m.id === scoringMatchId) || null
 
   const handleOverride = (matchId: string) => {
-    // TODO: Open score override form (Task 4.6e)
+    setScoringMatchId(matchId)
   }
 
   const handleMessageOpponent = (args: MessageOpponentArgs) => {
@@ -191,6 +191,7 @@ export const Matches: React.FC = () => {
             <ScoreSubmitForm
               tournamentId={tournamentId || ''}
               match={scoringMatch}
+              isOrganizer={userRole === 'organizer'}
               onSuccess={() => {
                 setScoringMatchId(null)
                 refetch()

@@ -751,6 +751,15 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'score must be a non-empty string' })
       }
 
+      // ISSUE-40: a reason is mandatory for an organizer override only — a
+      // participant editing their own score is the normal path, not an override.
+      if (isOrganizer && (typeof req.body.reason !== 'string' || !req.body.reason.trim())) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'reason is required when an organizer overrides a score' })
+      }
+      if (isOrganizer && req.body.reason.length > 500) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'reason must be 500 characters or fewer' })
+      }
+
       let parsed
       try {
         parsed = parseScore(req.body.score, tournament.sport as SportFormat)
@@ -773,7 +782,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
       }
 
       if (isOrganizer) {
-        log.info('score.overridden', { tournamentId, matchId, score: req.body.score, winnerId, organizerId: orgPayload?.sub })
+        log.info('score.overridden', { tournamentId, matchId, score: req.body.score, winnerId, organizerId: orgPayload?.sub, reason: req.body.reason })
       } else {
         log.info('score.edited', { tournamentId, matchId, score: req.body.score, winnerId, playerId: actingPlayerId })
       }
@@ -1218,6 +1227,15 @@ export default function tournamentsRouter(deps: AppDependencies) {
         return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'score must be a non-empty string' })
       }
 
+      // ISSUE-40: this route is organizer-only, so every call here is an override —
+      // a reason is always mandatory (mirrors the group-stage isOrganizer branch).
+      if (typeof req.body.reason !== 'string' || !req.body.reason.trim()) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'reason is required when an organizer overrides a score' })
+      }
+      if (req.body.reason.length > 500) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'reason must be 500 characters or fewer' })
+      }
+
       let parsed
       try {
         parsed = parseScore(req.body.score, tournament.sport as SportFormat)
@@ -1236,7 +1254,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
         deps.broadcastBus.emit(cid, 'bracket.updated', { matchId, round: updated.round, winnerId })
       }
 
-      log.info('score.overridden', { tournamentId, matchId, round: updated.round, score: req.body.score, winnerId, organizerId: payload.sub })
+      log.info('score.overridden', { tournamentId, matchId, round: updated.round, score: req.body.score, winnerId, organizerId: payload.sub, reason: req.body.reason })
 
       res.json({
         match: {

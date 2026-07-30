@@ -117,6 +117,10 @@ group's live rankings. The **Bracket** tab shows the knockout draw once publishe
   match's score**, and the app records who entered it. Scores stay editable until the session
   ends.
 - Standings update automatically a few seconds after a score goes in — no refresh needed.
+- Organizers can **override any match's score** at any time. An override requires entering a
+  **reason** — it's recorded in the audit log alongside the organizer and the new score, so there's
+  always a record of who changed a result and why. A participant correcting their own score is not
+  an override and never needs a reason.
 
 ## How standings are ranked
 

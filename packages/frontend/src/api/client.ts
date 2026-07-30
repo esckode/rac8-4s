@@ -199,7 +199,8 @@ export async function editScore(
   matchId: string,
   score: string,
   token: string,
-  matchType: 'group' | 'knockout' = 'group'
+  matchType: 'group' | 'knockout' = 'group',
+  reason?: string
 ): Promise<{ queued: boolean }> {
   const path = matchType === 'knockout'
     ? `/tournaments/${tournamentId}/knockout/${matchId}/score`
@@ -207,7 +208,7 @@ export async function editScore(
   const response = await apiFetch<{ match?: unknown; code?: string }>(path, {
     method: 'PATCH',
     token,
-    body: { score },
+    body: reason !== undefined ? { score, reason } : { score },
   })
   return { queued: response.code === 'QUEUED' }
 }

@@ -12,6 +12,9 @@ import type { ReplayNotification } from '../workers/sw-lib/sync-queue'
  * (POST) for a pending match, editScore (PATCH) for a completed one. Backend
  * error codes map to friendly messages; validation/deadline errors keep the form
  * open, and ALREADY_SCORED offers an edit affordance.
+ *
+ * ISSUE-40: this is also the organizer's override form (isOrganizer prop) — an
+ * override requires a `reason`, forwarded only on the editScore (PATCH) call.
  */
 
 interface ScoreSubmitFormMatch {
@@ -27,6 +30,8 @@ interface ScoreSubmitFormProps {
   match: ScoreSubmitFormMatch
   onSuccess: () => void
   onClose: () => void
+  // ISSUE-40: organizer overrides require a reason; participant self-edits don't.
+  isOrganizer?: boolean
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -49,8 +54,9 @@ const REPLAY_NOTICES: Record<Exclude<ReplayNotification['outcome'], 'success'>, 
   expired: 'Offline score expired — submit again.',
 }
 
-export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: ScoreSubmitFormProps) {
+export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose, isOrganizer = false }: ScoreSubmitFormProps) {
   const [score, setScore] = useState(match.score ?? '')
+  const [reason, setReason] = useState('')
   const [isEdit, setIsEdit] = useState(match.status === 'completed')
   const [error, setError] = useState<string | null>(null)
   const [offerEdit, setOfferEdit] = useState(false)
@@ -81,6 +87,11 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
     e.preventDefault()
     setError(null)
 
+    if (isOrganizer && !reason.trim()) {
+      setError('A reason is required when overriding a score.')
+      return
+    }
+
     const token = localStorage.getItem('auth_token')
     if (!token) {
       setError('You need to sign in again to submit a score.')
@@ -90,7 +101,7 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
     setSubmitting(true)
     try {
       const result = isEdit
-        ? await editScore(tournamentId, match.id, score, token, matchType)
+        ? await editScore(tournamentId, match.id, score, token, matchType, ...(isOrganizer ? [reason.trim()] : []))
         : await submitScore(tournamentId, match.id, score, token, matchType)
 
       if (result.queued) {
@@ -171,6 +182,24 @@ export function ScoreSubmitForm({ tournamentId, match, onSuccess, onClose }: Sco
         />
         <p className="text-xs text-(--ink-500)">Games per set, comma-separated. e.g. 11-9, 11-7</p>
       </div>
+
+      {isOrganizer && (
+        <div className="space-y-(--s-1)">
+          <label htmlFor="reason-input" className="text-sm font-medium text-(--ink-700)">
+            Reason
+          </label>
+          <input
+            id="reason-input"
+            data-testid="score-reason-input"
+            type="text"
+            value={reason}
+            placeholder="Why is this score being overridden?"
+            onChange={(e) => setReason(e.target.value)}
+            disabled={submitting}
+            className="w-full border border-(--border) rounded-(--r-md) px-(--s-3) py-(--s-2)"
+          />
+        </div>
+      )}
 
       {error && (
         <p data-testid="score-error" role="alert" className="text-sm text-(--rose-700)">
