@@ -5,7 +5,7 @@
 
 **Date:** 2026-07-13
 **Status:** ✅ **Built** (P0–P12, 2026-07-14 — see [PERSONALIZATION_IMPLEMENTATION.md](./PERSONALIZATION_IMPLEMENTATION.md)'s
-Definition of done). P13 ratings still needs its own grill; the 1:1 Coach later phase (§4) has
+Definition of done). P13 ratings is **grilled — see [RATINGS_DESIGN.md](./RATINGS_DESIGN.md)**; the 1:1 Coach later phase (§4) has
 its own doc, ungrilled. Builds on the community layer ([PLAYER_GROUPS_DESIGN.md](./PLAYER_GROUPS_DESIGN.md)),
 the @coach assistant ([LLM_ASSISTANT_DESIGN.md](./LLM_ASSISTANT_DESIGN.md) — Phases A–C merged to
 `main` 2026-07-12/13), and the Task-19 mobile-first frontend architecture
@@ -54,7 +54,7 @@ parallel with anything.
 | P10 | Persisted display preferences (theme, density, text size, motion) | App+UI | M | P0 |
 | P11 | Standings snapshots → personal trends | App | M | — |
 | P12 | Availability preferences (Coach-aware) | App | M | P0 |
-| P13 | Skill ratings | App | L | P11; own grill |
+| P13 | Skill ratings | App | L | P11; **grilled 2026-07-30 → [RATINGS_DESIGN.md](./RATINGS_DESIGN.md) (R1–R14)** |
 
 ### P0 — Player preferences store *(foundation, do first)*
 

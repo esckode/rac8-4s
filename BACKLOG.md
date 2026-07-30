@@ -47,6 +47,7 @@ here.
 | [COACH_1TO1_IMPLEMENTATION.md](assets/planning/COACH_1TO1_IMPLEMENTATION.md) | 1:1 Coach — S0–S10 (migration 057: `type='coach'` convo + `player_memories` + `assistant_cards.conversation_id` re-key; `/player/coach/*` routes + SSE; player-level tool context + snapshot; history-cached coach client (`COACH_MODEL`); 20/hr+60/day limiter + heads-up; `propose_remember` + memory routes; pinned entry + `/coach` page + Profile section; DSR export/erasure incl. the §5.2 [RED] personal-scope card test; **privacy-policy page** clearing the A9.2 gate). TDD + e2e-scenario-first | ✅ **Built & merged** (S0–S10, 2026-07-14/15, branch `coach-1to1` → `main`) — e2e 8/8 chromium+firefox, coverage ≥85% stmts on all named modules, regression ladder green modulo documented pre-existing flakes. Privacy-policy page (`/privacy`) live; **owner review/approval of its text still pending**, and manual live-model smoke blocked on A0.1b (P-AWS enrollment) — A9.2 + launch-readiness clear once those land |
 | [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md) | Token-usage lint gate — Phases E0–E5: (b) repair broken ESLint config + clear 53 errors + gate lint in CI, (a) color-literal `no-restricted-syntax` rule on the unified gate w/ interim baseline + permanent allowlist, (c) husky/lint-staged pre-commit, **(E5 mandatory) full retrofit of all ~301 legacy color literals across 11 files + tear down the baseline** (gate becomes total). TDD-first via ESLint fixture harness | ✅ **Built & merged** to `main` |
 | [PWA_CACHING_IMPLEMENTATION.md](assets/planning/PWA_CACHING_IMPLEMENTATION.md) | Venue-mode offline caching — S0–S9 (service worker rewrite as testable `sw-lib/` modules via `vite-plugin-pwa` injectManifest, network-first venue-read cache + 48h TTL, IndexedDB scores sync queue with explicit pending/replay states, offline banner + per-view snapshot timestamps, D11 offline session survival in `useAuth`, sign-out wipe, update-prompt toast, CloudFront no-cache behaviors for the SW/manifest, real icons). TDD + e2e-scenario-first, ≥85% coverage on new modules | ✅ **Built & merged** (S0–S9, 2026-07-18, branch `pwa-caching`) — pwa e2e project 11/11; found+fixed 2 real regressions via the mandated full-suite regression check (D10 navigation fallback wasn't network-first; a `testIgnore` config bug had un-excluded 2 unrelated spec files) |
+| [RATINGS_DESIGN.md](assets/planning/RATINGS_DESIGN.md) | Private per-player skill ratings (P13), R1–R14: 0–500 NTRP-shaped scale, seeded from an optional self-rating (default 270), keyed per sport × format, updated on **score confirmation** with gap-scaled movement, doubles teams averaged, casual counts in full, no inactivity decay; private to the player and used internally for balanced auto-pairing | 📐 **Design (grilled 2026-07-30)** — discharges the PERSONALIZATION_DESIGN DSR-at-grill-time rule in §4; → `RATINGS_IMPLEMENTATION.md` next |
 
 ## Test scenarios
 | Spec doc | Covers | Status |
@@ -83,6 +84,17 @@ here.
   leaderboard tab; P3.1–P3.9, migrations 047–048). Resolves FrontEndPlan §A/§B.
 
 ### 📐 Design → needs an implementation plan
+
+- **Skill ratings (P13)** — **grilled 2026-07-30
+  ([RATINGS_DESIGN.md](assets/planning/RATINGS_DESIGN.md) §3, R1–R14)**. Private per-player rating on
+  a 0–500 NTRP-shaped scale, keyed per sport × format, seeded from an optional self-rating (default
+  270), updated **on score confirmation** with gap-scaled movement; doubles averages the pair; casual
+  counts in full; no inactivity decay. Shown only to its owner on `/profile`, and used internally to
+  balance auto-paired doubles. Next: create `RATINGS_IMPLEMENTATION.md` — migration
+  (`player_ratings` + `player_rating_history`), the update service hooked to the confirmation path,
+  the lazy per-sport self-rating prompt, the `/profile` panel, and the one-line
+  `dsr-service.ts` erase step. **Derive the constants rather than porting Elo's** — standard values
+  assume a ~400-point spread, and the 500 cap breaks zero-sum at the ceiling.
 - *(done)* ~~**Player Groups** → `PLAYER_GROUPS_IMPLEMENTATION.md`~~ — **✅ Built & merged** (G0.1–G5.1,
   migrations 038–045). See the Built queue above.
 - *(done)* ~~**PWA-first frontend** (FRONTEND_PLATFORM_STRATEGY.md) → create
