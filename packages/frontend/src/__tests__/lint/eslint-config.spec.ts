@@ -92,6 +92,15 @@ const CSS_VAR_STYLE_FIXTURE = `const g = <div style={{ color: 'var(--ink-900)' }
 const NON_COLOR_ARBITRARY_FIXTURE = `const h = <div className="min-h-[44px] max-h-[600px]" />
 `
 
+const CSS_VAR_BRACKET_CLASSNAME_FIXTURE = `const j = <div className="bg-[--court-500]" />
+`
+
+const CSS_VAR_BRACKET_TEMPLATE_FIXTURE = `const k = <div className={\`bg-[--court-500]\`} />
+`
+
+const CSS_VAR_BRACKET_MULTI_PREFIX_FIXTURE = `const m = <div className="text-[--ink-900] px-[--s-3] duration-[--duration-normal]" />
+`
+
 const HEX_NEW_FILE_FIXTURE = `const i = <div className="bg-[#fff]" />
 `
 
@@ -213,6 +222,36 @@ describe('eslint config (programmatic fixture runner)', () => {
       const results = await lintText(HEX_FORMERLY_BASELINED_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/pages/Login.tsx')
 
       expect(results[0].errorCount).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  describe('no-restricted-syntax: -[--token] bracket form banned (invalid CSS in Tailwind v4)', () => {
+    it('reports a no-restricted-syntax error for the -[--token] bracket form in a className string (ISSUE-44c regression guard)', async () => {
+      const results = await lintText(CSS_VAR_BRACKET_CLASSNAME_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-cssvar-bracket-classname.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('reports a no-restricted-syntax error for the -[--token] bracket form in a template literal className', async () => {
+      const results = await lintText(CSS_VAR_BRACKET_TEMPLATE_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-cssvar-bracket-template.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('reports a no-restricted-syntax error for every -[--token] prefix in a mixed className (text-/px-/duration-)', async () => {
+      const results = await lintText(CSS_VAR_BRACKET_MULTI_PREFIX_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-cssvar-bracket-multi.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('reports 0 no-restricted-syntax errors for ordinary arbitrary values (min-h-[44px] max-h-[600px])', async () => {
+      const results = await lintText(NON_COLOR_ARBITRARY_FIXTURE, '/home/esckode/projects/claude/rac8-4s/packages/frontend/src/fake-fixture-noncolor-arbitrary-2.tsx')
+
+      const errors = results[0].messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+      expect(errors).toHaveLength(0)
     })
   })
 })
