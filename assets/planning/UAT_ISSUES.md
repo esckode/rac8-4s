@@ -54,7 +54,7 @@ shipped.
 | ├ [44c](#issue-44c) | ✅ Resolved | 🟠 | Add the lint guard so the broken form cannot regress | frontend · lint |
 | └ [44d](#issue-44d) | 🔲 Open | 🟠 | Visual review of the app-wide layout shift (human, not an agent) | frontend · design |
 | [ISSUE-45](#issue-45) | 🔲 Open | 🟠 | `seed-test-accounts.spec.ts` fails on a FK violation — test isolation is leaking | test · db |
-| [ISSUE-46](#issue-46) | 🔲 Open | 🔴 | Organizer score override only partially built — Standings button is a placebo | frontend |
+| [ISSUE-46](#issue-46) | ⏸ Tabled | 🔴 | Organizer score override only partially built — Standings button is a placebo | frontend |
 
 **Implementation status, 2026-07-30.** ISSUE-39/40/41/42 and 44a/44b/44c are implemented on branch
 `fix/uat-issues-39-44`, each TDD (failing test committed before implementation). Verified: full
@@ -703,6 +703,19 @@ submission succeeds and logs `score.overridden` with `organizerId` and `reason`.
 ## Not yet triaged / follow-ups
 
 **Decided, recorded so they are not re-raised:**
+
+- **Scope is casual *unlisted* tournaments only; organizer features are tabled** *(owner,
+  2026-07-30)*. Concretely `mode='casual'` + `visibility='unlisted'` (migration
+  `044_casual_mode_schema.sql`) — group-launched, hidden from browse, reachable only by direct URL or
+  invite link. **[ISSUE-46](#issue-46) is tabled under this**, not fixed: the Standings Override button
+  stays a placebo, so do not pick it up. Consequences worth knowing before anyone re-triages:
+  - Casual scoring does not involve an organizer at all. `score-service.ts:97` — *"Casual mode: any
+    tournament participant may score any match"* — so the participant path (`score.edited`,
+    `actingPlayerId`) **is** the casual flow.
+  - [ISSUE-40](#issue-40)'s mandatory override `reason` therefore does **not** burden casual users: it
+    is gated on `isOrganizer`, with a named regression test guarding participant self-edits.
+  - [ISSUE-39](#issue-39)'s fix to `score.edited` (adding `playerId`) is the audit trail casual
+    actually relies on — that one matters here, unlike its `score.overridden` sibling.
 
 - **`pages/DesignSpec.tsx` — keep it** *(owner, 2026-07-29)*. It is unreferenced by any route or
   test, and has twice been flagged as dead code. It is retained deliberately as a design reference.
