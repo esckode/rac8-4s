@@ -49,6 +49,10 @@ shipped.
 | [ISSUE-42](#issue-42) | 🔲 Open | 🟡 | `login.success` logs a plaintext email, violating CLAUDE.md §6 | api |
 | [ISSUE-43](#issue-43) | ⏸ Deferred | 🟡 | No audit log exists for player-email access — scoped, waiting on DSR cascade | api |
 | [ISSUE-44](#issue-44) | 🔲 Open | 🔴 | App-wide: `-[--token]` Tailwind syntax emits invalid CSS — invisible buttons, dead spacing | frontend |
+| ├ [44a](#issue-44a) | 🔲 Open | 🔴 | Codemod the shared design-system primitives (self-verifying: specs pin the strings) | frontend |
+| ├ [44b](#issue-44b) | 🔲 Open | 🔴 | Codemod the remaining ~48 files (depends on 44a) | frontend |
+| ├ [44c](#issue-44c) | 🔲 Open | 🟠 | Add the lint guard so the broken form cannot regress | frontend · lint |
+| └ [44d](#issue-44d) | 🔲 Open | 🟠 | Visual review of the app-wide layout shift (human, not an agent) | frontend · design |
 
 **All six were re-verified against current code on 2026-07-30 and the blocking product decisions are
 recorded in each section.** Three corrections came out of that pass and change how the work is
@@ -444,47 +448,80 @@ ride along with this fix. This change already shifts spacing on every screen; st
 migration on top means a broken layout can't be attributed to one or the other. The parens form is a
 correct, stable resting point that can stay indefinitely. Raise `@theme` separately if wanted.
 
-### Fix
+### Fix — split into 44a / 44b / 44c *(2026-07-30)*
 
-Mechanical but too large to hand-edit safely — needs a scoped codemod, not a blind repo-wide `sed`:
+Mechanical but too large to land in one step: 1,069 sites across 55 files is not a reviewable diff,
+and the lint rule needs judgement the codemod doesn't. Split so each piece has its own proof.
 
-1. Replace `<prefix>-[--token]` → `<prefix>-(--token)`. The pattern
-   `/(\b[a-z][a-z-]*)-\[(--[a-zA-Z0-9-]+)\]/g` → `'$1-($2)'` matches only this exact broken shape —
-   it leaves legitimate arbitrary values like `min-h-[44px]`, `max-h-[600px]` untouched (they don't
-   start with `--`). **Scope it to `packages/frontend/src/**/*.{ts,tsx}`.** Do **not** run it
-   repo-wide: `tokens.css` / `responsive.css` already use correct `var(--token)` CSS syntax and must
-   not be touched.
+**The shared codemod, used by both 44a and 44b.** Pattern
+`/(\b[a-z][a-z-]*)-\[(--[a-zA-Z0-9-]+)\]/g` → `'$1-($2)'`. It matches only this exact broken shape and
+leaves legitimate arbitrary values (`min-h-[44px]`, `max-h-[600px]`) untouched — they don't start with
+`--`. **Write it as a Node script and run it. Do not hand-edit files** — a hand-edited 1,000-site diff
+will drift and is unreviewable. Scope to `packages/frontend/src`; do **not** run repo-wide, as
+`tokens.css` / `responsive.css` already use correct `var(--token)` CSS syntax and must not be touched.
 
-2. **Include the 3 spec files — they assert on the broken strings and will fail otherwise.** The
-   original scope line said "51 files (excluding tests)"; the real count is **55 files**, and the 4
-   test files are not incidental:
-   - `components/shared/__tests__/Button.spec.tsx` — `toHaveClass('text-[--court-600]')`,
-     `'px-[--s-3]'`, `'focus:ring-[--court-400]'`, `'duration-[--duration-normal]'`, …
-   - `components/shared/__tests__/Modal.spec.tsx` — `toHaveClass('rounded-[--r-lg]')`,
-     `classList.contains('gap-[--s-2]')`
-   - `components/shared/__tests__/PaginationControls.spec.tsx` — `toHaveClass('bg-[--court-500]')`, …
+---
 
-   These are pure class-string assertions, so the same codemod fixes them. Run it over the specs in
-   the same pass.
+#### ISSUE-44a — codemod the shared design-system primitives {#issue-44a}
 
-3. **Update the lint rule — this is the part that stops it coming back.** The 4th test file,
-   `src/__tests__/lint/eslint-config.spec.ts:86`, is not an assertion on app code; it encodes
-   `text-[--ink-900] bg-[--court-500]` as the **approved** token form for the `no-restricted-syntax`
-   rule that bans raw colour literals (`.eslintrc.json`). That is the root cause of the spread: the
-   rule pushes everyone toward design tokens, and the only blessed route was a syntax that silently
-   produces invalid CSS. Fixing the 1,069 sites without fixing the rule buys time, not a solution.
-   - Update the `CSS_VAR_CLASSNAME_FIXTURE` to the parens form.
-   - Add a `no-restricted-syntax` case making `<prefix>-[--token]` an **error**, with a message
-     naming the fix (e.g. *"Use `-(--token)`; the `-[--token]` form emits invalid CSS in Tailwind
-     v4"*). Add a fixture asserting the broken form now reports ≥1 error — that test is the actual
-     regression guard for this whole issue.
-   - Keep the existing `NON_COLOR_ARBITRARY_FIXTURE` (`min-h-[44px]`) passing: the new rule must not
-     fire on ordinary arbitrary values.
+**Scope:** `packages/frontend/src/components/shared/**` only, **including its `__tests__`**.
 
-4. Spot-check the highest-traffic screens (Play / Groups / Tournament Detail) plus every consumer of
-   `components/shared/Button.tsx`, `Modal.tsx`, `Badge.tsx` — those fan out everywhere. Per the
-   spacing finding above, expect **real layout shifts** here and review them as intended behaviour
-   rather than assuming a clean diff means no visual change.
+Do the primitives first and alone: `Button.tsx` (21 occurrences), `Modal.tsx` (19), `Badge.tsx` (13),
+`ErrorBanner.tsx`/`SuccessBanner.tsx` (9 each), `PaginationControls.tsx`. They fan out to every screen,
+so a mistake here is the highest-leverage way to reintroduce the bug — and uniquely, **they already
+have specs asserting the exact class strings**, which makes this slice self-verifying:
+
+- `__tests__/Button.spec.tsx` — `toHaveClass('text-[--court-600]')`, `'px-[--s-3]'`,
+  `'focus:ring-[--court-400]'`, `'duration-[--duration-normal]'`, …
+- `__tests__/Modal.spec.tsx` — `toHaveClass('rounded-[--r-lg]')`, `classList.contains('gap-[--s-2]')`
+- `__tests__/PaginationControls.spec.tsx` — `toHaveClass('bg-[--court-500]')`, …
+
+These are pure class-string assertions, so the same codemod fixes them. **Run it over the specs in the
+same pass** — otherwise they fail. That the suite is green afterwards *is* the proof the transform was
+faithful: the specs pin the exact expected strings.
+
+**Note on coverage:** this is a string substitution with no new executable logic, so it moves no
+coverage number and no new tests are warranted. Proof is the existing specs passing plus the greps
+below — do **not** invent tests to chase a percentage (CLAUDE.md §13).
+
+#### ISSUE-44b — codemod the remaining ~48 files {#issue-44b}
+
+**Scope:** the rest of `packages/frontend/src` (everything 44a didn't cover). Same script, same
+pattern, run once. Largest files: `MyGroups.tsx` (100), `TournamentDetail/index.tsx` (72),
+`TournamentDetail/Details.tsx` (69), `PlayHub.tsx` (52), `Profile.tsx` (47), `OrganizerDashboard.tsx`
+(42), `TournamentDetail/Matches.tsx` (41), `GroupChatPanel.tsx` (39), `StandingsTable.tsx` (35),
+`ScoreSubmitForm.tsx` (32).
+
+**Depends on 44a being merged first** — if the primitives change under you, the diff is harder to
+reason about. Same coverage note as 44a.
+
+#### ISSUE-44c — add the lint guard so it cannot regress {#issue-44c}
+
+**This is the part that makes the fix durable, and the part needing real judgement.** Do it last, once
+the tree is clean.
+
+`src/__tests__/lint/eslint-config.spec.ts:86` is not an assertion on app code — it encodes
+`text-[--ink-900] bg-[--court-500]` as the **approved** token form for the `no-restricted-syntax` rule
+that bans raw colour literals (`.eslintrc.json`). That is the root cause of the spread: the rule pushes
+everyone toward design tokens, and the only blessed route was a syntax that silently produces invalid
+CSS. Fixing 1,069 sites without fixing the rule buys time, not a solution.
+
+- Update `CSS_VAR_CLASSNAME_FIXTURE` to the parens form.
+- Add a `no-restricted-syntax` case making `<prefix>-[--token]` an **error**, message naming the fix
+  (e.g. *"Use `-(--token)`; the `-[--token]` form emits invalid CSS in Tailwind v4"*).
+- Add a fixture asserting the broken form now reports ≥1 error — **that test is the regression guard
+  for this entire issue**, so write it first and watch it fail (CLAUDE.md §4).
+- Keep `NON_COLOR_ARBITRARY_FIXTURE` (`min-h-[44px]`) passing — the rule must **not** fire on ordinary
+  arbitrary values. This is the easy thing to get wrong: a pattern that catches `[--x]` but also
+  catches `[44px]` will fail this and must not be "fixed" by deleting the fixture.
+
+#### ISSUE-44d — visual review (human, not an agent) {#issue-44d}
+
+Per the spacing finding above, ~380 dead spacing declarations start applying when 44a+44b land, so
+**layout visibly changes on essentially every screen**. Spot-check Play / Groups / Tournament Detail
+and the 28 `bg-[--*]` + `text-white` sites for newly-visible controls. This is a judgement call about
+intended appearance, not something a green test suite can answer — do not mark ISSUE-44 resolved on
+test results alone.
 
 ### Verify
 
