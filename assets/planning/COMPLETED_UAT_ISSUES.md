@@ -1763,3 +1763,141 @@ the session), which ISSUE-32's registration-based fallback alone could never gra
 exactly as before whenever `group_id IS NULL`. The new branching lives entirely in the call sites'
 shared helper, which is the only place with a database connection to look up membership with.
 
+---
+
+## 2026-07-29 actionable-follow-ups batch (ISSUE-34 – ISSUE-38) {#actionable-follow-ups-batch}
+
+**All five resolved 2026-07-29, branch-per-issue, fast-forwarded to `main` in the suggested order:
+34 → 35 → 36 → 37 → 38.** Raised the same day by promoting items sitting in the "not yet triaged"
+follow-ups list into scoped issues. Two (35, 38) needed a scope correction mid-flight from an owner
+review before their fix was implementable as written — see each issue's note.
+
+## ISSUE-34 — e2e merge gate unusable: the rate-limit override was never set 🟠 {#issue-34}
+
+**✅ Resolved** (2026-07-29, `e63304b`): `APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS=10000` set
+in `.env`, `.env.example`, and `packages/api/.env` — a test-environment-only override, not a raise of
+ISSUE-11's abuse-prevention default (`config.ts`'s production default stays 25). `scripts/e2e-setup.js`
+also gained a `checkRateLimitOverride()` step that reads the value back out of `packages/api/.env` and
+reports it in the prerequisite summary, so a missing override fails loudly instead of silently
+self-DoSing the sweep again.
+
+Verified with the actual failure mode: 30 registration requests from one IP with unique emails per
+request (not the same email 30×, which hits the unrelated per-email cap) all got past the per-IP
+limiter. A subsequent full `npm run test:e2e` sweep completed with **zero** `RATE_LIMITED` occurrences
+for the first time this session — 453 tests, restoring the CLAUDE.md §11 merge gate this issue exists
+to fix. That same sweep surfaced pre-existing, unrelated failures — `coach.spec.ts` and
+`profile.spec.ts` failing on both chromium and firefox, and 10 failures under the `pwa` project — not
+yet triaged; see the follow-ups list below.
+
+⚠ **Restart-verification pitfall hit repeatedly while working this issue:** `pkill -f
+"workspace=packages/api"` does not match the process actually bound to port 3001.
+`npm run dev --workspace=packages/api` spawns a chain (`sh -c tsx watch...` → `node .../tsx
+watch...` → a grandchild `node --require .../tsx/preflight.cjs ...`), and it's the grandchild that
+binds the port — its process line doesn't retain the `workspace=packages/api` string once orphaned.
+Restarts that don't verify a **new PID** on the port via `ss -ltnp | grep 3001` can silently leave a
+stale server running for hours with exhausted rate-limit counters and old code. Use `fuser -k
+3001/tcp` when in doubt.
+
+---
+
+## ISSUE-35 — `POST /api/analytics/events` 401s for registered accounts 🟠 {#issue-35}
+
+> **Scope correction, 2026-07-29 (before implementation):** the issue as originally written proposed
+> reusing "the existing resolver" — but neither `player.ts`'s `resolvePlayerId` nor
+> `tournaments.ts`'s `resolveTournamentPlayer` was exported (both are closures local to their route
+> factories), so there was nothing importable to reuse. Corrected to extract a new shared module first.
+
+**✅ Resolved** (2026-07-29, `3275991`/`6b1db1a`): new `auth/resolve-player.ts` exports
+`resolvePlayerIdentity(deps, authHeader)` — the identity-only half shared by every caller, returning a
+`via: 'session' | 'account'` discriminator so tournament-scoped callers can still layer their own
+registration/membership check on top. `player.ts`'s `resolvePlayerId` and `tournaments.ts`'s
+`resolveTournamentPlayer` were both refactored to call it instead of hand-rolling their own dual-auth,
+eliminating the 3rd and 4th copies of the pattern that produced ISSUE-32 in the first place.
+`analytics.ts` now calls it directly (no tournament-scoping needed for an identity-only endpoint).
+Guest magic-link sessions and registered-account JWTs both reach `POST /api/analytics/events`
+successfully; verified with a live full e2e sweep (453 tests) alongside ISSUE-34's rate-limit fix,
+zero `RATE_LIMITED`, zero new 401s on `/api/analytics/events`.
+
+---
+
+## ISSUE-36 — Three of four More-menu items were dead links 🟠 {#issue-36}
+
+**✅ Resolved** (2026-07-29, `e5f5717`/`2542274`/`0dd12db`): **Account** repointed to the existing
+`/profile` route. **About** built with only the group-owner support guidance the owner approved
+("for anything about games, fixtures or membership, message your group owners") — deliberately *no*
+technical-contact block, since no publishable email or contact-form backend exists yet (tracked below,
+not by this issue). **Settings** built to a scope agreed live with the owner (sign-out + privacy link,
+PWA install/update state, offline & cached-data controls — all three candidate areas the issue's own
+text raised, rather than guessing one). `ROUTES.ABOUT`/`ROUTES.SETTINGS` constants added; the More-menu
+items now read from `ROUTES` instead of hardcoded path strings. A new guard test
+(`mobile.spec.ts`, "every More-menu item resolves to a real page, not NotFound") asserts every menu
+`path` renders real content, so a fifth dead link fails CI rather than waiting for the next manual
+walkthrough. `docs/assistant-help.md` updated per CLAUDE.md §9 (install/update copy, sign-out-clears-data
+copy, a new "Getting help" section).
+
+Technical support destination is still genuinely unbuilt — see the follow-ups list below; this issue
+does not resolve it.
+
+---
+
+## ISSUE-37 — Auth page titles were not headings 🟡 {#issue-37}
+
+**✅ Resolved** (2026-07-29, `9bd665e`/`254a4d2`): `Login.tsx`, `ForgotPassword.tsx` (both render
+states) and `ResetPassword.tsx` (both render states) had their 34px title `<div>`s promoted to `<h1>`,
+matching `Signup.tsx`'s existing correct pattern — same inline styles, nothing moves visually. Five
+render states total across the three files; a new test suite (`page-copy-convention.spec.tsx`) asserts
+exactly one `<h1>` per screen via `getAllByRole('heading', { level: 1 })`, confirmed via a genuine
+`git stash` red before the fix landed. Not built as a shared page-header component — the issue flagged
+that as optional, and three call sites didn't justify the abstraction.
+
+---
+
+## ISSUE-38 — `real-time-updates.spec.ts` reconnect test failed consistently 🟡 {#issue-38}
+
+> **Root cause was not what the issue's own lead suggested.** The service worker's venue-read cache
+> (`sw-lib/routing.ts`) — the one named lead — is registered under Playwright but was verified, via a
+> route-based reproduction that bypasses it entirely, to be uninvolved. The actual causes were two
+> independent bugs the issue's diagnosis didn't anticipate, one in the test and one real, plus a
+> Playwright/CDP limitation that made the test unfixable as originally written regardless of app code.
+
+**✅ Resolved** (2026-07-29, `29b9d89`/`d37d756`/`73a2d77`/`d46e9c5`/`7ccb2d8`):
+
+1. **Test methodology bug, verified live on both chromium and firefox:** `context.setOffline(true)` →
+   `context.setOffline(false)` never lets a native `EventSource` reconnect in Playwright — confirmed
+   with a bare `new EventSource(...)` and zero app code involved, stuck in `readyState` `CONNECTING`
+   indefinitely, while a plain `fetch()` on the same origin at the same moment resolves normally. No
+   amount of app-side fix could pass a test built on this. Swapped for
+   `context.route('**/events**', route => route.abort())` / `unroute()`, which blocks only the SSE
+   endpoint and leaves the app's real reconnect path exercised.
+2. **Real bug in `useSSE.ts`:** `useTournament().refetch` is a fresh closure every render (never
+   memoized), and re-renders happen constantly while connected — including ones the hook's own
+   `setConnected`/`setReconnecting` calls trigger. Depending on that identity in the connection
+   `useEffect` tore the live `EventSource` down and rebuilt it on nearly every render; verified live
+   that a connection repeatedly torn down before it finishes opening may never open at all. Fixed with
+   the standard "latest ref" pattern — `refetchRef`/`trackRef` keep the effect's dependency array down
+   to `[tournamentId]` while still always calling the current callback.
+3. **Real bug in `GET /tournaments/:id/events`:** `res.flushHeaders()` alone doesn't reach the client
+   through Vite's dev proxy — verified with `curl`, direct-to-API got headers instantly, the identical
+   request through the Vite proxy got **zero bytes**, headers included, for 6+ seconds. Without a
+   broadcast there's nothing else written to the stream, so a client can sit in `CONNECTING`
+   indefinitely. Fixed with a leading `res.write(': connected\n\n')` right after `flushHeaders()` — an
+   SSE comment line, invisible to `EventSource`'s message parsing, whose only job is forcing a flush.
+   This is a real, if dev-environment-specific, gap independent of the Playwright issue above; the
+   `coach.ts` SSE route (`/player/coach/events`) has the identical pattern and was **not** touched —
+   out of scope for this issue, tracked below.
+
+The companion flaky test ("multiple connected clients see synchronized standings") had its own,
+separate cause: broadcasts are a single, unrepeated event, and the test submitted the score without
+confirming both viewers' `EventSource` connections had actually opened — a viewer still mid-handshake
+missed the one broadcast for good, ~40% of the time in isolation. Both viewers now wait on a new
+`data-testid="sse-connected"` indicator (`TournamentDetail`'s existing dev-only debug panel) before the
+score is submitted. Playwright's own network `response` events were tried first and ruled out — they
+never fired for this endpoint's streaming response across several verified runs, even on connections
+confirmed open via a direct console log in the hook itself, so the fix reads the DOM instead of the
+network layer.
+
+Verify command run clean, first attempt, no retries, both browsers: 4/4 chromium (6.2s), 4/4 firefox
+(9.6s) — down from the original ~45s-with-retries-and-still-failing baseline.
+
+---
+
