@@ -20,9 +20,9 @@ ISSUE-1–21, the 2026-07-26/27 walkthrough batch (ISSUE-22–31), the post-walk
 [the actionable-follow-ups batch](COMPLETED_UAT_ISSUES.md#actionable-follow-ups-batch) for what each
 shipped.
 
-**7 issues filed 2026-07-30 (ISSUE-39–45)** — see the implementation-status note below: ISSUE-39–43 after checking
+**8 issues filed 2026-07-30 (ISSUE-39–46)** — see the implementation-status note below: ISSUE-39–43 after checking
 `REQUIREMENTS.md`'s "Audit Logging" section against the actual code, ISSUE-44 from a live UAT report
-(invite/create-group buttons appeared to have no submit button). Number the next one 46.
+(invite/create-group buttons appeared to have no submit button). Number the next one 47.
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -54,6 +54,7 @@ shipped.
 | ├ [44c](#issue-44c) | ✅ Resolved | 🟠 | Add the lint guard so the broken form cannot regress | frontend · lint |
 | └ [44d](#issue-44d) | 🔲 Open | 🟠 | Visual review of the app-wide layout shift (human, not an agent) | frontend · design |
 | [ISSUE-45](#issue-45) | 🔲 Open | 🟠 | `seed-test-accounts.spec.ts` fails on a FK violation — test isolation is leaking | test · db |
+| [ISSUE-46](#issue-46) | 🔲 Open | 🟠 | Organizer "Override" on a not-yet-played match posts as a submit and fails | frontend |
 
 **Implementation status, 2026-07-30.** ISSUE-39/40/41/42 and 44a/44b/44c are implemented on branch
 `fix/uat-issues-39-44`, each TDD (failing test committed before implementation). Verified: full
@@ -624,6 +625,53 @@ npm --workspace=packages/api exec -- jest src/__tests__/integration/seed-test-ac
 ```
 Then confirm the isolation invariant holds: capture row counts before and after a full API run and
 confirm they are unchanged.
+
+---
+
+## ISSUE-46 — Organizer "Override" on a not-yet-played match posts as a submit and fails 🟠 {#issue-46}
+
+*Found 2026-07-30 while implementing [ISSUE-40](#issue-40), which is also what made it reachable.*
+
+### Symptom
+
+An organizer sees the **Override** button on *every* match, including `pending` ones that have no score
+yet. Clicking it on a pending match opens the score form, but submitting fails — the request is sent to
+the wrong endpoint and the organizer is not authorised for it.
+
+### Root cause
+
+Two independent conditions combine:
+
+- `components/shared/MatchCard.tsx:73` — `const canOverride = userRole === 'organizer'`. **No match-status
+  gate at all**, so Override renders on pending matches as readily as completed ones.
+- `components/ScoreSubmitForm.tsx:60` — `const [isEdit, setIsEdit] = useState(match.status === 'completed')`.
+  For a pending match `isEdit` is `false`, so line 103 routes to `submitScore` (**POST**) instead of
+  `editScore` (**PATCH**). POST is the participant submit path, and an organizer is not a participant in
+  the match, so it fails authorisation.
+
+**This was latent until ISSUE-40.** Before that change `Matches.tsx`'s `handleOverride` was a dead
+`// TODO: Task 4.6e` stub — the button rendered but did nothing, so the broken route was never taken.
+ISSUE-40 wired the button to the real form (correctly — otherwise its new mandatory reason field would
+have been unreachable), which made this path live. It is an incomplete feature now exposed, not a
+regression in ISSUE-40's own logic.
+
+### Fix — pick one, they are not equivalent
+
+1. **Gate the button** — add a status condition to `canOverride` so Override only appears where there is
+   a score to override. Smallest change; leaves organizers with no way to enter a score for a match that
+   was never played.
+2. **Route on role, not match status** — have `ScoreSubmitForm` choose PATCH vs POST from whether the
+   actor is the organizer rather than from `match.status`. Larger, but it is the option that lets an
+   organizer record a result for a match the players never submitted, which is plausibly the real
+   requirement.
+
+Decide which behaviour is wanted before coding — (1) and (2) ship different products.
+
+### Verify
+
+Reproduce first: as organizer, open a tournament with a `pending` match, click Override, submit. Confirm
+the failure. Then confirm the chosen fix — for (1) the button is absent on pending matches; for (2) the
+submission succeeds and logs `score.overridden` with `organizerId` and `reason`.
 
 ---
 
