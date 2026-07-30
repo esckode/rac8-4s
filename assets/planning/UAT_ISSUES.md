@@ -20,9 +20,9 @@ ISSUE-1–21, the 2026-07-26/27 walkthrough batch (ISSUE-22–31), the post-walk
 [the actionable-follow-ups batch](COMPLETED_UAT_ISSUES.md#actionable-follow-ups-batch) for what each
 shipped.
 
-**6 issues filed 2026-07-30 (ISSUE-39–44)** — 5 open, 1 deferred: ISSUE-39–43 after checking
+**7 issues filed 2026-07-30 (ISSUE-39–45)** — see the implementation-status note below: ISSUE-39–43 after checking
 `REQUIREMENTS.md`'s "Audit Logging" section against the actual code, ISSUE-44 from a live UAT report
-(invite/create-group buttons appeared to have no submit button). Number the next one 45.
+(invite/create-group buttons appeared to have no submit button). Number the next one 46.
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -43,16 +43,28 @@ shipped.
 | [ISSUE-36](COMPLETED_UAT_ISSUES.md#issue-36) | ✅ Resolved | 🟠 | Three of four More-menu items are dead links; no About/Contact/Settings pages exist | frontend |
 | [ISSUE-37](COMPLETED_UAT_ISSUES.md#issue-37) | ✅ Resolved | 🟡 | Auth page titles are styled `<div>`s, not headings — no page heading for screen readers | frontend · a11y |
 | [ISSUE-38](COMPLETED_UAT_ISSUES.md#issue-38) | ✅ Resolved | 🟡 | `real-time-updates.spec.ts` reconnect test fails consistently; a second test is flaky | test |
-| [ISSUE-39](#issue-39) | 🔲 Open | 🟠 | Group-stage score override doesn't log the actor (knockout path does) | api |
-| [ISSUE-40](#issue-40) | 🔲 Open | 🟡 | Score-override audit log has no "reason" field — capability was never built | api + frontend |
-| [ISSUE-41](#issue-41) | 🔲 Open | 🟠 | Login/logout audit events never capture IP | api |
-| [ISSUE-42](#issue-42) | 🔲 Open | 🟡 | `login.success` logs a plaintext email, violating CLAUDE.md §6 | api |
+| [ISSUE-39](#issue-39) | ✅ Resolved | 🟠 | Group-stage score override doesn't log the actor (knockout path does) | api |
+| [ISSUE-40](#issue-40) | ✅ Resolved | 🟡 | Score-override audit log has no "reason" field — capability was never built | api + frontend |
+| [ISSUE-41](#issue-41) | ✅ Resolved | 🟠 | Login/logout audit events never capture IP | api |
+| [ISSUE-42](#issue-42) | ✅ Resolved | 🟡 | `login.success` logs a plaintext email, violating CLAUDE.md §6 | api |
 | [ISSUE-43](#issue-43) | ⏸ Deferred | 🟡 | No audit log exists for player-email access — scoped, waiting on DSR cascade | api |
 | [ISSUE-44](#issue-44) | 🔲 Open | 🔴 | App-wide: `-[--token]` Tailwind syntax emits invalid CSS — invisible buttons, dead spacing | frontend |
-| ├ [44a](#issue-44a) | 🔲 Open | 🔴 | Codemod the shared design-system primitives (self-verifying: specs pin the strings) | frontend |
-| ├ [44b](#issue-44b) | 🔲 Open | 🔴 | Codemod the remaining ~48 files (depends on 44a) | frontend |
-| ├ [44c](#issue-44c) | 🔲 Open | 🟠 | Add the lint guard so the broken form cannot regress | frontend · lint |
+| ├ [44a](#issue-44a) | ✅ Resolved | 🔴 | Codemod the shared design-system primitives (self-verifying: specs pin the strings) | frontend |
+| ├ [44b](#issue-44b) | ✅ Resolved | 🔴 | Codemod the remaining ~48 files (depends on 44a) | frontend |
+| ├ [44c](#issue-44c) | ✅ Resolved | 🟠 | Add the lint guard so the broken form cannot regress | frontend · lint |
 | └ [44d](#issue-44d) | 🔲 Open | 🟠 | Visual review of the app-wide layout shift (human, not an agent) | frontend · design |
+| [ISSUE-45](#issue-45) | 🔲 Open | 🟠 | `seed-test-accounts.spec.ts` fails on a FK violation — test isolation is leaking | test · db |
+
+**Implementation status, 2026-07-30.** ISSUE-39/40/41/42 and 44a/44b/44c are implemented on branch
+`fix/uat-issues-39-44`, each TDD (failing test committed before implementation). Verified: full
+workspace suites green apart from one pre-existing failure ([ISSUE-45](#issue-45), reproduced
+identically on the pre-work commit `7bee748`); no coverage floor breached; compiled CSS carries **zero**
+invalid bare-token declarations traceable to app-rendered code (down from 133).
+
+**ISSUE-44 stays open until [44d](#issue-44d) — the human visual review — is done.** 44a+44b made ~380
+previously-dead spacing declarations start applying, so layout genuinely shifted app-wide. A green test
+suite cannot tell you whether it now *looks* right. Do not archive ISSUE-44 to
+`COMPLETED_UAT_ISSUES.md` on test results alone.
 
 **All six were re-verified against current code on 2026-07-30 and the blocking product decisions are
 recorded in each section.** Three corrections came out of that pass and change how the work is
@@ -563,6 +575,55 @@ Manual, the actual repro: `/groups/:id` → Members tab → confirm "Invite" is 
 white-on-transparent). `/groups` with zero groups → confirm "Create" is visibly filled. Then walk the
 28 `bg-[--*]` + `text-white` sites for other now-visible controls, and check the top-traffic pages for
 spacing that has changed.
+
+---
+
+## ISSUE-45 — `seed-test-accounts.spec.ts` fails on a FK violation 🟠 {#issue-45}
+
+*Found 2026-07-30 during the ISSUE-39–44 merge-gate run. **Pre-existing — not caused by that work.***
+
+### Symptom
+
+All 3 tests in `packages/api/src/__tests__/integration/seed-test-accounts.spec.ts` fail, both in a full
+run and in isolation:
+
+```
+error: update or delete on table "players" violates foreign key constraint
+       "player_groups_created_by_fkey" on table "player_groups"
+```
+
+### Confirmed pre-existing
+
+Reproduced identically on `7bee748` — the commit immediately *before* any ISSUE-39–44 work — with the
+same constraint name. Do not attribute it to the score-logging, audit or Tailwind changes.
+
+### Likely root cause
+
+Leftover `player_groups` rows in the shared dev database reference the seeded player, so the spec's
+delete/recreate hits the FK. That points at a **test-isolation leak**, which CLAUDE.md §7 forbids
+outright: *"Never autocommit or write directly to the shared DB in tests — a full run must leave row
+counts unchanged."* Something is writing outside the transactional harness (`getTestPool()`), most
+likely a group-creation path that commits.
+
+Note this is a *different* failure mode from the two flaky specs recorded under "Still open" below
+(`reset-password.spec.ts`, `partner-invite-by-email.spec.ts`) — those only fail under parallel load and
+pass in isolation. This one fails in isolation too, so it is deterministic, not a race.
+
+### Fix
+
+Find the writer that escapes the harness rather than special-casing the spec. Starting points: whatever
+creates `player_groups` rows during integration runs, and whether it uses `this.pool.connect()` +
+`BEGIN/COMMIT` (translated to savepoints by the harness) or a raw autocommitting client. **Do not**
+"fix" this by deleting rows in a `beforeAll` — that hides the leak and leaves the shared DB dirty for
+every other suite.
+
+### Verify
+
+```bash
+npm --workspace=packages/api exec -- jest src/__tests__/integration/seed-test-accounts.spec.ts --bail
+```
+Then confirm the isolation invariant holds: capture row counts before and after a full API run and
+confirm they are unchanged.
 
 ---
 
