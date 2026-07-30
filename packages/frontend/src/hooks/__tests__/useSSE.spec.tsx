@@ -178,6 +178,78 @@ describe('useSSE', () => {
     })
   })
 
+  // ISSUE-38: useTournament().refetch is a brand-new closure every render
+  // (not memoized). Re-renders happen constantly while connected — including
+  // ones triggered by this hook's own setConnected/setReconnecting calls. If
+  // the connection effect depended on that identity directly, every such
+  // render tears the live EventSource down and rebuilds it, and — verified
+  // live via Playwright — a connection that keeps getting torn down before
+  // it can finish opening may never actually open at all.
+  describe('Connection stability across re-renders (ISSUE-38)', () => {
+    it('does not recreate the EventSource when refetch/track identities change but tournamentId does not', () => {
+      const tournamentId = 'tourn_123'
+      const baseTournament = {
+        tournament: null,
+        standings: [],
+        matches: { group: [], knockout: [] },
+        bracket: null,
+        isLoading: false,
+        error: null,
+        retryIn: null,
+        cancelAutoRetry: jest.fn(),
+      }
+      mockUseTournament.mockReturnValue({ ...baseTournament, refetch: jest.fn() })
+
+      const { rerender } = renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
+
+      const firstInstance = mockEventSourceInstance
+      expect(firstInstance).not.toBeNull()
+
+      // Simulate the real hook's behavior: every render, useTournament hands
+      // back a fresh refetch closure.
+      mockUseTournament.mockReturnValue({ ...baseTournament, refetch: jest.fn() })
+      rerender()
+      mockUseTournament.mockReturnValue({ ...baseTournament, refetch: jest.fn() })
+      rerender()
+
+      expect(mockEventSourceInstance).toBe(firstInstance)
+      expect(firstInstance?.closed).toBe(false)
+    })
+
+    it('still calls the latest refetch on reconnect after refetch identity changed mid-connection', async () => {
+      const tournamentId = 'tourn_123'
+      const baseTournament = {
+        tournament: null,
+        standings: [],
+        matches: { group: [], knockout: [] },
+        bracket: null,
+        isLoading: false,
+        error: null,
+        retryIn: null,
+        cancelAutoRetry: jest.fn(),
+      }
+      const staleRefetch = jest.fn()
+      mockUseTournament.mockReturnValue({ ...baseTournament, refetch: staleRefetch })
+
+      const { rerender } = renderHook(() => useSSE(tournamentId), { wrapper: Wrapper })
+
+      const freshRefetch = jest.fn()
+      mockUseTournament.mockReturnValue({ ...baseTournament, refetch: freshRefetch })
+      rerender()
+
+      // Open, then a reconnect (open again) — should call the CURRENT
+      // (fresh) refetch, not the stale closure captured at mount.
+      mockEventSourceInstance?.emitEvent('open')
+      mockEventSourceInstance?.emitEvent('error')
+      mockEventSourceInstance?.emitEvent('open')
+
+      await waitFor(() => {
+        expect(freshRefetch).toHaveBeenCalled()
+      })
+      expect(staleRefetch).not.toHaveBeenCalled()
+    })
+  })
+
   describe('Event handling', () => {
     it('handles standings.updated event and updates store', () => {
       const tournamentId = 'tourn_123'
