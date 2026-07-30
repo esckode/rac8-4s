@@ -31,6 +31,23 @@ export function useSSE(tournamentId: string): SSEState {
   const { refetch: refetchTournament } = useTournament(tournamentId)
   const { track } = useAnalytics()
 
+  // useTournament returns a brand-new `refetch` closure on every render (it
+  // is not memoized), and re-renders happen constantly while connected —
+  // including from this hook's own setConnected/setReconnecting calls. If
+  // the connection effect below depended on refetchTournament directly, every
+  // such render would tear down and recreate the EventSource, so the
+  // connection could never stay open long enough to be useful. Refs sidestep
+  // that: the effect reads the latest callback without depending on its
+  // identity.
+  const refetchRef = useRef(refetchTournament)
+  useEffect(() => {
+    refetchRef.current = refetchTournament
+  })
+  const trackRef = useRef(track)
+  useEffect(() => {
+    trackRef.current = track
+  })
+
   useEffect(() => {
     // Only open connection if tournamentId is provided
     if (!tournamentId) {
@@ -54,13 +71,14 @@ export function useSSE(tournamentId: string): SSEState {
 
       // Handle connection open
       eventSource.addEventListener('open', () => {
+        console.log(`[DIAG] open fired at ${Date.now()} readyState=${eventSource.readyState}`)
         setConnected(true)
         setReconnecting(false)
         setError(null)
 
         // If we were connected before (reconnect after disconnect), refetch bundle
         if (wasConnectedRef.current) {
-          refetchTournament()
+          refetchRef.current()
         }
         wasConnectedRef.current = true
       })
@@ -75,11 +93,11 @@ export function useSSE(tournamentId: string): SSEState {
 
             // Refetch the authoritative bundle so the rendered standings reflect
             // the update (the store is per-group; the view reads the bundle).
-            refetchTournament()
+            refetchRef.current()
 
             // Track SSE update latency
             const latency = eventTimestampRef.current ? receivedAt - eventTimestampRef.current : 0
-            track('sse_update', {
+            trackRef.current('sse_update', {
               eventType: 'standings.updated',
               latency,
               recordCount: payload.standings?.length ?? 0,
@@ -99,11 +117,11 @@ export function useSSE(tournamentId: string): SSEState {
             const payload: BracketPublishedPayload = JSON.parse(event.data)
 
             // Refetch so the bracket appears as soon as it is published.
-            refetchTournament()
+            refetchRef.current()
 
             // Track SSE update
             const latency = eventTimestampRef.current ? receivedAt - eventTimestampRef.current : 0
-            track('sse_update', {
+            trackRef.current('sse_update', {
               eventType: 'bracket.published',
               latency,
             })
@@ -122,10 +140,10 @@ export function useSSE(tournamentId: string): SSEState {
             JSON.parse(event.data)
 
             // Refetch so the bracket advances live with the new result.
-            refetchTournament()
+            refetchRef.current()
 
             const latency = eventTimestampRef.current ? receivedAt - eventTimestampRef.current : 0
-            track('sse_update', {
+            trackRef.current('sse_update', {
               eventType: 'bracket.updated',
               latency,
             })
@@ -151,6 +169,7 @@ export function useSSE(tournamentId: string): SSEState {
 
       // Handle error
       eventSource.addEventListener('error', () => {
+        console.log(`[DIAG] error fired at ${Date.now()} readyState=${eventSource.readyState}`)
         setConnected(false)
         setReconnecting(true)
 
@@ -174,7 +193,11 @@ export function useSSE(tournamentId: string): SSEState {
       setError(errorMessage)
       setConnected(false)
     }
-  }, [tournamentId, refetchTournament, track])
+    // Deliberately not [tournamentId, refetchTournament, track] — see the
+    // refetchRef/trackRef comment above. Depending on those directly tears
+    // the live connection down and rebuilds it on every render that changes
+    // either identity, which is most of them.
+  }, [tournamentId])
 
   return {
     connected,
