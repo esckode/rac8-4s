@@ -296,7 +296,7 @@ export const TournamentDetail: React.FC = () => {
           <p>Current Tab: {currentTab}</p>
           <p>Tournament ID: {tournamentId}</p>
           <p>Is Organizer: {permissions.organizerRole ? 'yes' : 'no'}</p>
-          <p>SSE Connected: {sseState.connected ? 'yes' : 'no'}</p>
+          <p data-testid="sse-connected" data-connected={sseState.connected}>SSE Connected: {sseState.connected ? 'yes' : 'no'}</p>
           <p>SSE Reconnecting: {sseState.reconnecting ? 'yes' : 'no'}</p>
         </div>
       )}

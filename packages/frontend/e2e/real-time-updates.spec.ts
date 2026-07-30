@@ -54,6 +54,20 @@ test.describe('Real-Time Updates', () => {
   const winsCells = (page: Page) => page.locator(SELECTORS.STANDINGS_WINS)
   const wonCells = (page: Page) => page.locator(SELECTORS.STANDINGS_WINS).filter({ hasText: '1' })
 
+  // Waits until the viewer's EventSource has actually opened. Broadcasts are
+  // a single, unrepeated event per score submission — a viewer whose
+  // EventSource is still mid-handshake when the broadcast fires misses it
+  // for good, with no later signal to recover from (ISSUE-38: this race was
+  // the actual cause of this file's "synchronized standings" flake, not
+  // anything in the reconnect path). Playwright's network-response events
+  // don't reliably fire for this endpoint's streaming response (verified:
+  // page.waitForResponse on '/events' never resolved even once across
+  // several runs, despite the connection genuinely opening), so this reads
+  // the dev-only SSE-state debug indicator (TournamentDetail/index.tsx)
+  // instead of the network layer.
+  const waitForSseOpen = (page: Page) =>
+    expect(page.locator(SELECTORS.SSE_CONNECTED)).toHaveAttribute('data-connected', 'true', { timeout: 15000 })
+
   test('standings update live when another actor submits a score', async ({ page }) => {
     const fx = await createSinglesTournamentInGroupStage(organizerToken, 2)
     await inject(page, fx.playerToken)
@@ -77,6 +91,7 @@ test.describe('Real-Time Updates', () => {
     await inject(page, fx.playerToken)
     await page.goto(`/tournament/${fx.tournamentId}/standings`)
     await expect(wonCells(page)).toHaveCount(0)
+    await waitForSseOpen(page)
 
     // Viewer B: the organizer, a distinct authenticated client/session.
     const ctxB: BrowserContext = await browser.newContext()
@@ -84,8 +99,10 @@ test.describe('Real-Time Updates', () => {
     await inject(pageB, organizerToken)
     await pageB.goto(`/tournament/${fx.tournamentId}/standings`)
     await expect(wonCells(pageB)).toHaveCount(0)
+    await waitForSseOpen(pageB)
 
-    // One score submission should reach both clients.
+    // One score submission should reach both clients — only fired once both
+    // are actually listening.
     await submitGroupWinForFocus(fx.tournamentId, fx.playerToken, fx.playerId)
 
     await expect(wonCells(page)).toHaveCount(1, { timeout: 15000 })
@@ -124,16 +141,29 @@ test.describe('Real-Time Updates', () => {
     await page.goto(`/tournament/${fx.tournamentId}/standings`)
     await expect(winsCells(page)).toHaveCount(2)
     await expect(wonCells(page)).toHaveCount(0)
+    await waitForSseOpen(page)
 
-    // Drop the network so the EventSource disconnects and the broadcast is missed.
-    await context.setOffline(true)
+    // Drop only the SSE connection so the EventSource disconnects and the
+    // broadcast is missed, leaving the rest of the network (including the
+    // out-of-band score submit below) unaffected.
+    //
+    // Deliberately not context.setOffline(): verified live (Playwright +
+    // CDP network emulation, both chromium and firefox) that a real
+    // EventSource never recovers once setOffline(false) runs — even a bare
+    // `new EventSource(...)` with zero app code involved stays stuck in
+    // readyState CONNECTING forever, while a plain fetch() on the same
+    // origin at the same moment resolves normally. That is a Playwright/CDP
+    // limitation specific to EventSource, not an application bug — it made
+    // this test fail unconditionally regardless of the app's reconnect
+    // logic, which route-based blocking (below) confirms already works.
+    await context.route('**/events**', (route) => route.abort())
     await submitGroupWinForFocus(fx.tournamentId, fx.playerToken, fx.playerId)
 
-    // The page is still showing stale data while offline.
+    // The page is still showing stale data while disconnected.
     await expect(wonCells(page)).toHaveCount(0)
 
     // On reconnect, the hook refetches the authoritative bundle (no data loss).
-    await context.setOffline(false)
+    await context.unroute('**/events**')
     await expect(wonCells(page)).toHaveCount(1, { timeout: 20000 })
   })
 })

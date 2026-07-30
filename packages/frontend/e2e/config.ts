@@ -255,6 +255,10 @@ export const SELECTORS = {
   STANDINGS_ROW: '[data-testid="standings-row"]',
   STANDINGS_WINS: '[data-testid="standings-wins"]',
   BRACKET_MATCHES: '[data-testid="match-card"], .match-card',
+  // Dev-only debug panel (TournamentDetail/index.tsx) — used only to know when
+  // a viewer's SSE connection has actually opened, to avoid racing a broadcast
+  // against a still-connecting EventSource (ISSUE-38).
+  SSE_CONNECTED: '[data-testid="sse-connected"]',
 
   // My Tournaments Hub — multi-tournament depth
   MY_TOURNAMENTS: '[data-testid="my-tournaments"]',
