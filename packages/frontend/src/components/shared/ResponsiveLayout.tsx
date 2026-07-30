@@ -37,7 +37,7 @@ const NavCountBadge: React.FC<{ count: number; testId: string; corner?: 'top' | 
     <span
       data-testid={testId}
       style={{ position: 'absolute', [corner]: -6, right: -6 } as React.CSSProperties}
-      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-[--rose-500] text-white rounded-full"
+      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-(--rose-500) text-white rounded-full"
     >
       {count > 9 ? '9+' : count}
     </span>
@@ -252,7 +252,7 @@ const BottomNav = () => {
                 <span
                   data-testid="notification-unread-badge"
                   style={{ position: 'absolute', top: -6, right: -6 }}
-                  className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-[--rose-500] text-white rounded-full"
+                  className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-(--rose-500) text-white rounded-full"
                 >
                   {notificationUnread > 99 ? '99+' : notificationUnread}
                 </span>

@@ -158,7 +158,7 @@ describe('PaginationControls', () => {
       )
 
       const wrapper = container.firstChild
-      expect(wrapper).toHaveClass('flex', 'justify-center', 'py-[--s-8]')
+      expect(wrapper).toHaveClass('flex', 'justify-center', 'py-(--s-8)')
     })
 
     it('applies custom className', () => {
@@ -179,14 +179,14 @@ describe('PaginationControls', () => {
       render(<PaginationControls hasMore={true} isLoading={false} onLoadMore={jest.fn()} />)
 
       const button = screen.getByRole('button')
-      expect(button).toHaveClass('px-[--s-6]', 'py-[--s-3]', 'bg-[--court-500]', 'text-white')
+      expect(button).toHaveClass('px-(--s-6)', 'py-(--s-3)', 'bg-(--court-500)', 'text-white')
     })
 
     it('button has hover styling', () => {
       render(<PaginationControls hasMore={true} isLoading={false} onLoadMore={jest.fn()} />)
 
       const button = screen.getByRole('button')
-      expect(button).toHaveClass('hover:bg-[--court-600]')
+      expect(button).toHaveClass('hover:bg-(--court-600)')
     })
 
     it('button has disabled styling', () => {
@@ -211,7 +211,7 @@ describe('PaginationControls', () => {
       render(<PaginationControls hasMore={true} isLoading={false} onLoadMore={jest.fn()} />)
 
       const button = screen.getByRole('button')
-      expect(button).toHaveClass('rounded-[--r-lg]')
+      expect(button).toHaveClass('rounded-(--r-lg)')
     })
   })
 

@@ -15,12 +15,12 @@ type Hue = (typeof PALETTE)[number]
 // Literal class strings (not template-interpolated) so Tailwind's static
 // scanner generates them — see DESIGN_SYSTEM_ENFORCEMENT's color lint gate.
 const BG_CLASS: Record<Hue, string> = {
-  court: 'bg-[--court-500]',
-  gold: 'bg-[--gold-500]',
-  lavender: 'bg-[--lavender-500]',
-  mint: 'bg-[--mint-500]',
-  peach: 'bg-[--peach-500]',
-  pink: 'bg-[--pink-500]',
+  court: 'bg-(--court-500)',
+  gold: 'bg-(--gold-500)',
+  lavender: 'bg-(--lavender-500)',
+  mint: 'bg-(--mint-500)',
+  peach: 'bg-(--peach-500)',
+  pink: 'bg-(--pink-500)',
 }
 
 function hueFor(playerId: string): Hue {

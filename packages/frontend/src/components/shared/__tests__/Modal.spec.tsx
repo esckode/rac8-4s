@@ -211,7 +211,7 @@ describe('Modal.tsx', () => {
       const footers = container.querySelectorAll('div')
       let foundActionFooter = false
       footers.forEach((footer) => {
-        if (footer.classList.contains('gap-[--s-2]')) {
+        if (footer.classList.contains('gap-(--s-2)')) {
           foundActionFooter = true
         }
       })
@@ -227,7 +227,7 @@ describe('Modal.tsx', () => {
         </Modal>
       )
       const dialog = screen.getByRole('dialog')
-      expect(dialog).toHaveClass('bg-white', 'rounded-[--r-lg]', 'shadow-lg')
+      expect(dialog).toHaveClass('bg-white', 'rounded-(--r-lg)', 'shadow-lg')
       expect(dialog).toHaveClass('flex', 'flex-col')
     })
 

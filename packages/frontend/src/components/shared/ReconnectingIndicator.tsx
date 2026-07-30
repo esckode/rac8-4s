@@ -23,10 +23,10 @@ export const ReconnectingIndicator: React.FC<ReconnectingIndicatorProps> = ({
     <div
       data-testid="reconnecting-indicator"
       role="status"
-      className={`flex items-center gap-[--s-2] px-[--s-3] py-[--s-2] bg-[--gold-200] border border-[--gold-400] rounded-[--r-md] text-sm text-[--ink-900] ${className ?? ''}`}
+      className={`flex items-center gap-(--s-2) px-(--s-3) py-(--s-2) bg-(--gold-200) border border-(--gold-400) rounded-(--r-md) text-sm text-(--ink-900) ${className ?? ''}`}
     >
       <svg
-        className="w-4 h-4 text-[--gold-600] animate-spin flex-shrink-0"
+        className="w-4 h-4 text-(--gold-600) animate-spin flex-shrink-0"
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"

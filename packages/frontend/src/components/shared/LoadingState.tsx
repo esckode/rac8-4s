@@ -18,10 +18,10 @@ export const LoadingState: React.FC<LoadingStateProps> = ({ message, className }
   return (
     <div
       data-testid="loading-state"
-      className={`flex flex-col items-center justify-center gap-[--s-4] py-[--s-12] px-[--s-6] ${className ?? ''}`}
+      className={`flex flex-col items-center justify-center gap-(--s-4) py-(--s-12) px-(--s-6) ${className ?? ''}`}
     >
       <LoadingSpinner size="md" />
-      {message && <p className="text-sm text-[--ink-500]">{message}</p>}
+      {message && <p className="text-sm text-(--ink-500)">{message}</p>}
     </div>
   )
 }

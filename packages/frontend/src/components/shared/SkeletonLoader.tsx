@@ -31,13 +31,13 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
       key={i}
       style={{ width: widthStyle, height: heightStyle }}
       className={`
-        bg-[--ink-100]
+        bg-(--ink-100)
         animate-pulse
-        ${circle ? 'rounded-[--r-full]' : 'rounded-[--r-sm]'}
+        ${circle ? 'rounded-(--r-full)' : 'rounded-(--r-sm)'}
         ${className}
       `}
     />
   ))
 
-  return <div className="space-y-[--s-3]">{skeletons}</div>
+  return <div className="space-y-(--s-3)">{skeletons}</div>
 }

@@ -51,7 +51,7 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
   const listRef = useListRef(null)
   const isCompact = density === 'compact'
   const rowHeight = isCompact ? 32 : 44
-  const rowPaddingY = isCompact ? 'py-[--s-1]' : 'py-[--s-3]'
+  const rowPaddingY = isCompact ? 'py-(--s-1)' : 'py-(--s-3)'
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -109,7 +109,7 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
     if (sortField !== field) return null
 
     return (
-      <svg className="w-4 h-4 inline-block ml-[--s-1]" viewBox="0 0 20 20" fill="currentColor">
+      <svg className="w-4 h-4 inline-block ml-(--s-1)" viewBox="0 0 20 20" fill="currentColor">
         {sortDirection === 'asc' ? (
           <path
             fillRule="evenodd"
@@ -133,11 +133,11 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
         flex
         items-center
         font-semibold
-        text-[--ink-900]
+        text-(--ink-900)
         text-sm
         transition-colors
-        duration-[--duration-normal]
-        ${sortable ? 'hover:text-[--court-600] cursor-pointer' : 'cursor-default'}
+        duration-(--duration-normal)
+        ${sortable ? 'hover:text-(--court-600) cursor-pointer' : 'cursor-default'}
       `}
     >
       {label}
@@ -159,38 +159,38 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
         className={`
           flex
           items-center
-          px-[--s-4]
+          px-(--s-4)
           ${rowPaddingY}
           border-b
-          border-[--border]
+          border-(--border)
           text-sm
           transition-colors
-          duration-[--duration-normal]
-          ${isYou ? 'bg-[--court-50] border-l-4 border-l-[--court-500]' : isEven ? 'bg-white' : 'bg-[--ink-50]'}
-          ${onRowClick ? 'hover:bg-[--court-50] cursor-pointer' : ''}
+          duration-(--duration-normal)
+          ${isYou ? 'bg-(--court-50) border-l-4 border-l-(--court-500)' : isEven ? 'bg-white' : 'bg-(--ink-50)'}
+          ${onRowClick ? 'hover:bg-(--court-50) cursor-pointer' : ''}
         `}
       >
         {/* Rank */}
-        <div className="w-16 text-center font-semibold text-[--ink-900]">{standing.rank}</div>
+        <div className="w-16 text-center font-semibold text-(--ink-900)">{standing.rank}</div>
 
         {/* Team Name */}
-        <div className="flex-1 flex items-center gap-2 font-medium text-[--ink-900]">
+        <div className="flex-1 flex items-center gap-2 font-medium text-(--ink-900)">
           <Avatar playerId={standing.participantId} name={player?.name || standing.participantId} />
           {player?.name || standing.participantId}
-          {isYou && <span className="ml-[--s-2] text-xs font-semibold text-[--court-600]">(You)</span>}
+          {isYou && <span className="ml-(--s-2) text-xs font-semibold text-(--court-600)">(You)</span>}
         </div>
 
         {/* Matches */}
-        <div className="w-20 text-center text-[--ink-600]">{standing.wins + standing.losses}</div>
+        <div className="w-20 text-center text-(--ink-600)">{standing.wins + standing.losses}</div>
 
         {/* Wins */}
-        <div data-testid="standings-wins" className="w-16 text-center text-[--ink-600]">{standing.wins}</div>
+        <div data-testid="standings-wins" className="w-16 text-center text-(--ink-600)">{standing.wins}</div>
 
         {/* Losses */}
-        <div className="w-20 text-center text-[--ink-600]">{standing.losses}</div>
+        <div className="w-20 text-center text-(--ink-600)">{standing.losses}</div>
 
         {/* Set Difference */}
-        <div className="w-24 text-center text-[--ink-600]">{standing.setsWon - standing.setsLost}</div>
+        <div className="w-24 text-center text-(--ink-600)">{standing.setsWon - standing.setsLost}</div>
 
         {/* Actions */}
         {userRole === 'organizer' && (
@@ -213,8 +213,8 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
 
   if (isLoading) {
     return (
-      <div className={`bg-white rounded-[--r-lg] border border-[--border] p-[--s-4] ${className}`}>
-        <SkeletonLoader count={5} height="40px" className="mb-[--s-3]" />
+      <div className={`bg-white rounded-(--r-lg) border border-(--border) p-(--s-4) ${className}`}>
+        <SkeletonLoader count={5} height="40px" className="mb-(--s-3)" />
       </div>
     )
   }
@@ -229,8 +229,8 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
 
   if (standings.length === 0) {
     return (
-      <div className={`bg-white rounded-[--r-lg] border border-[--border] p-[--s-8] text-center ${className}`}>
-        <p className="text-[--ink-600] font-medium">No standings available</p>
+      <div className={`bg-white rounded-(--r-lg) border border-(--border) p-(--s-8) text-center ${className}`}>
+        <p className="text-(--ink-600) font-medium">No standings available</p>
       </div>
     )
   }
@@ -238,10 +238,10 @@ const StandingsTableComponent: React.FC<StandingsTableProps> = ({
   return (
     <div
       data-testid="standings-table"
-      className={`bg-white rounded-[--r-lg] border border-[--border] overflow-hidden ${isCompact ? 'standings-table--compact' : ''} ${className}`}
+      className={`bg-white rounded-(--r-lg) border border-(--border) overflow-hidden ${isCompact ? 'standings-table--compact' : ''} ${className}`}
     >
       {/* Header */}
-      <div className="bg-[--ink-100] px-[--s-4] py-[--s-3] border-b border-[--border] grid grid-cols-auto gap-0 sticky top-0 z-10">
+      <div className="bg-(--ink-100) px-(--s-4) py-(--s-3) border-b border-(--border) grid grid-cols-auto gap-0 sticky top-0 z-10">
         <div className="w-16 text-center">
           <HeaderCell field="rank" label="Rank" />
         </div>

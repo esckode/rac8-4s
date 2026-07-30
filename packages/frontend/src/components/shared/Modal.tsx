@@ -65,7 +65,7 @@ export const Modal: React.FC<ModalProps> = ({
         justify-center
         bg-black/40
         transition-opacity
-        duration-[--duration-normal]
+        duration-(--duration-normal)
       `}
     >
       <div
@@ -75,7 +75,7 @@ export const Modal: React.FC<ModalProps> = ({
         aria-labelledby="modal-title"
         className={`
           bg-white
-          rounded-[--r-lg]
+          rounded-(--r-lg)
           shadow-lg
           max-w-[90vw]
           sm:max-w-md
@@ -84,15 +84,15 @@ export const Modal: React.FC<ModalProps> = ({
           flex
           flex-col
           transition-all
-          duration-[--duration-normal]
+          duration-(--duration-normal)
           ${className}
         `}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-[--s-4] py-[--s-4] border-b border-[--border]">
+        <div className="flex items-center justify-between px-(--s-4) py-(--s-4) border-b border-(--border)">
           <h2
             id="modal-title"
-            className="text-lg font-bold text-[--ink-900]"
+            className="text-lg font-bold text-(--ink-900)"
           >
             {title}
           </h2>
@@ -105,15 +105,15 @@ export const Modal: React.FC<ModalProps> = ({
               justify-center
               w-8
               h-8
-              rounded-[--r-md]
-              text-[--ink-600]
-              hover:text-[--ink-900]
-              hover:bg-[--ink-100]
+              rounded-(--r-md)
+              text-(--ink-600)
+              hover:text-(--ink-900)
+              hover:bg-(--ink-100)
               transition-colors
-              duration-[--duration-normal]
+              duration-(--duration-normal)
               focus:outline-none
               focus:ring-2
-              focus:ring-[--court-400]
+              focus:ring-(--court-400)
               focus:ring-offset-2
             `}
           >
@@ -128,13 +128,13 @@ export const Modal: React.FC<ModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-[--s-4] py-[--s-4]">
+        <div className="flex-1 overflow-y-auto px-(--s-4) py-(--s-4)">
           {children}
         </div>
 
         {/* Actions */}
         {actions && actions.length > 0 && (
-          <div className="flex gap-[--s-2] px-[--s-4] py-[--s-4] border-t border-[--border]">
+          <div className="flex gap-(--s-2) px-(--s-4) py-(--s-4) border-t border-(--border)">
             {actions.map((action, index) => (
               <Button
                 key={index}

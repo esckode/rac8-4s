@@ -23,19 +23,19 @@ export const ErrorBanner: React.FC<ErrorBannerProps> = ({ message, onDismiss, cl
         flex
         items-center
         justify-between
-        gap-[--s-4]
-        bg-[--rose-100]
+        gap-(--s-4)
+        bg-(--rose-100)
         border
-        border-[--rose-200]
-        rounded-[--r-md]
-        px-[--s-4]
-        py-[--s-3]
+        border-(--rose-200)
+        rounded-(--r-md)
+        px-(--s-4)
+        py-(--s-3)
         ${className}
       `}
     >
-      <div className="flex items-center gap-[--s-3]">
+      <div className="flex items-center gap-(--s-3)">
         <svg
-          className="w-5 h-5 text-[--rose-600] flex-shrink-0"
+          className="w-5 h-5 text-(--rose-600) flex-shrink-0"
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 20 20"
           fill="currentColor"
@@ -47,7 +47,7 @@ export const ErrorBanner: React.FC<ErrorBannerProps> = ({ message, onDismiss, cl
             clipRule="evenodd"
           />
         </svg>
-        <p className="text-sm font-medium text-[--rose-900]">{message}</p>
+        <p className="text-sm font-medium text-(--rose-900)">{message}</p>
       </div>
       {onDismiss && (
         <Button

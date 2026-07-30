@@ -21,17 +21,17 @@ export const MatchNode: React.FC<NodeProps> = ({ data }) => {
   return (
     <div
       data-testid="match-card"
-      className="bg-white border border-[--border] rounded-[--r-lg] p-[--s-3] w-[--s-56] space-y-[--s-2] shadow-sm"
+      className="bg-white border border-(--border) rounded-(--r-lg) p-(--s-3) w-(--s-56) space-y-(--s-2) shadow-sm"
     >
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      <div className="flex items-center justify-between gap-[--s-2]">
-        <p className="font-medium text-[--ink-900] truncate">{player1}</p>
-        <span className="text-xs text-[--ink-500]">vs</span>
-        <p className="font-medium text-[--ink-900] truncate text-right">{player2}</p>
+      <div className="flex items-center justify-between gap-(--s-2)">
+        <p className="font-medium text-(--ink-900) truncate">{player1}</p>
+        <span className="text-xs text-(--ink-500)">vs</span>
+        <p className="font-medium text-(--ink-900) truncate text-right">{player2}</p>
       </div>
-      <div className="flex items-center justify-between gap-[--s-2]">
+      <div className="flex items-center justify-between gap-(--s-2)">
         <Badge variant={completed ? 'complete' : 'live'}>{completed ? 'Completed' : 'Pending'}</Badge>
-        {completed && score && <p className="font-bold text-[--ink-900]">{score}</p>}
+        {completed && score && <p className="font-bold text-(--ink-900)">{score}</p>}
       </div>
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </div>
@@ -40,7 +40,7 @@ export const MatchNode: React.FC<NodeProps> = ({ data }) => {
 
 /** A round header (Semifinals / Final …), rendered as a React Flow node. */
 export const RoundLabelNode: React.FC<NodeProps> = ({ data }) => (
-  <div data-testid="bracket-round" className="text-sm font-semibold text-[--ink-700] w-[--s-56] text-center">
+  <div data-testid="bracket-round" className="text-sm font-semibold text-(--ink-700) w-(--s-56) text-center">
     {(data as { label: string }).label}
   </div>
 )
@@ -57,7 +57,7 @@ export const OrganizerBracket: React.FC<{ rounds: BracketRound[] }> = ({ rounds 
   const { nodes, edges } = useMemo(() => bracketToFlow(rounds, nameOf), [rounds])
 
   return (
-    <div data-testid="bracket-tree" style={{ height: 480 }} className="rounded-[--r-lg] border border-[--border] bg-[--ink-50]">
+    <div data-testid="bracket-tree" style={{ height: 480 }} className="rounded-(--r-lg) border border-(--border) bg-(--ink-50)">
       <ReactFlow
         nodes={nodes}
         edges={edges}

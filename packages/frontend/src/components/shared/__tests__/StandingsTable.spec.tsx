@@ -438,7 +438,7 @@ describe('StandingsTable', () => {
       )
 
       const row = container.querySelector('[style*="position: absolute"]')
-      expect(row?.className).toMatch(/hover:bg-\[--court-50\]/)
+      expect(row?.className).toMatch(/hover:bg-\(--court-50\)/)
     })
   })
 

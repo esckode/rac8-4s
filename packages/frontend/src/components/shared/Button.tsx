@@ -21,10 +21,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const variantClasses = {
       primary: 'text-white',
       secondary: 'text-white',
-      outline: 'bg-transparent border-2 text-[--court-600] hover:bg-[--court-50] active:bg-[--court-100]',
-      ghost: 'bg-transparent text-[--ink-600] hover:bg-[--ink-50] active:bg-[--ink-100]',
-      soft: 'text-[--court-700] hover:bg-[--court-200] active:bg-[--court-300]',
-      dark: 'text-white hover:bg-[--ink-800] active:bg-[--ink-700]',
+      outline: 'bg-transparent border-2 text-(--court-600) hover:bg-(--court-50) active:bg-(--court-100)',
+      ghost: 'bg-transparent text-(--ink-600) hover:bg-(--ink-50) active:bg-(--ink-100)',
+      soft: 'text-(--court-700) hover:bg-(--court-200) active:bg-(--court-300)',
+      dark: 'text-white hover:bg-(--ink-800) active:bg-(--ink-700)',
     }
 
     const variantStyles = {
@@ -37,9 +37,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     }
 
     const sizeClasses = {
-      sm: 'px-[--s-3] py-[--s-2] text-sm min-h-[36px]',
-      md: 'px-[--s-4] py-[--s-3] text-base min-h-[44px]',
-      lg: 'px-[--s-6] py-[--s-4] text-base min-h-[48px]',
+      sm: 'px-(--s-3) py-(--s-2) text-sm min-h-[36px]',
+      md: 'px-(--s-4) py-(--s-3) text-base min-h-[44px]',
+      lg: 'px-(--s-6) py-(--s-4) text-base min-h-[48px]',
     }
 
     const sizeStyles = {
@@ -49,8 +49,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     }
 
     const disabledClasses = disabled || loading ? 'opacity-60 cursor-not-allowed' : ''
-    const focusClasses = 'focus:outline-none focus:ring-4 focus:ring-[--court-400] focus:ring-opacity-30'
-    const transitionClasses = 'transition-all duration-[--duration-normal] ease-[--easing-snap]'
+    const focusClasses = 'focus:outline-none focus:ring-4 focus:ring-(--court-400) focus:ring-opacity-30'
+    const transitionClasses = 'transition-all duration-(--duration-normal) ease-(--easing-snap)'
 
     return (
       <button
@@ -73,7 +73,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {loading ? (
-          <span className="inline-flex items-center gap-[--s-2]">
+          <span className="inline-flex items-center gap-(--s-2)">
             <svg
               className="animate-spin h-4 w-4"
               xmlns="http://www.w3.org/2000/svg"

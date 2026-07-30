@@ -56,18 +56,18 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
       className={`
         bg-white
         border
-        border-[--border]
-        rounded-[--r-lg]
-        p-[--s-4]
+        border-(--border)
+        rounded-(--r-lg)
+        p-(--s-4)
         transition-all
-        duration-[--duration-normal]
-        ${onClick ? 'hover:shadow-md hover:border-[--court-300] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[--court-300] focus:ring-offset-2' : ''}
+        duration-(--duration-normal)
+        ${onClick ? 'hover:shadow-md hover:border-(--court-300) cursor-pointer focus:outline-none focus:ring-2 focus:ring-(--court-300) focus:ring-offset-2' : ''}
         ${className}
       `}
     >
       {/* Header: Title and Phase Badge */}
-      <div className="flex items-start justify-between gap-[--s-3] mb-[--s-3]">
-        <h3 className="text-lg font-bold text-[--ink-900] flex-1 line-clamp-2">
+      <div className="flex items-start justify-between gap-(--s-3) mb-(--s-3)">
+        <h3 className="text-lg font-bold text-(--ink-900) flex-1 line-clamp-2">
           {tournament.name}
         </h3>
         <Badge variant={getPhaseVariant(tournament.status)}>
@@ -76,8 +76,8 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
       </div>
 
       {/* Sport and Meta */}
-      <div className="flex items-center gap-[--s-2] mb-[--s-4]">
-        <p className="text-sm text-[--ink-600]">
+      <div className="flex items-center gap-(--s-2) mb-(--s-4)">
+        <p className="text-sm text-(--ink-600)">
           {tournament.sport}
           {tournament.matchFormat && ` • ${tournament.matchFormat}`}
         </p>
@@ -85,17 +85,17 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
 
       {/* Meta information */}
       {meta && (
-        <p className="text-sm font-medium text-[--ink-700] mb-[--s-3]">
+        <p className="text-sm font-medium text-(--ink-700) mb-(--s-3)">
           {meta}
         </p>
       )}
 
       {/* Dates */}
-      <div className="space-y-[--s-2] text-xs text-[--ink-600]">
+      <div className="space-y-(--s-2) text-xs text-(--ink-600)">
         {tournament.registrationDeadline && (
           <p>
             Registration:{' '}
-            <span className="font-medium text-[--ink-700]">
+            <span className="font-medium text-(--ink-700)">
               {formatDate(tournament.registrationDeadline)}
             </span>
           </p>
@@ -103,7 +103,7 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
         {tournament.groupStageDeadline && (
           <p>
             Group Stage:{' '}
-            <span className="font-medium text-[--ink-700]">
+            <span className="font-medium text-(--ink-700)">
               {formatDate(tournament.groupStageDeadline)}
             </span>
           </p>
@@ -111,7 +111,7 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
         {tournament.knockoutStageDeadline && (
           <p>
             Knockout:{' '}
-            <span className="font-medium text-[--ink-700]">
+            <span className="font-medium text-(--ink-700)">
               {formatDate(tournament.knockoutStageDeadline)}
             </span>
           </p>

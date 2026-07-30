@@ -22,21 +22,21 @@ describe('Button.tsx', () => {
     it('renders with outline variant', () => {
       render(<Button variant="outline">Outline</Button>)
       const btn = screen.getByRole('button', { name: /outline/i })
-      expect(btn).toHaveClass('bg-transparent', 'border-2', 'text-[--court-600]')
+      expect(btn).toHaveClass('bg-transparent', 'border-2', 'text-(--court-600)')
       expect(btn).toHaveStyle({ borderColor: 'var(--court-400)' })
     })
 
     it('renders with ghost variant', () => {
       render(<Button variant="ghost">Ghost</Button>)
       const btn = screen.getByRole('button', { name: /ghost/i })
-      expect(btn).toHaveClass('bg-transparent', 'text-[--ink-600]')
+      expect(btn).toHaveClass('bg-transparent', 'text-(--ink-600)')
     })
 
     it('renders with soft variant', () => {
       render(<Button variant="soft">Soft</Button>)
       const btn = screen.getByRole('button', { name: /soft/i })
       expect(btn).toHaveStyle({ backgroundColor: 'var(--court-100)' })
-      expect(btn).toHaveClass('text-[--court-700]')
+      expect(btn).toHaveClass('text-(--court-700)')
     })
 
     it('renders with dark variant', () => {
@@ -51,21 +51,21 @@ describe('Button.tsx', () => {
     it('renders with small size', () => {
       render(<Button size="sm">Small</Button>)
       const btn = screen.getByRole('button', { name: /small/i })
-      expect(btn).toHaveClass('px-[--s-3]', 'py-[--s-2]', 'text-sm', 'min-h-[36px]')
+      expect(btn).toHaveClass('px-(--s-3)', 'py-(--s-2)', 'text-sm', 'min-h-[36px]')
       expect(btn).toHaveStyle({ borderRadius: 'var(--r-md)' })
     })
 
     it('renders with medium size', () => {
       render(<Button size="md">Medium</Button>)
       const btn = screen.getByRole('button', { name: /medium/i })
-      expect(btn).toHaveClass('px-[--s-4]', 'py-[--s-3]', 'text-base', 'min-h-[44px]')
+      expect(btn).toHaveClass('px-(--s-4)', 'py-(--s-3)', 'text-base', 'min-h-[44px]')
       expect(btn).toHaveStyle({ borderRadius: 'var(--r-lg)' })
     })
 
     it('renders with large size', () => {
       render(<Button size="lg">Large</Button>)
       const btn = screen.getByRole('button', { name: /large/i })
-      expect(btn).toHaveClass('px-[--s-6]', 'py-[--s-4]', 'text-base', 'min-h-[48px]')
+      expect(btn).toHaveClass('px-(--s-6)', 'py-(--s-4)', 'text-base', 'min-h-[48px]')
       expect(btn).toHaveStyle({ borderRadius: 'var(--r-lg)' })
     })
   })
@@ -129,13 +129,13 @@ describe('Button.tsx', () => {
     it('has focus styles', () => {
       render(<Button>Focus test</Button>)
       const btn = screen.getByRole('button')
-      expect(btn).toHaveClass('focus:outline-none', 'focus:ring-4', 'focus:ring-[--court-400]')
+      expect(btn).toHaveClass('focus:outline-none', 'focus:ring-4', 'focus:ring-(--court-400)')
     })
 
     it('has transition classes', () => {
       render(<Button>Transition test</Button>)
       const btn = screen.getByRole('button')
-      expect(btn).toHaveClass('transition-all', 'duration-[--duration-normal]', 'ease-[--easing-snap]')
+      expect(btn).toHaveClass('transition-all', 'duration-(--duration-normal)', 'ease-(--easing-snap)')
     })
   })
 
@@ -176,7 +176,7 @@ describe('Button.tsx', () => {
     it('uses medium size by default', () => {
       render(<Button>Default Size</Button>)
       const btn = screen.getByRole('button', { name: /default size/i })
-      expect(btn).toHaveClass('px-[--s-4]', 'py-[--s-3]', 'min-h-[44px]')
+      expect(btn).toHaveClass('px-(--s-4)', 'py-(--s-3)', 'min-h-[44px]')
     })
 
     it('is not loading by default', () => {

@@ -16,11 +16,11 @@ export interface BadgeProps {
 
 export const Badge: React.FC<BadgeProps> = ({ variant, children, className }) => {
   const variantClasses = {
-    group: 'bg-[--court-100] text-[--court-700]',
-    knockout: 'bg-[--lavender-100] text-[--lavender-700]',
-    live: 'bg-[--mint-100] text-[--mint-600]',
-    registration: 'bg-[--peach-100] text-[--peach-600]',
-    complete: 'bg-[--gold-200] text-[--gold-600]',
+    group: 'bg-(--court-100) text-(--court-700)',
+    knockout: 'bg-(--lavender-100) text-(--lavender-700)',
+    live: 'bg-(--mint-100) text-(--mint-600)',
+    registration: 'bg-(--peach-100) text-(--peach-600)',
+    complete: 'bg-(--gold-200) text-(--gold-600)',
   }
 
   return (
@@ -28,11 +28,11 @@ export const Badge: React.FC<BadgeProps> = ({ variant, children, className }) =>
       className={`
         inline-flex
         items-center
-        px-[--s-3]
-        py-[--s-1]
+        px-(--s-3)
+        py-(--s-1)
         text-xs
         font-semibold
-        rounded-[--r-full]
+        rounded-(--r-full)
         ${variantClasses[variant]}
         ${className}
       `}
