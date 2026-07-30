@@ -8,11 +8,9 @@
  * Optional: JOB_QUEUE=bullmq (the worker always uses BullMQ directly)
  */
 
+import './load-env'
+
 import path from 'node:path'
-import dotenv from 'dotenv'
-
-dotenv.config({ path: path.resolve(__dirname, '../.env') })
-
 import { initializeDb, closeDb } from './db-connections'
 import { runMigrations } from './migrations'
 import { createWorker } from '@worker/worker'
