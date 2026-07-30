@@ -11,6 +11,7 @@ import { InMemoryEmailAdapter } from '../../email-adapter'
 import { generateBracket } from '@core/index'
 import { defaultAdultAttestation } from '../factories/player.factory'
 import { clearRateLimitStore } from '../../middleware/rate-limit'
+import { addTransport, type LogEntry } from '../../logger'
 
 const ADULT_ATTESTATION = defaultAdultAttestation()
 
@@ -1585,6 +1586,114 @@ describe('Tournaments API', () => {
 
       expect(scoreRes.status).toBe(409)
       expect(scoreRes.body.code).toBe('DEADLINE_PASSED')
+    })
+
+    it('logs score.overridden with organizerId when organizer overrides', async () => {
+      const entries: LogEntry[] = []
+      addTransport((entry) => entries.push(entry))
+
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+
+      await repo.updateStatus(tournament.id, 'registration_closed')
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      const groupRes = await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 2, advancingPerGroup: 1 })
+
+      await repo.updateStatus(tournament.id, 'group_stage_active')
+
+      const groupRepo = new GroupRepository(pool)
+      const matches = await groupRepo.findMatchesByGroup(groupRes.body.groups[0].id)
+      const match = matches[0]
+
+      const overrideRes = await request(app)
+        .patch(`/tournaments/${tournament.id}/matches/${match.id}/score`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ score: '7-5, 6-2' })
+
+      expect(overrideRes.status).toBe(200)
+
+      const scoreOverriddenLog = entries.find((e) => e.msg === 'score.overridden')
+      expect(scoreOverriddenLog).toBeDefined()
+      expect(scoreOverriddenLog).toHaveProperty('organizerId', organizerId)
+    })
+
+    it('logs score.edited with playerId when participant self-edits', async () => {
+      const entries: LogEntry[] = []
+      addTransport((entry) => entries.push(entry))
+
+      const { sub: organizerId, accessToken: orgToken } = OrganizerFactory.token(jwtConfig)
+      const tournament = await TournamentFactory.create(pool, organizerId)
+      const repo = new TournamentRepository(pool)
+
+      await repo.updateStatus(tournament.id, 'registration_closed')
+      const players = await Promise.all([
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+        PlayerFactory.create(pool),
+      ])
+
+      const playerRepo = new PlayerRepository(pool)
+      for (const player of players) {
+        await playerRepo.createRegistration(player.id, tournament.id)
+      }
+
+      const groupRes = await request(app)
+        .post(`/tournaments/${tournament.id}/groups`)
+        .set('Authorization', `Bearer ${orgToken}`)
+        .send({ numGroups: 2, advancingPerGroup: 1 })
+
+      await repo.updateStatus(tournament.id, 'group_stage_active')
+
+      const groupRepo = new GroupRepository(pool)
+      const matches = await groupRepo.findMatchesByGroup(groupRes.body.groups[0].id)
+      const match = matches[0]
+
+      // First, a participant submits their score via POST
+      const player1Session = await generatePlayerSession(
+        {
+          playerId: match.player1_id!,
+          tournamentId: tournament.id,
+          email: `player${match.player1_id}@test.local`,
+          createdAt: Date.now(),
+        },
+        3600,
+        tokenStore
+      )
+
+      const submitRes = await request(app)
+        .post(`/tournaments/${tournament.id}/matches/${match.id}/score`)
+        .set('Authorization', `Bearer ${player1Session.token}`)
+        .send({ score: '6-4, 6-3' })
+
+      expect(submitRes.status).toBe(200)
+
+      // Then participant edits their score via PATCH
+      const editRes = await request(app)
+        .patch(`/tournaments/${tournament.id}/matches/${match.id}/score`)
+        .set('Authorization', `Bearer ${player1Session.token}`)
+        .send({ score: '6-4, 6-2' })
+
+      expect(editRes.status).toBe(200)
+
+      const scoreEditedLog = entries.find((e) => e.msg === 'score.edited')
+      expect(scoreEditedLog).toBeDefined()
+      expect(scoreEditedLog).toHaveProperty('playerId', match.player1_id)
     })
   })
 
