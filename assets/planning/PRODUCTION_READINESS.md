@@ -20,19 +20,12 @@ These do **not** block the build (V1–V6 are complete and verified). They block
 
 ---
 
-## PR-1 — `trust proxy` behind the load balancer 🔴
-**Scope:** platform-wide (not just messaging). **Found in:** V2.3.
+## PR-1 — `trust proxy` behind the load balancer ✅ RESOLVED
+**Scope:** platform-wide (not just messaging). **Found in:** V2.3. **Fixed in:** ISSUE-41/42 (2026-07-30).
 
-The app does **not** call Express `app.set('trust proxy', …)`, so `req.ip` resolves to the **load
-balancer's IP** for all proxied traffic (the nginx LB already forwards `X-Forwarded-For` / `X-Real-IP`).
-Consequences in prod:
-- **Rate-limit keys collapse** — keys built from `req.ip` (e.g. `login:<email>:<ip>`) share one IP value
-  for everyone behind the LB, so per-client limiting is meaningless. *(The shared Redis counter from V2.3
-  is itself correct — this is about the key, not the store.)*
-- **IP-based logging / audit** records the LB IP, not the client.
-
-**Fix:** set `trust proxy` (scoped to proxied / Redis-selected deploys) so `req.ip` reflects the real
-client via `X-Forwarded-For`. Small, well-scoped, TDD-able. **Do this first.**
+**Resolution:** `app.set('trust proxy', 2)` is implemented at `packages/api/src/app.ts:157`.
+`req.ip` now correctly resolves to the client IP through the two proxy hops (CloudFront → ALB → Node).
+This ensures rate-limit keys and audit logging capture the actual client IP, not the load balancer's IP.
 
 ## PR-2 — SSE catch-up on reconnect 🟠
 **Scope:** messaging. **Found in:** V2 design review (gap #3).

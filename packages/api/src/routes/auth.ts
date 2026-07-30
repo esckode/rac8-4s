@@ -292,7 +292,7 @@ export default function authRouter(deps: AppDependencies) {
       // Log successful login
       log.info('login.success', {
         accountId: account.id,
-        email: account.email,
+        ip: req.ip,
       })
 
       // Return success response with user info and token
@@ -537,6 +537,7 @@ export default function authRouter(deps: AppDependencies) {
       // Log the logout event
       log.info('logout', {
         accountId: payload.sub,
+        ip: req.ip,
       })
 
       // Return 204 No Content
