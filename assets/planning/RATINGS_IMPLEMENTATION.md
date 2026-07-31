@@ -232,6 +232,15 @@ delta computed for the team.
 **Red:** two partners rated 200 and 400 vs a team meaned 300 draw ~zero movement; both partners move
 by the same amount, not proportionally to their own rating.
 
+⚠ **Open, decided provisionally during Phase 3 (2026-07-30):** `computeTeamDelta` takes ONE
+`matchesPlayed` for the K ramp, but partners can have different counts. **Implemented as the mean**,
+mirroring how the same function already means the team *rating*. Not exercised by the current suite —
+all its tests use fresh players. The alternative is `min`, which treats the team as provisional
+whenever *either* partner is new: better for the newcomer's calibration (their guess corrects faster)
+at the cost of moving the settled partner in larger steps than their own experience warrants. R10's
+"both partners move equally" is what forces a single team-level K and creates the tension. **Revisit
+with real doubles volume** — same trigger as R10's partner-quality weighting in design §6.
+
 ---
 
 ## Phase 3 — Apply and correct
