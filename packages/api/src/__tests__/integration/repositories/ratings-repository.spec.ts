@@ -13,8 +13,8 @@ function uniquePlayerId(): string {
 
 async function createTestPlayer(client: PoolClient, playerId: string): Promise<string> {
   const res = await client.query(
-    `INSERT INTO public.players (id, email) VALUES ($1, $2) RETURNING id`,
-    [playerId, `${playerId}@test.local`]
+    `INSERT INTO public.players (id, email, name) VALUES ($1, $2, $3) RETURNING id`,
+    [playerId, `${playerId}@test.local`, playerId]
   )
   return res.rows[0].id
 }
@@ -99,9 +99,9 @@ describe('RatingsRepository', () => {
     })
 
     it('sets updated_at to current time', async () => {
-      const before = new Date()
+      const before = new Date(Date.now() - 1000) // 1 second buffer
       await repo.upsert(testPlayerId, 'racquetball', 'singles', 250, 5)
-      const after = new Date()
+      const after = new Date(Date.now() + 1000) // 1 second buffer
 
       const rating = await repo.getFor(testPlayerId, 'racquetball', 'singles')
       const updatedAt = new Date(rating!.updatedAt)
@@ -139,6 +139,8 @@ describe('RatingsRepository', () => {
       const matchId = `match_${uid()}`
       await repo.appendHistory(testPlayerId, 'racquetball', 'singles', 15, 265, matchId)
       // R17: correction logic writes a second row for the same match
+      // Delay to ensure different timestamps (database may have coarse timestamp granularity)
+      await new Promise((r) => setTimeout(r, 100))
       await repo.appendHistory(testPlayerId, 'racquetball', 'singles', -3, 262, matchId)
 
       const latest = await repo.findLatestHistoryFor(testPlayerId, matchId)
@@ -172,8 +174,8 @@ describe('RatingsRepository', () => {
       const matchId1 = `match_${uid()}`
       const matchId2 = `match_${uid()}`
       await repo.appendHistory(testPlayerId, 'racquetball', 'singles', 15, 265, matchId1)
-      // Small delay to ensure different timestamps
-      await new Promise((r) => setTimeout(r, 10))
+      // Delay to ensure different timestamps
+      await new Promise((r) => setTimeout(r, 100))
       await repo.appendHistory(testPlayerId, 'racquetball', 'singles', -5, 260, matchId2)
 
       const history = await repo.findHistoryFor(testPlayerId, 'racquetball', 'singles')
