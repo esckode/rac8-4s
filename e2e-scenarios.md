@@ -212,6 +212,7 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 | **Personalization (pending actions)** | 4 | `personalization-pending-actions.spec.ts` | `npx playwright test personalization-pending-actions` |
 | **Personalization (digest movement)** | 2 | `personalization-digest-movement.spec.ts` | `npx playwright test personalization-digest-movement` |
 | **Player profile** | 3 | `profile.spec.ts` | `npx playwright test profile` |
+| **Skill ratings (P13)** | 5 | `ratings.spec.ts` | `npx playwright test ratings` |
 | **PWA install** | 2 | `pwa-install.spec.ts` | `npx playwright test pwa-install` |
 | **PWA hygiene (no stale caches)** | 2 | `pwa-hygiene.spec.ts` | `npx playwright test pwa-hygiene` |
 | **PWA offline (venue mode)** | 4 | `pwa-offline-venue.spec.ts` | `npx playwright test pwa-offline-venue` |
@@ -219,7 +220,7 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 | **Mobile & Responsive** | 5 | `mobile.spec.ts` | `npx playwright test mobile.spec` |
 | **Accessibility** | 3 | `accessibility.spec.ts` | `npx playwright test accessibility` |
 
-**Total: 245 `test(...)` blocks across 42 specs.** `TEMPLATE.spec.ts` is a scaffold,
+**Total: 250 `test(...)` blocks across 43 specs.** `TEMPLATE.spec.ts` is a scaffold,
 excluded via `testIgnore`.
 
 **Specs requiring the worker** (`npm run dev:worker --workspace=packages/api`, see
