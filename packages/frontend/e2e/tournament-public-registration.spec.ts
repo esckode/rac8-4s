@@ -41,7 +41,8 @@ test.describe('Public Tournament Registration (guest)', () => {
     await expect(page).toHaveURL(/\/tournament\/[^/]+\/browse/)
     // Shows the tournament identity + status
     await expect(page.locator(`text=${tournament.name}`)).toBeVisible()
-    await expect(page.locator('text=/registration open/i')).toBeVisible()
+    // ISSUE-9: the badge reads "Reg Open" (abbreviated), not "Registration open".
+    await expect(page.locator('text=/reg(istration)? open/i')).toBeVisible()
     // Registration section for unauthenticated users
     await expect(page.locator(SELECTORS.EMAIL_INPUT)).toBeVisible()
     await expect(page.locator(SELECTORS.NAME_INPUT)).toBeVisible()

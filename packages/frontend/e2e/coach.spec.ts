@@ -44,7 +44,9 @@ async function loginFrontend(page: any, user: { email: string; password: string 
   await page.fill(SELECTORS.EMAIL_INPUT, user.email)
   await page.fill(SELECTORS.PASSWORD_INPUT, user.password)
   await page.click(SELECTORS.SIGN_IN_BUTTON())
-  await page.waitForURL('**/browse', { timeout: 8000 })
+  // Login always navigates to /play now (ISSUE-28 Play hub consolidation);
+  // this helper predates that change and used to wait for /browse only.
+  await page.waitForURL(/\/(play|browse)/, { timeout: 8000 })
 }
 
 async function sendCoachMessage(page: any, body: string) {
