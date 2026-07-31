@@ -1,10 +1,10 @@
 /**
- * S1.3 — Profile page (P0); S5.3 notify/density; S7.3 availability grid (P12)
+ * S1.3 — Profile page (P0); S5.3 notify/density; S7.3 availability grid (P12); P13 ratings (P7)
  *
  * Renders settings from GET /api/auth/me + availability from
  * GET /api/auth/me/availability; density/notify/quiet-hours PATCH
  * /api/auth/me/settings; the availability grid PUTs the full grid to
- * /api/auth/me/availability on every toggle.
+ * /api/auth/me/availability on every toggle; ratings from GET /player/ratings (P13 Phase 7).
  */
 
 import React from 'react'
@@ -53,12 +53,30 @@ function availabilityResponse(
   return { ok: true, json: async () => ({ slots, updatedAt }) }
 }
 
+function ratingsResponse(
+  ratings: Array<{ sport: string; format: string; rating: number; matchesPlayed: number; provisional: boolean }> = []
+) {
+  return {
+    ok: true,
+    json: async () => ({
+      ratings,
+      min: 100,
+      max: 500,
+      seedDefault: 270,
+    }),
+  }
+}
+
 /** Routes each fetch call by URL so tests don't depend on call order. */
 function mockFetchRouter(
   avail: { slots?: Array<{ weekday: number; dayPart: string }>; updatedAt?: string | null } = {},
-  meOverrides: Parameters<typeof meResponse>[0] = {}
+  meOverrides: Parameters<typeof meResponse>[0] = {},
+  ratings: Array<{ sport: string; format: string; rating: number; matchesPlayed: number; provisional: boolean }> = []
 ) {
   mockFetch.mockImplementation((url: string) => {
+    if (url.includes('/player/ratings')) {
+      return Promise.resolve(ratingsResponse(ratings))
+    }
     if (url.includes('/api/auth/me/availability')) {
       return Promise.resolve(availabilityResponse(avail.slots ?? [], avail.updatedAt ?? null))
     }
@@ -236,5 +254,44 @@ describe('Profile', () => {
     render(<Profile />)
     await waitFor(() => expect(screen.getByTestId('availability-last-updated')).toBeInTheDocument())
     expect(screen.queryByTestId('availability-reconfirm-prompt')).not.toBeInTheDocument()
+  })
+
+  // ── P13 Phase 7 — Your Rating panel ──────────────────────────────────────
+
+  it('renders a rating with the (provisional) label when provisional', async () => {
+    mockFetchRouter(
+      {},
+      {},
+      [{ sport: 'Tennis', format: 'singles', rating: 320, matchesPlayed: 5, provisional: true }]
+    )
+    render(<Profile />)
+    await waitFor(() => {
+      expect(screen.getByTestId('rating-Tennis-singles')).toBeInTheDocument()
+      expect(screen.getByText(/320/)).toBeInTheDocument()
+      expect(screen.getByText(/provisional/)).toBeInTheDocument()
+    })
+  })
+
+  it('renders a rating without the (provisional) label when not provisional', async () => {
+    mockFetchRouter(
+      {},
+      {},
+      [{ sport: 'Tennis', format: 'doubles', rating: 280, matchesPlayed: 10, provisional: false }]
+    )
+    render(<Profile />)
+    await waitFor(() => {
+      expect(screen.getByTestId('rating-Tennis-doubles')).toBeInTheDocument()
+      expect(screen.getByText(/280/)).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/provisional/)).not.toBeInTheDocument()
+  })
+
+  it('renders a not-yet-played state for a sport with no buckets', async () => {
+    mockFetchRouter({}, {}, [])
+    render(<Profile />)
+    await waitFor(() => {
+      expect(screen.getByTestId('rating-empty-state')).toBeInTheDocument()
+      expect(screen.getByText(/not yet played/i)).toBeInTheDocument()
+    })
   })
 })
