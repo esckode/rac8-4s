@@ -2,7 +2,7 @@
  * Ratings Service — Phase 3 (P13): apply and correct
  *
  * Pure application logic on top of the Phase 2 calculator and the Phase 1
- * repository. Not yet wired into any route (Phase 4).
+ * repository.
  *
  * correctRatingForMatch is the critical piece (R16/R17): it reverses the
  * MOST RECENT history row for the match (never the original — a corrected
@@ -11,8 +11,16 @@
  * participant's CURRENT rating, and never touches any other match. It does
  * not increment matches_played — that match was already counted when it was
  * first applied.
+ *
+ * Phase 12 (R29): applyRatingForMatch/correctRatingForMatch each own a
+ * single transaction — separate from the score write (design §3b) — that
+ * locks every participant's row with one `SELECT ... FOR UPDATE` (sorted by
+ * player id) and writes with one multi-row upsert and one multi-row history
+ * insert. This closes ISSUE-47 (a partial settle on failure) and ISSUE-48
+ * (an unlocked read-modify-write losing an update under overlap).
  */
-import type { RatingsRepository, PlayerRating } from '../repositories/ratings-repository'
+import type { Pool, PoolClient } from 'pg'
+import { RatingsRepository, type DbConnection, type PlayerRating } from '../repositories/ratings-repository'
 import { computeDelta, computeTeamDelta, applyDelta } from './ratings-calculator'
 import { SEED_DEFAULT } from './ratings-constants'
 import { getLogger } from '../logger'
@@ -47,61 +55,39 @@ function sameOutcome(a: MatchParticipants, b: MatchParticipants): boolean {
   return false
 }
 
-async function getOrSeedRating(
-  repo: RatingsRepository,
-  playerId: string,
-  sport: string,
-  format: string
-): Promise<{ rating: number; matchesPlayed: number }> {
-  const existing = await repo.getFor(playerId, sport, format)
+/**
+ * Opens the settle's own transaction (plain connect + BEGIN/COMMIT/ROLLBACK
+ * per CLAUDE.md §7 — the test harness rewrites these to savepoints) and
+ * hands `fn` a repository bound to the locked, transactional connection.
+ */
+async function withRatingsTransaction<T>(pool: DbConnection, fn: (repo: RatingsRepository) => Promise<T>): Promise<T> {
+  const client: PoolClient = await (pool as Pool).connect()
+  try {
+    await client.query('BEGIN')
+    const repo = new RatingsRepository(client)
+    const result = await fn(repo)
+    await client.query('COMMIT')
+    return result
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
+function seededOrDefault(locked: Map<string, PlayerRating>, playerId: string): { rating: number; matchesPlayed: number } {
+  const existing = locked.get(playerId)
   if (existing) return { rating: existing.rating, matchesPlayed: existing.matchesPlayed }
   return { rating: SEED_DEFAULT, matchesPlayed: 0 }
 }
 
-async function requireCurrentRating(
-  repo: RatingsRepository,
-  playerId: string,
-  sport: string,
-  format: string,
-  matchId: string
-): Promise<{ rating: number; matchesPlayed: number }> {
-  const existing = await repo.getFor(playerId, sport, format)
+function requireLocked(locked: Map<string, PlayerRating>, playerId: string, matchId: string): { rating: number; matchesPlayed: number } {
+  const existing = locked.get(playerId)
   if (!existing) {
-    throw new Error(
-      `correctRatingForMatch: no current rating for player ${playerId} (${sport}/${format}); match ${matchId} was never applied`
-    )
+    throw new Error(`correctRatingForMatch: no current rating for player ${playerId}; match ${matchId} was never applied`)
   }
   return existing
-}
-
-/** Reverses the most recent history row for this player+match, throwing if none exists. */
-async function reverseLastDelta(
-  repo: RatingsRepository,
-  playerId: string,
-  matchId: string,
-  currentRating: number
-): Promise<number> {
-  const last = await repo.findLatestHistoryFor(playerId, matchId)
-  if (!last) {
-    throw new Error(`correctRatingForMatch: no prior rating history for player ${playerId}, match ${matchId}`)
-  }
-  return currentRating - last.delta
-}
-
-async function settlePlayerRating(
-  repo: RatingsRepository,
-  playerId: string,
-  sport: string,
-  format: string,
-  baseline: number,
-  delta: number,
-  matchesPlayed: number,
-  matchId: string
-): Promise<number> {
-  const newRating = applyDelta(baseline, delta)
-  await repo.upsert(playerId, sport, format, newRating, matchesPlayed)
-  await repo.appendHistory(playerId, sport, format, delta, newRating, matchId)
-  return newRating
 }
 
 async function applySinglesRating(
@@ -113,14 +99,23 @@ async function applySinglesRating(
   const format = 'singles'
   const won1 = winnerId === player1Id
 
-  const p1 = await getOrSeedRating(repo, player1Id, sport, format)
-  const p2 = await getOrSeedRating(repo, player2Id, sport, format)
+  const locked = await repo.lockManyFor([player1Id, player2Id], sport, format)
+  const p1 = seededOrDefault(locked, player1Id)
+  const p2 = seededOrDefault(locked, player2Id)
 
   const delta1 = computeDelta(p1.rating, p2.rating, won1, p1.matchesPlayed)
   const delta2 = computeDelta(p2.rating, p1.rating, !won1, p2.matchesPlayed)
+  const rating1 = applyDelta(p1.rating, delta1)
+  const rating2 = applyDelta(p2.rating, delta2)
 
-  await settlePlayerRating(repo, player1Id, sport, format, p1.rating, delta1, p1.matchesPlayed + 1, matchId)
-  await settlePlayerRating(repo, player2Id, sport, format, p2.rating, delta2, p2.matchesPlayed + 1, matchId)
+  await repo.upsertMany([
+    { playerId: player1Id, sport, format, rating: rating1, matchesPlayed: p1.matchesPlayed + 1 },
+    { playerId: player2Id, sport, format, rating: rating2, matchesPlayed: p2.matchesPlayed + 1 },
+  ])
+  await repo.appendHistoryMany([
+    { playerId: player1Id, sport, format, delta: delta1, ratingAfter: rating1, matchId },
+    { playerId: player2Id, sport, format, delta: delta2, ratingAfter: rating2, matchId },
+  ])
 
   log.info('rating.applied', { matchId, sport, format })
 }
@@ -136,10 +131,11 @@ async function applyDoublesRating(
   const [t1p1id, t1p2id] = team1
   const [t2p1id, t2p2id] = team2
 
-  const t1p1 = await getOrSeedRating(repo, t1p1id, sport, format)
-  const t1p2 = await getOrSeedRating(repo, t1p2id, sport, format)
-  const t2p1 = await getOrSeedRating(repo, t2p1id, sport, format)
-  const t2p2 = await getOrSeedRating(repo, t2p2id, sport, format)
+  const locked = await repo.lockManyFor([t1p1id, t1p2id, t2p1id, t2p2id], sport, format)
+  const t1p1 = seededOrDefault(locked, t1p1id)
+  const t1p2 = seededOrDefault(locked, t1p2id)
+  const t2p1 = seededOrDefault(locked, t2p1id)
+  const t2p2 = seededOrDefault(locked, t2p2id)
 
   // Team "matches played" for K-decay mirrors how the calculator itself treats
   // team rating — the mean of the two partners.
@@ -148,11 +144,23 @@ async function applyDoublesRating(
 
   const delta1 = computeTeamDelta([t1p1.rating, t1p2.rating], [t2p1.rating, t2p2.rating], team1Won, team1MatchesPlayed)
   const delta2 = computeTeamDelta([t2p1.rating, t2p2.rating], [t1p1.rating, t1p2.rating], !team1Won, team2MatchesPlayed)
+  const rating1a = applyDelta(t1p1.rating, delta1)
+  const rating1b = applyDelta(t1p2.rating, delta1)
+  const rating2a = applyDelta(t2p1.rating, delta2)
+  const rating2b = applyDelta(t2p2.rating, delta2)
 
-  await settlePlayerRating(repo, t1p1id, sport, format, t1p1.rating, delta1, t1p1.matchesPlayed + 1, matchId)
-  await settlePlayerRating(repo, t1p2id, sport, format, t1p2.rating, delta1, t1p2.matchesPlayed + 1, matchId)
-  await settlePlayerRating(repo, t2p1id, sport, format, t2p1.rating, delta2, t2p1.matchesPlayed + 1, matchId)
-  await settlePlayerRating(repo, t2p2id, sport, format, t2p2.rating, delta2, t2p2.matchesPlayed + 1, matchId)
+  await repo.upsertMany([
+    { playerId: t1p1id, sport, format, rating: rating1a, matchesPlayed: t1p1.matchesPlayed + 1 },
+    { playerId: t1p2id, sport, format, rating: rating1b, matchesPlayed: t1p2.matchesPlayed + 1 },
+    { playerId: t2p1id, sport, format, rating: rating2a, matchesPlayed: t2p1.matchesPlayed + 1 },
+    { playerId: t2p2id, sport, format, rating: rating2b, matchesPlayed: t2p2.matchesPlayed + 1 },
+  ])
+  await repo.appendHistoryMany([
+    { playerId: t1p1id, sport, format, delta: delta1, ratingAfter: rating1a, matchId },
+    { playerId: t1p2id, sport, format, delta: delta1, ratingAfter: rating1b, matchId },
+    { playerId: t2p1id, sport, format, delta: delta2, ratingAfter: rating2a, matchId },
+    { playerId: t2p2id, sport, format, delta: delta2, ratingAfter: rating2b, matchId },
+  ])
 
   log.info('rating.applied', { matchId, sport, format })
 }
@@ -160,19 +168,22 @@ async function applyDoublesRating(
 /**
  * Step 3.1 — apply ratings for a newly scored match. Seeds any participant
  * without an existing (sport, format) row from SEED_DEFAULT, moves each
- * participant, and increments their matches_played.
+ * participant, and increments their matches_played. Runs inside its own
+ * transaction (Phase 12) — separate from the score write.
  */
 export async function applyRatingForMatch(
-  repo: RatingsRepository,
+  pool: DbConnection,
   matchId: string,
   sport: string,
   participants: MatchParticipants
 ): Promise<void> {
-  if (participants.format === 'singles') {
-    await applySinglesRating(repo, matchId, sport, participants)
-  } else {
-    await applyDoublesRating(repo, matchId, sport, participants)
-  }
+  await withRatingsTransaction(pool, async (repo) => {
+    if (participants.format === 'singles') {
+      await applySinglesRating(repo, matchId, sport, participants)
+    } else {
+      await applyDoublesRating(repo, matchId, sport, participants)
+    }
+  })
 }
 
 async function correctSinglesRating(
@@ -183,19 +194,36 @@ async function correctSinglesRating(
 ): Promise<void> {
   const format = 'singles'
   const won1New = winnerId === player1Id
+  const ids = [player1Id, player2Id]
 
-  const cur1 = await requireCurrentRating(repo, player1Id, sport, format, matchId)
-  const cur2 = await requireCurrentRating(repo, player2Id, sport, format, matchId)
+  const locked = await repo.lockManyFor(ids, sport, format)
+  const cur1 = requireLocked(locked, player1Id, matchId)
+  const cur2 = requireLocked(locked, player2Id, matchId)
 
-  const baseline1 = await reverseLastDelta(repo, player1Id, matchId, cur1.rating)
-  const baseline2 = await reverseLastDelta(repo, player2Id, matchId, cur2.rating)
+  const lastDeltas = await repo.findLatestHistoryForMany(ids, matchId)
+  const last1 = lastDeltas.get(player1Id)
+  const last2 = lastDeltas.get(player2Id)
+  if (!last1 || !last2) {
+    throw new Error(`correctRatingForMatch: no prior rating history for match ${matchId}`)
+  }
+
+  const baseline1 = cur1.rating - last1.delta
+  const baseline2 = cur2.rating - last2.delta
 
   const delta1 = computeDelta(baseline1, baseline2, won1New, cur1.matchesPlayed)
   const delta2 = computeDelta(baseline2, baseline1, !won1New, cur2.matchesPlayed)
+  const rating1 = applyDelta(baseline1, delta1)
+  const rating2 = applyDelta(baseline2, delta2)
 
   // matches_played is NOT incremented on a correction — the match was already counted.
-  await settlePlayerRating(repo, player1Id, sport, format, baseline1, delta1, cur1.matchesPlayed, matchId)
-  await settlePlayerRating(repo, player2Id, sport, format, baseline2, delta2, cur2.matchesPlayed, matchId)
+  await repo.upsertMany([
+    { playerId: player1Id, sport, format, rating: rating1, matchesPlayed: cur1.matchesPlayed },
+    { playerId: player2Id, sport, format, rating: rating2, matchesPlayed: cur2.matchesPlayed },
+  ])
+  await repo.appendHistoryMany([
+    { playerId: player1Id, sport, format, delta: delta1, ratingAfter: rating1, matchId },
+    { playerId: player2Id, sport, format, delta: delta2, ratingAfter: rating2, matchId },
+  ])
 
   log.info('rating.corrected', { matchId, sport, format })
 }
@@ -210,16 +238,24 @@ async function correctDoublesRating(
   const team1WonNew = winningTeam === 'team1'
   const [t1p1id, t1p2id] = team1
   const [t2p1id, t2p2id] = team2
+  const ids = [t1p1id, t1p2id, t2p1id, t2p2id]
 
-  const cur_t1p1 = await requireCurrentRating(repo, t1p1id, sport, format, matchId)
-  const cur_t1p2 = await requireCurrentRating(repo, t1p2id, sport, format, matchId)
-  const cur_t2p1 = await requireCurrentRating(repo, t2p1id, sport, format, matchId)
-  const cur_t2p2 = await requireCurrentRating(repo, t2p2id, sport, format, matchId)
+  const locked = await repo.lockManyFor(ids, sport, format)
+  const cur_t1p1 = requireLocked(locked, t1p1id, matchId)
+  const cur_t1p2 = requireLocked(locked, t1p2id, matchId)
+  const cur_t2p1 = requireLocked(locked, t2p1id, matchId)
+  const cur_t2p2 = requireLocked(locked, t2p2id, matchId)
 
-  const baseline_t1p1 = await reverseLastDelta(repo, t1p1id, matchId, cur_t1p1.rating)
-  const baseline_t1p2 = await reverseLastDelta(repo, t1p2id, matchId, cur_t1p2.rating)
-  const baseline_t2p1 = await reverseLastDelta(repo, t2p1id, matchId, cur_t2p1.rating)
-  const baseline_t2p2 = await reverseLastDelta(repo, t2p2id, matchId, cur_t2p2.rating)
+  const lastDeltas = await repo.findLatestHistoryForMany(ids, matchId)
+  const missing = ids.filter((id) => !lastDeltas.has(id))
+  if (missing.length > 0) {
+    throw new Error(`correctRatingForMatch: no prior rating history for match ${matchId}`)
+  }
+
+  const baseline_t1p1 = cur_t1p1.rating - lastDeltas.get(t1p1id)!.delta
+  const baseline_t1p2 = cur_t1p2.rating - lastDeltas.get(t1p2id)!.delta
+  const baseline_t2p1 = cur_t2p1.rating - lastDeltas.get(t2p1id)!.delta
+  const baseline_t2p2 = cur_t2p2.rating - lastDeltas.get(t2p2id)!.delta
 
   const team1MatchesPlayed = (cur_t1p1.matchesPlayed + cur_t1p2.matchesPlayed) / 2
   const team2MatchesPlayed = (cur_t2p1.matchesPlayed + cur_t2p2.matchesPlayed) / 2
@@ -236,11 +272,23 @@ async function correctDoublesRating(
     !team1WonNew,
     team2MatchesPlayed
   )
+  const rating_t1p1 = applyDelta(baseline_t1p1, delta1)
+  const rating_t1p2 = applyDelta(baseline_t1p2, delta1)
+  const rating_t2p1 = applyDelta(baseline_t2p1, delta2)
+  const rating_t2p2 = applyDelta(baseline_t2p2, delta2)
 
-  await settlePlayerRating(repo, t1p1id, sport, format, baseline_t1p1, delta1, cur_t1p1.matchesPlayed, matchId)
-  await settlePlayerRating(repo, t1p2id, sport, format, baseline_t1p2, delta1, cur_t1p2.matchesPlayed, matchId)
-  await settlePlayerRating(repo, t2p1id, sport, format, baseline_t2p1, delta2, cur_t2p1.matchesPlayed, matchId)
-  await settlePlayerRating(repo, t2p2id, sport, format, baseline_t2p2, delta2, cur_t2p2.matchesPlayed, matchId)
+  await repo.upsertMany([
+    { playerId: t1p1id, sport, format, rating: rating_t1p1, matchesPlayed: cur_t1p1.matchesPlayed },
+    { playerId: t1p2id, sport, format, rating: rating_t1p2, matchesPlayed: cur_t1p2.matchesPlayed },
+    { playerId: t2p1id, sport, format, rating: rating_t2p1, matchesPlayed: cur_t2p1.matchesPlayed },
+    { playerId: t2p2id, sport, format, rating: rating_t2p2, matchesPlayed: cur_t2p2.matchesPlayed },
+  ])
+  await repo.appendHistoryMany([
+    { playerId: t1p1id, sport, format, delta: delta1, ratingAfter: rating_t1p1, matchId },
+    { playerId: t1p2id, sport, format, delta: delta1, ratingAfter: rating_t1p2, matchId },
+    { playerId: t2p1id, sport, format, delta: delta2, ratingAfter: rating_t2p1, matchId },
+    { playerId: t2p2id, sport, format, delta: delta2, ratingAfter: rating_t2p2, matchId },
+  ])
 
   log.info('rating.corrected', { matchId, sport, format })
 }
@@ -257,10 +305,11 @@ async function correctDoublesRating(
  * Reverses only the MOST RECENT history row per participant (never the
  * original), recomputes against each participant's CURRENT rating, and
  * touches only the participants of THIS match — no cascade to opponents'
- * other matches. matches_played is left unchanged.
+ * other matches. matches_played is left unchanged. Runs inside its own
+ * transaction (Phase 12) — separate from the score write.
  */
 export async function correctRatingForMatch(
-  repo: RatingsRepository,
+  pool: DbConnection,
   matchId: string,
   sport: string,
   previous: MatchParticipants,
@@ -268,11 +317,13 @@ export async function correctRatingForMatch(
 ): Promise<void> {
   if (sameOutcome(previous, current)) return
 
-  if (current.format === 'singles') {
-    await correctSinglesRating(repo, matchId, sport, current)
-  } else {
-    await correctDoublesRating(repo, matchId, sport, current)
-  }
+  await withRatingsTransaction(pool, async (repo) => {
+    if (current.format === 'singles') {
+      await correctSinglesRating(repo, matchId, sport, current)
+    } else {
+      await correctDoublesRating(repo, matchId, sport, current)
+    }
+  })
 }
 
 /**
@@ -283,6 +334,10 @@ export async function correctRatingForMatch(
  * format's bucket already has a scored match — seeding is only legal
  * before the first score. By construction there is therefore no history to
  * reconcile here: this simply writes the baseline for both buckets.
+ *
+ * R23: stays synchronous and outside the Phase 12 lock — it is a single-row
+ * write with no concurrent settle to race against before a bucket has any
+ * matches.
  */
 export async function seedRatingForSport(
   repo: RatingsRepository,

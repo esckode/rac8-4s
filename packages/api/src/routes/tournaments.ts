@@ -32,7 +32,6 @@ import { sendMagicLinkEmail, sendPartnerInviteEmail } from '../email-adapter'
 import { generateRoundPairings } from '../mixer-scheduler'
 import { submitScore, SCORE_ERROR_HTTP_STATUS } from '../services/score-service'
 import { correctRatingForMatch, type MatchParticipants } from '../services/ratings-service'
-import { RatingsRepository } from '../repositories/ratings-repository'
 import { createRateLimitMiddleware } from '../middleware/rate-limit'
 import { PLAYS_IN_BRACKET } from '../registration-status'
 
@@ -798,7 +797,6 @@ export default function tournamentsRouter(deps: AppDependencies) {
       // nothing yet to correct.
       if (match.winner_id) {
         try {
-          const ratingsRepo = new RatingsRepository(deps.db)
           let previous: MatchParticipants
           let current: MatchParticipants
           if (match.format === 'doubles') {
@@ -832,7 +830,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
               winnerId: winnerId as string,
             }
           }
-          await correctRatingForMatch(ratingsRepo, matchId, tournament.sport, previous, current)
+          await correctRatingForMatch(deps.db, matchId, tournament.sport, previous, current)
         } catch (e) {
           log.warn('rating.correct.failed', { tournamentId, matchId, error: (e as Error).message })
         }

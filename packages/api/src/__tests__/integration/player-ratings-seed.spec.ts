@@ -110,7 +110,7 @@ describe('PUT /player/ratings/seed (P13 Phase 5)', () => {
     const { player: playerB } = await playerToken()
     const matchId = `match_${uid()}`
 
-    await applyRatingForMatch(ratingsRepo, matchId, SPORT, {
+    await applyRatingForMatch(pool, matchId, SPORT, {
       format: 'singles',
       player1Id: playerA.id,
       player2Id: playerB.id,

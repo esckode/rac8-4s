@@ -22,7 +22,6 @@ import type { JobQueue } from '@worker/job-queue'
 import type { IBroadcastBus } from '../broadcast-bus'
 import type { AppConfig } from '../config'
 import { getLogger } from '../logger'
-import { RatingsRepository } from '../repositories/ratings-repository'
 import { applyRatingForMatch, type MatchParticipants } from './ratings-service'
 
 const log = getLogger('score-service')
@@ -253,7 +252,6 @@ export async function submitScore(
   // tournaments.ts's "Best-effort: swallow enqueue errors, never fail an
   // already-committed..." wrap around the teams.formed enqueue.
   try {
-    const ratingsRepo = new RatingsRepository(db)
     const participants: MatchParticipants =
       match.format === 'doubles'
         ? {
@@ -268,7 +266,7 @@ export async function submitScore(
             player2Id: match.player2_id as string,
             winnerId: winnerId as string,
           }
-    await applyRatingForMatch(ratingsRepo, matchId, tournament.sport, participants)
+    await applyRatingForMatch(db, matchId, tournament.sport, participants)
   } catch (e) {
     log.warn('rating.apply.failed', { tournamentId, matchId, error: (e as Error).message })
   }
