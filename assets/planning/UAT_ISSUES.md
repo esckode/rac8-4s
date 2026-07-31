@@ -772,6 +772,12 @@ submission succeeds and logs `score.overridden` with `organizerId` and `reason`.
     `partner-invite-by-email.spec.ts` — a notification-count assertion off by one under load).
     Consistent with random collisions/timing under heavy parallel load, not a real defect; not
     pursued further.
+  - **A third instance, 2026-07-31:** `unit/assistant-anthropic-client.spec.ts` failed in a full
+    `test:coverage` run on branch `feat/ratings-p13`, and passes 12/12 in isolation. That branch
+    changes no assistant or Anthropic-client file, so it is the same parallel-load pattern, not a
+    regression. Three specs now show this behaviour — enough that the shared-state cause is worth
+    finding rather than re-confirming case by case. Related to [ISSUE-45](#issue-45), which is the
+    deterministic version of the same underlying problem (test isolation leaking).
 
 - **Tournament lifecycle has no automatic status transitions** (surfaced by ISSUE-9) — **moved to
   `BACKLOG.md` § Deferred on 2026-07-27**, since its urgency came from stale tournaments lingering in
