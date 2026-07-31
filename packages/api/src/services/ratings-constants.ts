@@ -15,7 +15,7 @@ export const K_PROVISIONAL = 24
 /** Max points once the rating has settled */
 export const K_SETTLED = 10
 
-/** Matches before K finishes decaying to K_SETTLED; load-bearing for R20 pairing gate */
+/** Matches before K finishes decaying to K_SETTLED */
 export const PROVISIONAL_MATCHES = 10
 
 /** Starting rating when a player does not self-assess */
