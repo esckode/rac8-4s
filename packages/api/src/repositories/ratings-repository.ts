@@ -101,6 +101,106 @@ export class RatingsRepository {
     )
   }
 
+  /**
+   * P13 Phase 12 — locks and returns existing rows for the given players in
+   * one statement, sorted by player id so overlapping settles always acquire
+   * their locks in the same order (deadlock avoidance, ISSUE-48). A player
+   * with no row is simply absent from the map — there is nothing to lock.
+   */
+  async lockManyFor(playerIds: string[], sport: string, format: string): Promise<Map<string, PlayerRating>> {
+    const sorted = [...new Set(playerIds)].sort()
+    const res = await this.pool.query(
+      `SELECT player_id, sport, format, rating, matches_played, updated_at
+       FROM public.player_ratings
+       WHERE player_id = ANY($1) AND sport = $2 AND format = $3
+       ORDER BY player_id
+       FOR UPDATE`,
+      [sorted, sport, format]
+    )
+
+    const map = new Map<string, PlayerRating>()
+    for (const row of res.rows) {
+      map.set(row.player_id, {
+        playerId: row.player_id,
+        sport: row.sport,
+        format: row.format,
+        rating: parseFloat(row.rating),
+        matchesPlayed: row.matches_played,
+        updatedAt: row.updated_at,
+      })
+    }
+    return map
+  }
+
+  /** P13 Phase 12 — one multi-row upsert instead of one per player. */
+  async upsertMany(
+    entries: { playerId: string; sport: string; format: string; rating: number; matchesPlayed: number }[]
+  ): Promise<void> {
+    if (entries.length === 0) return
+
+    const values: string[] = []
+    const params: unknown[] = []
+    entries.forEach((e, i) => {
+      const b = i * 5
+      values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, now())`)
+      params.push(e.playerId, e.sport, e.format, e.rating, e.matchesPlayed)
+    })
+
+    await this.pool.query(
+      `INSERT INTO public.player_ratings (player_id, sport, format, rating, matches_played, updated_at)
+       VALUES ${values.join(', ')}
+       ON CONFLICT (player_id, sport, format) DO UPDATE SET
+         rating = EXCLUDED.rating, matches_played = EXCLUDED.matches_played, updated_at = EXCLUDED.updated_at`,
+      params
+    )
+  }
+
+  /** P13 Phase 12 — one multi-row insert instead of one per player. */
+  async appendHistoryMany(
+    entries: { playerId: string; sport: string; format: string; delta: number; ratingAfter: number; matchId: string | null }[]
+  ): Promise<void> {
+    if (entries.length === 0) return
+
+    const values: string[] = []
+    const params: unknown[] = []
+    entries.forEach((e, i) => {
+      const b = i * 6
+      values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, now())`)
+      params.push(e.playerId, e.sport, e.format, e.delta, e.ratingAfter, e.matchId)
+    })
+
+    await this.pool.query(
+      `INSERT INTO public.player_rating_history (player_id, sport, format, delta, rating_after, match_id, created_at)
+       VALUES ${values.join(', ')}`,
+      params
+    )
+  }
+
+  /** P13 Phase 12 — latest history row per player for one match, batched via DISTINCT ON. */
+  async findLatestHistoryForMany(playerIds: string[], matchId: string): Promise<Map<string, RatingHistoryEntry>> {
+    const res = await this.pool.query(
+      `SELECT DISTINCT ON (player_id) player_id, sport, format, delta, rating_after, match_id, created_at
+       FROM public.player_rating_history
+       WHERE player_id = ANY($1) AND match_id = $2
+       ORDER BY player_id, created_at DESC, id DESC`,
+      [playerIds, matchId]
+    )
+
+    const map = new Map<string, RatingHistoryEntry>()
+    for (const row of res.rows) {
+      map.set(row.player_id, {
+        playerId: row.player_id,
+        sport: row.sport,
+        format: row.format,
+        delta: parseFloat(row.delta),
+        ratingAfter: parseFloat(row.rating_after),
+        matchId: row.match_id,
+        createdAt: row.created_at,
+      })
+    }
+    return map
+  }
+
   async findLatestHistoryFor(playerId: string, matchId: string): Promise<RatingHistoryEntry | undefined> {
     const res = await this.pool.query(
       `SELECT player_id, sport, format, delta, rating_after, match_id, created_at
