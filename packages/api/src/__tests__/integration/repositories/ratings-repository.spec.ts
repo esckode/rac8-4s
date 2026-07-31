@@ -207,6 +207,100 @@ describe('RatingsRepository', () => {
     })
   })
 
+  describe('lockManyFor (P13 Phase 12)', () => {
+    it('returns only rows that exist, keyed by player id', async () => {
+      await repo.upsert(testPlayerId, 'racquetball', 'singles', 250, 5)
+
+      const locked = await repo.lockManyFor([testPlayerId, testPlayerId2], 'racquetball', 'singles')
+
+      expect(locked.get(testPlayerId)?.rating).toBe(250)
+      expect(locked.get(testPlayerId2)).toBeUndefined()
+    })
+
+    it('returns an empty map when none of the players have a row', async () => {
+      const locked = await repo.lockManyFor([testPlayerId, testPlayerId2], 'racquetball', 'singles')
+      expect(locked.size).toBe(0)
+    })
+  })
+
+  describe('upsertMany (P13 Phase 12)', () => {
+    it('creates multiple rows in one call', async () => {
+      await repo.upsertMany([
+        { playerId: testPlayerId, sport: 'racquetball', format: 'singles', rating: 250, matchesPlayed: 5 },
+        { playerId: testPlayerId2, sport: 'racquetball', format: 'singles', rating: 300, matchesPlayed: 2 },
+      ])
+
+      const r1 = await repo.getFor(testPlayerId, 'racquetball', 'singles')
+      const r2 = await repo.getFor(testPlayerId2, 'racquetball', 'singles')
+      expect(r1?.rating).toBe(250)
+      expect(r1?.matchesPlayed).toBe(5)
+      expect(r2?.rating).toBe(300)
+      expect(r2?.matchesPlayed).toBe(2)
+    })
+
+    it('updates existing rows on conflict', async () => {
+      await repo.upsert(testPlayerId, 'racquetball', 'singles', 250, 5)
+
+      await repo.upsertMany([
+        { playerId: testPlayerId, sport: 'racquetball', format: 'singles', rating: 262, matchesPlayed: 6 },
+      ])
+
+      const r1 = await repo.getFor(testPlayerId, 'racquetball', 'singles')
+      expect(r1?.rating).toBe(262)
+      expect(r1?.matchesPlayed).toBe(6)
+    })
+
+    it('is a no-op for an empty list', async () => {
+      await expect(repo.upsertMany([])).resolves.not.toThrow()
+    })
+  })
+
+  describe('appendHistoryMany (P13 Phase 12)', () => {
+    it('appends multiple history rows in one call', async () => {
+      const matchId = `match_${uid()}`
+      await repo.appendHistoryMany([
+        { playerId: testPlayerId, sport: 'racquetball', format: 'singles', delta: 15, ratingAfter: 265, matchId },
+        { playerId: testPlayerId2, sport: 'racquetball', format: 'singles', delta: -15, ratingAfter: 235, matchId },
+      ])
+
+      const h1 = await repo.findHistoryFor(testPlayerId, 'racquetball', 'singles')
+      const h2 = await repo.findHistoryFor(testPlayerId2, 'racquetball', 'singles')
+      expect(h1).toHaveLength(1)
+      expect(h1[0].delta).toBe(15)
+      expect(h2).toHaveLength(1)
+      expect(h2[0].delta).toBe(-15)
+    })
+
+    it('is a no-op for an empty list', async () => {
+      await expect(repo.appendHistoryMany([])).resolves.not.toThrow()
+    })
+  })
+
+  describe('findLatestHistoryForMany (P13 Phase 12)', () => {
+    it('returns the most recent row per player for a match', async () => {
+      const matchId = `match_${uid()}`
+      await repo.appendHistory(testPlayerId, 'racquetball', 'singles', 15, 265, matchId)
+      await new Promise((r) => setTimeout(r, 10))
+      await repo.appendHistory(testPlayerId, 'racquetball', 'singles', -3, 262, matchId)
+      await repo.appendHistory(testPlayerId2, 'racquetball', 'singles', 12, 282, matchId)
+
+      const latest = await repo.findLatestHistoryForMany([testPlayerId, testPlayerId2], matchId)
+
+      expect(latest.get(testPlayerId)?.delta).toBe(-3)
+      expect(latest.get(testPlayerId2)?.delta).toBe(12)
+    })
+
+    it('omits players with no history for that match', async () => {
+      const matchId = `match_${uid()}`
+      await repo.appendHistory(testPlayerId, 'racquetball', 'singles', 15, 265, matchId)
+
+      const latest = await repo.findLatestHistoryForMany([testPlayerId, testPlayerId2], matchId)
+
+      expect(latest.has(testPlayerId)).toBe(true)
+      expect(latest.has(testPlayerId2)).toBe(false)
+    })
+  })
+
   describe('deleteFor', () => {
     it('deletes ratings from both tables', async () => {
       const matchId = `match_${uid()}`
