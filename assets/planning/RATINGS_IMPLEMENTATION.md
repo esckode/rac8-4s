@@ -70,6 +70,47 @@ Starting values to sign off (all are *proposals*, not decided):
 **Deliverable:** the constants file with comments, and owner sign-off on the four proposed values.
 No tests — a constants module has no behaviour. Phase 2 tests its *consequences*.
 
+### 0a. No hard-coded constants — a hard rule, enforced 🚩
+
+**`ratings-constants.ts` is the only place any of these numbers may appear.** Tuning must stay a
+one-file change; a value duplicated anywhere else is a silent bug the moment someone tunes it. This
+applies to **every** step below, and reviewers should reject on it.
+
+**The four places this rule actually gets broken** — each is a real trap, not a hypothetical:
+
+1. **The migration.** ⚠ **Do NOT write `DEFAULT 270` (or any bound) into the SQL.** It is the natural
+   thing to type in Step 1.1 and it puts `SEED_DEFAULT` in two places that no test compares. A tuned
+   constant would then silently disagree with every pre-existing row. The column is created with **no
+   default**; the service supplies the seed from the constant on first write.
+2. **The tests.** A test that asserts `expect(rating).toBe(270)` re-encodes the constant. Import it, or
+   assert a property (Phase 2 already mandates properties over exact deltas for this reason). ⚠ **A
+   test that fails after a legitimate tune is a bug in the test** — do not "fix" it by editing the
+   expected number, which is exactly the failure this rule exists to prevent.
+3. **The frontend.** The frontend resolves `@shared`, **not** `@core`, so API-side constants are not
+   importable client-side without wiring both `vite.config.ts` and `jest.config.js`. **Do not wire
+   them, and do not retype the values.** The API is the sole source of truth: `GET /player/ratings`
+   (Step 7.1) returns `{ min, max, seedDefault }` alongside the buckets, and the seed prompt (Step
+   5.3) renders its range hint and validation bounds from that response. The frontend never knows a
+   rating constant.
+4. **Validation and clamping.** Both the seed endpoint's input check (Step 5.1) and the calculator's
+   clamp (Step 2.1) must read `RATING_MIN`/`RATING_MAX` — not restate `100`/`500`. Same for the tail
+   thresholds in R19.
+
+**Verification, per step:** the only numeric literals permitted in ratings code are `0` and `1`.
+```bash
+grep -rnE "\b(270|500|450|150|120|100|24|10|0\.5)\b" \
+  packages/api/src/services/ratings-*.ts \
+  packages/api/src/repositories/ratings-repository.ts \
+  db/migrations/061_player_ratings.sql \
+  | grep -v ratings-constants.ts
+# expect: no matches
+```
+
+**Optional guard, and it fits this repo.** The same `no-restricted-syntax` mechanism ISSUE-44c used to
+ban the `-[--token]` class form can ban numeric literals in `ratings-*.ts`. Worth doing if these files
+are expected to churn; skip it if Phase 0's values are signed off and stable. Decide at Phase 2, not
+before — that is when the shape of the code is known.
+
 ---
 
 ## Phase 1 — Data layer
@@ -90,6 +131,9 @@ No tests — a constants module has no behaviour. Phase 2 tests its *consequence
 - ⚠ **Do NOT add `UNIQUE (player_id, match_id)`** — design §4 explains why: it forces corrections to
   overwrite in place, destroying both the audit trail and R17's mechanism. This is the single most
   likely wrong instinct in this step.
+- ⚠ **Do NOT give `rating` a SQL `DEFAULT`** (§0a trap 1). `DEFAULT 270` is the natural thing to type
+  and it duplicates `SEED_DEFAULT` into a place no test compares. No default in the column; the
+  service supplies it from the constant.
 
 **Red:** a migration test asserting both tables exist with the expected columns after `runMigrations`.
 Follow whatever existing migration specs do; if none exist, Step 1.2's repository tests cover it and
@@ -129,7 +173,7 @@ Composition order matters and must be **explicit**:
 3. **R19** — if the *result* moves the rating toward a bound and the rating is in that tail zone,
    halve it. **Directional only**: at 470 a win is halved, a loss is not; at 130 a loss is halved, a
    win is not
-4. **R18** — clamp to `[100, 500]` last
+4. **R18** — clamp to `[RATING_MIN, RATING_MAX]` last (read the constants; do not restate `100`/`500` — §0a trap 4)
 
 **Red — assert properties, not exact numbers.** This is deliberate: the constants are unsigned-off
 (Phase 0) and exact-value tests would have to be rewritten when they are tuned, which invites someone
@@ -224,7 +268,8 @@ asserts they moved back the other way. Plus: a rating failure does not 500 the s
 ### Step 5.1 — `PUT /player/ratings/seed`
 
 Accepts a self-rating per sport; seeds **both formats** (R5). Skippable — no call means the player
-stays at `SEED_DEFAULT`.
+stays at `SEED_DEFAULT`. ⚠ Validate the input against `RATING_MIN`/`RATING_MAX` from the constants
+module, not literals (§0a trap 4).
 
 ### Step 5.2 — replay on seed (R5 + R17)
 
@@ -276,15 +321,18 @@ opponent's rating is unchanged**; export contains both tables.
 
 ### Step 7.1 — `GET /player/ratings`
 
-Returns the caller's own buckets with a `provisional` flag. ⚠ **Own ratings only** — R1 makes this
-private, so there must be no route that returns another player's rating. Add an explicit test that
-this is not possible.
+Returns the caller's own buckets with a `provisional` flag, **plus `{ min, max, seedDefault }`** so
+the frontend never holds its own copy of a rating constant (§0a trap 3).
+⚠ **Own ratings only** — R1 makes this private, so there must be no route that returns another
+player's rating. Add an explicit test that this is not possible.
 
 ### Step 7.2 — client + panel
 
 `fetchPlayerRatings` in `api/client.ts` (copy the surrounding pattern), and a "Your Rating" panel in
 `pages/Profile.tsx` matching design §5's layout, with `(provisional)` shown.
 
+⚠ **No rating constants in frontend code** (§0a trap 3) — take `min`/`max`/`seedDefault` from the
+Step 7.1 response. Do not add a `@core` alias to `vite.config.ts`/`jest.config.js` to import them.
 ⚠ Use the **`-(--token)`** class form. The `-[--token]` form is banned by lint since ISSUE-44c and
 emits invalid CSS.
 ⚠ Copy convention: no trailing full stop in the panel title.
@@ -316,6 +364,8 @@ strong-with-weak to balance means; an opted-out player is still excluded.
 - [ ] Design doc §4's `dsr-service.ts` path corrected (Step 6.1) and §7's "hooked to score
       confirmation" line updated to *submission*
 - [ ] No `-[--token]` classes introduced (§44c lint guard will fail the commit)
+- [ ] **§0a grep clean** — no rating constant appears outside `ratings-constants.ts`, including in the
+      migration, the tests, and the frontend
 - [ ] Full e2e sweep once before merge (§8) — ratings touch scoring, which `group-stage-singles` and
       the casual specs exercise
 
