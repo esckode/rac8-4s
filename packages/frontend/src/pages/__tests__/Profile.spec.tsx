@@ -62,6 +62,10 @@ function ratingsResponse(
       get: () => undefined,
     },
     json: async () => ({
+      // Wire-format fixture for the GET /player/ratings response (Step 7.1)
+      // — these restate the API's response shape, not a rating constant
+      // (RATINGS_IMPLEMENTATION.md §0a trap 2/Step 10.3). The frontend has
+      // no `@core` alias to import the real constants from.
       ratings,
       min: 100,
       max: 500,
