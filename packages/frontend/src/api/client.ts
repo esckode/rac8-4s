@@ -211,6 +211,20 @@ export async function fetchPlayerRatings(token: string): Promise<PlayerRatingsRe
   return apiFetch<PlayerRatingsResponse>('/player/ratings', { token })
 }
 
+export interface PlayerPartner {
+  playerId: string
+  name: string
+  lastPartneredAt: string
+}
+
+export interface PlayerPartnersResponse {
+  partners: PlayerPartner[]
+}
+
+export async function fetchPlayerPartners(token: string): Promise<PlayerPartnersResponse> {
+  return apiFetch<PlayerPartnersResponse>('/player/partners', { token })
+}
+
 /** Score edits (PATCH) hit the same …/score path, so an offline edit also
  * queues (D7) — same 202 {code:'QUEUED'} contract as submitScore. */
 export async function editScore(

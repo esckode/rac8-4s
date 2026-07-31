@@ -7,7 +7,7 @@
  */
 import React, { useEffect, useState } from 'react'
 import { Modal } from '../components/shared/Modal'
-import { fetchPlayerRatings, PlayerRatingsResponse } from '../api/client'
+import { fetchPlayerRatings, PlayerRatingsResponse, fetchPlayerPartners, PlayerPartnersResponse } from '../api/client'
 
 interface ProfileSettings {
   timezone: string | null
@@ -53,6 +53,7 @@ export const Profile: React.FC = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [ratings, setRatings] = useState<PlayerRatingsResponse | null>(null)
+  const [partners, setPartners] = useState<PlayerPartnersResponse | null>(null)
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token')
@@ -82,6 +83,10 @@ export const Profile: React.FC = () => {
     if (token) {
       fetchPlayerRatings(token)
         .then(data => setRatings(data))
+        .catch(() => {})
+
+      fetchPlayerPartners(token)
+        .then(data => setPartners(data))
         .catch(() => {})
     }
   }, [])
@@ -397,6 +402,31 @@ export const Profile: React.FC = () => {
             className="py-4 text-center text-(--ink-500)"
           >
             <p className="text-sm">You have not yet played any matches</p>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-xl border border-(--border) p-4 bg-(--surface) space-y-3">
+        <h2 className="text-base font-semibold text-(--ink-800)">Recent Partners</h2>
+
+        {partners && partners.partners.length > 0 ? (
+          <div className="space-y-2">
+            {partners.partners.map(partner => (
+              <div
+                key={partner.playerId}
+                data-testid={`partner-${partner.playerId}`}
+                className="flex items-center justify-between py-2 px-2 bg-(--surface-alt) rounded"
+              >
+                <span className="text-sm text-(--ink-700)">{partner.name}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            data-testid="partners-empty-state"
+            className="py-4 text-center text-(--ink-500)"
+          >
+            <p className="text-sm">No doubles partners yet</p>
           </div>
         )}
       </section>
