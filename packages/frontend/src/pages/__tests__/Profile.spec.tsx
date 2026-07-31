@@ -70,13 +70,29 @@ function ratingsResponse(
   }
 }
 
+function partnersResponse(
+  partners: Array<{ playerId: string; name: string; lastPartneredAt: string }> = []
+) {
+  return {
+    ok: true,
+    headers: {
+      get: () => undefined,
+    },
+    json: async () => ({ partners }),
+  }
+}
+
 /** Routes each fetch call by URL so tests don't depend on call order. */
 function mockFetchRouter(
   avail: { slots?: Array<{ weekday: number; dayPart: string }>; updatedAt?: string | null } = {},
   meOverrides: Parameters<typeof meResponse>[0] = {},
-  ratings: Array<{ sport: string; format: string; rating: number; matchesPlayed: number; provisional: boolean }> = []
+  ratings: Array<{ sport: string; format: string; rating: number; matchesPlayed: number; provisional: boolean }> = [],
+  partners: Array<{ playerId: string; name: string; lastPartneredAt: string }> = []
 ) {
   mockFetch.mockImplementation((url: string) => {
+    if (url.includes('/player/partners')) {
+      return Promise.resolve(partnersResponse(partners))
+    }
     if (url.includes('/player/ratings')) {
       return Promise.resolve(ratingsResponse(ratings))
     }
@@ -296,5 +312,30 @@ describe('Profile', () => {
       expect(screen.getByTestId('rating-empty-state')).toBeInTheDocument()
       expect(screen.getByText(/not yet played/i)).toBeInTheDocument()
     })
+  })
+
+  // ── P13 Phase 13 — last-10-partners panel ────────────────────────────────
+
+  it('renders each partner by name', async () => {
+    mockFetchRouter({}, {}, [], [
+      { playerId: 'player_1', name: 'Alex Kim', lastPartneredAt: '2026-07-20T00:00:00.000Z' },
+      { playerId: 'player_2', name: 'Sam Rivera', lastPartneredAt: '2026-07-10T00:00:00.000Z' },
+    ])
+    render(<Profile />)
+    await waitFor(() => {
+      expect(screen.getByTestId('partner-player_1')).toBeInTheDocument()
+      expect(screen.getByText('Alex Kim')).toBeInTheDocument()
+      expect(screen.getByTestId('partner-player_2')).toBeInTheDocument()
+      expect(screen.getByText('Sam Rivera')).toBeInTheDocument()
+    })
+  })
+
+  it('renders an empty state for a player who has never played doubles', async () => {
+    mockFetchRouter({}, {}, [], [])
+    render(<Profile />)
+    await waitFor(() => {
+      expect(screen.getByTestId('partners-empty-state')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId(/^partner-/)).not.toBeInTheDocument()
   })
 })
