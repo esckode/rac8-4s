@@ -314,33 +314,35 @@ winner. Cross-referenced in ISSUE-46.
 
 ---
 
-## Phase 5 — Self-rating seed and replay
+## Phase 5 — Self-rating seed *(replay removed, R21)*
 
-**Model: Sonnet.** Ordering plus reuse of Phase 3's primitive.
+**Model: Sonnet.**
 
-### Step 5.1 — `PUT /player/ratings/seed`
+⚠ **Rewritten 2026-07-30 after R21.** The original Phase 5 asked for the self-rating at the first
+*scored* match, which forced a "replay" of already-played matches onto the new baseline. R21 moves the
+question to **tournament registration — before any score exists** — so there is nothing to replay.
+Steps 5.1/5.2 were implemented under the old design (commits `146d972`, `9ac5813`) and **the replay
+must now be removed**.
 
-Accepts a self-rating per sport; seeds **both formats** (R5). Skippable — no call means the player
-stays at `SEED_DEFAULT`. ⚠ Validate the input against `RATING_MIN`/`RATING_MAX` from the constants
-module, not literals (§0a trap 4).
+### Step 5.1 — `PUT /player/ratings/seed`, gated
 
-### Step 5.2 — replay on seed (R5 + R17)
+Accepts a self-rating for one sport; seeds **both formats**. Validate against `RATING_MIN`/`RATING_MAX`
+imported from the constants (§0a).
 
-Answering the prompt sets the new baseline and **replays that player's matches so far** from it,
-reusing Phase 3's reverse-and-reapply primitive per match in `created_at` order.
+**New gate:** reject when the bucket already has `matches_played > 0` — seeding is only legal before
+the first scored match. This is what makes replay unnecessary, and it also kills the double-seed
+double-count bug for free.
 
-Bounded by construction — a player being seeded has almost no history, which is *why* they are being
-seeded. **No cascade**: opponents keep the deltas they earned against the default.
+### Step 5.2 — ~~replay on seed~~ **REMOVED**
 
-**Red:** a player scored once at the default, then seeds 350 → final rating equals "started at 350 and
-played that match", not 350 flat and not default+delta. And: never seeding leaves them at 270.
+Delete `seedAndReplayBucket` and its replay tests. Seeding now simply sets the baseline, because by
+construction there is no history to reconcile.
 
-### Step 5.3 — prompt UI
+### Step 5.3 — prompt UI (deferred to the frontend batch)
 
-Fires at first *scored* match (R5, as amended). ⚠ In casual, **someone else may have scored it**, so
-the prompt cannot be synchronous with submission — surface it on next app open.
-
----
+Fires at **tournament registration**, not first scored match. If the player was auto-registered by a
+group launch and a score already landed, the prompt is **not offered** — they keep `SEED_DEFAULT` and
+calibrate through the provisional period (R21).
 
 ## Phase 6 — DSR
 
