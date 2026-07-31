@@ -677,6 +677,12 @@ so there is one override implementation rather than two. Note A's handler curren
 this needs a match-selection step or the button belongs on the match, not the row. **Resolve that before
 coding; it may be the reason the stub was never finished.**
 
+⚠ **Ratings interaction, added 2026-07-30.** Option 2 below has a consequence outside this issue: the
+skill-ratings hook (`RATINGS_IMPLEMENTATION.md` Phase 4) applies a rating on *submission* and only
+*corrects* on edit. An organizer PATCHing a never-played match would therefore record a result that
+never moves anyone's rating, silently. Choosing option 2 means extending that hook in the same change;
+option 1 avoids it entirely.
+
 **B — decide the pending-match behaviour.** Two options that ship different products:
 1. **Gate the button** — add a status condition to `canOverride` so Override only appears where a score
    exists. Smallest change; leaves organizers unable to record a result for a match players never

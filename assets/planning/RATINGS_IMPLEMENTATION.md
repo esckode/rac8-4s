@@ -303,6 +303,15 @@ asserts they moved back the other way. Plus: a rating failure does not 500 the s
 
 **Scope note:** knockout is out — design §6 records it as moot while play is casual round-robin.
 
+⚠ **Known gap, found during Phase 4 (2026-07-30): a match first scored via PATCH gets no rating.**
+Phase 4 wires *apply* into submission (POST) only, so `correctRatingForMatch` is skipped when
+`match.winner_id` was never set — there is nothing to reverse. Harmless today, because POST is the
+only way to score a pending match. **But it becomes live if [ISSUE-46](./UAT_ISSUES.md#issue-46) is
+fixed via its "route on role" option**, which would have an organizer PATCH a never-played match —
+and that result would then never move a rating, silently. Whoever picks up ISSUE-46 must either take
+the "gate the button" option or extend this hook to apply (not correct) when there is no prior
+winner. Cross-referenced in ISSUE-46.
+
 ---
 
 ## Phase 5 — Self-rating seed and replay
