@@ -3,7 +3,8 @@
 > Implements [`RATINGS_DESIGN.md`](./RATINGS_DESIGN.md) (grilled ×2, R1–R20).
 > **Read the design first.** This plan assumes its decisions and does not re-argue them.
 
-**Date:** 2026-07-30 · **Status:** 📋 Plan — not started
+**Date:** 2026-07-30 · **Status:** 📋 Plan — not started. **Phase 0 signed off 2026-07-30; Phase 1 is
+ready to dispatch.**
 
 Every step is **TDD-first** per CLAUDE.md §4: write the test, watch it fail *and read why*, commit the
 failing test, then implement and commit separately (§11). Every step names the model it is sized for.
@@ -42,9 +43,9 @@ and report**, not choose. Any Haiku step that comes back with tests changed to f
 
 ---
 
-## Phase 0 — Settle the constants 🚧 blocks Phase 2
+## Phase 0 — Constants ✅ signed off 2026-07-30
 
-**Model: human decision, or Sonnet with owner sign-off.**
+**Model: human decision — done. Phase 2 is unblocked.**
 
 §6 of the design says the constants must be *derived, not guessed*, and that there is no real data to
 derive them from (all 290 doubles matches are synthetic). That is a genuine blocker for an exact
@@ -54,21 +55,45 @@ leaves provisional. So the number can be imperfect for a while without affecting
 **Approach:** put every constant in one file, `packages/api/src/services/ratings-constants.ts`, with
 the reasoning in comments. Tuning later is then a one-file change with no logic touched.
 
-Starting values to sign off (all are *proposals*, not decided):
+**All values signed off by the owner, 2026-07-30.** The four that were proposals are now decided; the
+rest were already fixed by the design. Recorded with their consequences so a future tune starts from
+the reasoning rather than re-deriving it.
 
 | Constant | Proposed | Reasoning |
 |---|---|---|
-| `LOGISTIC_DIVISOR` | **120** | ⚠ **Not Elo's 400.** Elo's 400 encodes "400 points ≈ 10:1 odds" on a scale where 100 points is a modest edge. Here 100 points = a full NTRP level, which is close to decisive. A divisor near 120 makes a one-level gap ≈ 85% expected win, which matches how racket players actually experience a 3.0 vs 4.0 match |
-| `K_PROVISIONAL` | **24** | R13 wants a wrong seed corrected "in a few sessions, not a season". At ~5 matches a session, K=24 moves a 100-point error inside ~2–3 sessions |
-| `K_SETTLED` | **10** | Roughly Elo's club value, scaled down for the coarser band |
-| `PROVISIONAL_MATCHES` | **10** | Bucket leaves provisional here. Load-bearing beyond display — R20 gates pairing on it |
+| `LOGISTIC_DIVISOR` | **120** ✅ | ⚠ **Not Elo's 400.** Elo's 400 encodes "400 points ≈ 10:1 odds" on a scale where 100 points is a modest edge. Here 100 points = a full NTRP level, which is close to decisive. A divisor near 120 makes a one-level gap ≈ 85% expected win, which matches how racket players actually experience a 3.0 vs 4.0 match |
+| `K_PROVISIONAL` | **24** ✅ | R13 wants a wrong seed corrected "in a few sessions, not a season". At ~5 matches a session, K=24 moves a 100-point error inside ~2–3 sessions |
+| `K_SETTLED` | **10** ✅ | Roughly Elo's club value, scaled down for the coarser band |
+| `PROVISIONAL_MATCHES` | **10** ✅ | Bucket leaves provisional here. Load-bearing beyond display — R20 gates pairing on it |
 | `SEED_DEFAULT` | **270** | R4, already decided |
 | `RATING_MIN` / `RATING_MAX` | **100 / 500** | R18, already decided |
 | `TAIL_LOW` / `TAIL_HIGH` | **150 / 450** | R19, already decided |
 | `TAIL_FACTOR` | **0.5** | R19, already decided ("double the results to cross") |
 
-**Deliverable:** the constants file with comments, and owner sign-off on the four proposed values.
-No tests — a constants module has no behaviour. Phase 2 tests its *consequences*.
+**What these values produce** — the sanity check the sign-off was made against, kept so Phase 2 can
+assert against intent rather than arithmetic:
+
+| Rating gap | Stronger player's win probability |
+|---|---|
+| 0 (equal) | 50% |
+| 50 (half a level) | 72% |
+| 100 (one NTRP level) | **87%** |
+| 200 (two levels) | 98% |
+
+| Result | Provisional (K=24) | Settled (K=10) |
+|---|---|---|
+| Beat someone 100 **above** you | **+20.9** | +8.7 |
+| Beat an equal | +12.0 | +5.0 |
+| Beat someone 100 **below** you | +3.1 | +1.3 |
+| Lose to someone 100 above | −3.1 | −1.3 |
+| Lose to someone 100 below | −20.9 | −8.7 |
+
+R9 is visible here: beating someone a level up is worth **~7×** beating someone a level down. And a
+player seeded 100 too low gains ~21/match against stronger opponents, correcting a bad seed in ~5
+matches — R13's "a few sessions, not a season".
+
+**Deliverable:** the constants file with comments. No tests — a constants module has no behaviour.
+Phase 2 tests its *consequences*.
 
 ### 0a. No hard-coded constants — a hard rule, enforced 🚩
 
@@ -108,8 +133,8 @@ grep -rnE "\b(270|500|450|150|120|100|24|10|0\.5)\b" \
 
 **Optional guard, and it fits this repo.** The same `no-restricted-syntax` mechanism ISSUE-44c used to
 ban the `-[--token]` class form can ban numeric literals in `ratings-*.ts`. Worth doing if these files
-are expected to churn; skip it if Phase 0's values are signed off and stable. Decide at Phase 2, not
-before — that is when the shape of the code is known.
+are expected to churn. Phase 0's values are now signed off and stable, so this is likely unnecessary —
+the §0a grep covers it. Decide at Phase 2, not before; that is when the shape of the code is known.
 
 ---
 
@@ -169,7 +194,14 @@ computeDelta(playerRating, opponentRating, won, matchesPlayed): number
 ```
 Composition order matters and must be **explicit**:
 1. **R9** — expected score from the rating gap via `LOGISTIC_DIVISOR`
-2. **R13** — pick `K_PROVISIONAL` or `K_SETTLED` from `matchesPlayed`
+2. **R13** — **decay** K from `K_PROVISIONAL` to `K_SETTLED` as a *linear ramp*:
+   ```
+   K(n) = K_SETTLED + (K_PROVISIONAL − K_SETTLED) × max(0, 1 − n / PROVISIONAL_MATCHES)
+   n=0 → 24    n=5 → 17    n=10 → 10    n>10 → 10
+   ```
+   ⚠ **Not a hard switch at `PROVISIONAL_MATCHES`.** R13 says the step *"decays with matches played"*,
+   and a switch would jolt the rating — match 10 moving 24 points and match 11 moving 10. The ramp
+   needs no extra constant
 3. **R19** — if the *result* moves the rating toward a bound and the rating is in that tail zone,
    halve it. **Directional only**: at 470 a win is halved, a loss is not; at 130 a loss is halved, a
    win is not
@@ -184,6 +216,9 @@ to "fix" the test instead of the code.
   - at 130 a loss drops ≤ half what it drops at 300; **a win at 130 is not halved** (R19)
   - no input produces a result outside `[100, 500]` (R18) — property-test across the range
   - a win never decreases a rating and a loss never increases it
+  - **K decreases monotonically** with `matchesPlayed` and is **continuous** — no jump at
+    `PROVISIONAL_MATCHES` (this is the guard against someone re-implementing the hard switch)
+  - K never falls below `K_SETTLED`, however many matches are played
 
 **Coverage:** this module is pure and fully reachable; expect ~100%. It is also where the
 `coverageThreshold` in `packages/api/jest.config.js` may be ratcheted afterwards — run
