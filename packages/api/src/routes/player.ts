@@ -6,7 +6,7 @@ import { buildCoachToolContext } from '../assistant/tools'
 import { buildPlayerSnapshot } from '../assistant/player-snapshot'
 import { RatingsRepository } from '../repositories/ratings-repository'
 import { seedRatingForSport } from '../services/ratings-service'
-import { RATING_MIN, RATING_MAX } from '../services/ratings-constants'
+import { RATING_MIN, RATING_MAX, SEED_DEFAULT, PROVISIONAL_MATCHES } from '../services/ratings-constants'
 import { getLogger } from '../logger'
 
 const log = getLogger('player')
@@ -154,6 +154,35 @@ export default function playerRouter(deps: AppDependencies) {
       log.info('read_receipt.preferences.updated', { playerId: payload.playerId, shareReadReceipts: req.body.shareReadReceipts })
 
       res.json({ shareReadReceipts: updated.share_read_receipts })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /player/ratings - read the caller's own skill ratings
+  // Returns all buckets (sport/format) for the authenticated player, each with
+  // a provisional flag (true if matchesPlayed < PROVISIONAL_MATCHES). Never
+  // returns another player's ratings — this is a read-only player surface.
+  // Also returns min/max/seedDefault so the frontend never holds its own copy
+  // of a rating constant (§0a).
+  router.get('/ratings', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePlayerId(req.headers.authorization)
+
+      const ratings = await ratingsRepo.getAllFor(playerId)
+
+      res.json({
+        ratings: ratings.map(r => ({
+          sport: r.sport,
+          format: r.format,
+          rating: r.rating,
+          matchesPlayed: r.matchesPlayed,
+          provisional: r.matchesPlayed < PROVISIONAL_MATCHES,
+        })),
+        min: RATING_MIN,
+        max: RATING_MAX,
+        seedDefault: SEED_DEFAULT,
+      })
     } catch (err) {
       next(err)
     }
