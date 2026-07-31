@@ -3,6 +3,8 @@ import { randomInt } from 'crypto'
 import { NotFoundError, DeadlockError, CheckConstraintError, UniqueConstraintError, ConstraintViolationError } from './db/errors'
 import { getLogger } from './logger'
 import { COUNTS_FOR_CAPACITY, PLAYS_IN_BRACKET } from './registration-status'
+import { RatingsRepository } from './repositories/ratings-repository'
+import { PROVISIONAL_MATCHES } from './services/ratings-constants'
 
 const log = getLogger('db')
 
@@ -1092,9 +1094,59 @@ export class GroupRepository {
         const leftovers = playerIds.filter(p => !teamed.has(p))
         if (pairUnpaired) {
           const consenting = leftovers.filter(p => consentOf.get(p) !== false)
-          const shuffled = [...consenting].sort(() => Math.random() - 0.5)
-          for (let i = 0; i < shuffled.length - 1; i += 2) {
-            await createTeam(shuffled[i], shuffled[i + 1])
+
+          const pairRandomly = (ids: string[]): [string, string][] => {
+            const shuffled = [...ids].sort(() => Math.random() - 0.5)
+            const randomPairs: [string, string][] = []
+            for (let i = 0; i < shuffled.length - 1; i += 2) {
+              randomPairs.push([shuffled[i], shuffled[i + 1]])
+            }
+            return randomPairs
+          }
+
+          // R20: balance team means on settled DOUBLES ratings — but only
+          // for players whose doubles bucket is out of provisional. Anyone
+          // still provisional, including a player with no rating row at
+          // all, pairs exactly as before (plain random shuffle). This is a
+          // pure planning pass (no writes) so a lookup failure partway
+          // through never leaves a half-paired roster: never fail group
+          // creation over a ratings problem, fall back to pairing every
+          // consenting leftover exactly as today.
+          let pairs: [string, string][]
+          try {
+            const tournamentRow = await client.query(
+              `SELECT sport FROM public.tournaments WHERE id = $1`,
+              [tournamentId]
+            )
+            const sport = tournamentRow.rows[0]?.sport
+            const ratingsRepo = new RatingsRepository(client)
+
+            const settled: string[] = []
+            const provisional: string[] = []
+            const ratingOf = new Map<string, number>()
+            for (const p of consenting) {
+              const rating = await ratingsRepo.getFor(p, sport, 'doubles')
+              if (rating && rating.matchesPlayed >= PROVISIONAL_MATCHES) {
+                settled.push(p)
+                ratingOf.set(p, rating.rating)
+              } else {
+                provisional.push(p)
+              }
+            }
+
+            settled.sort((a, b) => ratingOf.get(a)! - ratingOf.get(b)!)
+            pairs = []
+            for (let lo = 0, hi = settled.length - 1; lo < hi; lo++, hi--) {
+              pairs.push([settled[lo], settled[hi]])
+            }
+            pairs.push(...pairRandomly(provisional))
+          } catch (err) {
+            log.warn('ratings.pairing.fallback', { tournamentId, error: (err as Error).message })
+            pairs = pairRandomly(consenting)
+          }
+
+          for (const [p1, p2] of pairs) {
+            await createTeam(p1, p2)
           }
         }
         // Everyone still unteamed here — opted out, the odd one out among
