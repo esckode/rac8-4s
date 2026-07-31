@@ -57,7 +57,7 @@ describe('ratings-service', () => {
         player2Id: p2,
         winnerId: p1,
       }
-      await applyRatingForMatch(repo, matchId, SPORT, participants)
+      await applyRatingForMatch(pool, matchId, SPORT, participants)
 
       const r1 = await repo.getFor(p1, SPORT, 'singles')
       const r2 = await repo.getFor(p2, SPORT, 'singles')
@@ -105,7 +105,7 @@ describe('ratings-service', () => {
         team2: [t2p1, t2p2],
         winningTeam: 'team1',
       }
-      await applyRatingForMatch(repo, matchId, SPORT, participants)
+      await applyRatingForMatch(pool, matchId, SPORT, participants)
 
       const r1a = await repo.getFor(t1p1, SPORT, 'doubles')
       const r1b = await repo.getFor(t1p2, SPORT, 'doubles')
@@ -143,7 +143,7 @@ describe('ratings-service', () => {
         player2Id: p2,
         winnerId,
       }
-      await applyRatingForMatch(repo, matchId, SPORT, participants)
+      await applyRatingForMatch(pool, matchId, SPORT, participants)
     }
 
     it('writes no history row and does not change ratings when the score is unchanged (no-op short-circuit)', async () => {
@@ -158,7 +158,7 @@ describe('ratings-service', () => {
       const before2 = await repo.getFor(p2, SPORT, 'singles')
 
       const unchanged: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p1 }
-      await correctRatingForMatch(repo, matchId, SPORT, unchanged, unchanged)
+      await correctRatingForMatch(pool, matchId, SPORT, unchanged, unchanged)
 
       const after1 = await repo.getFor(p1, SPORT, 'singles')
       const after2 = await repo.getFor(p2, SPORT, 'singles')
@@ -187,7 +187,7 @@ describe('ratings-service', () => {
 
       const previous: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p1 }
       const flipped: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p2 }
-      await correctRatingForMatch(repo, matchId, SPORT, previous, flipped)
+      await correctRatingForMatch(pool, matchId, SPORT, previous, flipped)
 
       const afterCorrect1 = await repo.getFor(p1, SPORT, 'singles')
       const afterCorrect2 = await repo.getFor(p2, SPORT, 'singles')
@@ -213,7 +213,7 @@ describe('ratings-service', () => {
 
       const previous: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p1 }
       const flipped: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p2 }
-      await correctRatingForMatch(repo, matchId, SPORT, previous, flipped)
+      await correctRatingForMatch(pool, matchId, SPORT, previous, flipped)
 
       const afterCorrect = await repo.getFor(p1, SPORT, 'singles')
       expect(afterCorrect?.matchesPlayed).toBe(1)
@@ -229,7 +229,7 @@ describe('ratings-service', () => {
 
       const previous: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p1 }
       const flipped: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p2 }
-      await correctRatingForMatch(repo, matchId, SPORT, previous, flipped)
+      await correctRatingForMatch(pool, matchId, SPORT, previous, flipped)
 
       const h1 = await repo.findHistoryFor(p1, SPORT, 'singles')
       expect(h1).toHaveLength(2)
@@ -252,7 +252,7 @@ describe('ratings-service', () => {
 
       const previous: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p1 }
       const flipped: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p2 }
-      await correctRatingForMatch(repo, matchId, SPORT, previous, flipped)
+      await correctRatingForMatch(pool, matchId, SPORT, previous, flipped)
 
       const afterFirst1 = await repo.getFor(p1, SPORT, 'singles')
       const afterFirst2 = await repo.getFor(p2, SPORT, 'singles')
@@ -261,7 +261,7 @@ describe('ratings-service', () => {
       // A replayed correction (e.g. the service worker's sync-queue retry on
       // reconnect): the "previous" state now really is the flipped winner, and
       // the requested "current" state is the same flipped winner — a no-op.
-      await correctRatingForMatch(repo, matchId, SPORT, flipped, flipped)
+      await correctRatingForMatch(pool, matchId, SPORT, flipped, flipped)
 
       const afterSecond1 = await repo.getFor(p1, SPORT, 'singles')
       const afterSecond2 = await repo.getFor(p2, SPORT, 'singles')
@@ -291,7 +291,7 @@ describe('ratings-service', () => {
 
       const previous: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p1 }
       const flipped: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p2 }
-      await correctRatingForMatch(repo, matchId1, SPORT, previous, flipped)
+      await correctRatingForMatch(pool, matchId1, SPORT, previous, flipped)
 
       const p3RatingAfter = await repo.getFor(p3, SPORT, 'singles')
       const p1HistoryForMatch2After = await repo.findLatestHistoryFor(p1, matchId2)
