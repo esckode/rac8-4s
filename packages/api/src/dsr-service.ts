@@ -10,6 +10,7 @@ import { PlayerSettingsRepository, type PlayerSettings } from './repositories/pl
 import { StandingsSnapshotRepository } from './repositories/standings-snapshot-repository'
 import { AvailabilityRepository, type AvailabilitySlot } from './repositories/availability-repository'
 import { PlayerMemoryRepository, type PlayerMemoryRow } from './repositories/player-memory-repository'
+import { RatingsRepository, type PlayerRating, type RatingHistoryEntry } from './repositories/ratings-repository'
 
 const log = getLogger('dsr-service')
 
@@ -27,6 +28,8 @@ export interface PlayerExport {
   coachMessageCount: number
   memories: PlayerMemoryRow[]
   rememberCardCount: number
+  playerRatings: PlayerRating[]
+  playerRatingHistory: RatingHistoryEntry[]
 }
 
 export type EraseResult = { status: 'erased'; playerId: string } | { status: 'not_found' }
@@ -43,6 +46,7 @@ export class DataSubjectRequestService {
   private standingsSnapshotRepo: StandingsSnapshotRepository
   private availabilityRepo: AvailabilityRepository
   private memoryRepo: PlayerMemoryRepository
+  private ratingsRepo: RatingsRepository
 
   constructor(private pool: Pool) {
     this.playerRepo = new PlayerRepository(pool as any)
@@ -55,6 +59,7 @@ export class DataSubjectRequestService {
     this.standingsSnapshotRepo = new StandingsSnapshotRepository(pool as any)
     this.availabilityRepo = new AvailabilityRepository(pool as any)
     this.memoryRepo = new PlayerMemoryRepository(pool as any)
+    this.ratingsRepo = new RatingsRepository(pool as any)
   }
 
   /**
@@ -82,6 +87,7 @@ export class DataSubjectRequestService {
     await this.playerSettingsRepo.deleteFor(playerId)
     await this.standingsSnapshotRepo.deleteFor(playerId)
     await this.availabilityRepo.deleteFor(playerId)
+    await this.ratingsRepo.deleteFor(playerId)   // current + history
 
     // 1:1 Coach (S8, design §5.2): the ids-only args rule breaks deliberately
     // for propose_remember (args carry the actual text) — scrub any remaining
@@ -160,6 +166,24 @@ export class DataSubjectRequestService {
     )
     const rememberCardCount = Number(rememberCardResult.rows[0].c)
 
+    const playerRatings = await this.ratingsRepo.getAllFor(playerId)
+    const playerRatingHistoryResult = await this.pool.query(
+      `SELECT player_id, sport, format, delta, rating_after, match_id, created_at
+       FROM public.player_rating_history
+       WHERE player_id = $1
+       ORDER BY created_at ASC`,
+      [playerId]
+    )
+    const playerRatingHistory = playerRatingHistoryResult.rows.map((row) => ({
+      playerId: row.player_id,
+      sport: row.sport,
+      format: row.format,
+      delta: parseFloat(row.delta),
+      ratingAfter: parseFloat(row.rating_after),
+      matchId: row.match_id,
+      createdAt: row.created_at,
+    }))
+
     const data: PlayerExport = {
       playerId,
       email: player.email,
@@ -173,6 +197,8 @@ export class DataSubjectRequestService {
       memories,
       rememberCardCount,
       availability,
+      playerRatings,
+      playerRatingHistory,
     }
 
     log.info('dsr.exported', { playerId })
