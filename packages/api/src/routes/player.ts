@@ -4,6 +4,9 @@ import { PlayerRepository } from '../db'
 import { requirePlayerSessionAuth, resolvePlayerIdentity } from '../auth'
 import { buildCoachToolContext } from '../assistant/tools'
 import { buildPlayerSnapshot } from '../assistant/player-snapshot'
+import { RatingsRepository } from '../repositories/ratings-repository'
+import { seedRatingForSport } from '../services/ratings-service'
+import { RATING_MIN, RATING_MAX } from '../services/ratings-constants'
 import { getLogger } from '../logger'
 
 const log = getLogger('player')
@@ -11,6 +14,7 @@ const log = getLogger('player')
 export default function playerRouter(deps: AppDependencies) {
   const router = Router()
   const playerRepo = new PlayerRepository(deps.db)
+  const ratingsRepo = new RatingsRepository(deps.db)
 
   // Resolve the acting player's id from either a magic-link player session or a
   // registered player's account JWT (role 'player', carries playerId). Used by
@@ -150,6 +154,40 @@ export default function playerRouter(deps: AppDependencies) {
       log.info('read_receipt.preferences.updated', { playerId: payload.playerId, shareReadReceipts: req.body.shareReadReceipts })
 
       res.json({ shareReadReceipts: updated.share_read_receipts })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // PUT /player/ratings/seed - accept a player's self-rating for one sport,
+  // seeding BOTH formats (singles + doubles) from the same value and
+  // replaying the player's existing match history for each bucket from the
+  // new baseline (P13 Phase 5). Skippable by design — a player who never
+  // calls this simply stays at SEED_DEFAULT.
+  router.put('/ratings/seed', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePlayerId(req.headers.authorization)
+
+      const { sport, rating } = req.body
+
+      if (typeof sport !== 'string' || !sport.trim()) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'sport is required' })
+      }
+
+      if (typeof rating !== 'number' || rating < RATING_MIN || rating > RATING_MAX) {
+        return res.status(400).json({
+          code: 'VALIDATION_ERROR',
+          message: `rating must be a number between ${RATING_MIN} and ${RATING_MAX}`,
+        })
+      }
+
+      const seeded = await seedRatingForSport(ratingsRepo, playerId, sport, rating)
+
+      res.json({
+        sport,
+        singles: { rating: seeded.singles.rating, matchesPlayed: seeded.singles.matchesPlayed },
+        doubles: { rating: seeded.doubles.rating, matchesPlayed: seeded.doubles.matchesPlayed },
+      })
     } catch (err) {
       next(err)
     }

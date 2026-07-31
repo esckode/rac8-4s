@@ -12,7 +12,7 @@
  * not increment matches_played — that match was already counted when it was
  * first applied.
  */
-import type { RatingsRepository } from '../repositories/ratings-repository'
+import type { RatingsRepository, PlayerRating } from '../repositories/ratings-repository'
 import { computeDelta, computeTeamDelta, applyDelta } from './ratings-calculator'
 import { SEED_DEFAULT } from './ratings-constants'
 import { getLogger } from '../logger'
@@ -273,4 +273,57 @@ export async function correctRatingForMatch(
   } else {
     await correctDoublesRating(repo, matchId, sport, current)
   }
+}
+
+async function seedAndReplayBucket(
+  repo: RatingsRepository,
+  playerId: string,
+  sport: string,
+  format: 'singles' | 'doubles',
+  seedValue: number
+): Promise<PlayerRating> {
+  const existing = await repo.getFor(playerId, sport, format)
+  const matchesPlayed = existing ? existing.matchesPlayed : 0
+
+  const history = await repo.findHistoryFor(playerId, sport, format)
+
+  let running = seedValue
+  for (const entry of history) {
+    running = applyDelta(running, entry.delta)
+    await repo.appendHistory(playerId, sport, format, entry.delta, running, entry.matchId)
+  }
+
+  await repo.upsert(playerId, sport, format, running, matchesPlayed)
+
+  return (await repo.getFor(playerId, sport, format))!
+}
+
+/**
+ * Step 5.2 — set a new self-rating seed for a sport and replay this
+ * player's existing history for BOTH formats from the new baseline.
+ *
+ * "Replay" is event-log replay: each recorded delta is re-folded onto the
+ * new running rating in `created_at` order (the outcome of each match
+ * doesn't change, only what it's added on top of does), and a fresh
+ * history row is appended per replayed match so a later correction — which
+ * reverses only the LATEST row for a match (R17) — still reverses the
+ * right amount.
+ *
+ * No cascade — only this player's (sport, format) buckets are touched.
+ * Opponents keep the deltas they already earned; they are never read or
+ * written here. matches_played is carried forward unchanged: this replay
+ * doesn't add or remove matches, only re-bases where they started from.
+ */
+export async function seedRatingForSport(
+  repo: RatingsRepository,
+  playerId: string,
+  sport: string,
+  seedValue: number
+): Promise<{ singles: PlayerRating; doubles: PlayerRating }> {
+  const singles = await seedAndReplayBucket(repo, playerId, sport, 'singles', seedValue)
+  const doubles = await seedAndReplayBucket(repo, playerId, sport, 'doubles', seedValue)
+
+  log.info('rating.seeded', { playerId, sport })
+
+  return { singles, doubles }
 }
