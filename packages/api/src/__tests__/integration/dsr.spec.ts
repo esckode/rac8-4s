@@ -21,6 +21,7 @@ import { getTestPool, beginTransaction, rollbackTransaction } from '../helpers/d
 import { createTestApp, JwtConfig } from '../helpers/app'
 import { PlayerFactory, OrganizerFactory } from '../factories'
 import { DataSubjectRequestService } from '../../dsr-service'
+import { RatingsRepository } from '../../repositories/ratings-repository'
 
 function uid(): string {
   return crypto.randomUUID().slice(0, 8)
@@ -375,6 +376,91 @@ describe('G5.1 DSR orchestration', () => {
         .send({ email: 'x@x.com', type: 'erase' })
 
       expect(res.status).toBe(401)
+    })
+  })
+
+  // ─── 10. erase: deletes skill ratings ────────────────────────────────────
+
+  describe('10. erase deletes skill ratings', () => {
+    it('removes all rating rows for the erased player from both tables', async () => {
+      const player = await PlayerFactory.create(pool)
+      const ratingsRepo = new RatingsRepository(pool)
+
+      // Create ratings for the player
+      await ratingsRepo.upsert(player.id, 'tennis', 'doubles', 350, 5)
+      await ratingsRepo.appendHistory(player.id, 'tennis', 'doubles', 25, 375, null)
+
+      // Verify ratings exist before erase
+      const ratingsBefore = await ratingsRepo.getAllFor(player.id)
+      expect(ratingsBefore).toHaveLength(1)
+      expect(ratingsBefore[0].rating).toBe(350)
+
+      // Erase the player
+      const result = await svc.erase(player.email)
+      expect(result.status).toBe('erased')
+
+      // Verify ratings deleted
+      const ratingsAfter = await ratingsRepo.getAllFor(player.id)
+      expect(ratingsAfter).toHaveLength(0)
+
+      // Verify history deleted
+      const historyAfter = await ratingsRepo.findHistoryFor(player.id, 'tennis', 'doubles')
+      expect(historyAfter).toHaveLength(0)
+    })
+  })
+
+  // ─── 11. erase: opponent's rating unchanged ──────────────────────────────
+
+  describe('11. opponent rating unchanged after erase', () => {
+    it("does not modify an opponent's rating when erasing another player", async () => {
+      const player = await PlayerFactory.create(pool)
+      const opponent = await PlayerFactory.create(pool)
+      const ratingsRepo = new RatingsRepository(pool)
+
+      // Create ratings for both players
+      await ratingsRepo.upsert(player.id, 'tennis', 'singles', 300, 3)
+      await ratingsRepo.upsert(opponent.id, 'tennis', 'singles', 350, 7)
+
+      // Record opponent's rating before erase
+      const opponentBefore = await ratingsRepo.getFor(opponent.id, 'tennis', 'singles')
+      expect(opponentBefore).toBeDefined()
+      const opponentRatingBefore = opponentBefore!.rating
+
+      // Erase the player
+      const result = await svc.erase(player.email)
+      expect(result.status).toBe('erased')
+
+      // Verify opponent's rating unchanged
+      const opponentAfter = await ratingsRepo.getFor(opponent.id, 'tennis', 'singles')
+      expect(opponentAfter).toBeDefined()
+      expect(opponentAfter!.rating).toBe(opponentRatingBefore)
+      expect(opponentAfter!.matchesPlayed).toBe(7)
+    })
+  })
+
+  // ─── 12. export includes skill ratings ───────────────────────────────────
+
+  describe('12. export includes skill ratings', () => {
+    it('includes player_ratings and player_rating_history in export', async () => {
+      const player = await PlayerFactory.create(pool)
+      const ratingsRepo = new RatingsRepository(pool)
+
+      // Create ratings for the player
+      await ratingsRepo.upsert(player.id, 'tennis', 'doubles', 400, 12)
+      await ratingsRepo.appendHistory(player.id, 'tennis', 'doubles', 30, 420, 'match-1')
+      await ratingsRepo.appendHistory(player.id, 'tennis', 'doubles', -20, 400, 'match-2')
+
+      // Export the player
+      const result = await svc.export(player.email)
+      expect(result.status).toBe('exported')
+      if (result.status !== 'exported') return
+
+      // Verify export contains rating fields
+      expect(result.data).toHaveProperty('playerRatings')
+      expect(result.data).toHaveProperty('playerRatingHistory')
+      expect(result.data.playerRatings).toHaveLength(1)
+      expect(result.data.playerRatings[0].rating).toBe(400)
+      expect(result.data.playerRatingHistory).toHaveLength(2)
     })
   })
 })
