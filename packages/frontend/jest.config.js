@@ -11,31 +11,32 @@ module.exports = {
     '!src/**/__tests__/**',
   ],
   coverageReporters: ['text-summary', 'lcov'],
-  // Floors: measured actuals 2026-07-22 (babel provider). Raise-only — CLAUDE.md §13.
-  // `global` lowered from 80 (it was never enforced — see CLAUDE.md §13); actual was
-  // 81.71 stmts / 71.16 branches / 74.52 funcs / 83.4 lines. Note these are the
-  // global-pool numbers, which exclude every file matched by the two keys below —
-  // that pool is why they differ from the "All files" row in the coverage table.
+  // Floors: measured actuals, last raised 2026-07-31 (P13 ratings work, babel
+  // provider) via scripts/ratchet-coverage.mjs. Raise-only — CLAUDE.md §13. Note
+  // these are the global-pool numbers, which exclude every file matched by the two
+  // keys below — that pool is why they differ from the "All files" row in the
+  // coverage table.
   //
   // The two glob keys are applied by Jest PER MATCHING FILE, not to the group, so
   // these are the worst file in each set. 100 means every file in the set is fully
   // covered today and a new partially-covered file will fail the gate — that is
   // intentional for PWA/service-worker code, which is hard to debug in the field.
   //
-  // branches is backed off one further point (71 -> 70): the measured 71.16 left
-  // 0.16 of headroom, which gates nothing but ordinary churn (§13's lucky-run
-  // failure mode). The other three keep their measured floors.
+  // sw-lib branches is 93 rather than 100: sync-queue.ts has a branch covered
+  // non-deterministically (observed 93.75 and 100 across repeat runs of an
+  // unchanged tree — CLAUDE.md §13). 93 is the observed minimum; that flakiness is
+  // a test defect, not a tuning problem — fix it and this can go back to 100.
+  //
+  // ⚠ The ratchet script regenerates the whole coverageThreshold block below from
+  // Jest's own numbers — any comment placed *inside* it will not survive the next
+  // --write. Keep explanations here, above the block, instead.
   coverageThreshold: {
     global: {
-      branches: 70,
+      branches: 71,
       functions: 74,
-      lines: 83,
-      statements: 81,
+      lines: 84,
+      statements: 82,
     },
-    // branches is 93 rather than the 100 two of three runs report: sync-queue.ts has
-    // a branch that is covered non-deterministically (observed 93.75 and 100 across
-    // repeat runs of an unchanged tree). 93 is the observed minimum. That flakiness
-    // is a test defect, not a tuning problem — fix it and this can go back to 100.
     './src/workers/sw-lib/**/*.ts': {
       branches: 93,
       functions: 91,
