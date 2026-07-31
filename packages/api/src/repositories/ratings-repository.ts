@@ -145,6 +145,27 @@ export class RatingsRepository {
     }))
   }
 
+  /** Every bucket's history for one player, for the DSR export row dump. */
+  async findAllHistoryFor(playerId: string): Promise<RatingHistoryEntry[]> {
+    const res = await this.pool.query(
+      `SELECT player_id, sport, format, delta, rating_after, match_id, created_at
+       FROM public.player_rating_history
+       WHERE player_id = $1
+       ORDER BY created_at ASC`,
+      [playerId]
+    )
+
+    return res.rows.map((row) => ({
+      playerId: row.player_id,
+      sport: row.sport,
+      format: row.format,
+      delta: parseFloat(row.delta),
+      ratingAfter: parseFloat(row.rating_after),
+      matchId: row.match_id,
+      createdAt: row.created_at,
+    }))
+  }
+
   /** Idempotent — no error if the player has no ratings. Used by DSR erasure. */
   async deleteFor(playerId: string): Promise<void> {
     const client = await (this.pool as Pool).connect()

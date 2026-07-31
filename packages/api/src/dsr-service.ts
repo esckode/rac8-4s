@@ -167,22 +167,7 @@ export class DataSubjectRequestService {
     const rememberCardCount = Number(rememberCardResult.rows[0].c)
 
     const playerRatings = await this.ratingsRepo.getAllFor(playerId)
-    const playerRatingHistoryResult = await this.pool.query(
-      `SELECT player_id, sport, format, delta, rating_after, match_id, created_at
-       FROM public.player_rating_history
-       WHERE player_id = $1
-       ORDER BY created_at ASC`,
-      [playerId]
-    )
-    const playerRatingHistory = playerRatingHistoryResult.rows.map((row) => ({
-      playerId: row.player_id,
-      sport: row.sport,
-      format: row.format,
-      delta: parseFloat(row.delta),
-      ratingAfter: parseFloat(row.rating_after),
-      matchId: row.match_id,
-      createdAt: row.created_at,
-    }))
+    const playerRatingHistory = await this.ratingsRepo.findAllHistoryFor(playerId)
 
     const data: PlayerExport = {
       playerId,
