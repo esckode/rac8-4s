@@ -192,6 +192,25 @@ export async function fetchPlayerSnapshot(token: string): Promise<PlayerSnapshot
   return apiFetch<PlayerSnapshot>('/player/snapshot', { token })
 }
 
+export interface PlayerRating {
+  sport: string
+  format: string
+  rating: number
+  matchesPlayed: number
+  provisional: boolean
+}
+
+export interface PlayerRatingsResponse {
+  ratings: PlayerRating[]
+  min: number
+  max: number
+  seedDefault: number
+}
+
+export async function fetchPlayerRatings(token: string): Promise<PlayerRatingsResponse> {
+  return apiFetch<PlayerRatingsResponse>('/player/ratings', { token })
+}
+
 /** Score edits (PATCH) hit the same …/score path, so an offline edit also
  * queues (D7) — same 202 {code:'QUEUED'} contract as submitScore. */
 export async function editScore(

@@ -7,6 +7,7 @@
  */
 import React, { useEffect, useState } from 'react'
 import { Modal } from '../components/shared/Modal'
+import { fetchPlayerRatings, PlayerRatingsResponse } from '../api/client'
 
 interface ProfileSettings {
   timezone: string | null
@@ -51,6 +52,7 @@ export const Profile: React.FC = () => {
   const [memories, setMemories] = useState<CoachMemory[]>([])
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [ratings, setRatings] = useState<PlayerRatingsResponse | null>(null)
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token')
@@ -76,6 +78,12 @@ export const Profile: React.FC = () => {
         if (data?.memories) setMemories(data.memories)
       })
       .catch(() => {})
+
+    if (token) {
+      fetchPlayerRatings(token)
+        .then(data => setRatings(data))
+        .catch(() => {})
+    }
   }, [])
 
   async function patchSettings(body: Record<string, unknown>) {
@@ -350,6 +358,47 @@ export const Profile: React.FC = () => {
             Clear conversation
           </button>
         </div>
+      </section>
+
+      <section className="rounded-xl border border-(--border) p-4 bg-(--surface) space-y-3">
+        <h2 className="text-base font-semibold text-(--ink-800)">Your Rating</h2>
+
+        {ratings && ratings.ratings.length > 0 ? (
+          <div className="space-y-4">
+            {Array.from(
+              new Map(
+                ratings.ratings.map(r => [r.sport, r])
+              ).entries()
+            ).map(([sport]) => {
+              const sportRatings = ratings.ratings.filter(r => r.sport === sport)
+              return (
+                <div key={sport} className="space-y-2">
+                  <h3 className="text-sm font-semibold text-(--ink-800)">{sport}</h3>
+                  {sportRatings.map(rating => (
+                    <div
+                      key={`${sport}-${rating.format}`}
+                      data-testid={`rating-${sport}-${rating.format}`}
+                      className="flex items-center justify-between py-2 px-2 bg-(--surface-alt) rounded"
+                    >
+                      <span className="text-sm text-(--ink-700)">{rating.format}</span>
+                      <span className="text-sm font-semibold text-(--ink-900)">
+                        {rating.rating}
+                        {rating.provisional && <span className="text-(--ink-500) ml-1">(provisional)</span>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div
+            data-testid="rating-empty-state"
+            className="py-4 text-center text-(--ink-500)"
+          >
+            <p className="text-sm">You have not yet played any matches</p>
+          </div>
+        )}
       </section>
 
       <Modal
