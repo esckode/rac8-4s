@@ -199,4 +199,30 @@ describe('PUT /player/ratings/seed (P13 Phase 5)', () => {
     const afterSeed = await ratingsRepo.getFor(playerA.id, SPORT, 'singles')
     expect(afterSeed?.matchesPlayed).toBe(1)
   })
+
+  it('rejects a seed once the bucket already has a scored match (R21)', async () => {
+    const { player: playerA, token: tokenA } = await playerToken()
+    const { player: playerB } = await playerToken()
+    const matchId = `match_${uid()}`
+
+    await applyRatingForMatch(ratingsRepo, matchId, SPORT, {
+      format: 'singles',
+      player1Id: playerA.id,
+      player2Id: playerB.id,
+      winnerId: playerA.id,
+    })
+
+    const beforeSeed = await ratingsRepo.getFor(playerA.id, SPORT, 'singles')
+
+    const res = await request(app)
+      .put('/player/ratings/seed')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ sport: SPORT, rating: RATING_MIN + 250 })
+
+    expect(res.status).toBe(409)
+    expect(res.body.code).toBe('RATING_ALREADY_SCORED')
+
+    const afterSeed = await ratingsRepo.getFor(playerA.id, SPORT, 'singles')
+    expect(afterSeed?.rating).toBe(beforeSeed?.rating)
+  })
 })
