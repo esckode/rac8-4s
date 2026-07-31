@@ -7,7 +7,7 @@
 **Second pass 2026-07-30** — a gap audit against the actual code found six holes, four of them in
 load-bearing decisions. Grilled to resolution as **R15–R20** (§3). **R5 and R8 were rewritten, not
 appended to** — they described mechanics that do not exist. See §3a for why the trust model changed.
-**Status:** 📐 **Design (grilled ×2)** — no implementation plan yet.
+**Status:** 📐 **Design (grilled ×2)** — implementation plan written, see [RATINGS_IMPLEMENTATION.md](./RATINGS_IMPLEMENTATION.md).
 
 ---
 
@@ -110,7 +110,8 @@ well-defined, and what keeps the correction itself auditable. ⚠ **Do not add a
 but it forces corrections to overwrite in place, destroying both the audit trail and R17's mechanism.
 Idempotency comes from the reverse-latest rule plus the unchanged-score no-op, not from the schema.
 
-**Erasure.** Add one step to `dsr-service.ts`'s `erase()` fan-out, alongside the three existing
+**Erasure.** Add one step to `dsr-service.ts`'s `erase()` fan-out (the file is at
+`packages/api/src/dsr-service.ts`, lines 81–84 — *not* `src/services/`), alongside the three existing
 precedents in the same block — `playerSettingsRepo.deleteFor`, `availabilityRepo.deleteFor`, and most
 directly **`standingsSnapshotRepo.deleteFor`**, which is per-player derived *competitive* data and is
 deleted outright rather than anonymised:
@@ -178,5 +179,7 @@ the player reads as *"this is still settling"* is what keeps an unproven rating 
   anonymise-on-DSR precedent for shared competitive records comes from there.
 - [MONETIZATION_DESIGN.md](./MONETIZATION_DESIGN.md) — §10c pause-instead-of-cancel is the seasonality
   evidence behind R14.
-- Next: `RATINGS_IMPLEMENTATION.md` — migration, the update service hooked to score confirmation, the
-  self-rating prompt, the `/profile` panel, and the `dsr-service.ts` line.
+- [RATINGS_IMPLEMENTATION.md](./RATINGS_IMPLEMENTATION.md) — **written 2026-07-30.** Migration, the
+  update service hooked to score **submission** (not confirmation — see R15), the correction path
+  (R16/R17), the self-rating prompt and replay, the `/profile` panel, the `dsr-service.ts` line, and
+  the R20 pairing gate. Phase 0 (constants) needs owner sign-off before Phase 2 can start.
