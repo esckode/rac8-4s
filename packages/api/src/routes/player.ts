@@ -160,10 +160,11 @@ export default function playerRouter(deps: AppDependencies) {
   })
 
   // PUT /player/ratings/seed - accept a player's self-rating for one sport,
-  // seeding BOTH formats (singles + doubles) from the same value and
-  // replaying the player's existing match history for each bucket from the
-  // new baseline (P13 Phase 5). Skippable by design — a player who never
-  // calls this simply stays at SEED_DEFAULT.
+  // seeding BOTH formats (singles + doubles) from the same value (P13 Phase
+  // 5). R21: fired at tournament registration, before any score exists —
+  // rejected with 409 once either format's bucket already has a scored
+  // match, since seeding is only legal before the first score. Skippable by
+  // design — a player who never calls this simply stays at SEED_DEFAULT.
   router.put('/ratings/seed', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const playerId = await resolvePlayerId(req.headers.authorization)
@@ -178,6 +179,18 @@ export default function playerRouter(deps: AppDependencies) {
         return res.status(400).json({
           code: 'VALIDATION_ERROR',
           message: `rating must be a number between ${RATING_MIN} and ${RATING_MAX}`,
+        })
+      }
+
+      const [existingSingles, existingDoubles] = await Promise.all([
+        ratingsRepo.getFor(playerId, sport, 'singles'),
+        ratingsRepo.getFor(playerId, sport, 'doubles'),
+      ])
+
+      if ((existingSingles?.matchesPlayed ?? 0) > 0 || (existingDoubles?.matchesPlayed ?? 0) > 0) {
+        return res.status(409).json({
+          code: 'RATING_ALREADY_SCORED',
+          message: 'This sport already has a scored match; seeding is only allowed before the first score.',
         })
       }
 

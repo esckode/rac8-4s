@@ -275,44 +275,14 @@ export async function correctRatingForMatch(
   }
 }
 
-async function seedAndReplayBucket(
-  repo: RatingsRepository,
-  playerId: string,
-  sport: string,
-  format: 'singles' | 'doubles',
-  seedValue: number
-): Promise<PlayerRating> {
-  const existing = await repo.getFor(playerId, sport, format)
-  const matchesPlayed = existing ? existing.matchesPlayed : 0
-
-  const history = await repo.findHistoryFor(playerId, sport, format)
-
-  let running = seedValue
-  for (const entry of history) {
-    running = applyDelta(running, entry.delta)
-    await repo.appendHistory(playerId, sport, format, entry.delta, running, entry.matchId)
-  }
-
-  await repo.upsert(playerId, sport, format, running, matchesPlayed)
-
-  return (await repo.getFor(playerId, sport, format))!
-}
-
 /**
- * Step 5.2 — set a new self-rating seed for a sport and replay this
- * player's existing history for BOTH formats from the new baseline.
+ * Step 5.1 — set a new self-rating seed for a sport, seeding BOTH formats
+ * from the same value (R5).
  *
- * "Replay" is event-log replay: each recorded delta is re-folded onto the
- * new running rating in `created_at` order (the outcome of each match
- * doesn't change, only what it's added on top of does), and a fresh
- * history row is appended per replayed match so a later correction — which
- * reverses only the LATEST row for a match (R17) — still reverses the
- * right amount.
- *
- * No cascade — only this player's (sport, format) buckets are touched.
- * Opponents keep the deltas they already earned; they are never read or
- * written here. matches_played is carried forward unchanged: this replay
- * doesn't add or remove matches, only re-bases where they started from.
+ * R21: the caller (route) rejects with 409 before this runs if either
+ * format's bucket already has a scored match — seeding is only legal
+ * before the first score. By construction there is therefore no history to
+ * reconcile here: this simply writes the baseline for both buckets.
  */
 export async function seedRatingForSport(
   repo: RatingsRepository,
@@ -320,10 +290,13 @@ export async function seedRatingForSport(
   sport: string,
   seedValue: number
 ): Promise<{ singles: PlayerRating; doubles: PlayerRating }> {
-  const singles = await seedAndReplayBucket(repo, playerId, sport, 'singles', seedValue)
-  const doubles = await seedAndReplayBucket(repo, playerId, sport, 'doubles', seedValue)
+  await repo.upsert(playerId, sport, 'singles', seedValue, 0)
+  await repo.upsert(playerId, sport, 'doubles', seedValue, 0)
 
   log.info('rating.seeded', { playerId, sport })
 
-  return { singles, doubles }
+  return {
+    singles: (await repo.getFor(playerId, sport, 'singles'))!,
+    doubles: (await repo.getFor(playerId, sport, 'doubles'))!,
+  }
 }
