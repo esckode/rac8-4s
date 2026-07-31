@@ -235,6 +235,39 @@ export default function playerRouter(deps: AppDependencies) {
     }
   })
 
+  // GET /player/partners - the caller's last 10 distinct doubles partners
+  // across all groups/tournaments (P13 Phase 13, R28), most recent first.
+  // Own partners only — there is no way to ask for another player's list;
+  // R1/R28 permit cross-group visibility solely because this page is
+  // owner-private.
+  router.get('/partners', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePlayerId(req.headers.authorization)
+
+      const result = await deps.db.query(
+        `SELECT p.id AS partner_id, p.name AS partner_name, MAX(t.created_at) AS last_partnered_at
+         FROM public.teams t
+         JOIN public.players p
+           ON p.id = CASE WHEN t.player1_id = $1 THEN t.player2_id ELSE t.player1_id END
+         WHERE t.player1_id = $1 OR t.player2_id = $1
+         GROUP BY p.id, p.name
+         ORDER BY last_partnered_at DESC
+         LIMIT 10`,
+        [playerId]
+      )
+
+      res.json({
+        partners: result.rows.map((r: any) => ({
+          playerId: r.partner_id,
+          name: r.partner_name,
+          lastPartneredAt: r.last_partnered_at,
+        })),
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
+
   // GET /player/notifications/messages - personal notification history
   router.get('/notifications/messages', async (req: Request, res: Response, next: NextFunction) => {
     try {
