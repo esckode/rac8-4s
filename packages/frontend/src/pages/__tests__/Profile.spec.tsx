@@ -58,6 +58,9 @@ function ratingsResponse(
 ) {
   return {
     ok: true,
+    headers: {
+      get: () => undefined,
+    },
     json: async () => ({
       ratings,
       min: 100,
