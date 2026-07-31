@@ -22,8 +22,17 @@ import type { JobQueue } from '@worker/job-queue'
 import type { IBroadcastBus } from '../broadcast-bus'
 import type { AppConfig } from '../config'
 import { getLogger } from '../logger'
+import { RatingsRepository } from '../repositories/ratings-repository'
+import { applyRatingForMatch, type MatchParticipants } from './ratings-service'
 
 const log = getLogger('score-service')
+
+/** Resolves a doubles team ID into its member player IDs, tupled for the ratings service. */
+async function teamPlayerIds(db: Pool | PoolClient, teamId: string): Promise<[string, string]> {
+  const teamRepo = new TeamRepository(db as Pool)
+  const { player1Id, player2Id } = await teamRepo.getTeamPlayers(teamId)
+  return [player1Id, player2Id]
+}
 
 export interface SubmitScoreInput {
   tournamentId: string
@@ -237,6 +246,32 @@ export async function submitScore(
   }
 
   log.info('score.submitted', { tournamentId, matchId, score, winnerId, playerId })
+
+  // Best-effort: apply skill-rating movement for this result, never fail an
+  // already-committed score write if the ratings path errors — the score is
+  // the user's data, the rating is derived (P13 Phase 4). Precedent:
+  // tournaments.ts's "Best-effort: swallow enqueue errors, never fail an
+  // already-committed..." wrap around the teams.formed enqueue.
+  try {
+    const ratingsRepo = new RatingsRepository(db)
+    const participants: MatchParticipants =
+      match.format === 'doubles'
+        ? {
+            format: 'doubles',
+            team1: await teamPlayerIds(db, match.team1_id as string),
+            team2: await teamPlayerIds(db, match.team2_id as string),
+            winningTeam: winnerId === match.team1_id ? 'team1' : 'team2',
+          }
+        : {
+            format: 'singles',
+            player1Id: match.player1_id as string,
+            player2Id: match.player2_id as string,
+            winnerId: winnerId as string,
+          }
+    await applyRatingForMatch(ratingsRepo, matchId, tournament.sport, participants)
+  } catch (e) {
+    log.warn('rating.apply.failed', { tournamentId, matchId, error: (e as Error).message })
+  }
 
   // Casual mode: auto-advance when all group matches in the tournament are scored.
   if (isCasual) {

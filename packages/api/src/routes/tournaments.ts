@@ -31,6 +31,8 @@ import { getLogger } from '../logger'
 import { sendMagicLinkEmail, sendPartnerInviteEmail } from '../email-adapter'
 import { generateRoundPairings } from '../mixer-scheduler'
 import { submitScore, SCORE_ERROR_HTTP_STATUS } from '../services/score-service'
+import { correctRatingForMatch, type MatchParticipants } from '../services/ratings-service'
+import { RatingsRepository } from '../repositories/ratings-repository'
 import { createRateLimitMiddleware } from '../middleware/rate-limit'
 import { PLAYS_IN_BRACKET } from '../registration-status'
 
@@ -785,6 +787,55 @@ export default function tournamentsRouter(deps: AppDependencies) {
         log.info('score.overridden', { tournamentId, matchId, score: req.body.score, winnerId, organizerId: orgPayload?.sub, reason: req.body.reason })
       } else {
         log.info('score.edited', { tournamentId, matchId, score: req.body.score, winnerId, playerId: actingPlayerId })
+      }
+
+      // Best-effort: correct skill-rating movement for the new result, never
+      // fail an already-committed score edit if the ratings path errors — the
+      // score is the user's data, the rating is derived (P13 Phase 4).
+      // Applies to both the participant edit and organizer override branches
+      // above, since either changes the result. Skipped when the match had no
+      // prior winner: Phase 4 only wires "apply" into submission, so there is
+      // nothing yet to correct.
+      if (match.winner_id) {
+        try {
+          const ratingsRepo = new RatingsRepository(deps.db)
+          let previous: MatchParticipants
+          let current: MatchParticipants
+          if (match.format === 'doubles') {
+            const { TeamRepository } = require('../repositories/team-repository')
+            const teamRepo = new TeamRepository(deps.db)
+            const { player1Id: t1p1, player2Id: t1p2 } = await teamRepo.getTeamPlayers(match.team1_id as string)
+            const { player1Id: t2p1, player2Id: t2p2 } = await teamRepo.getTeamPlayers(match.team2_id as string)
+            previous = {
+              format: 'doubles',
+              team1: [t1p1, t1p2],
+              team2: [t2p1, t2p2],
+              winningTeam: match.winner_id === match.team1_id ? 'team1' : 'team2',
+            }
+            current = {
+              format: 'doubles',
+              team1: [t1p1, t1p2],
+              team2: [t2p1, t2p2],
+              winningTeam: winnerId === match.team1_id ? 'team1' : 'team2',
+            }
+          } else {
+            previous = {
+              format: 'singles',
+              player1Id: match.player1_id as string,
+              player2Id: match.player2_id as string,
+              winnerId: match.winner_id,
+            }
+            current = {
+              format: 'singles',
+              player1Id: match.player1_id as string,
+              player2Id: match.player2_id as string,
+              winnerId: winnerId as string,
+            }
+          }
+          await correctRatingForMatch(ratingsRepo, matchId, tournament.sport, previous, current)
+        } catch (e) {
+          log.warn('rating.correct.failed', { tournamentId, matchId, error: (e as Error).message })
+        }
       }
 
       res.json({
