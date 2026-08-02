@@ -132,6 +132,34 @@ export class RatingsRepository {
     return map
   }
 
+  /**
+   * P13 Task 14.1 (ISSUE-48) — inserts a seed row (ON CONFLICT DO NOTHING) for
+   * every player in the list that doesn't have one yet, so the FOR UPDATE that
+   * follows in the same transaction has a row to lock for every participant —
+   * including one appearing in this (sport, format) for the first time. A
+   * concurrent conflicting insert waits on the other transaction and then does
+   * nothing; the following lock select then sees and locks the committed row.
+   */
+  async seedManyFor(playerIds: string[], sport: string, format: string, seedRating: number): Promise<void> {
+    const sorted = [...new Set(playerIds)].sort()
+    if (sorted.length === 0) return
+
+    const values: string[] = []
+    const params: unknown[] = []
+    sorted.forEach((id, i) => {
+      const b = i * 4
+      values.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, 0, now())`)
+      params.push(id, sport, format, seedRating)
+    })
+
+    await this.pool.query(
+      `INSERT INTO public.player_ratings (player_id, sport, format, rating, matches_played, updated_at)
+       VALUES ${values.join(', ')}
+       ON CONFLICT (player_id, sport, format) DO NOTHING`,
+      params
+    )
+  }
+
   /** P13 Phase 12 — one multi-row upsert instead of one per player. */
   async upsertMany(
     entries: { playerId: string; sport: string; format: string; rating: number; matchesPlayed: number }[]

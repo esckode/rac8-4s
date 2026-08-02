@@ -18,6 +18,12 @@
  * player id) and writes with one multi-row upsert and one multi-row history
  * insert. This closes ISSUE-47 (a partial settle on failure) and ISSUE-48
  * (an unlocked read-modify-write losing an update under overlap).
+ *
+ * Task 14.1: Phase 12's lock only covered rows that already existed, so a
+ * player's FIRST match in a (sport, format) was computed from an unlocked
+ * read — ISSUE-48's shape again, narrowed to first matches. applyRatingForMatch
+ * now seeds a row (ON CONFLICT DO NOTHING) for every participant before
+ * locking, so every id is guaranteed present in the locked map.
  */
 import type { Pool, PoolClient } from 'pg'
 import { RatingsRepository, type DbConnection, type PlayerRating } from '../repositories/ratings-repository'
@@ -76,12 +82,6 @@ async function withRatingsTransaction<T>(pool: DbConnection, fn: (repo: RatingsR
   }
 }
 
-function seededOrDefault(locked: Map<string, PlayerRating>, playerId: string): { rating: number; matchesPlayed: number } {
-  const existing = locked.get(playerId)
-  if (existing) return { rating: existing.rating, matchesPlayed: existing.matchesPlayed }
-  return { rating: SEED_DEFAULT, matchesPlayed: 0 }
-}
-
 function requireLocked(locked: Map<string, PlayerRating>, playerId: string, matchId: string): { rating: number; matchesPlayed: number } {
   const existing = locked.get(playerId)
   if (!existing) {
@@ -98,10 +98,14 @@ async function applySinglesRating(
 ): Promise<void> {
   const format = 'singles'
   const won1 = winnerId === player1Id
+  const ids = [player1Id, player2Id]
 
-  const locked = await repo.lockManyFor([player1Id, player2Id], sport, format)
-  const p1 = seededOrDefault(locked, player1Id)
-  const p2 = seededOrDefault(locked, player2Id)
+  // Task 14.1 (ISSUE-48): seed before locking so a player's first match in
+  // this (sport, format) has a row for FOR UPDATE to actually lock.
+  await repo.seedManyFor(ids, sport, format, SEED_DEFAULT)
+  const locked = await repo.lockManyFor(ids, sport, format)
+  const p1 = locked.get(player1Id)!
+  const p2 = locked.get(player2Id)!
 
   const delta1 = computeDelta(p1.rating, p2.rating, won1, p1.matchesPlayed)
   const delta2 = computeDelta(p2.rating, p1.rating, !won1, p2.matchesPlayed)
@@ -130,12 +134,16 @@ async function applyDoublesRating(
   const team1Won = winningTeam === 'team1'
   const [t1p1id, t1p2id] = team1
   const [t2p1id, t2p2id] = team2
+  const ids = [t1p1id, t1p2id, t2p1id, t2p2id]
 
-  const locked = await repo.lockManyFor([t1p1id, t1p2id, t2p1id, t2p2id], sport, format)
-  const t1p1 = seededOrDefault(locked, t1p1id)
-  const t1p2 = seededOrDefault(locked, t1p2id)
-  const t2p1 = seededOrDefault(locked, t2p1id)
-  const t2p2 = seededOrDefault(locked, t2p2id)
+  // Task 14.1 (ISSUE-48): seed before locking so a player's first match in
+  // this (sport, format) has a row for FOR UPDATE to actually lock.
+  await repo.seedManyFor(ids, sport, format, SEED_DEFAULT)
+  const locked = await repo.lockManyFor(ids, sport, format)
+  const t1p1 = locked.get(t1p1id)!
+  const t1p2 = locked.get(t1p2id)!
+  const t2p1 = locked.get(t2p1id)!
+  const t2p2 = locked.get(t2p2id)!
 
   // Team "matches played" for K-decay mirrors how the calculator itself treats
   // team rating — the mean of the two partners.
