@@ -31,6 +31,10 @@ module.exports = {
   // 88.71 funcs / 88.95 lines, run with `--testPathIgnorePatterns=seed-test-accounts.
   // spec.ts` — that spec fails on a pre-existing FK violation unrelated to this branch
   // (ISSUE-45) and ratchet-coverage.mjs refuses to measure a red suite.
+  // ISSUE-45 is fixed as of 2026-08-02, so the next measurement should drop that
+  // exclusion flag and run the whole suite. Expect the numbers to barely move: the
+  // seeder lives in scripts/, outside collectCoverageFrom's src/** scope, so the spec
+  // only re-covers repositories other suites already exercise.
   //
   // Previous floors measured 2026-07-22: 87.45 stmts / 76.06 branches / 88.61 funcs /
   // 87.87 lines.

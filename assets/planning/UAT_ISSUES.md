@@ -68,7 +68,7 @@ reproduce-first bar. These four are the ones that are **defects right now**, ind
 | ├ [44b](#issue-44b) | ✅ Resolved | 🔴 | Codemod the remaining ~48 files (depends on 44a) | frontend |
 | ├ [44c](#issue-44c) | ✅ Resolved | 🟠 | Add the lint guard so the broken form cannot regress | frontend · lint |
 | └ [44d](#issue-44d) | 🔲 Open | 🟠 | Visual review of the app-wide layout shift (human, not an agent) | frontend · design |
-| [ISSUE-45](#issue-45) | 🔲 Open | 🟠 | `seed-test-accounts.spec.ts` fails on a FK violation — e2e debris vs. a destructively re-seeded fixed identity | test · db |
+| [ISSUE-45](#issue-45) | ✅ Resolved | 🟠 | `seed-test-accounts.spec.ts` fails on a FK violation — e2e debris vs. a destructively re-seeded fixed identity | test · db |
 | [ISSUE-46](#issue-46) | ⏸ Tabled | 🔴 | Organizer score override only partially built — Standings button is a placebo | frontend |
 | [ISSUE-47](#issue-47) | ✅ Resolved | 🟠 | Rating application is not transactional — a failed doubles settle moves two of four players | api · data |
 | [ISSUE-48](#issue-48) | ✅ Resolved | 🟡 | Rating read-modify-write takes no lock — concurrent scores silently lose an update | api · data |
@@ -103,11 +103,11 @@ sequenced:
 **Suggested order — re-prioritized 2026-08-02**, after ISSUE-39/40/41/42/44a/44b/44c/47/48 closed. The
 previous ordering (44 → 39 → 40 → 41+42) is spent; every issue it named is resolved.
 
-1. **ISSUE-45** — highest leverage despite being 🟠: it is the merge gate (§11 requires a full run) and
-   it fails deterministically, in isolation, every time. ⚠ **Correction 2026-08-02:** this list first
-   claimed it was the tractable instance of the flaky trio and that one leak explained all four. It
-   does not — see its [verified root cause](#issue-45). Different mechanism, no shared fix; the trio
-   stays untriaged.
+1. ~~**ISSUE-45**~~ — ✅ **done 2026-08-02** (`cebb7b4` red, `55fa8f7` green). It was the merge gate, and
+   the API workspace now runs fully green for the first time: 183 suites, 2666 passed, 0 failed, with
+   per-table row counts identical before and after the run. ⚠ **Correction:** this list first claimed it
+   was the tractable instance of the flaky trio and that one leak explained all four. It does not — see
+   its [verified root cause](#issue-45). Different mechanism, no shared fix; **the trio stays untriaged.**
 2. **ISSUE-52** — small, and mirrors a check that already exists on the tournament route. **Bundle the
    unnumbered `coach.ts` `flushHeaders()` gap** (under "Still open") into the same pass: same route, same
    handler, one change instead of two.
@@ -659,10 +659,12 @@ player_groups: acd982cb-3bba-4791-a12c-cd50843de03a  "Pickleball Fundays"
   created_by = player_1785279941972_tq7i6jkv2i  (= player@test.com)   2026-07-30 16:16:40+00
 ```
 
-`player@test.com` is a **fixed seed identity** (`seed-test-accounts.ts:16`). The spec's repair path
-deletes and recreates that player, and the delete hits `player_groups_created_by_fkey` against a row
-that is *committed* — visible to the suite transaction, but impossible for it to roll back or affect.
-Hence deterministic, in isolation, permanently, until that row is dealt with.
+`player@test.com` is a **fixed seed identity** (`seed-test-accounts.ts:16`). The destructive actor is the
+spec's own clean-slate `beforeEach`, which ran `DELETE FROM public.players WHERE email = ANY(...)`
+(`seed-test-accounts.spec.ts:40`) — **not** anything in `seed-test-accounts.ts`, which contains no
+`DELETE` at all and is already non-destructive. That delete hits `player_groups_created_by_fkey` against
+a row that is *committed* — visible to the suite transaction, but impossible for it to roll back or
+affect. Hence deterministic, in isolation, permanently, until that row is dealt with.
 
 Playwright drives the real API on :3001, which commits by design — e2e **cannot** use the transactional
 harness, so this is not a leak in the §7 sense. The defect is that a durable fixed identity is reachable
@@ -675,22 +677,20 @@ identity. Confirmed at scale: 3,593 committed `player_groups` rows, `created_by`
 within a run; this is committed cross-run debris. **Fixing this will not fix those** — an earlier note
 in this file suggested a shared cause, which the evidence above rules out.
 
-### Fix
+### Fix *(shipped 2026-08-02 — `cebb7b4` red, `55fa8f7` green)*
 
-Do **not** hunt for a harness-escaping writer — there isn't one. The real decision is how a durable seed
-identity and destructive re-seeding coexist. Options, in rough order of preference:
+Removed the `DELETE FROM public.players` from the spec's `beforeEach`. Clearing the **account** is the
+entire precondition these tests need: every one of them asserts on account state, and the seeder's
+`findOrCreatePlayerByEmail` adopts a pre-existing player rather than duplicating it. Deleting the player
+too was unnecessary *and* wrong — players are durable identities other tables reference.
 
-1. **Make the seed script non-destructive** — repair/upsert in place rather than delete-and-recreate, so
-   a pre-existing FK reference is simply irrelevant. Smallest change; fixes the spec and the CLI path at
-   once.
-2. **Stop e2e acting as the fixed seed identities** — have group-creating specs seed a throwaway owner
-   (already the convention in `e2e/README.md`), leaving `player@test.com` unreferenced.
+The red commit also made the bug reproduce **deterministically**: `beforeAll` now creates a group owned
+by the seed player inside the suite transaction, so the spec fails for the real reason on a clean
+database too. Without that, **this bug is invisible on a fresh DB** and a future regression would only
+resurface on someone's dirty dev machine.
 
-⚠ **Do not** "fix" this by deleting rows in a `beforeAll` — it hides the debris, leaves the shared DB
-dirty for every other suite, and breaks again the next time e2e runs.
-
-⚠ **Do not** clear the debris before reproducing. **On a clean database this bug does not reproduce at
-all**, so a fresh DB shows green against an unfixed tree. A dump of the dirty state is the repro.
+Rejected: hunting for a harness-escaping writer (there isn't one), and deleting the debris rows — that
+hides the problem, leaves the shared DB dirty for every other suite, and breaks again next e2e run.
 
 **Separate, larger, do not fold in:** the dev DB holds 198,782 players / 13,365 accounts / 3,593 groups
 of uncleaned e2e debris (361 MB). That is a real problem and it is why this one bites, but it is not
@@ -1148,8 +1148,11 @@ tournament route's behaviour is unchanged.
     `test:coverage` run on branch `feat/ratings-p13`, and passes 12/12 in isolation. That branch
     changes no assistant or Anthropic-client file, so it is the same parallel-load pattern, not a
     regression. Three specs now show this behaviour — enough that the shared-state cause is worth
-    finding rather than re-confirming case by case. Related to [ISSUE-45](#issue-45), which is the
-    deterministic version of the same underlying problem (test isolation leaking).
+    finding rather than re-confirming case by case. ⚠ **Correction 2026-08-02: this is NOT related to
+    [ISSUE-45](#issue-45)**, as previously claimed here. ISSUE-45 was committed cross-run e2e debris
+    colliding with a destructive `DELETE`; these three are parallel-load races within a run. Fixing
+    ISSUE-45 did not address them and they remain untriaged. (All three passed in the green full run of
+    2026-08-02, which is consistent with a race, not evidence they are fixed.)
 
 - **Tournament lifecycle has no automatic status transitions** (surfaced by ISSUE-9) — **moved to
   `BACKLOG.md` § Deferred on 2026-07-27**, since its urgency came from stale tournaments lingering in
