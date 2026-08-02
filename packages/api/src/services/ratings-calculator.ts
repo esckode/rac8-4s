@@ -7,6 +7,7 @@
 
 import {
   LOGISTIC_DIVISOR,
+  LOGISTIC_BASE,
   K_PROVISIONAL,
   K_SETTLED,
   PROVISIONAL_MATCHES,
@@ -19,7 +20,7 @@ import {
 
 /** R9 — expected score of the player from the rating gap via LOGISTIC_DIVISOR. */
 function expectedScore(playerRating: number, opponentRating: number): number {
-  return 1 / (1 + 10 ** ((opponentRating - playerRating) / LOGISTIC_DIVISOR))
+  return 1 / (1 + LOGISTIC_BASE ** ((opponentRating - playerRating) / LOGISTIC_DIVISOR))
 }
 
 /**

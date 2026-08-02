@@ -127,9 +127,23 @@ grep -rnE "\b(270|500|450|150|120|100|24|10|0\.5)\b" \
   packages/api/src/services/ratings-*.ts \
   packages/api/src/repositories/ratings-repository.ts \
   db/migrations/061_player_ratings.sql \
+  packages/frontend/src/pages/Profile.tsx \
+  packages/frontend/src/pages/__tests__/Profile.spec.tsx \
+  packages/frontend/src/api/client.ts \
   | grep -v ratings-constants.ts
-# expect: no matches
+# expect: no matches, OR a hit inside a mocked wire-format response/fixture
+# (a `json: async () => ({...})` mock, a component-prop fixture) — those
+# restate the API's response shape, not a rating constant, and are the
+# trap-3 exception (below), not a violation. Read each hit; do not just
+# count them — CSS custom-property values (e.g. `--ink-500`) match too.
 ```
+
+⚠ **Trap 3 exception, Task 14.2:** the frontend has no `@core` alias and must not gain one just to
+satisfy this grep (trap 3 itself). So a frontend hit inside a mocked API response or component-prop
+fixture is expected and is verified **by reading**, not by the grep passing — annotate it with a
+comment naming §0a trap 2/3 so the next reader doesn't "fix" it into an import
+(`Profile.spec.tsx`'s `seedDefault: 270` is the existing example). A hit **outside** a mock/fixture —
+inline in component or client logic — is a real violation.
 
 **Optional guard, and it fits this repo.** The same `no-restricted-syntax` mechanism ISSUE-44c used to
 ban the `-[--token]` class form can ban numeric literals in `ratings-*.ts`. Worth doing if these files

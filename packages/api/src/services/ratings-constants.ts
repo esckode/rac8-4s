@@ -9,6 +9,9 @@
 /** Rating gap → win probability via logistic function. 100 pts (one NTRP level) ≈ 87% expected win for higher-rated player */
 export const LOGISTIC_DIVISOR = 120
 
+/** Base of the logistic function (Task 14.2 §0a: formula shape, but still not a bare literal). */
+export const LOGISTIC_BASE = 10
+
 /** Max points one match can move a new rating (provisional player) */
 export const K_PROVISIONAL = 24
 
