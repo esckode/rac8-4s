@@ -1,7 +1,7 @@
 /**
  * PrivacyPolicy — /privacy (public, S9)
  *
- * Clears the A9.2 launch gate for the whole assistant program (group @coach
+ * Clears the A9.2 launch gate for the whole assistant program (group @ref
  * + the 1:1 Coach). Static content — no data fetching.
  *
  * OWNER MUST REVIEW AND APPROVE THIS TEXT BEFORE THE ASSISTANT PROD CHANNEL
@@ -35,12 +35,13 @@ export const PrivacyPolicy: React.FC = () => {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-(--ink-800)">AI features</h2>
         <p className="text-sm text-(--ink-700)">
-          This app uses Anthropic's Claude to power an assistant called Coach, in two places:
+          This app uses Anthropic's Claude to power two separate assistants: Ref in group chat,
+          and Coach in a private 1:1 conversation.
         </p>
         <p className="text-sm text-(--ink-700)">
-          <strong>Group assistant.</strong> When you @mention Coach in a group chat, your message,
-          recent group chat for context, and relevant tournament data are sent to Anthropic to
-          compose a reply. That reply is visible to the group.
+          <strong>Group assistant (Ref).</strong> When you @mention Ref in a group chat, your
+          message, recent group chat for context, and relevant tournament data are sent to
+          Anthropic to compose a reply. That reply is visible to the group.
         </p>
         <p className="text-sm text-(--ink-700)">
           <strong>Private 1:1 Coach.</strong> Every authenticated account has a private Coach
@@ -49,10 +50,11 @@ export const PrivacyPolicy: React.FC = () => {
           never to your groups.
         </p>
         <p className="text-sm text-(--ink-700)">
-          <strong>Memories.</strong> Coach can remember stable facts you tell it (like a
-          preference or a piece of equipment), but only after you confirm each one on a card —
-          nothing is remembered silently. Your memories are listed and deletable in your Profile,
-          and are included in your data export and erasure.
+          <strong>Memories.</strong> Coach (the 1:1 assistant only — Ref does not have this
+          feature) can remember stable facts you tell it (like a preference or a piece of
+          equipment), but only after you confirm each one on a card — nothing is remembered
+          silently. Your memories are listed and deletable in your Profile, and are included in
+          your data export and erasure.
         </p>
         <p className="text-sm text-(--ink-700)">
           <strong>What is never sent</strong> to Anthropic: email addresses, passwords, or any
