@@ -253,7 +253,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
       if (group.assistantEnabledTransitionedOn) {
         const { message, conversationId } = await groupMsgRepo.sendAssistantMessage({
           groupId,
-          body: "Hi, I'm Coach 👋 — mention @coach to ask about your matches, standings, or how the app works.",
+          body: "Hi, I'm Ref 👋 — mention @ref to ask about your matches, standings, or how the app works.",
           metadata: { intro: true },
         })
         if (deps.broadcastBus) {
