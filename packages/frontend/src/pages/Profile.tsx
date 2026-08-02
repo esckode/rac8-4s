@@ -418,6 +418,7 @@ export const Profile: React.FC = () => {
                 className="flex items-center justify-between py-2 px-2 bg-(--surface-alt) rounded"
               >
                 <span className="text-sm text-(--ink-700)">{partner.name}</span>
+                <span className="text-xs text-(--ink-500)">{new Date(partner.lastPartneredAt).toLocaleDateString()}</span>
               </div>
             ))}
           </div>
