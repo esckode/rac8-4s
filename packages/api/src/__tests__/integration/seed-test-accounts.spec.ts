@@ -52,9 +52,14 @@ describe('seedTestAccounts (ISSUE-25)', () => {
   // Start every test from a clean slate for the fixed seed emails, regardless
   // of whatever the shared dev DB already has for them (it may already carry
   // the pre-fix broken shape this issue exists to repair).
+  //
+  // ISSUE-45: clearing the account is the whole precondition — every test here
+  // asserts on account state, and the seeder's own findOrCreatePlayerByEmail
+  // adopts a pre-existing player. Deleting the player too is both unnecessary
+  // and wrong: players are durable identities that other tables reference, so
+  // the DELETE fails outright on any DB where the identity owns data.
   beforeEach(async () => {
     await pool.query(`DELETE FROM auth.accounts WHERE email = ANY($1::text[])`, [SEED_EMAILS])
-    await pool.query(`DELETE FROM public.players WHERE email = ANY($1::text[])`, [SEED_EMAILS])
   })
 
   it('creates both accounts with a linked player, mirroring real signup', async () => {
