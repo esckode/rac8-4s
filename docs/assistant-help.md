@@ -1,7 +1,8 @@
 # App Help Reference
 
-This is a player-facing reference for how the app works. It is loaded into Coach's system
-prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, no dev framing.
+This is a player-facing reference for how the app works. It is loaded into both **Ref**'s
+(group chat) and **Coach**'s (1:1) system prompts. Keep it about *mechanics a player can act
+on* — no internals, no SQL, no dev framing.
 
 > House rule (CLAUDE.md §9): user-visible behavior changes must update this file in the same
 > change.
@@ -36,8 +37,8 @@ prompt. Keep it about *mechanics a player can act on* — no internals, no SQL, 
   and pending confirmations still show up on your badges and the up-next strip regardless.
 - **Availability** is a weekly grid (morning/afternoon/evening x each day) you can set in your
   profile. It's used only to suggest times where most of a group is free — ask "when can we
-  play?" in a group chat and Coach will reply with a count like "4 of 6 free Saturday evening."
-  Coach never says or implies which specific person is or isn't free at a slot.
+  play?" in a group chat and Ref will reply with a count like "4 of 6 free Saturday evening."
+  Ref never says or implies which specific person is or isn't free at a slot.
 - Your **Play** and **Groups** tabs show a number badge when you have something waiting on
   you (an unscored match, an open poll, a card to confirm) — it clears once you act. In a group
   chat, the message box may suggest a one-tap action (report a score, cast a vote) based on
@@ -201,30 +202,33 @@ Each group has a per-member notification level, changeable in the group's settin
 Announcements from owners notify everyone except muted members. Live updates (new messages,
 scores, standings) always appear in the app in real time regardless of notification level.
 
-## Coach (this assistant)
+## Ref (the group chat assistant)
 
-- Mention **@coach** in a group chat to ask about your matches, standings, deadlines, venues,
+- Mention **@ref** in a group chat to ask about your matches, standings, deadlines, venues,
   how the app works, or general racket-sport questions.
-- Coach can also **draft actions** for you: report a score ("I beat Bob 6-4, 6-3"), start a poll,
-  cast your vote on an open poll, or launch a casual tournament from a poll you created. Coach
+- Ref can also **draft actions** for you: report a score ("I beat Bob 6-4, 6-3"), start a poll,
+  cast your vote on an open poll, or launch a casual tournament from a poll you created. Ref
   never does these itself — it drafts a card in the chat that only you can confirm, and nothing
   happens until you tap Confirm. If your request is ambiguous (e.g. two pending matches against
-  players with similar names), Coach asks which one you mean instead of guessing.
-- Coach sees only what you could see yourself in the app: this group's tournaments plus
+  players with similar names), Ref asks which one you mean instead of guessing.
+- Ref sees only what you could see yourself in the app: this group's tournaments plus
   tournaments you're registered in, and it only ever acts as you — never as anyone else.
-- Everyone in the group sees Coach's replies and any cards it drafts, so ask accordingly.
-- Group owners can turn Coach off (and back on) in group settings.
-- Coach has hourly usage limits per player and per group; if you hit one, it says so and you
+- Everyone in the group sees Ref's replies and any cards it drafts, so ask accordingly.
+- Group owners can turn Ref off (and back on) in group settings.
+- Ref has hourly usage limits per player and per group; if you hit one, it says so and you
   can try again later.
-- Coach can also speak up on its own, without being asked: a **deadline reminder** when a
+- Ref does not settle score disputes — if you think a reported score is wrong, there's no
+  "reject" button. Ask the reporter to re-report it with the correct score, or use the confirm
+  flow to accept it as recorded.
+- Ref can also speak up on its own, without being asked: a **deadline reminder** when a
   scheduled tournament's group-stage deadline is 2 days or 1 day away and matches are still
   unscored (it names the pending matches and states the deadline as a clock time); a **recap**
   naming the winner and standings once a group-linked tournament finishes; and, for groups that
   opt in, a **weekly digest** — posted Sunday morning — summarizing results, pending matches,
   the nearest upcoming deadline, and (from your second week onward) a line naming anyone whose
-  rank moved since last week. These only post while Coach is enabled for the group. The weekly
+  rank moved since last week. These only post while Ref is enabled for the group. The weekly
   digest is off by default — turn it on in group settings.
-- Times Coach states to the whole group (deadlines, the weekly digest) use the **group's
+- Times Ref states to the whole group (deadlines, the weekly digest) use the **group's
   timezone** — derived from members' own timezones, or pinned by a group owner in group
   settings. Your **own timezone** (used for your profile and anything shown just to you) follows
   your device automatically unless you set one manually in your profile.
@@ -234,7 +238,7 @@ scores, standings) always appear in the app in real time regardless of notificat
 - Every signed-in player has a private **Coach** conversation — a pinned entry at the top of
   your conversations list, separate from any group chat. It exists even if you're not in any
   groups. Guests who haven't created a full account don't have one.
-- Unlike group chat, there's no `@coach` mention needed here — **every message you send is
+- Unlike group chat, there's no `@ref` mention needed here — **every message you send is
   answered**. That also means it counts against your usage limits (below), so it's for
   questions you actually want answered, not idle chatter.
 - This is the place to ask things you wouldn't want your group to see: "how do I beat Bob?",
@@ -253,8 +257,8 @@ scores, standings) always appear in the app in real time regardless of notificat
   fresh — this does not delete anything Coach remembers about you; manage memories separately.
 - Coach has its own hourly and daily usage limits here, separate from group chat; if you're
   close to a limit it lets you know, and if you hit it, it says so and you can try again later.
-- Nothing you say to 1:1 Coach is ever visible to your groups, and group Coach never sees your
-  1:1 conversation or memories.
+- Nothing you say to 1:1 Coach is ever visible to your groups, and Ref (the group assistant)
+  never sees your 1:1 conversation or memories.
 
 ## Installing the app & using it offline
 
