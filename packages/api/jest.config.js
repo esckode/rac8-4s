@@ -26,13 +26,14 @@ module.exports = {
     '!src/worker-entrypoint.ts',
   ],
   coverageReporters: ['text-summary', 'lcov'],
-  // Floors: measured actuals 2026-07-22, green run (babel provider). Raise-only —
-  // CLAUDE.md §13. Actual was 87.45 stmts / 76.06 branches / 88.61 funcs / 87.87 lines.
+  // Floors: measured actuals 2026-08-02 (ratings-p13, Task 14.6), green run (babel
+  // provider). Raise-only — CLAUDE.md §13. Actual was 88.46 stmts / 77.85 branches /
+  // 88.71 funcs / 88.95 lines, run with `--testPathIgnorePatterns=seed-test-accounts.
+  // spec.ts` — that spec fails on a pre-existing FK violation unrelated to this branch
+  // (ISSUE-45) and ratchet-coverage.mjs refuses to measure a red suite.
   //
-  // branches is LOWERED from 85, which had never been enforced (coverageThreshold is
-  // a Jest global-only option and was dropped by the root projects: config). Real
-  // branch coverage has been ~76 the whole time; 85 was aspirational. Raising it back
-  // means writing tests, not editing this number.
+  // Previous floors measured 2026-07-22: 87.45 stmts / 76.06 branches / 88.61 funcs /
+  // 87.87 lines.
   //
   // Caveat: src/__tests__/unit/assistant-anthropic-client.spec.ts is FLAKY — repeat
   // runs of an unchanged tree gave 11 failures once and 2502-passed the next. These
@@ -40,10 +41,10 @@ module.exports = {
   // flaky tests barely move coverage), but the flakiness is a real defect to fix.
   coverageThreshold: {
     global: {
-      branches: 75,
+      branches: 76,
       functions: 87,
-      lines: 86,
-      statements: 86,
+      lines: 87,
+      statements: 87,
     },
   },
   moduleNameMapper: {

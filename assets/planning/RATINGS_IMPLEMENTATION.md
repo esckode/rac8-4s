@@ -17,8 +17,8 @@ display-only (R27), and with no consumer needing freshness the async work loses 
 **Remaining: [Phase 14](#phase-14--post-verification-fixes--not-built)** — the fixes from the
 2026-08-01 verification of that delivery. **Tasks 14.1–14.4 and 14.7 are done**, including
 [ISSUE-48](./UAT_ISSUES.md#issue-48) (Task 14.1: a player's *first* match in a sport/format settling
-without a lock — now closed). **Tasks 14.5 (e2e sweep reconciliation) and 14.6 (coverage-gate scope
-call) remain** before this branch merges.
+without a lock — now closed). **Tasks 14.4 and 14.6 are also done.** **Task 14.5 (e2e sweep
+reconciliation) remains** before this branch merges.
 
 Every step is **TDD-first** per CLAUDE.md §4: write the test, watch it fail *and read why*, commit the
 failing test, then implement and commit separately (§11). Every step names the model it is sized for.
@@ -1069,7 +1069,7 @@ specs fail in confusing ways unrelated to ratings.
 
 **Done when:** the three numbers add up to the run slots, in writing, in this doc.
 
-### Task 14.6 — `seed-test-accounts` blocks the API coverage gate 🟡 (pre-existing, not P13's)
+### Task 14.6 — `seed-test-accounts` blocks the API coverage gate ⚪ resolved 2026-08-02 (pre-existing, not P13's)
 
 `npm run test:coverage` cannot complete for `packages/api`. Three tests in `seed-test-accounts.spec.ts`
 fail with:
@@ -1091,12 +1091,16 @@ fails on a FK violation — test isolation is leaking". Do **not** file a duplic
 **Requirement — make the scope call and record it.** Recommended: merge P13 with the exclusion
 documented in the DoD and leave the fix to ISSUE-45, which owns it. Fixing the seed script here (cascade
 or reassign `player_groups.created_by`) touches the group ownership model and does not belong in a
-ratings branch.
+ratings branch. **✅ Scope call made 2026-08-02: this recommendation is adopted.** ISSUE-45 keeps the
+fix; it already carries the FK reproduction above.
 
-**Then run the API ratchet.** `node scripts/ratchet-coverage.mjs` has never run on this branch for the
-api workspace, and there is roughly 2 points of branch headroom (77.89 measured vs the 75 floor) that
-eight phases of new code earned and never claimed. Do it once the suite can complete, and commit the
-bump with this work (CLAUDE.md §13).
+**API ratchet run 2026-08-02.** `node scripts/ratchet-coverage.mjs` shells out to `npx jest
+--coverageThreshold=<pinned to 100>` with no option to exclude a spec, and refuses to ratchet a red
+suite — so it cannot run as-is while ISSUE-45 is open. Measured by hand instead, same command plus
+`--testPathIgnorePatterns=seed-test-accounts.spec.ts`: 182 suites, **0 failed**, 2662 passed / 31
+skipped, 88.46% stmts / 77.85% branches / 88.71% funcs / 88.95% lines. Applying the script's own
+floor(actual) − 1 margin raised `packages/api/jest.config.js`: branches 75→76, statements 86→87, lines
+86→87 (functions stayed at 87 — no headroom). Committed with this task.
 
 ### Task 14.7 — two recorded deviations ⚪ resolved 2026-08-02
 
@@ -1136,11 +1140,12 @@ still block the two remaining boxes — do not tick either from this session's o
       10.4, corrected command (Task 14.3). Re-run 2026-08-02: api 139 suites / 1895 passed / 3 failed
       (all `seed-test-accounts.spec.ts`, Task 14.6, pre-existing/environmental — not P13 code); frontend
       22 suites / 210 passed.
-- [ ] **Coverage floors not breached; ratchet run once at the end, not per step (§13).** Frontend raised
-      in `cc40fce` and re-verified green. API floors are not breached (measured 2026-08-01: 88.41%
-      stmts / 77.89% branches / 88.70% funcs / 88.89% lines against a 75-branch floor), **but
-      `npm run test:coverage` cannot complete for the api workspace** (Task 14.6's blocker) and the api
-      ratchet has never run on this branch. **Blocked on Task 14.6.**
+- [x] **Coverage floors not breached; ratchet run once at the end, not per step (§13).** Frontend raised
+      in `cc40fce` and re-verified green. Task 14.6 (2026-08-02): `npm run test:coverage` still can't
+      complete for api as-is (ISSUE-45's pre-existing `seed-test-accounts.spec.ts` failure), so the
+      ratchet was run by hand excluding that one spec — 182 suites, 0 failed, 88.46% stmts / 77.85%
+      branches / 88.71% funcs / 88.95% lines. `packages/api/jest.config.js` raised: branches 75→76,
+      statements 86→87, lines 86→87.
 - [x] **§0a grep clean.** Task 14.2: `LOGISTIC_BASE` extracted, API-side grep returns no matches; §0a
       widened to the frontend surfaces and the wire-format-fixture exception (`Profile.spec.tsx`) is
       written into the doc rather than left implicit.
