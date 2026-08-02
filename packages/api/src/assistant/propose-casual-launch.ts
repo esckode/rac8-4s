@@ -64,7 +64,7 @@ export async function proposeCasualLaunch(
   const askerName: string = askerRes.rows[0]?.name ?? 'A member'
 
   const cardRepo = new AssistantCardRepository(ctx.db as any)
-  const body = `Coach drafted a tournament launch from "${chosen.question}" — ${inVoterNames.length} player${inVoterNames.length === 1 ? '' : 's'} in. Only ${askerName} can confirm, within 15 minutes.`
+  const body = `Ref drafted a tournament launch from "${chosen.question}" — ${inVoterNames.length} player${inVoterNames.length === 1 ? '' : 's'} in. Only ${askerName} can confirm, within 15 minutes.`
   const { card, conversationId } = await cardRepo.createCard({
     groupId: ctx.groupId,
     proposerPlayerId: ctx.playerId,

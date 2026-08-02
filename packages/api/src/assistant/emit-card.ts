@@ -26,7 +26,7 @@ export function emitCardCreated(
     conversationId,
     groupId,
     playerId: null,
-    senderName: 'Coach',
+    senderName: groupId ? 'Ref' : 'Coach',
     body,
     type: 'assistant',
     createdAt: card.createdAt,

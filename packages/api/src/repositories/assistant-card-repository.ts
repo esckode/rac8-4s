@@ -3,8 +3,9 @@
  *
  * A card is stored as:
  *   - A type='assistant' message in messaging.group_messages (player_id=NULL,
- *     sender 'Coach', body = a human-readable prose summary — the durable/
- *     export/fallback record, B-Q9), metadata = {cardId}
+ *     sender 'Ref' (group) / 'Coach' (1:1, createCoachCard) — body = a
+ *     human-readable prose summary — the durable/export/fallback record, B-Q9),
+ *     metadata = {cardId}
  *   - A row in messaging.assistant_cards (status/args/expiry/result)
  *
  * Lifecycle: pending → confirmed | failed | cancelled. 'expired' is NEVER
@@ -124,7 +125,7 @@ export class AssistantCardRepository {
       const msgRes = await client.query(
         `INSERT INTO messaging.group_messages
            (conversation_id, player_id, sender_name_snapshot, body, type)
-         VALUES ($1, NULL, 'Coach', $2, 'assistant')
+         VALUES ($1, NULL, 'Ref', $2, 'assistant')
          RETURNING id`,
         [conversationId, body]
       )

@@ -249,7 +249,7 @@ const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', '
  * - "standings" → real get_standings on the first group-linked tournament
  * - "when can we play" / "good time for everyone" → real get_group_availability,
  *   citing only counts (P12 privacy wall)
- * - anything else → canned "[mock] Coach reply"
+ * - anything else → canned "[mock] Ref reply"
  */
 export class MockAssistantClient implements AssistantClient {
   /** Last input captured for test assertions. */
@@ -346,7 +346,7 @@ export class MockAssistantClient implements AssistantClient {
       }
     }
 
-    return { text: '[mock] Coach reply', toolRounds: 0 }
+    return { text: '[mock] Ref reply', toolRounds: 0 }
   }
 }
 

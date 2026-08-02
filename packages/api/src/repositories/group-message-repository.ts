@@ -193,8 +193,8 @@ export class GroupMessageRepository {
   }
 
   /**
-   * Post an assistant (@coach) reply into a group conversation.
-   * Bot rows: type='assistant', player_id=NULL, sender_name_snapshot='Coach' — the
+   * Post an assistant (@ref) reply into a group conversation.
+   * Bot rows: type='assistant', player_id=NULL, sender_name_snapshot='Ref' — the
    * explicit type keeps them unambiguous against DSR tombstones (also player_id=NULL).
    * Optional metadata carries provenance markers ({replyTo: <messageId>} for
    * idempotency, {intro: true} for the one-time enable intro).
@@ -213,7 +213,7 @@ export class GroupMessageRepository {
       const result = await client.query(
         `INSERT INTO messaging.group_messages
            (conversation_id, player_id, sender_name_snapshot, body, type, metadata)
-         VALUES ($1, NULL, 'Coach', $2, 'assistant', $3)
+         VALUES ($1, NULL, 'Ref', $2, 'assistant', $3)
          RETURNING id, conversation_id, player_id, sender_name_snapshot, body, type,
                    created_at, metadata`,
         [conversationId, body, metadata ?? null]
