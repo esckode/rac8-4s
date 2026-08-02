@@ -4,6 +4,8 @@
 > 🗂️ Tracked in the [project backlog](../../BACKLOG.md).
 
 **Date:** 2026-06-24 (open items + casual edges + compliance grilled to resolution; see §11–§12)
+· **Amended 2026-07-31 — see §13**, which reframes casual play as a **session ledger** and removes
+system-assigned pairing. §13 supersedes parts of 11.11 and 11.14; read it before implementing §6.1.
 **Status:** 📋 DESIGN (fully grilled) — not started. A **new product track** (community layer), distinct from
 but sharing infrastructure with the tournament-scoped messaging in
 [`MESSAGING_DESIGN.md`](./MESSAGING_DESIGN.md).
@@ -222,6 +224,11 @@ Resolutions for every item formerly in §9, plus the §6.1 casual edges. Numberi
   uses **best-effort partner rotation** (track past partnerships, greedily minimize repeats — not
   guaranteed-optimal); **sit-out rotation** for odd N (rest rotates ~evenly; sitting players score nothing
   that round). *This is new engine code, not reuse* (the existing doubles engine assumes fixed teams).
+  ⚠ **Amended by §13 (2026-07-31): the system no longer assigns teams at all.** The partner-rotation
+  *principle* is retained and promoted — it becomes the basis of §13's chat suggestion. ⚠ **Note for the
+  record:** RATINGS_DESIGN R20 (2026-07-30) replaced this rotation with rating-based lo/hi pairing
+  **without recording that it reversed 11.11**. Measurement later showed the replacement produced one
+  distinct partner per player, forever — the precise opposite of a mixer. See RATINGS_DESIGN §3c.
 - **11.12 — Leaderboards:** record every casual match result into a **durable, cross-tournament group
   match log** (`messaging.group_match_log`; never auto-purged, Option-X style). Derive **two leaderboards**
   from it: a **pair** board (`{A,B}` cumulative) and an **individual** board (each player across all
@@ -274,3 +281,64 @@ overrides our "durable/immutable/never-purged" promises** (softens 11.2/11.12 ac
   - **Limitation (honest):** self-attestation can be lied about; the legal standard is "reasonable measures
     + don't knowingly onboard minors + act on actual knowledge," which this meets. If a minor is later
     identified, run the 12.1 erasure cascade.
+## 13. Casual **sessions** — the ledger model *(grilled 2026-07-31)*
+
+Casual doubles reached this design by elimination. RATINGS_DESIGN R20 made pairing consume a skill
+rating; measurement killed it (§3c there); the replacement — novelty pairing — was then itself
+questioned with *"why should the system be pairing anyone at all?"*, and nothing survived the question.
+Much of what follows **restores 11.11–11.14** rather than inventing: the partner-rotation principle and
+the durable match log were both already decided on 2026-06-24, and the ratings work had partly
+overwritten them.
+
+**The reframing that makes the rest follow: this is a *session*, not a tournament.** A time-boxed window
+in which a group logs the results of games it actually played. "Tournament" keeps dragging bracket
+assumptions back in — scheduled matches, an authoritative next opponent, a completion condition derived
+from a fixture list — and those assumptions are how R2/R20 got justified in the first place.
+
+- **13.1 — No system-assigned teams. Supersedes 11.11's "randomly assigned".** Players form pairs
+  themselves, on court, however they like. The system records what happened; it does not decide what
+  should happen. ⛔ This removes auto-pairing from casual doubles entirely — not "changes the criterion."
+- **13.2 — A session is a result ledger, not a fixture list.** No round-robin is generated for casual.
+  A logged result names four players, two sides, and a score; `teams` rows are created from the reported
+  pair if they do not exist. Restores 11.12's durable-log intent and makes it the *only* record rather
+  than a shadow copy of a scheduled match. Standings and leaderboards derive from the log, which
+  `getIndividualLeaderboard` already does. ⚠ 11.12 names the table `messaging.group_match_log`; it is
+  actually **`public.group_match_log`**.
+- **13.3 — Pairing *suggestion* posted to group chat one hour before the session starts.** Weighted to
+  favour pairs who have not partnered recently — 11.11's rotation principle, kept as advice rather than
+  assignment. It is a **message, not a decision**: nobody is bound by it, nothing downstream depends on
+  it, and ignoring it has no consequence. ⚠ Therefore a session needs a **start time**, which it does not
+  have today. ⚠ Deliberately **not** @coach: this must be free, deterministic, and always available —
+  @coach is per-call cost, queue-async, and rate-limited. It reuses the coach's *delivery surface* (a
+  group-chat message), not its model.
+- **13.4 — Every score is posted to group chat, however it was entered** (webapp or @coach). This is the
+  falsifiability answer. With no fixture list the system cannot know who *should* have played, and unlike
+  a rating (private under R1) the leaderboard is **shared**, so R15's "privacy replaces confirmation"
+  argument does not reach it. Social visibility replaces it instead: all four participants see the claim
+  in the feed. ⚠ Sufficient **only** because groups are invite-only; revisit if that changes.
+- **13.5 — Sessions auto-close on a duration, default 24 hours, set at creation.** Supersedes 11.14's
+  "owner ends it + deferred 7-day idle-archive". Partial results still count; a system message posts on
+  close, as 11.14 already required. ✅ **Mostly built already:** `casual-idle-sweep.ts`
+  (`sweepIdleCasualTournaments`) does the closing and reports scored-vs-total — but it is **dead code**,
+  never called and never registered in `worker-entrypoint.ts`. It needs a duration trigger instead of an
+  idle trigger, plus the wiring `registerAutoCloseSweepJob` already models.
+- **13.6 — Rename to "casual session" in UI and docs; keep the `tournaments` table.** The storage rename
+  is a large migration for no behavioural gain. ⚠ Record the mapping explicitly so the next reader is not
+  misled: **a casual session *is* a `tournaments` row with `mode='casual'`.**
+
+**Ripples worth knowing before implementing:**
+
+- ⚠ **The launch path is duplicated.** `player-groups.ts:959-965` and `auto-close-processor.ts:107-114`
+  both create registrations, call `createGroupsForDoubles`, and carry the same ISSUE-31 comment. Both
+  must change together or they diverge.
+- ⚠ **ISSUE-31 is the trap.** It was a 🔴 whose symptom was *"a group-launched casual tournament never
+  generates matches — there is nothing to play."* Removing fixture generation re-creates that symptom
+  unless the ledger's "log a result" affordance ships in the same change. **Do not land 13.2 without it.**
+- **PlayHub changes shape.** `buildPlayerSnapshot`'s `nextMatch` has no meaning without a fixture list.
+  The session home becomes: log a result, current standings, your recent partners. That is a better home
+  screen for drop-in play, and it is a deliberate loss, not an oversight.
+- **Ratings are unaffected in substance.** `applyRatingForMatch` takes participants as an argument, so it
+  works unchanged from logged data. Under RATINGS_DESIGN R27 the rating is display-only anyway.
+- **Singles gets the same model** — social singles is equally drop-in. Applying the ledger to one format
+  and fixtures to the other would double the engine.
+

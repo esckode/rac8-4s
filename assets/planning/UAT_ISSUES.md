@@ -22,7 +22,21 @@ shipped.
 
 **8 issues filed 2026-07-30 (ISSUE-39–46)** — see the implementation-status note below: ISSUE-39–43 after checking
 `REQUIREMENTS.md`'s "Audit Logging" section against the actual code, ISSUE-44 from a live UAT report
-(invite/create-group buttons appeared to have no submit button). Number the next one 47.
+(invite/create-group buttons appeared to have no submit button).
+
+**2 issues filed 2026-07-31 (ISSUE-47–48)** — both found by reading the P13 ratings write path while
+designing its move to the worker (`RATINGS_DESIGN.md` §3b). Neither was introduced by that design work:
+both are in Phase 3/4 as built. ⚠ **Unlike every other issue in this file, these are not shipped
+defects** — the ratings code exists only on `feat/ratings-p13` and is absent from `main`. They are
+filed rather than fixed silently because they are real and easy to lose, but the right time to fix them
+is **before that branch merges**.
+
+**4 issues filed 2026-07-31 (ISSUE-49–52)** — from a sweep of the DB operations on daily player hot
+paths, done against a "tens of thousands of users" question. Most of that sweep's findings are
+**volume-dependent** and are recorded in [`BACKLOG.md`](../../BACKLOG.md) § 🔍 Hot-path DB gaps instead:
+they are correct today and cannot be reproduced at current data levels, so they fail this file's
+reproduce-first bar. These four are the ones that are **defects right now**, independent of scale.
+**Number the next one 53.**
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -55,6 +69,12 @@ shipped.
 | └ [44d](#issue-44d) | 🔲 Open | 🟠 | Visual review of the app-wide layout shift (human, not an agent) | frontend · design |
 | [ISSUE-45](#issue-45) | 🔲 Open | 🟠 | `seed-test-accounts.spec.ts` fails on a FK violation — test isolation is leaking | test · db |
 | [ISSUE-46](#issue-46) | ⏸ Tabled | 🔴 | Organizer score override only partially built — Standings button is a placebo | frontend |
+| [ISSUE-47](#issue-47) | 🔲 Open | 🟠 | Rating application is not transactional — a failed doubles settle moves two of four players | api · data |
+| [ISSUE-48](#issue-48) | 🔲 Open | 🟡 | Rating read-modify-write takes no lock — concurrent scores silently lose an update | api · data |
+| [ISSUE-49](#issue-49) | 🔲 Open | 🟡 | The whole `config.database` block is dead — four settable env vars do nothing | api · config |
+| [ISSUE-50](#issue-50) | 🔲 Open | 🟠 | `StandingsCache` is never read or populated — only invalidated | api · perf |
+| [ISSUE-51](#issue-51) | 🔲 Open | 🟡 | Bracket generation recomputes each group's standings once per advancing rank | api · perf |
+| [ISSUE-52](#issue-52) | 🔲 Open | 🟠 | Coach SSE route ignores `sseMaxConnectionsPerUser` — unbounded streams per user | api |
 
 **Implementation status, 2026-07-30.** ISSUE-39/40/41/42 and 44a/44b/44c are implemented on branch
 `fix/uat-issues-39-44`, each TDD (failing test committed before implementation). Verified: full
@@ -703,6 +723,286 @@ with `organizerId` and `reason` (per [ISSUE-39](#issue-39) and [ISSUE-40](#issue
 Reproduce first: as organizer, open a tournament with a `pending` match, click Override, submit. Confirm
 the failure. Then confirm the chosen fix — for (1) the button is absent on pending matches; for (2) the
 submission succeeds and logs `score.overridden` with `organizerId` and `reason`.
+
+---
+
+## ISSUE-47 — Rating application is not transactional 🟠 {#issue-47}
+
+*Found 2026-07-31 while designing P13's move to the worker (`RATINGS_DESIGN.md` §3b). Not introduced by
+that design work — present in Phase 3 as built. **Unmerged**: lives on `feat/ratings-p13`, not `main`,
+so fix it before that branch lands.*
+
+### Symptom
+
+A doubles rating application that fails partway leaves **two of four players moved and two not**. The
+score is fine; the ratings are permanently inconsistent, and nothing surfaces — the user sees a
+successful score submission.
+
+Worse, it compounds. A later score edit on that match reaches `correctRatingForMatch`, which finds
+history rows for the two players that landed and none for the two that did not, and throws
+`no prior rating history` (`ratings-service.ts:86`) for the latter — also swallowed.
+
+### Root cause
+
+There is no transaction anywhere in the path. `deps.db` is the bare Pool passed straight through
+(`tournaments.ts:653`) and `score-service.ts` opens no `BEGIN`, so every statement autocommits on its
+own. `applyDoublesRating` settles four players in sequence (`ratings-service.ts:152-155`), and each
+`settlePlayerRating` issues **two** writes (`upsert` then `appendHistory`) — eight independent commits.
+
+The best-effort wrap at `score-service.ts:272` then catches whatever threw and logs
+`rating.apply.failed`, by which point the earlier commits are already durable. That wrap is correct in
+intent (a rating must never fail a score write) but it converts a partial write into a silent one.
+
+### Fix
+
+Wrap the whole settle in a single transaction — plain `this.pool.connect()` + `BEGIN/COMMIT/ROLLBACK`
+per CLAUDE.md §7, so the test harness can rewrite it to savepoints.
+
+⚠ **Do NOT extend the score write's transaction to cover the ratings.** The obvious approach — one
+transaction for the whole request — makes a rating failure roll back the *score*, which inverts the
+rule that wrap exists to enforce (design R15/§3b: the score is the user's data, the rating is derived).
+The ratings settle needs its **own** transaction so it can roll back alone.
+⚠ Do **not** add test-only branching to `db.ts` to make the harness cooperate (CLAUDE.md §7).
+
+**`RATINGS_IMPLEMENTATION.md` Phase 12** does this. *(It was Phase 9's Step 9.2 until 2026-07-31, when
+Phase 9 was dropped — the fix is unchanged, it just no longer arrives alongside a queue.)* Phase 12 also
+batches the settle from 14 statements to ~3, which falls out of the same transaction.
+
+### Verify
+
+Reproduce first: force a throw between the second and third `settlePlayerRating` call in a doubles
+apply. Before the fix, two players have moved and two history rows exist. After, no player has moved
+and `rating_history` has no rows for that `match_id`.
+
+---
+
+## ISSUE-48 — Rating read-modify-write takes no lock 🟡 {#issue-48}
+
+*Found 2026-07-31 alongside [ISSUE-47](#issue-47), same read-through. Also unmerged — same branch, same
+"fix before it lands" window.*
+
+### Symptom
+
+Two scores committed near-simultaneously for matches sharing a player leave that player's rating
+reflecting only **one** of the two, with `matches_played` short by one.
+
+The detectable signature is that `player_rating_history` and `player_ratings` disagree: both history
+rows are written, but the current rating equals the baseline plus only one delta — so the player has
+history for more *matches* than their `matches_played` admits.
+
+### Root cause
+
+Classic unserialized read-modify-write. `getFor` (`ratings-repository.ts:41`) is a plain `SELECT` with
+no `FOR UPDATE`, and `upsert` (`ratings-repository.ts:79`) writes an **absolute** value — `rating = $4`,
+`matches_played = $5` — rather than an increment. Under READ COMMITTED both transactions read the same
+baseline and the second write silently overwrites the first. No constraint is violated, so nothing
+errors.
+
+Blast radius is narrow **today**: it needs genuine overlap, and in round-robin a player is usually in
+one match at a time. It is not impossible, though — casual lets any participant score any match
+(`score-service.ts:97`), so two people entering two of one player's matches at once is a real path.
+
+⚠ *Superseded note (2026-07-31):* this previously warned that P13 Phase 9 would widen the race via
+concurrent queue workers. **Phase 9 was dropped** (R29 — application stays synchronous), so the window
+stays as narrow as it is today. The fix is still required, now in
+`RATINGS_IMPLEMENTATION.md` **Phase 12**; it is simply no longer urgent for that reason.
+
+### Fix
+
+Take `SELECT … FOR UPDATE` on every participant's `player_ratings` row before computing deltas, inside
+the transaction ISSUE-47 introduces. Lock in a deterministic order — sort the participant ids — or two
+doubles matches sharing two players will deadlock instead of racing.
+
+Pinning worker concurrency to 1 also masks it, but is **not** a substitute: it is a deployment setting
+that a future scale-out silently removes.
+
+### Verify
+
+Reproduce first: submit two scores concurrently for matches sharing one player and assert the failure —
+that player's `matches_played` advances by 1, not 2. After the fix it advances by 2 and the rating
+equals the baseline with both deltas applied.
+
+Standing check, useful against real data:
+```sql
+-- expect: no rows
+SELECT h.player_id, h.sport, h.format,
+       COUNT(DISTINCT h.match_id) AS rated_matches, r.matches_played
+FROM public.player_rating_history h
+JOIN public.player_ratings r USING (player_id, sport, format)
+GROUP BY h.player_id, h.sport, h.format, r.matches_played
+HAVING COUNT(DISTINCT h.match_id) > r.matches_played;
+```
+⚠ **`COUNT(DISTINCT h.match_id)`, not `COUNT(*)`.** A correction appends a history row *without*
+incrementing `matches_played` (Phase 3 Step 3.2, deliberately — the match was already counted), so a
+raw row count exceeds `matches_played` on every edited score and the check would be all false
+positives.
+
+---
+
+## ISSUE-49 — The whole `config.database` block is dead 🟡 {#issue-49}
+
+*Found 2026-07-31 during the hot-path DB sweep, while checking whether pool size was tunable in prod.*
+
+### Symptom
+
+`APP_DATABASE_CONNECTION_TIMEOUT_MS` is a documented, settable environment variable that does nothing.
+Someone tuning a prod incident sets it, redeploys, and observes no change — with nothing in logs or
+config output to indicate why.
+
+The documented value is also wrong. `config.ts:521` says the pool acquisition timeout is 5 seconds; the
+pool actually uses **2 seconds** (`db-connections.ts:26`).
+
+### Root cause
+
+`config.ts:517-522` defines a full `database` config block — `queryTimeoutMs`, `retryMaxAttempts`,
+`retryBackoffBaseMs`, `connectionTimeoutMs` — each with doc comments and env overrides wired in
+(`config.ts:635-636`). **Nothing outside `config.ts` reads any of the four.** Verified by grep for each
+field name across `packages/api/src` excluding tests: zero consumers.
+
+Meanwhile `initializeDb()` constructs the Pool from hardcoded literals and never consults the config at
+all (`db-connections.ts:22-27`): `min: 2`, `max: 10`, `idleTimeoutMillis: 30000`,
+`connectionTimeoutMillis: 2000`.
+
+### Fix
+
+Wire the block through, or delete it. Wiring is preferable — pool sizing genuinely needs to be tunable
+without a redeploy, and `max: 10` is currently a code change (see
+[`BACKLOG.md`](../../BACKLOG.md) § 🔍 Hot-path DB gaps, which covers why the number itself matters).
+
+Pass `getAppConfig().database` into `initializeDb()` and use it for `connectionTimeoutMillis` and the
+query timeout. Add `max`/`min` to the config block at the same time, since that is the field anyone
+reaching for this actually wants.
+
+⚠ **Do NOT just change the literal 2000 to 5000 to make the comment true.** That leaves the env var
+still dead, which is the actual defect — the wrong number is only how it was noticed.
+
+### Verify
+
+Reproduce first: set `APP_DATABASE_CONNECTION_TIMEOUT_MS=9999`, start the API, and confirm the pool
+still times out acquisition at 2s. After the fix, the configured value takes effect and
+`getAppConfig().database` has at least one consumer outside `config.ts`.
+
+---
+
+## ISSUE-50 — `StandingsCache` is never read or populated 🟠 {#issue-50}
+
+*Found 2026-07-31 during the hot-path DB sweep. Same placebo shape as [ISSUE-46](#issue-46) — wired-up
+machinery that cannot do its job.*
+
+### Symptom
+
+`GET /tournaments/:id/bundle` recomputes standings from scratch on every request — two queries per
+group plus a `calculateStandings` pass — even though a cache exists specifically to prevent that. Every
+player viewing the same tournament recomputes identical standings independently.
+
+### Root cause
+
+The cache is fully built and fully wired, except for the two methods that would make it a cache.
+
+`StandingsCache` declares `get`/`set`/`clear` and `InMemoryStandingsCache` implements all three
+(`standings-cache.ts:4-24`). It is constructed at `server.ts:64`, subscribed to cross-instance
+invalidations at `server.ts:65`, and passed into app deps (`server.ts:142`, `app.ts:100`). The standings
+processor publishes `standings.invalidate` on the bus and calls `clear(groupId)` on every score
+(`standings-processor.ts:29-30`).
+
+**Only `clear` is ever called.** Grep for `standingsCache` across `packages/api/src` excluding tests
+returns the class, the type import, the wiring, and that one `clear` — no `get`, no `set`. `routes/
+tournaments.ts` never references it. So the invalidation channel faithfully maintains an empty Map, and
+the bundle endpoint (`tournaments.ts:2870-2898`) never consults it.
+
+### Fix
+
+Read from the cache before the per-group fetch in the bundle's Phase 2, and `set` the computed result.
+Keyed by `groupId`, which is what `clear` already uses, so the existing invalidation works unchanged.
+
+⚠ **Check the `include` parameter interaction.** The bundle computes standings only when
+`fields.has('standings')` (`tournaments.ts:2871`), and the per-group fetch is shared with the `matches`
+field — so a cache hit must not skip work that `matches` still needs.
+
+### Verify
+
+Reproduce first: request the same bundle twice with no score in between and confirm both requests issue
+the per-group member/match queries (log at `debug`, or count with `LOG_LEVEL=debug | grep`). After the
+fix the second request issues none, and submitting a score makes the next request issue them again.
+
+---
+
+## ISSUE-51 — Bracket generation recomputes each group's standings once per advancing rank 🟡 {#issue-51}
+
+*Found 2026-07-31 during the hot-path DB sweep.*
+
+### Symptom
+
+Publishing a bracket does `Σ(advancing_count) × 2` database queries and that many `calculateStandings`
+passes, where `groups.length × 2` and one pass per group would do. A tournament with 4 groups advancing
+4 players each does 32 queries instead of 8, computing the identical standings four times per group.
+
+### Root cause
+
+`bracket-processor.ts:47-63` nests the seed walk outside the group walk:
+
+```
+for (let rank = 0; rank < maxAdvancing; rank++) {
+  for (const group of groups) {
+    const members = await deps.groupRepo.findMembersByGroup(group.id)
+    const matches = await deps.groupRepo.findMatchesByGroup(group.id)
+    const standings = calculateStandings(participants, matchData)
+    if (standings[rank]) { seeds.push(...) }
+```
+
+A group's standings do not change between rank iterations — each pass recomputes the same array and
+reads a different index out of it. The rank-major ordering is **deliberate and must be preserved**: it
+is what interleaves seeds across groups (all 1st-place finishers, then all 2nd, …).
+
+### Fix
+
+Hoist the fetch and the computation above the rank loop — build a `Map<groupId, Standing[]>` once, then
+index it inside the existing nested walk. The seed ordering is unchanged because only the data source
+moves, not the loop structure.
+
+### Verify
+
+Reproduce first: publish a bracket for a tournament with ≥2 groups and ≥2 advancing each, counting
+`findMembersByGroup` calls. Before the fix the count is `Σ(advancing_count)`; after, it equals
+`groups.length`. The resulting `seeds` array must be byte-identical either way — assert on seed order,
+not just seed membership.
+
+---
+
+## ISSUE-52 — Coach SSE route ignores `sseMaxConnectionsPerUser` 🟠 {#issue-52}
+
+*Found 2026-07-31 during the hot-path DB sweep, while sizing SSE connection load.*
+
+### Symptom
+
+A single user can hold unlimited concurrent `GET /player/coach/events` streams. The per-user cap that
+exists to prevent exactly this is enforced on the tournament stream and not on the coach stream, so the
+protection is bypassed by using the other route.
+
+### Root cause
+
+`tournaments.ts:2764-2771` counts live streams per user in `sseConnectionCount` and returns **429** once
+`deps.config.limits.sseMaxConnectionsPerUser` (default 5, `config.ts:526`) is reached.
+
+`coach.ts:234-256` has no equivalent. It goes straight from `resolveCoachConversation` to
+`flushHeaders()` and `broadcastBus.subscribe(...)` with no counter, no cap, and no 429 path.
+
+### Fix
+
+Mirror the tournament route's check, keyed on the resolved `playerId`, incrementing before
+`flushHeaders()` and decrementing in the existing `req.on('close')` handler alongside `unsubscribe()`.
+
+⚠ **The counter is per-process, not global.** `sseConnectionCount` is an in-memory Map, so the cap is
+per-instance and a user spread across instances gets N× the limit. That is a known property of the
+existing tournament-route implementation, not something to fix here — it belongs with the
+multi-instance work (`PRODUCTION_READINESS.md` PR-3). Match the existing behaviour; do not invent a
+distributed counter in this issue.
+
+### Verify
+
+Reproduce first: open 10 concurrent `EventSource` connections to `/player/coach/events` as one player
+and confirm all 10 connect. After the fix the 6th returns 429, and closing one frees a slot. Confirm the
+tournament route's behaviour is unchanged.
 
 ---
 

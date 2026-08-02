@@ -43,6 +43,15 @@ last-seen id) before treating SSE as guaranteed delivery. Relevant once real mul
 No task yet exists for the actual production rollout of the distributed topology:
 - **Provisioning** — ElastiCache (multi-AZ — see the Redis-required failure model in the V2 plan), ASG,
   ALB target groups + the readiness/liveness probes built in V1.5.
+  - **Sizing inputs added 2026-07-31** (hot-path DB sweep). Two per-instance ceilings that decide
+    instance count, neither of which is a DB-query problem: (a) **SSE holds one Node connection per
+    open stream** for the whole session, and the per-user cap (`sseMaxConnectionsPerUser`, default 5)
+    is an in-process Map — so it is per-instance, and a user spread across instances gets N× the limit;
+    (b) **the DB pool is `max: 10` hardcoded** (`db-connections.ts:25`), so total DB connections are
+    `instances × 10` against one server limit — which is what makes RDS Proxy / PgBouncer a real
+    question here rather than simply raising the number. Making it configurable at all is
+    [UAT ISSUE-49](./UAT_ISSUES.md#issue-49); **choosing the value belongs to this cutover.** Full
+    context in [`BACKLOG.md`](../../BACKLOG.md) § 🔍 Hot-path DB gaps (P-7).
 - **Rolling-deploy mixed-mode** — during a deploy, some instances run the in-process bus and some the Redis
   bus; SSE fan-out splits across the two until all instances are on Redis. Needs a deploy strategy.
 - **Live-session migration** — at cutover from `InMemoryTokenStore` → `RedisTokenStore`, in-flight
