@@ -86,7 +86,7 @@ async function main() {
       // In production, consider fallback or different initialization strategy
     }
 
-    // Assistant (@coach): in BullMQ mode the worker tier consumes
+    // Assistant (group @ref / 1:1 Coach): in BullMQ mode the worker tier consumes
     // assistant.reply/coach.turn; the in-memory queue has no consumer, so those two
     // inline processors are memory-mode-only (single-process dev/e2e). The client +
     // rate limiter themselves, and processRecapSweep, are built unconditionally —

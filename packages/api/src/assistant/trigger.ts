@@ -1,7 +1,7 @@
 /**
  * @ref trigger detection + reserved display names (design: reserved literal,
  * case-insensitive, detected server-side before the player-mention parser).
- * Renamed from @coach (Phase N, design §12 N-Q5).
+ * Renamed from the group surface's original trigger (Phase N, design §12 N-Q5).
  */
 
 export const ASSISTANT_TRIGGER_NAME = 'ref'

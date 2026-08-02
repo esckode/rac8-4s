@@ -123,7 +123,7 @@ async function main() {
     })
   }
 
-  // ── Assistant (@coach) processor deps ──────────────────────────────────────
+  // ── Assistant (@ref) processor deps ──────────────────────────────────────
   // Adapter defaults to mock (no network) until ASSISTANT_ADAPTER is set (A9.2).
   // The bus must be Redis-backed (SSE_BUS=redis) for replies to reach API
   // instances' SSE connections from the worker tier.

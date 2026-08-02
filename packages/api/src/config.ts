@@ -384,7 +384,7 @@ export interface EmailConfig {
 }
 
 /**
- * LLM assistant (@coach) configuration.
+ * LLM assistant configuration (group @ref + 1:1 Coach).
  */
 export interface AssistantConfig {
   /**

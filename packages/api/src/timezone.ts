@@ -2,7 +2,7 @@
  * Timezone hierarchy — Player Personalization P1 (design §P1).
  *
  * Pure helpers shared by the group-settings route (owner pin), the digest
- * sweep (timing gate), and Coach's group prose (absolute times).
+ * sweep (timing gate), and Ref's group prose (absolute times).
  */
 
 /**

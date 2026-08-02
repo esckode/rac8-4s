@@ -78,8 +78,8 @@ export class DataSubjectRequestService {
 
     // Anonymize per-store (idempotent primitives)
     await this.conversationRepo.anonymizeGroupMessagesFor(playerId)
-    // Best-effort: scrub the player's exact display name out of Coach's
-    // replies (A9.3) — must run before the name is otherwise lost.
+    // Best-effort: scrub the player's exact display name out of Ref's or
+    // Coach's replies (A9.3) — must run before the name is otherwise lost.
     await this.conversationRepo.scrubAssistantMentionsOf(player.name)
     await this.pollRepo.anonymizePollVotesFor(playerId)
     await this.leaderboardRepo.anonymizeMatchLogSlotsFor(playerId)

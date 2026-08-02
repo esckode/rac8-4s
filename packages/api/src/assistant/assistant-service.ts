@@ -1,8 +1,8 @@
 /**
- * Assistant service — one @coach turn, worker-tier (never the request path).
+ * Assistant service — one @ref turn, worker-tier (never the request path).
  *
  * Stateless per turn (Q13): fresh context = asker name + the last ~20 group
- * messages (Coach's own prior replies are ordinary rows, so the chat IS the
+ * messages (Ref's own prior replies are ordinary rows, so the chat IS the
  * memory). Idempotent on the triggering message id (Q12) via the reply row's
  * metadata.replyTo. On any client failure the fallback row is posted — a
  * mentioned bot that says nothing looks broken — and the job RESOLVES (no

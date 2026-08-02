@@ -31,7 +31,7 @@ const log = getLogger('recap-processor')
 
 const RECAP_TERMINAL_STATUSES = ['completed', 'tournament_complete']
 
-const RECAP_POLISH_SYSTEM_PROMPT = `You are Coach, a tennis/pickleball tournament assistant. You will be given
+const RECAP_POLISH_SYSTEM_PROMPT = `You are Ref, a tennis/pickleball tournament assistant. You will be given
 a tournament recap already written in full — winner, standings, and a stat.
 Rewrite it to sound warm and natural in under 80 words. Do not add, remove,
 or change any name, rank, or number. Do not call any tools. Reply with the

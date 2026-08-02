@@ -71,7 +71,7 @@ const MAX_TIMEZONE_LENGTH = 64
 
 /**
  * Browser IANA timezone (B-Q6), optional. Never trusted for auth — only used
- * to help @coach resolve natural-language times. Length-capped, not
+ * to help @ref resolve natural-language times. Length-capped, not
  * validated against the IANA database (an unrecognized value just falls
  * back to UTC downstream).
  */
@@ -694,7 +694,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           }
         }
 
-        // @coach trigger → enqueue one assistant.reply job (worker tier runs the
+        // @ref trigger → enqueue one assistant.reply job (worker tier runs the
         // LLM turn). jobId is keyed on the triggering message id (Q12 idempotency).
         if (deps.jobQueue && detectAssistantTrigger(message.body)) {
           const toggleRes = await (deps.db as any).query(
@@ -1341,7 +1341,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   // ─── Phase B: assistant-card confirm/cancel (design §11 B-Q3: mutate-first, then flip) ───
 
   // POST /player/groups/:groupId/assistant-cards/:cardId/confirm — proposer confirms a
-  // pending @coach write-action card. Mutates through the SAME existing service the normal
+  // pending @ref write-action card. Mutates through the SAME existing service the normal
   // route uses (submitScore), then atomically flips the card — the card is a shortcut, never
   // an authority; this route re-validates everything server-side regardless of draft-time checks.
   router.post(
@@ -1374,7 +1374,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
         if (requestedSchemaVersion !== undefined && requestedSchemaVersion !== card.schemaVersion) {
           return res.status(409).json({
             code: 'SCHEMA_VERSION_MISMATCH',
-            message: 'This card is from an older version — ask Coach again',
+            message: 'This card is from an older version — ask Ref again',
           })
         }
 

@@ -153,10 +153,10 @@ export class ConversationRepository {
   }
 
   /**
-   * DSR best-effort scrub (A9.3): assistant (@coach) rows are never
-   * authored by the erased player (player_id is always NULL, sender is
-   * always 'Coach'), so anonymizeGroupMessagesFor never touches them — but
-   * Coach may have mentioned the player's name in a reply body. Rewrites
+   * DSR best-effort scrub (A9.3): assistant rows (group @ref or 1:1 Coach)
+   * are never authored by the erased player (player_id is always NULL), so
+   * anonymizeGroupMessagesFor never touches them — but Ref or Coach may have
+   * mentioned the player's name in a reply body. Rewrites
    * every EXACT occurrence of the player's pre-erasure display name with
    * "Former player" inside type='assistant' bodies. Paraphrases (nicknames,
    * partial names) are out of scope — exact-substring only.

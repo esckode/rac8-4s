@@ -1,5 +1,5 @@
 /**
- * assistant.reply processor — worker-tier consumer for @coach turns.
+ * assistant.reply processor — worker-tier consumer for @ref turns.
  *
  * Gates the service behind the Q10 rate limiter, posts the polite cap
  * message at most once per limited window, records real spend post-turn,
