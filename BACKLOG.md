@@ -42,7 +42,7 @@ here.
 | [FRONTEND_IMPLEMENTATION.md](assets/planning/FRONTEND_IMPLEMENTATION.md) | Frontend-quality / rendering tasks driving [FRONTEND_PLATFORM_STRATEGY.md](assets/planning/FRONTEND_PLATFORM_STRATEGY.md) — FE-RENDER-1 (memoize `AuthProvider` value) | 📋 **Plan ready** — not started |
 | [PLAYER_GROUPS_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_IMPLEMENTATION.md) | Community layer — Phases G0–G5 (compliance/age-gate prereq, group entity+membership, durable chat+moderation, polls, casual tournament engine+launch, DSR erasure cascade). TDD-first, ≥85% coverage; carries R-A reconciliation (G4.7) | ✅ **Built & merged** (G0.1–G5.1, migrations 038–045) |
 | [PLAYER_GROUPS_V2_IMPLEMENTATION.md](assets/planning/PLAYER_GROUPS_V2_IMPLEMENTATION.md) | Community-layer refinements (FrontEndPlan §A/§B, grilled Q1–Q16) in **3 phases** — P1 member layer (group settings, member mgmt, invite-accept, age-gate wiring, @mentions), P2 personal notification thread (conversation-backed, DM seed), P3 casual play (launch flow + poll auto-launch/min-count + **shared scheduler** + casual scoring/leaderboards). TDD-first, ≥85%; 3 new pages + 1 tab; carries backend deltas + the 🔴 shared scheduler | ✅ **Built & merged** (P1.1–P3.9, migrations 046–048) |
-| [LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md) | @coach assistant — Phase A MVP (A0–A9: migration 049, @coach trigger, read-only tool layer + rank_reason, Haiku 4.5 via adapter, worker processor + rate limits, toggle + intro, FE render/picker/settings, e2e), Phase B confirm-card writes (B0–B7: assistant_cards migration, propose_score/propose_poll/propose_poll_vote/propose_casual_launch, ActionCard UI, confirm/cancel/complete routes, timezone plumbing, Tier-2 prompt), Phase C proactive (C0–C6: migration 051, nudge/recap/digest sweeps + hourly/weekly BullMQ jobs). TDD + e2e-scenario-first | ✅ **Built & merged** — Phases A, B **and C all on `main`** (verified 2026-07-25: `git branch --no-merged main` is empty; `nudge`/`recap`/`digest-processor.ts` all wired). Phase A 8/8 + Phase B 7/7 + Phase C 11/11 e2e passing (26/26 total), no regressions. **Pending rename:** the group trigger becomes `@ref` (design §12, grilled 2026-07-25 — see the "Plan ready" queue); the 1:1 Coach identity is unaffected. Launch gate: prod channel stays off (`ASSISTANT_ADAPTER` unset/mock = bot inert) until the privacy-policy AI clause ships (A9.2); recap-polish live-model quality also blocked on the same A0.1b (P-AWS enrollment) smoke gate |
+| [LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md) | @ref assistant — Phase A MVP (A0–A9: migration 049, group trigger, read-only tool layer + rank_reason, Haiku 4.5 via adapter, worker processor + rate limits, toggle + intro, FE render/picker/settings, e2e), Phase B confirm-card writes (B0–B7: assistant_cards migration, propose_score/propose_poll/propose_poll_vote/propose_casual_launch, ActionCard UI, confirm/cancel/complete routes, timezone plumbing, Tier-2 prompt), Phase C proactive (C0–C6: migration 051, nudge/recap/digest sweeps + hourly/weekly BullMQ jobs), Phase N group trigger rename `@coach`→`@ref` (N0–N7). TDD + e2e-scenario-first | ✅ **Built** — Phases A, B, C **on `main`** (verified 2026-07-25: Phase A 8/8 + Phase B 7/7 + Phase C 11/11 e2e, no regressions). **Phase N (rename) is built on branch `llm-assistant-phase-n`, not yet merged** — the group trigger and its display name are now `@ref`/`Ref`; the 1:1 Coach identity is untouched (design §12 N-Q1). Re-verified 2026-08-02 post-rename: Phase A 8/8 + Phase B 7/7 + Phase C 13/13 + the two personalization specs touching the trigger 4/4 (32/32 total) e2e green; `coach.spec.ts` re-run unchanged, 8/8. Launch gate: prod channel stays off (`ASSISTANT_ADAPTER` unset/mock = bot inert) until the privacy-policy AI clause ships (A9.2, text now correct post-rename — still needs owner approval); recap-polish live-model quality also blocked on the same A0.1b (P-AWS enrollment) smoke gate |
 | [PERSONALIZATION_IMPLEMENTATION.md](assets/planning/PERSONALIZATION_IMPLEMENTATION.md) | Player personalization — S0–S8 (migrations 052–056: `player_settings` + `/profile` page; timezone hierarchy + group-tz digest reschedule; "you" anchoring + initials avatars + viewer-local times; pending-actions endpoint + tab badges + up-next strip + composer chip; notify prefs + quiet hours AND-layered with the group dial; table density; digest-aligned standings snapshots + rank movement; availability grid + Coach counts-only tool). TDD + e2e-scenario-first | ✅ **Built & merged** (S0–S8, 2026-07-14, branch `personalization-design` → `main`) — found+fixed a real dual-auth bug via live e2e |
 | [COACH_1TO1_IMPLEMENTATION.md](assets/planning/COACH_1TO1_IMPLEMENTATION.md) | 1:1 Coach — S0–S10 (migration 057: `type='coach'` convo + `player_memories` + `assistant_cards.conversation_id` re-key; `/player/coach/*` routes + SSE; player-level tool context + snapshot; history-cached coach client (`COACH_MODEL`); 20/hr+60/day limiter + heads-up; `propose_remember` + memory routes; pinned entry + `/coach` page + Profile section; DSR export/erasure incl. the §5.2 [RED] personal-scope card test; **privacy-policy page** clearing the A9.2 gate). TDD + e2e-scenario-first | ✅ **Built & merged** (S0–S10, 2026-07-14/15, branch `coach-1to1` → `main`) — e2e 8/8 chromium+firefox, coverage ≥85% stmts on all named modules, regression ladder green modulo documented pre-existing flakes. Privacy-policy page (`/privacy`) live; **owner review/approval of its text still pending**, and manual live-model smoke blocked on A0.1b (P-AWS enrollment) — A9.2 + launch-readiness clear once those land |
 | [DESIGN_SYSTEM_ENFORCEMENT.md](assets/planning/DESIGN_SYSTEM_ENFORCEMENT.md) | Token-usage lint gate — Phases E0–E5: (b) repair broken ESLint config + clear 53 errors + gate lint in CI, (a) color-literal `no-restricted-syntax` rule on the unified gate w/ interim baseline + permanent allowlist, (c) husky/lint-staged pre-commit, **(E5 mandatory) full retrofit of all ~301 legacy color literals across 11 files + tear down the baseline** (gate becomes total). TDD-first via ESLint fixture harness | ✅ **Built & merged** to `main` |
@@ -160,39 +160,26 @@ here.
   (`ASSISTANT_ADAPTER` unset/mock = bot inert); **A0.1b** — P-AWS channel enrollment, which blocks
   the manual live-model smoke for every phase (e2e asserts plumbing against the mock; real model
   behaviour — decline phrasing, injection resistance, recap-polish quality — is unverified).
+- *(done)* ~~**Group trigger rename `@coach` → `@ref`**~~ — **Phase N (N1–N7 + DoD) built**
+  2026-08-02 on branch `llm-assistant-phase-n` (not yet merged to `main`), TDD throughout
+  ([LLM_ASSISTANT_IMPLEMENTATION.md](assets/planning/LLM_ASSISTANT_IMPLEMENTATION.md) Phase N;
+  design [§12](assets/planning/LLM_ASSISTANT_DESIGN.md) N-Q1–N-Q8, now marked Built). Group
+  trigger only, per N-Q1 — 1:1 Coach identity untouched. Both grep gates clean; `coach.spec.ts`
+  re-run unchanged (8/8). **The plan's own pre-implementation review (N0's 🔴 bullet) undercounted
+  the display-name half** — auditing every real call site during the build found production
+  literals beyond what N0 and its own re-audit named: `group-message-repository.ts`'s
+  `sendAssistantMessage` and `assistant-card-repository.ts`'s `createCard` (both write
+  `sender_name_snapshot` via a raw SQL literal, independent of `emit-card.ts`), a 4th propose-body
+  (`propose-poll-vote.ts`, N0's list had 3), `emit-card.ts`'s `senderName` (needed to become
+  *conditional* on `groupId`, not a flat rename — it's shared with the 1:1-only `propose_remember`
+  tool), a hardcoded sender label in `GroupChatPanel.tsx` independent of the message row's real
+  `senderName`, the group's one-time enable intro message body in `player-groups.ts`, and two
+  group-settings copy strings (`MyGroups.tsx`'s assistant toggle, `UpNextStrip.tsx`'s pending-card
+  row). Each has its own commit and, where a real producer existed, its own RED→GREEN pair.
 
 ### 📋 Plan ready → available to tackle
-- **Group trigger rename `@coach` → `@ref`** *(decided 2026-07-25,
-  [LLM_ASSISTANT_DESIGN.md](assets/planning/LLM_ASSISTANT_DESIGN.md) §12 N-Q1–N-Q8; no grill left).*
-  The group bot **executes** (scores, polls, launches, location) while only the 1:1 surface
-  **advises** — one identity for both misdescribed the group role. **Group trigger only:**
-  `detectAssistantTrigger` has a single call site (`routes/player-groups.ts:697`) and the 1:1 route
-  never used it, so the 1:1 Coach identity and its `e2e/config.ts` constants are untouched. A
-  per-action `@verb` set was designed and rejected (too many words for a group to select correctly).
-  **Steps: `LLM_ASSISTANT_IMPLEMENTATION.md` Phase N (N0–N7 + DoD).**
-  🔴 **Do this BEFORE the A9.2 privacy-text approval** — `PrivacyPolicy.tsx` renders user-visible copy
-  naming "Coach" for both surfaces, including *"When you @mention Coach in a group chat"* (line 41),
-  and A9.2 is the owner-approval gate on that exact text. Approving first forces a second approval
-  round. It's also free right now: the bot is gated off (`ASSISTANT_ADAPTER` unset ⇒ inert), so no
-  real group has ever seen `@coach`. Verified scope: **101 occurrences across 32 files** (re-verified
-  2026-08-01, no drift), of which the functional ones are `trigger.ts`, `prompt.ts`,
-  `GroupChatPanel.tsx` (the P7 chip inserts `@coach` text), `PrivacyPolicy.tsx`,
-  `docs/assistant-help.md`, and the e2e specs.
-  🔴 **Plus a second half that count does not see** *(added 2026-08-01, pre-implementation review —
-  Phase N was keyed entirely on the `@coach` **trigger** and missed the `Coach` **display name**)*:
-  `prompt.ts:20`'s persona, `emit-card.ts:29`'s `senderName: 'Coach'`, the `Coach drafted a …` group
-  message bodies in `propose-score.ts`/`propose-poll.ts`/`propose-casual-launch.ts`, and
-  `assistant-client.ts:252,349`'s `'[mock] Coach reply'` — **none contain the string `@coach`**, so a
-  grep-clean branch still ships a bot that signs its messages Coach. Covered by the new
-  **N3b** step and a second DoD grep gate. Touches: `trigger.ts` (constants, regex, `RESERVED_DISPLAY_NAMES`
-  gains `ref` **and keeps `coach`** — else the retired identity is impersonable), `prompt.ts` persona
-  **plus an explicit "you do not arbitrate disputes" instruction** (N-Q6: "ref" invites
-  "@ref that score is wrong" and there is **no reject/dispute path** in the codebase — only
-  `PATCH /:id/matches/:matchId/confirm`), `MentionAutocomplete`, `ActionCard`, `GroupChatPanel`,
-  the group-assistant e2e specs, and steps/DoD in `LLM_ASSISTANT_IMPLEMENTATION.md`. ⚠ **Update
-  `docs/assistant-help.md` in the same change** — it is the corpus the bot answers *from*, so
-  shipping without it makes `@ref` explain itself as `@coach`. No HL/REQUIREMENTS reconciliation
-  needed (both contain zero `@coach` references).
+- **Merge `llm-assistant-phase-n` to `main`** — the Phase N rename above is built and e2e-verified
+  but was intentionally left unmerged per its build instructions. Fast-forward merge once reviewed.
 - **FRONTEND_IMPLEMENTATION.md** — frontend-quality tasks (TDD). First task: **FE-RENDER-1** memoize the
   `AuthProvider` context value.
 

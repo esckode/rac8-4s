@@ -5,7 +5,8 @@
 
 **Date:** 2026-07-10 (drafted + **fully grilled to resolution the same day** — see §10;
 Phase B/C mechanics grilled 2026-07-11 — see §11; **group trigger rename `@coach` → `@ref`
-grilled 2026-07-25 — see §12, decided but not yet built**)
+grilled 2026-07-25 — see §12, built (Phase N, branch `llm-assistant-phase-n`, not yet merged
+to `main`)**)
 **Status:** ✅ **Built & merged — all three phases on `main`:** Phase A (2026-07-11, A0–A9),
 Phase B (2026-07-12, B0–B7), Phase C (2026-07-13, C0–C6, proactive nudges/recap/digest — see
 [LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md)). *(Merge status corrected
@@ -585,6 +586,10 @@ their own bounds — nudge ≤40 words + the match list, recap ≤80 words, dige
 
 Grilled with the product owner to the same standard as §10/§11 — settled; do not relitigate
 without new evidence.
+
+**Status: ✅ Built** — Phase N (N1–N7 + DoD) in
+[LLM_ASSISTANT_IMPLEMENTATION.md](./LLM_ASSISTANT_IMPLEMENTATION.md), branch
+`llm-assistant-phase-n`, not yet merged to `main`.
 
 **The problem.** One identity, `@coach`, serves two jobs that are not alike. In the 1:1 surface the
 bot *advises* (performance, tactics, scouting) — "coach" is exactly right. In group chat it
