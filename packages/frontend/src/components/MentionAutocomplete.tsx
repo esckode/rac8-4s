@@ -9,13 +9,13 @@ interface MentionAutocompleteProps {
   query: string
   onSelect: (name: string) => void
   onClose: () => void
-  /** Whether the group's @coach assistant is enabled (mirrors trigger.ts). */
+  /** Whether the group's @ref assistant is enabled (mirrors trigger.ts). */
   assistantEnabled?: boolean
 }
 
 // Mirrors packages/api/src/assistant/trigger.ts ASSISTANT_TRIGGER_NAME/DISPLAY_NAME
-const ASSISTANT_TRIGGER_NAME = 'coach'
-const ASSISTANT_DISPLAY_NAME = 'Coach'
+const ASSISTANT_TRIGGER_NAME = 'ref'
+const ASSISTANT_DISPLAY_NAME = 'Ref'
 const ASSISTANT_HINT = 'Ask about matches, standings, how-to'
 
 export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
@@ -28,7 +28,7 @@ export const MentionAutocomplete: React.FC<MentionAutocompleteProps> = ({
   const filtered = members.filter(m =>
     m.name.toLowerCase().includes(query.toLowerCase())
   )
-  // Coach is filtered like a member by prefix, but always ranked first on match.
+  // Ref is filtered like a member by prefix, but always ranked first on match.
   const showAssistant =
     assistantEnabled && ASSISTANT_TRIGGER_NAME.startsWith(query.toLowerCase())
 

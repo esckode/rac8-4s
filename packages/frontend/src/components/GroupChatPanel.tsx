@@ -36,12 +36,12 @@ interface GroupChatPanelProps {
   active?: boolean
   /** When true, the current user is an owner of this group. */
   isOwner?: boolean
-  /** Whether the group's @coach assistant is enabled (from useGroupList). */
+  /** Whether the group's @ref assistant is enabled (from useGroupList). */
   assistantEnabled?: boolean
 }
 
 // Mirrors packages/api/src/assistant/trigger.ts ASSISTANT_DISPLAY_NAME
-const ASSISTANT_DISPLAY_NAME = 'Coach'
+const ASSISTANT_DISPLAY_NAME = 'Ref'
 
 export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
   groupId,
@@ -247,7 +247,7 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
   }
 
   // State-aware composer quick chip (P7) — one chip, highest applicable
-  // priority: Report score > Vote > generic @coach. Pre-fills or navigates
+  // priority: Report score > Vote > generic @ref. Pre-fills or navigates
   // only — never sends, never mutates. Hidden entirely when the group's
   // assistant is off (mirrors the mention picker).
   const groupOpenPoll = pendingActions.openPolls.find(p => p.groupId === groupId)
@@ -257,16 +257,16 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
     ? { kind: 'report' as const, label: 'Report score', opponentName: pendingActions.unscoredMatches[0].opponentName }
     : groupOpenPoll
     ? { kind: 'vote' as const, label: 'Vote', pollId: groupOpenPoll.pollId }
-    : { kind: 'generic' as const, label: "@coach when's my next match?" }
+    : { kind: 'generic' as const, label: "@ref when's my next match?" }
 
   function handleComposerChipClick() {
     if (!composerChip) return
     if (composerChip.kind === 'report') {
-      setBody(`@coach beat ${composerChip.opponentName} `)
+      setBody(`@ref beat ${composerChip.opponentName} `)
     } else if (composerChip.kind === 'vote') {
       document.getElementById(`poll-message-${composerChip.pollId}`)?.scrollIntoView({ behavior: 'smooth' })
     } else {
-      setBody("@coach when's my next match? ")
+      setBody("@ref when's my next match? ")
     }
   }
 
@@ -334,7 +334,7 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
                   <p className="text-(--ink-900)">{m.body}</p>
                 )}
                 <p className="text-xs text-(--court-700) font-medium">
-                  Coach · {new Date(m.createdAt).toLocaleTimeString()}
+                  Ref · {new Date(m.createdAt).toLocaleTimeString()}
                 </p>
               </div>
             )
@@ -463,11 +463,11 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
             onSelect={name => {
               const before = body.slice(0, mentionStart ?? body.length)
               const after = body.slice((mentionStart ?? 0) + 1 + mentionQuery.length)
-              // Coach must be inserted as the unquoted trigger literal
-              // (@coach) — the quoted @"Name" form used for members would
+              // Ref must be inserted as the unquoted trigger literal
+              // (@ref) — the quoted @"Name" form used for members would
               // not match the backend's trigger regex.
               const mention =
-                name === ASSISTANT_DISPLAY_NAME ? '@coach' : `@"${name}"`
+                name === ASSISTANT_DISPLAY_NAME ? '@ref' : `@"${name}"`
               setBody(`${before}${mention} ${after}`)
               setMentionQuery(null)
               setMentionStart(null)

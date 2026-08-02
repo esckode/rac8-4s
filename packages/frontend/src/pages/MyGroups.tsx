@@ -651,7 +651,7 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
       {/* Assistant toggle */}
       <div className="flex items-center gap-3">
         <label htmlFor="assistant-toggle" className="text-sm text-(--ink-700)">
-          Coach assistant
+          Ref assistant
         </label>
         <input
           id="assistant-toggle"
@@ -661,7 +661,7 @@ const GroupConfig: React.FC<GroupConfigProps> = ({
           checked={assistantEnabled}
           onChange={handleAssistantToggle}
           className="h-5 w-5 accent-(--court-600)"
-          aria-label="Enable Coach assistant"
+          aria-label="Enable Ref assistant"
         />
       </div>
 

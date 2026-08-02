@@ -1,7 +1,7 @@
 /**
  * ActionCard — B3.2
  *
- * Inline confirm-card widget rendered in the group chat stream for @coach
+ * Inline confirm-card widget rendered in the group chat stream for @ref
  * write-action proposals (design §11 B-Q1-B-Q9). A pure, controlled
  * component: the parent (GroupChatPanel) owns the confirm/dismiss API calls
  * and card.updated SSE patching — this component only renders the given

@@ -48,7 +48,7 @@ export const UpNextStrip: React.FC<UpNextStripProps> = ({ actions }) => {
       {pendingCards.map(c => (
         <a key={c.cardId} href={`/groups/${c.groupId}`} data-testid="up-next-card" style={rowStyle}>
           <span aria-hidden="true">🤖</span>
-          <span>Confirm with Coach · {c.groupName}</span>
+          <span>Confirm with Ref · {c.groupName}</span>
         </a>
       ))}
 
