@@ -320,17 +320,21 @@ describe('Profile', () => {
 
   // ── P13 Phase 13 — last-10-partners panel ────────────────────────────────
 
-  it('renders each partner by name', async () => {
+  it('renders each partner by name with the date last partnered (Task 14.7)', async () => {
+    const lastPartneredAt1 = '2026-07-20T00:00:00.000Z'
+    const lastPartneredAt2 = '2026-07-10T00:00:00.000Z'
     mockFetchRouter({}, {}, [], [
-      { playerId: 'player_1', name: 'Alex Kim', lastPartneredAt: '2026-07-20T00:00:00.000Z' },
-      { playerId: 'player_2', name: 'Sam Rivera', lastPartneredAt: '2026-07-10T00:00:00.000Z' },
+      { playerId: 'player_1', name: 'Alex Kim', lastPartneredAt: lastPartneredAt1 },
+      { playerId: 'player_2', name: 'Sam Rivera', lastPartneredAt: lastPartneredAt2 },
     ])
     render(<Profile />)
     await waitFor(() => {
       expect(screen.getByTestId('partner-player_1')).toBeInTheDocument()
       expect(screen.getByText('Alex Kim')).toBeInTheDocument()
+      expect(screen.getByText(new Date(lastPartneredAt1).toLocaleDateString())).toBeInTheDocument()
       expect(screen.getByTestId('partner-player_2')).toBeInTheDocument()
       expect(screen.getByText('Sam Rivera')).toBeInTheDocument()
+      expect(screen.getByText(new Date(lastPartneredAt2).toLocaleDateString())).toBeInTheDocument()
     })
   })
 
