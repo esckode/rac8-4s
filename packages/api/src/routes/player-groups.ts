@@ -310,7 +310,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'email must be a non-empty string' })
         }
 
-        // Reserved display names (the @coach assistant) cannot be taken by players
+        // Reserved display names (the @ref assistant) cannot be taken by players
         if (typeof name === 'string' && isReservedDisplayName(name)) {
           return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'name is reserved' })
         }

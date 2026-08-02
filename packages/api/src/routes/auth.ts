@@ -84,7 +84,7 @@ export default function authRouter(deps: AppDependencies) {
         validationErrors.push('name must be at least 2 characters')
       }
 
-      // Reserved display names (the @coach assistant) cannot be taken by players
+      // Reserved display names (the @ref assistant) cannot be taken by players
       if (name && isReservedDisplayName(name)) {
         validationErrors.push('name is reserved')
       }

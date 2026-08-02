@@ -1,19 +1,25 @@
 /**
- * @coach trigger detection + reserved display names (design: reserved literal,
+ * @ref trigger detection + reserved display names (design: reserved literal,
  * case-insensitive, detected server-side before the player-mention parser).
+ * Renamed from @coach (Phase N, design §12 N-Q5).
  */
 
-export const ASSISTANT_TRIGGER_NAME = 'coach'
-export const ASSISTANT_DISPLAY_NAME = 'Coach'
+export const ASSISTANT_TRIGGER_NAME = 'ref'
+export const ASSISTANT_DISPLAY_NAME = 'Ref'
 
-const TRIGGER_RE = /(^|\s)@coach\b/i
+const TRIGGER_RE = /(^|\s)@ref\b/i
 
-/** True when the message body mentions @coach (case-insensitive, word-boundary). */
+/** True when the message body mentions @ref (case-insensitive, word-boundary). */
 export function detectAssistantTrigger(body: string): boolean {
   return TRIGGER_RE.test(body)
 }
 
-const RESERVED_DISPLAY_NAMES = [ASSISTANT_TRIGGER_NAME]
+/**
+ * Explicit literal, not derived from ASSISTANT_TRIGGER_NAME (design §12 N-Q7):
+ * 'coach' stays reserved after the rename so the retired identity can't be
+ * registered and used to impersonate the bot's historical messages.
+ */
+const RESERVED_DISPLAY_NAMES = ['ref', 'coach']
 
 /**
  * True when a player display name collides with the assistant's reserved name

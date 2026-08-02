@@ -1,9 +1,9 @@
 /**
- * A2.5 — @coach trigger on the group message POST route enqueues an
+ * A2.5 — @ref trigger on the group message POST route enqueues an
  * assistant.reply job (RED first).
  *
  * Covers:
- *  - body containing @coach + assistant_enabled=true → 201 AND one
+ *  - body containing @ref + assistant_enabled=true → 201 AND one
  *    'assistant.reply' job with payload {messageId, conversationId, groupId,
  *    playerId, body} and jobId 'assistant-<messageId>' (Q12 idempotency key;
  *    hyphen not colon — BullMQ rejects ':' in custom job IDs)
@@ -52,7 +52,7 @@ async function playerToken(
   return session.token
 }
 
-describe('A2.5 — @coach mention enqueues assistant.reply', () => {
+describe('A2.5 — @ref mention enqueues assistant.reply', () => {
   let pool: Pool
   let app: Express
   let tokenStore: InMemoryTokenStore
@@ -94,7 +94,7 @@ describe('A2.5 — @coach mention enqueues assistant.reply', () => {
     const res = await request(app)
       .post(`/player/groups/${group.id}/messages`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ body: '@coach when is my next match?' })
+      .send({ body: '@ref when is my next match?' })
 
     expect(res.status).toBe(201)
     const jobs = newAssistantJobs(before)
@@ -105,7 +105,7 @@ describe('A2.5 — @coach mention enqueues assistant.reply', () => {
       conversationId: res.body.conversationId,
       groupId: group.id,
       playerId: owner.id,
-      body: '@coach when is my next match?',
+      body: '@ref when is my next match?',
     })
   })
 
@@ -118,7 +118,7 @@ describe('A2.5 — @coach mention enqueues assistant.reply', () => {
     const res = await request(app)
       .post(`/player/groups/${group.id}/messages`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ body: '@coach when is my next match?', timezone: 'America/New_York' })
+      .send({ body: '@ref when is my next match?', timezone: 'America/New_York' })
 
     expect(res.status).toBe(201)
     const jobs = newAssistantJobs(before)
@@ -139,7 +139,7 @@ describe('A2.5 — @coach mention enqueues assistant.reply', () => {
     expect(res.status).toBe(400)
   })
 
-  it('is case-insensitive (@Coach)', async () => {
+  it('is case-insensitive (@Ref)', async () => {
     const owner = await createPlayer(pool)
     const token = await playerToken(owner, tokenStore)
     const group = await createGroup(token)
@@ -148,7 +148,7 @@ describe('A2.5 — @coach mention enqueues assistant.reply', () => {
     const res = await request(app)
       .post(`/player/groups/${group.id}/messages`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ body: 'hey @Coach standings please' })
+      .send({ body: 'hey @Ref standings please' })
 
     expect(res.status).toBe(201)
     expect(newAssistantJobs(before)).toHaveLength(1)
@@ -164,7 +164,7 @@ describe('A2.5 — @coach mention enqueues assistant.reply', () => {
     const res = await request(app)
       .post(`/player/groups/${group.id}/messages`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ body: '@coach are you there?' })
+      .send({ body: '@ref are you there?' })
 
     expect(res.status).toBe(201)
     expect(newAssistantJobs(before)).toHaveLength(0)
@@ -179,7 +179,7 @@ describe('A2.5 — @coach mention enqueues assistant.reply', () => {
     const res = await request(app)
       .post(`/player/groups/${group.id}/messages`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ body: 'the coach said to practice @coaching drills' })
+      .send({ body: 'the ref said to practice @reffing drills' })
 
     expect(res.status).toBe(201)
     expect(newAssistantJobs(before)).toHaveLength(0)
