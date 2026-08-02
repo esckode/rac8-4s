@@ -888,7 +888,7 @@ The tasks below are what did **not** hold. **Order: 14.1 → 14.2 → 14.7 (code
 | 14.6 | `seed-test-accounts` blocks the API coverage gate | **Sonnet** | A scope call, not a code change |
 | 14.7 | Two recorded deviations | **Haiku** | One doc amendment, one two-line choice |
 
-### Task 14.1 — first-match settles take no lock (ISSUE-48 is not fully closed) 🟠
+### Task 14.1 — first-match settles take no lock (ISSUE-48 is not fully closed) ⚪ resolved 2026-08-02
 
 **This is the one thing on the branch that must not merge as-is.** Phase 12 closed
 [ISSUE-47](./UAT_ISSUES.md#issue-47) outright and closed [ISSUE-48](./UAT_ISSUES.md#issue-48) *for
@@ -954,7 +954,7 @@ leave a red assertion for the next session to "fix" by guessing.
 
 **Done when:** the tests above are green and ISSUE-48 flips to ✅ in `UAT_ISSUES.md` (Task 14.4).
 
-### Task 14.2 — the §0a grep is not clean 🟡
+### Task 14.2 — the §0a grep is not clean ⚪ resolved 2026-08-02
 
 §0a's verification command still returns a hit:
 
@@ -980,7 +980,7 @@ not by grep. **Pick one and write it into §0a** — leaving it implicit is how 
 **Done when:** the §0a command as written in this doc returns no matches, and its file list matches what
 it claims to cover.
 
-### Task 14.3 — Step 10.4's merge-gate command runs zero tests 🟠
+### Task 14.3 — Step 10.4's merge-gate command runs zero tests ⚪ resolved 2026-08-02
 
 The command in Step 10.4 (and the same shape in CLAUDE.md §11) is:
 
@@ -1018,7 +1018,7 @@ part of this branch.
 **Done when:** the corrected commands are in Step 10.4 and both have been run to a real, non-empty
 result. ✅ Done 2026-08-02.
 
-### Task 14.4 — status markers, DoD boxes, and six uncommitted docs 🟡
+### Task 14.4 — status markers, DoD boxes, and six uncommitted docs ⚪ resolved 2026-08-02
 
 **The plan of record for this branch exists only on disk.** `git status` shows six modified planning
 docs — `BACKLOG.md`, `PLAYER_GROUPS_DESIGN.md`, `PRODUCTION_READINESS.md`, `RATINGS_DESIGN.md`,
