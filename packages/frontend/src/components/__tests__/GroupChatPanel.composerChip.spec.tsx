@@ -2,7 +2,7 @@
  * S4.6 — State-aware composer quick chip (P7)
  *
  * Exactly one chip, highest applicable priority: Report score > Vote >
- * generic "@coach ...". Chips only pre-fill composer text or navigate —
+ * generic "@ref ...". Chips only pre-fill composer text or navigate —
  * never send, never mutate. Hidden entirely when the group's
  * assistantEnabled is false (mirrors the mention picker).
  */
@@ -65,10 +65,10 @@ describe('GroupChatPanel composer chip (P7)', () => {
     jest.clearAllMocks()
   })
 
-  it('shows a generic @coach chip when nothing is pending', async () => {
+  it('shows a generic @ref chip when nothing is pending', async () => {
     renderPanel()
     await waitFor(() => expect(screen.getByTestId('composer-chip')).toBeInTheDocument())
-    expect(screen.getByTestId('composer-chip')).toHaveTextContent(/@coach/i)
+    expect(screen.getByTestId('composer-chip')).toHaveTextContent(/@ref/i)
   })
 
   it('shows a Report score chip when an unscored match exists, and pre-fills without sending', async () => {
@@ -80,7 +80,7 @@ describe('GroupChatPanel composer chip (P7)', () => {
 
     fireEvent.click(screen.getByTestId('composer-chip'))
     const input = screen.getByTestId('group-message-input') as HTMLInputElement
-    expect(input.value).toBe('@coach beat Alice ')
+    expect(input.value).toBe('@ref beat Alice ')
     expect(screen.queryByTestId('group-system-event')).not.toBeInTheDocument()
   })
 
@@ -111,7 +111,7 @@ describe('GroupChatPanel composer chip (P7)', () => {
       { groupId: 'grp-other', groupName: 'Other', pollId: 'poll-9', question: 'Play Sunday?' },
     ]
     renderPanel()
-    await waitFor(() => expect(screen.getByTestId('composer-chip')).toHaveTextContent(/@coach/i))
+    await waitFor(() => expect(screen.getByTestId('composer-chip')).toHaveTextContent(/@ref/i))
   })
 
   it('hides the chip entirely when assistantEnabled is false, even with a pending match', async () => {

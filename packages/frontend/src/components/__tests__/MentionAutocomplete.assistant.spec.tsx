@@ -1,9 +1,10 @@
 /**
- * A7.3 — Coach pinned in the @ mention picker (RED first)
+ * A7.3 — Ref pinned in the @ mention picker (RED first)
+ * N4 (Phase N, design §12 N-Q5) — renamed from Coach.
  *
- * Coach is the pinned first entry with hint text, filtered by prefix like a
+ * Ref is the pinned first entry with hint text, filtered by prefix like a
  * member (but always ranked first on match), selectable → inserts an
- * unquoted '@coach ' via onSelect('Coach'), and hidden entirely when
+ * unquoted '@ref ' via onSelect('Ref'), and hidden entirely when
  * assistantEnabled is false.
  */
 import React from 'react'
@@ -12,13 +13,13 @@ import { MentionAutocomplete } from '../MentionAutocomplete'
 
 const MEMBERS = [{ name: 'Alice Smith' }, { name: 'Bob Jones' }]
 
-describe('MentionAutocomplete — Coach entry (A7.3)', () => {
+describe('MentionAutocomplete — Ref entry (A7.3)', () => {
   const onSelect = jest.fn()
   const onClose = jest.fn()
 
   beforeEach(() => jest.resetAllMocks())
 
-  it('pins Coach first with hint text when assistantEnabled and query is empty', () => {
+  it('pins Ref first with hint text when assistantEnabled and query is empty', () => {
     render(
       <MentionAutocomplete
         members={MEMBERS}
@@ -29,11 +30,11 @@ describe('MentionAutocomplete — Coach entry (A7.3)', () => {
       />
     )
     const options = screen.getAllByTestId(/mention-option/)
-    expect(options[0]).toHaveTextContent('Coach')
+    expect(options[0]).toHaveTextContent('Ref')
     expect(options[0]).toHaveTextContent('Ask about matches, standings, how-to')
   })
 
-  it('selecting Coach calls onSelect with "Coach"', () => {
+  it('selecting Ref calls onSelect with "Ref"', () => {
     render(
       <MentionAutocomplete
         members={MEMBERS}
@@ -44,14 +45,14 @@ describe('MentionAutocomplete — Coach entry (A7.3)', () => {
       />
     )
     fireEvent.click(screen.getByTestId('mention-option-assistant'))
-    expect(onSelect).toHaveBeenCalledWith('Coach')
+    expect(onSelect).toHaveBeenCalledWith('Ref')
   })
 
-  it('Coach appears when the query prefix-matches "co" even if no member matches', () => {
+  it('Ref appears when the query prefix-matches "re" even if no member matches', () => {
     render(
       <MentionAutocomplete
         members={MEMBERS}
-        query="co"
+        query="re"
         onSelect={onSelect}
         onClose={onClose}
         assistantEnabled
@@ -61,7 +62,7 @@ describe('MentionAutocomplete — Coach entry (A7.3)', () => {
     expect(screen.queryAllByTestId('mention-option')).toHaveLength(0)
   })
 
-  it('Coach does not appear when the query does not match "coach"', () => {
+  it('Ref does not appear when the query does not match "ref"', () => {
     render(
       <MentionAutocomplete
         members={MEMBERS}
@@ -79,7 +80,7 @@ describe('MentionAutocomplete — Coach entry (A7.3)', () => {
     render(
       <MentionAutocomplete
         members={MEMBERS}
-        query="co"
+        query="re"
         onSelect={onSelect}
         onClose={onClose}
         assistantEnabled={false}

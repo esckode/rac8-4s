@@ -3,7 +3,7 @@
  *
  * FE side of the timezone-plumbing chain (design §11 B-Q6): send() attaches
  * Intl.DateTimeFormat().resolvedOptions().timeZone as an optional field so
- * @coach can resolve natural-language times the asker gives it.
+ * @ref can resolve natural-language times the asker gives it.
  */
 import { renderHook, waitFor } from '@testing-library/react'
 import { useGroupMessages, clearGroupMessageStores } from '../useGroupMessages'

@@ -1,7 +1,7 @@
 /**
  * RTL unit tests for ActionCard — B3.1
  *
- * Confirm-card widget for @coach write-action proposals (design §11 B-Q1-B-Q9).
+ * Confirm-card widget for @ref write-action proposals (design §11 B-Q1-B-Q9).
  * Tests:
  * - Renders the human-readable card body
  * - Confirm + Dismiss visible only to the proposer, only while pending & not expired
@@ -15,7 +15,7 @@ import { ActionCard, type ActionCardProps } from '../../components/ActionCard'
 
 function makeCard(overrides: Partial<ActionCardProps> = {}): ActionCardProps {
   return {
-    body: 'Coach drafted a score — You 6-4, 6-3 Bob (Spring Open).',
+    body: 'Ref drafted a score — You 6-4, 6-3 Bob (Spring Open).',
     status: 'pending',
     expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     result: null,

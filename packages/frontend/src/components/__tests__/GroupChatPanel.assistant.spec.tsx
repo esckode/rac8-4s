@@ -1,8 +1,9 @@
 /**
- * A7.1 — @coach assistant message rendering in GroupChatPanel (RED first)
+ * A7.1 — @ref assistant message rendering in GroupChatPanel (RED first)
+ * N4 (Phase N, design §12 N-Q5) — renamed from @coach/Coach.
  *
  * type='assistant' rows render distinctly from player messages: sender
- * "Coach", data-testid="assistant-message", not the plain
+ * "Ref", data-testid="assistant-message", not the plain
  * data-testid="group-message-item" bubble.
  */
 import React from 'react'
@@ -16,7 +17,7 @@ const mockMessages = [
     groupId: 'grp-1',
     type: 'assistant' as const,
     body: 'Saturday 9am vs Bob, Court 2.',
-    senderName: 'Coach',
+    senderName: 'Ref',
     playerId: null,
     createdAt: new Date().toISOString(),
     pollId: null,
@@ -41,7 +42,7 @@ global.fetch = jest.fn().mockResolvedValue({
   json: async () => ({ members: [] }),
 } as unknown as Response)
 
-describe('GroupChatPanel — @coach assistant message rendering (A7.1)', () => {
+describe('GroupChatPanel — @ref assistant message rendering (A7.1)', () => {
   it('renders a type=assistant row with data-testid="assistant-message"', async () => {
     render(<MemoryRouter><GroupChatPanel groupId="grp-1" /></MemoryRouter>)
     await waitFor(() => {
@@ -49,11 +50,11 @@ describe('GroupChatPanel — @coach assistant message rendering (A7.1)', () => {
     })
   })
 
-  it('shows the sender as Coach and the reply body', async () => {
+  it('shows the sender as Ref and the reply body', async () => {
     render(<MemoryRouter><GroupChatPanel groupId="grp-1" /></MemoryRouter>)
     await waitFor(() => {
       const bubble = screen.getByTestId('assistant-message')
-      expect(bubble).toHaveTextContent('Coach')
+      expect(bubble).toHaveTextContent('Ref')
       expect(bubble).toHaveTextContent('Saturday 9am vs Bob, Court 2.')
     })
   })
