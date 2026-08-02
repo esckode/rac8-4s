@@ -26,6 +26,23 @@ describe('seedTestAccounts (ISSUE-25)', () => {
     await beginTransaction(pool)
     accountRepo = new AccountRepository(pool)
     playerRepo = new PlayerRepository(pool)
+
+    // ISSUE-45 precondition, reproduced deterministically. On a shared dev DB the
+    // fixed seed identity accumulates e2e-created groups (Playwright drives the real
+    // API, which commits by design), so `player@test.com`'s player is referenced by
+    // player_groups.created_by. Recreating that shape here means this spec fails for
+    // the real reason on ANY database — on a clean one the bug is invisible.
+    const seedPlayer = await playerRepo.findOrCreatePlayerByEmail(
+      'player@test.com',
+      'Test Player',
+      undefined,
+      undefined,
+      { dateOfBirth: '2000-01-01', policyVersion: 'v1' }
+    )
+    await pool.query(
+      `INSERT INTO public.player_groups (name, created_by) VALUES ($1, $2)`,
+      ['ISSUE-45 fixture group', seedPlayer.id]
+    )
   })
 
   afterAll(async () => {
@@ -65,6 +82,22 @@ describe('seedTestAccounts (ISSUE-25)', () => {
 
     const players = await pool.query(`SELECT id FROM public.players WHERE email = $1`, ['player@test.com'])
     expect(players.rows).toHaveLength(1)
+  })
+
+  // ISSUE-45. Players are durable identities — real signup never deletes one, and
+  // other tables reference them. Resetting an account's state must not destroy the
+  // player behind it, or seeding breaks on any DB where that identity owns data.
+  it('seeds when the seed player already owns a group, leaving the group intact', async () => {
+    await seedTestAccounts(pool)
+
+    const player = await playerRepo.findByEmail('player@test.com')
+    expect(player).not.toBeNull()
+
+    const groups = await pool.query(
+      `SELECT id FROM public.player_groups WHERE created_by = $1 AND name = $2`,
+      [player?.id, 'ISSUE-45 fixture group']
+    )
+    expect(groups.rows).toHaveLength(1)
   })
 
   it('repairs an existing unlinked account instead of skipping it', async () => {
