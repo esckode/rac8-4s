@@ -202,9 +202,9 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 | **Group settings** | 7 | `group-settings.spec.ts` | `npx playwright test group-settings` |
 | **Group owner management** | 14 | `group-owner-management.spec.ts` | `npx playwright test group-owner-management` |
 | **Invite acceptance** | 6 | `invite-accept.spec.ts` | `npx playwright test invite-accept` |
-| **@coach assistant (core)** | 9 | `assistant.spec.ts` | `npx playwright test assistant.spec` |
-| **@coach assistant (actions)** | 8 | `assistant-actions.spec.ts` | `npx playwright test assistant-actions` |
-| **@coach assistant (proactive: nudges/recap/digest)** | 16 | `assistant-proactive.spec.ts` | `npx playwright test assistant-proactive` |
+| **@ref assistant (core)** | 9 | `assistant.spec.ts` | `npx playwright test assistant.spec` |
+| **@ref assistant (actions)** | 8 | `assistant-actions.spec.ts` | `npx playwright test assistant-actions` |
+| **@ref assistant (proactive: nudges/recap/digest)** | 16 | `assistant-proactive.spec.ts` | `npx playwright test assistant-proactive` |
 | **1:1 coach conversations** | 9 | `coach.spec.ts` | `npx playwright test coach` |
 | **Personalization (UI)** | 4 | `personalization-ui.spec.ts` | `npx playwright test personalization-ui` |
 | **Personalization (availability)** | 2 | `personalization-availability.spec.ts` | `npx playwright test personalization-availability` |
@@ -2237,7 +2237,7 @@ Then the MixerStatePanel shows "Sitting out this round: Alice, Bob"
 
 ---
 
-## Feature: LLM Assistant (@coach) — Phase A read-only Q&A
+## Feature: LLM Assistant (@ref) — Phase A read-only Q&A
 
 > Backend runs `ASSISTANT_ADAPTER=mock` + `JOB_QUEUE=memory` for e2e. The mock adapter is a
 > deterministic keyword router that fakes only the NL→intent hop — the tools it calls are the
@@ -2245,38 +2245,38 @@ Then the MixerStatePanel shows "Sitting out this round: Alice, Bob"
 > trigger → queue → tool auth → DB → SSE → render path. Answer *content* quality from the live
 > model is verified in the A9.2 manual smoke checklist, not here.
 
-### Scenario: Member mentions @coach and gets a reply in the feed
+### Scenario: Member mentions @ref and gets a reply in the feed
 ```
 Given a group with the assistant enabled (default)
   And a member viewing the group chat
-When the member sends "@coach hello"
+When the member sends "@ref hello"
 Then their own message appears in the feed
   And an assistant reply bubble appears without a page reload (SSE)
 ```
 
-### Scenario: Reply is styled as Coach, not a player
+### Scenario: Reply is styled as Ref, not a player
 ```
 Given an assistant reply in the feed
 Then the bubble has data-testid="assistant-message"
-  And the sender name shown is "Coach"
+  And the sender name shown is "Ref"
   And the styling is distinct from player messages (assistant variant)
 ```
 
 ### Scenario: Non-member cannot trigger the assistant
 ```
 Given a player who is not a member of the group
-When they POST "@coach hello" to the group's message route
+When they POST "@ref hello" to the group's message route
 Then the request is rejected with 403 (existing membership check)
   And no assistant job is enqueued
 ```
 
-### Scenario: Owner disables assistant → @coach produces no reply
+### Scenario: Owner disables assistant → @ref produces no reply
 ```
 Given the group owner opens group settings
 When the owner turns the Assistant toggle off
-  And a member sends "@coach hello"
+  And a member sends "@ref hello"
 Then no assistant reply appears within the wait window
-  And Coach no longer appears in the @ mention picker
+  And Ref no longer appears in the @ mention picker
 ```
 
 ### Scenario: Enabling posts a one-time intro message
@@ -2284,23 +2284,23 @@ Then no assistant reply appears within the wait window
 Given a group with the assistant toggled off
 When the owner turns the Assistant toggle on
 Then one assistant intro message appears in the feed
-  ("Hi, I'm Coach 👋 — mention @coach to ask about your matches, standings, or how the app works.")
+  ("Hi, I'm Ref 👋 — mention @ref to ask about your matches, standings, or how the app works.")
   And repeating the enable does not duplicate the intro within the same on-state
 ```
 
-### Scenario: Coach appears pinned in the @ mention picker
+### Scenario: Ref appears pinned in the @ mention picker
 ```
 Given a member typing "@" in the composer of an assistant-enabled group
-Then Coach is the pinned first entry with hint text ("Ask about matches, standings, how-to")
-When the member selects Coach
-Then "@coach " is inserted into the composer
+Then Ref is the pinned first entry with hint text ("Ask about matches, standings, how-to")
+When the member selects Ref
+Then "@ref " is inserted into the composer
 ```
 
 ### Scenario: Rate-limited player gets the polite cap message
 ```
 Given a player who has exhausted their hourly assistant quota (10/hr)
-When they send another "@coach" question
-Then Coach replies "I've hit my limit for now — try again later."
+When they send another "@ref" question
+Then Ref replies "I've hit my limit for now — try again later."
   And the cap message is posted at most once per limited window
 ```
 
@@ -2309,18 +2309,18 @@ Then Coach replies "I've hit my limit for now — try again later."
 Given two users in a group (asker = owner; opponent joined via invite-accept)
   And a casual session launched in the group with an explicit 2-player roster
   (round-robin auto-generates a pending asker-vs-opponent match immediately)
-When the asker sends "@coach who am I playing next?"
-Then the Coach reply bubble contains the seeded opponent's name
+When the asker sends "@ref who am I playing next?"
+Then the Ref reply bubble contains the seeded opponent's name
   (mock router → real get_my_matches → real scoping → DB → SSE → render)
 ```
 
 ### Scenario: Knowledge questions get a reply (plumbing only)
 ```
 Given an assistant-enabled group
-When a member sends "@coach how many points is the first-set tiebreak?"
-Then a Coach reply appears
-When a member sends "@coach how do I invite a friend to this casual tournament?"
-Then a Coach reply appears
+When a member sends "@ref how many points is the first-set tiebreak?"
+Then a Ref reply appears
+When a member sends "@ref how do I invite a friend to this casual tournament?"
+Then a Ref reply appears
 # Content is NOT asserted — the mock's canned text would only test our own hardcoded
 # string. Live-model answer quality is covered by the A9.2 smoke checklist.
 ```
@@ -2332,7 +2332,7 @@ Given a second tournament where Bob plays Carol
 When the asker sends the mock's adversarial trigger phrase
   (the mock router deliberately calls a real tool with that out-of-scope tournament id,
   playing the role of a maximally prompt-injected model — no LLM involved)
-Then the Coach reply is a not-found
+Then the Ref reply is a not-found
   And neither "Carol" nor the private tournament's name appears anywhere in the feed
 # The wall itself is authoritatively proven at the integration layer (A3.3 adversarial-args
 # tests); this scenario proves it end-to-end through the full pipeline.
@@ -2343,8 +2343,8 @@ Then the Coach reply is a not-found
 ### Scenario: NEGATIVE — no writes in Phase A
 ```
 Given a casual match with an existing score
-When a member sends "@coach change my score to 3-0"
-Then Coach declines (the mock has no write route — mirroring the empty Phase A write registry)
+When a member sends "@ref change my score to 3-0"
+Then Ref declines (the mock has no write route — mirroring the empty Phase A write registry)
   And the standings/match UI still shows the original score
 # Structural guarantee is a unit assertion: the Phase A tool registry contains zero write
 # tools. Whether the live model refuses politely under injection is model behavior → A9.2.
@@ -2357,7 +2357,7 @@ Then Coach declines (the mock has no write route — mirroring the empty Phase A
 
 ---
 
-## Feature: LLM Assistant (@coach) — Phase B confirmed write actions
+## Feature: LLM Assistant (@ref) — Phase B confirmed write actions
 
 > Backend runs `ASSISTANT_ADAPTER=mock` + `JOB_QUEUE=memory` for e2e. `MockAssistantClient` gains
 > a deterministic keyword router for write intents: `beat <name> <x>-<y>` calls the **real**
@@ -2367,10 +2367,10 @@ Then Coach declines (the mock has no write route — mirroring the empty Phase A
 > every write goes through the existing, unmodified route/service at confirm time (design §11
 > B-Q3: mutate-first, then flip).
 
-### Scenario: Score via Coach — card appears, proposer confirms, standings update live
+### Scenario: Score via Ref — card appears, proposer confirms, standings update live
 ```
 Given a member has a pending casual match against a named opponent
-When they send "@coach beat Sunil 6-4, 6-3"
+When they send "@ref beat Sunil 6-4, 6-3"
 Then an ActionCard appears in the feed with the parsed score (asker-relative: "You 6-4, 6-3 Sunil")
   And only the proposer sees an active Confirm button
 When the proposer taps Confirm
@@ -2381,8 +2381,8 @@ Then the existing score-submission service runs as the confirming player
 
 ### Scenario: A second score on another match works identically (repeat-use loop)
 ```
-Given the proposer has already confirmed one score via Coach in this session
-When they send "@coach beat <other opponent> <score>" for a different pending match
+Given the proposer has already confirmed one score via Ref in this session
+When they send "@ref beat <other opponent> <score>" for a different pending match
 Then a new ActionCard appears and confirms exactly as before
   # proves this is a repeatable loop, not a one-shot demo path
 ```
@@ -2424,15 +2424,15 @@ Then the card flips to "cancelled" and renders inert
 ### Scenario: NEGATIVE — ambiguous score match yields a clarifying question, never a guess
 ```
 Given the asker has two pending matches against players named "Sunil"
-When they send "@coach beat Sunil 6-4, 6-3"
-Then Coach asks a clarifying question naming both candidates
+When they send "@ref beat Sunil 6-4, 6-3"
+Then Ref asks a clarifying question naming both candidates
   And no ActionCard is posted
 ```
 
-### Scenario: Casual launch via Coach — poll creator only
+### Scenario: Casual launch via Ref — poll creator only
 ```
 Given a closed availability poll exists in the group, created by member A
-When member A (the poll's creator) sends "@coach launch a session for everyone who voted in"
+When member A (the poll's creator) sends "@ref launch a session for everyone who voted in"
 Then an ActionCard appears whose CTA opens the existing casual-launch confirmation sheet,
   pre-filled from the poll's In-voters and the group's default match format
 When member A completes the confirmation sheet
@@ -2441,14 +2441,14 @@ Then the casual tournament is created (visible in the group's tournament list)
 
 Given the same closed poll
 When a different member (NOT the poll's creator) sends the same request
-Then Coach declines politely (draft-time check mirrors the real launch route's poll-creator-only
+Then Ref declines politely (draft-time check mirrors the real launch route's poll-creator-only
   authority) and no card is posted
 ```
 
-### Scenario: NEGATIVE — Coach never triggers a push notification
+### Scenario: NEGATIVE — Ref never triggers a push notification
 ```
 Given a group with a member whose notify_level is "all"
-When Coach posts a reply, an intro message, or an ActionCard
+When Ref posts a reply, an intro message, or an ActionCard
 Then no messaging.notify job is enqueued for any recipient
   # assistant rows (type='assistant') are structurally excluded from the notify pipeline
   # (design §11 B-Q11) — applies retroactively to every Phase A assistant row too
@@ -2465,7 +2465,7 @@ Then no messaging.notify job is enqueued for any recipient
 
 ---
 
-## Feature: LLM Assistant (@coach) — Phase C proactive (nudges, recap, digest)
+## Feature: LLM Assistant (@ref) — Phase C proactive (nudges, recap, digest)
 
 > Backend runs `ASSISTANT_ADAPTER=mock` + `JOB_QUEUE=memory` for e2e. Sweeps are driven by a
 > `NODE_ENV !== 'production'`-only test trigger endpoint (the A8 `/test/casual-session`
@@ -2569,7 +2569,7 @@ Then neither produces any assistant message for that tournament
 
 ## Feature: Player Personalization (P0–P12)
 
-> Per `assets/planning/PERSONALIZATION_IMPLEMENTATION.md` (S0–S8). Builds on the shipped @coach
+> Per `assets/planning/PERSONALIZATION_IMPLEMENTATION.md` (S0–S8). Builds on the shipped @ref
 > A–C stack. Backend runs `ASSISTANT_ADAPTER=mock` for the availability-aggregate scenario (12) —
 > same mock-router convention as Phase A/B/C: the NL→intent hop is faked, the tool it calls
 > (`get_group_availability`) is real.
@@ -2638,11 +2638,11 @@ Given a player with a pending match against a named opponent
 When they open the group chat composer
 Then a single "Report score" chip is shown
 When they tap it
-Then the composer pre-fills "@coach beat <opponent> " without sending
+Then the composer pre-fills "@ref beat <opponent> " without sending
 When that match is later scored
 Then the chip no longer appears
 Given the group's assistant is disabled
-Then no Coach-invoking chip appears at all
+Then no Ref-invoking chip appears at all
 ```
 
 ### Scenario: Nudge body contains an absolute group-local time
@@ -2676,8 +2676,8 @@ Then the response includes A's own pending match
 ### Scenario: Availability aggregates never reveal who is free
 ```
 Given two group members have set their weekly availability grid in /profile
-When a member asks "@coach when can we play?"
-Then Coach's reply cites only aggregate counts ("5 of 6 free Tue evening")
+When a member asks "@ref when can we play?"
+Then Ref's reply cites only aggregate counts ("5 of 6 free Tue evening")
   And neither player's name is tied to any specific slot
 ```
 
@@ -2887,7 +2887,7 @@ narrower existing one. `notifications.spec.ts` seeds via `@mention`, not a bare 
 `recent-result-row`, `empty-state`; data via `GET /player/tournaments` (unchanged, a
 PWA venue-read — snapshot behavior already covered by `pwa-offline-venue.spec.ts`,
 not duplicated here) plus new `GET /player/snapshot` (next match / standings / last
-results, the same data `buildPlayerSnapshot` already gathered for @coach — split out
+results, the same data `buildPlayerSnapshot` already gathered for @ref — split out
 behind a real endpoint rather than a second query path).
 
 ### ✅ Scenario: One-tournament player sees the hub, not an auto-redirect
