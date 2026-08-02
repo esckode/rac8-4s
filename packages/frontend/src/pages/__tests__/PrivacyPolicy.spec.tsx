@@ -26,6 +26,13 @@ describe('PrivacyPolicy', () => {
     expect(screen.getByText(/visible only to you/i)).toBeInTheDocument()
   })
 
+  it('names the two assistants distinctly: Ref in group chat, Coach in 1:1 (N5, Phase N)', () => {
+    render(<PrivacyPolicy />)
+    expect(screen.getByText(/@mention Ref in a group chat/i)).toBeInTheDocument()
+    expect(screen.getByText(/private Coach conversation/i)).toBeInTheDocument()
+    expect(screen.queryByText(/@mention Coach/i)).not.toBeInTheDocument()
+  })
+
   it('describes memories: confirmed, listed and deletable in Profile, included in export/erasure', () => {
     render(<PrivacyPolicy />)
     expect(screen.getByText(/only after you confirm/i)).toBeInTheDocument()
