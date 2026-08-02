@@ -1,8 +1,8 @@
 /**
- * Player Personalization (P12) — Coach availability E2E test
+ * Player Personalization (P12) — Ref availability E2E test
  *
  * See e2e-scenarios.md "Player Personalization (P0-P12)" scenario (12):
- * seed two players' grids, ask "@coach when can we play?", and the reply
+ * seed two players' grids, ask "@ref when can we play?", and the reply
  * contains "N of M" with neither player's name tied to a slot.
  *
  * Run: npx playwright test personalization-availability
@@ -82,14 +82,14 @@ async function lastAssistantMessage(groupId: string, token: string): Promise<str
   throw new Error('No assistant message appeared within the polling window')
 }
 
-test.describe('Player Personalization — Coach availability (P12, scenario 12)', () => {
+test.describe('Player Personalization — Ref availability (P12, scenario 12)', () => {
   test.beforeEach(async () => {
     if (!(await serversRunning())) {
       test.skip()
     }
   })
 
-  test('"@coach when can we play?" replies with counts only, never a player\'s name', async () => {
+  test('"@ref when can we play?" replies with counts only, never a player\'s name', async () => {
     const owner = createTestUser()
     const opponent = createTestUser()
     const { token: ownerToken } = await signupAndGetToken(owner)
@@ -99,7 +99,7 @@ test.describe('Player Personalization — Coach availability (P12, scenario 12)'
     await setAvailability(ownerToken, [{ weekday: 6, dayPart: 'morning' }])
     await setAvailability(opponentToken, [{ weekday: 6, dayPart: 'morning' }])
 
-    await sendMessage(groupId, ownerToken, '@coach when can we play?')
+    await sendMessage(groupId, ownerToken, '@ref when can we play?')
 
     const body = await lastAssistantMessage(groupId, ownerToken)
     expect(body).toMatch(/\d+ of \d+/)

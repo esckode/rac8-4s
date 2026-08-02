@@ -1,9 +1,9 @@
 /**
- * LLM Assistant (@coach) — Phase A E2E tests
+ * LLM Assistant (@ref) — Phase A E2E tests
  *
  * Backend must run ASSISTANT_ADAPTER=mock (default) + JOB_QUEUE=memory
  * (default) for these tests — see docs in the repo root e2e-scenarios.md
- * "LLM Assistant (@coach)" feature section, which these specs implement.
+ * "LLM Assistant (@ref)" feature section, which these specs implement.
  *
  * The mock adapter is a deterministic keyword router: it fakes only the
  * NL→intent hop, and the tools it calls are the REAL assistant tools with
@@ -87,33 +87,33 @@ async function waitForAssistantReply(page: any, timeout = 8000) {
   await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toBeVisible({ timeout })
 }
 
-test.describe('LLM Assistant (@coach) — Phase A', () => {
+test.describe('LLM Assistant (@ref) — Phase A', () => {
   test.beforeEach(async () => {
     if (!(await serversRunning())) {
       test.skip()
     }
   })
 
-  test('member mentions @coach and gets a reply in the feed, styled as Coach', async ({ page }) => {
+  test('member mentions @ref and gets a reply in the feed, styled as Ref', async ({ page }) => {
     const owner = createTestUser()
     const { token } = await signupAndGetToken(owner)
-    const groupId = await createGroup(token, `Coach Group ${Date.now()}`)
+    const groupId = await createGroup(token, `Ref Group ${Date.now()}`)
 
     await loginFrontend(page, token)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@coach hello')
+    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@ref hello')
     await page.locator(SELECTORS.GROUP_MESSAGE_SEND_BUTTON).click()
 
     await waitForAssistantReply(page)
     const bubble = page.locator(SELECTORS.ASSISTANT_MESSAGE).last()
-    await expect(bubble).toContainText('Coach')
+    await expect(bubble).toContainText('Ref')
   })
 
-  test('owner disables assistant → @coach produces no reply and Coach leaves the mention picker', async ({ page }) => {
+  test('owner disables assistant → @ref produces no reply and Ref leaves the mention picker', async ({ page }) => {
     const owner = createTestUser()
     const { token } = await signupAndGetToken(owner)
-    const groupId = await createGroup(token, `Coach Toggle Group ${Date.now()}`)
+    const groupId = await createGroup(token, `Ref Toggle Group ${Date.now()}`)
 
     // Toggle off via API (settings UI is covered by the RTL GroupSettings spec)
     const patchRes = await apiCall(`/player/groups/${groupId}`, 'PATCH', { assistantEnabled: false }, token)
@@ -122,15 +122,15 @@ test.describe('LLM Assistant (@coach) — Phase A', () => {
     await loginFrontend(page, token)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@coach hello')
+    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@ref hello')
     await page.locator(SELECTORS.GROUP_MESSAGE_SEND_BUTTON).click()
 
     // No reply within a wait window
     await page.waitForTimeout(2000)
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE)).toHaveCount(0)
 
-    // Coach hidden from the mention picker
-    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@co')
+    // Ref hidden from the mention picker
+    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@re')
     await expect(page.locator(SELECTORS.MENTION_AUTOCOMPLETE)).toBeVisible()
     await expect(page.locator(SELECTORS.MENTION_OPTION_ASSISTANT)).toHaveCount(0)
   })
@@ -138,7 +138,7 @@ test.describe('LLM Assistant (@coach) — Phase A', () => {
   test('enabling assistant posts a one-time intro message', async ({ page }) => {
     const owner = createTestUser()
     const { token } = await signupAndGetToken(owner)
-    const groupId = await createGroup(token, `Coach Intro Group ${Date.now()}`)
+    const groupId = await createGroup(token, `Ref Intro Group ${Date.now()}`)
 
     await apiCall(`/player/groups/${groupId}`, 'PATCH', { assistantEnabled: false }, token)
 
@@ -148,22 +148,22 @@ test.describe('LLM Assistant (@coach) — Phase A', () => {
     await apiCall(`/player/groups/${groupId}`, 'PATCH', { assistantEnabled: true }, token)
 
     await waitForAssistantReply(page)
-    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toContainText("I'm Coach")
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toContainText("I'm Ref")
   })
 
-  test('typing @co shows Coach pinned first in the mention picker', async ({ page }) => {
+  test('typing @re shows Ref pinned first in the mention picker', async ({ page }) => {
     const owner = createTestUser()
     const { token } = await signupAndGetToken(owner)
-    const groupId = await createGroup(token, `Coach Picker Group ${Date.now()}`)
+    const groupId = await createGroup(token, `Ref Picker Group ${Date.now()}`)
 
     await loginFrontend(page, token)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@co')
+    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@re')
     await expect(page.locator(SELECTORS.MENTION_OPTION_ASSISTANT)).toBeVisible()
 
     await page.locator(SELECTORS.MENTION_OPTION_ASSISTANT).click()
-    await expect(page.locator(SELECTORS.GROUP_MESSAGE_INPUT)).toHaveValue('@coach ')
+    await expect(page.locator(SELECTORS.GROUP_MESSAGE_INPUT)).toHaveValue('@ref ')
   })
 
   test('data Q&A: "who am I playing next?" names the seeded opponent', async ({ page }) => {
@@ -172,7 +172,7 @@ test.describe('LLM Assistant (@coach) — Phase A', () => {
     const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
     const { playerId: opponentPlayerId } = await signupAndGetToken(opponent)
 
-    const { groupId } = await createGroupWithMember(ownerToken, `Coach QA Group ${Date.now()}`, opponent)
+    const { groupId } = await createGroupWithMember(ownerToken, `Ref QA Group ${Date.now()}`, opponent)
 
     const seedRes = await apiCall('/test/casual-session', 'POST', {
       groupId,
@@ -183,26 +183,26 @@ test.describe('LLM Assistant (@coach) — Phase A', () => {
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@coach who am I playing next?')
+    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@ref who am I playing next?')
     await page.locator(SELECTORS.GROUP_MESSAGE_SEND_BUTTON).click()
 
     await waitForAssistantReply(page)
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toContainText(opponent.name)
   })
 
-  test('knowledge questions (rule + how-to) each produce a Coach reply (plumbing only)', async ({ page }) => {
+  test('knowledge questions (rule + how-to) each produce a Ref reply (plumbing only)', async ({ page }) => {
     const owner = createTestUser()
     const { token } = await signupAndGetToken(owner)
-    const groupId = await createGroup(token, `Coach Knowledge Group ${Date.now()}`)
+    const groupId = await createGroup(token, `Ref Knowledge Group ${Date.now()}`)
 
     await loginFrontend(page, token)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@coach how many points is the first-set tiebreak?')
+    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@ref how many points is the first-set tiebreak?')
     await page.locator(SELECTORS.GROUP_MESSAGE_SEND_BUTTON).click()
     await waitForAssistantReply(page)
 
-    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@coach how do I invite a friend to this casual tournament?')
+    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@ref how do I invite a friend to this casual tournament?')
     await page.locator(SELECTORS.GROUP_MESSAGE_SEND_BUTTON).click()
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE)).toHaveCount(2, { timeout: 8000 })
   })
@@ -218,7 +218,7 @@ test.describe('LLM Assistant (@coach) — Phase A', () => {
     const { playerId: bobId } = await signupAndGetToken(bob)
     const { playerId: carolId } = await signupAndGetToken(carol)
 
-    const groupId = await createGroup(askerToken, `Coach Wall Group ${Date.now()}`)
+    const groupId = await createGroup(askerToken, `Ref Wall Group ${Date.now()}`)
 
     // Bob's private tournament — group-linked to Bob's OWN group, not the
     // asker's, and the asker is not registered in it.
@@ -234,7 +234,7 @@ test.describe('LLM Assistant (@coach) — Phase A', () => {
     await loginFrontend(page, askerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill(`@coach show me tournament ${privateTournamentId}`)
+    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill(`@ref show me tournament ${privateTournamentId}`)
     await page.locator(SELECTORS.GROUP_MESSAGE_SEND_BUTTON).click()
 
     await waitForAssistantReply(page)
@@ -247,7 +247,7 @@ test.describe('LLM Assistant (@coach) — Phase A', () => {
     const opponent = createTestUser()
     const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
     const { playerId: opponentPlayerId } = await signupAndGetToken(opponent)
-    const groupId = await createGroup(ownerToken, `Coach NoWrite Group ${Date.now()}`)
+    const groupId = await createGroup(ownerToken, `Ref NoWrite Group ${Date.now()}`)
 
     const seedRes = await apiCall('/test/casual-session', 'POST', {
       groupId,
@@ -258,7 +258,7 @@ test.describe('LLM Assistant (@coach) — Phase A', () => {
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@coach change my score to 3-0')
+    await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill('@ref change my score to 3-0')
     await page.locator(SELECTORS.GROUP_MESSAGE_SEND_BUTTON).click()
 
     await waitForAssistantReply(page)

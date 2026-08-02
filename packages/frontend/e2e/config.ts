@@ -356,13 +356,13 @@ export const SELECTORS = {
   INVITE_SUCCESS: '[data-testid="invite-success"]',
   INVITE_ERROR: '[data-testid="invite-error"]',
 
-  // LLM Assistant (@coach) — Phase A
+  // LLM Assistant (@ref) — Phase A
   ASSISTANT_MESSAGE: '[data-testid="assistant-message"]',
   ASSISTANT_TOGGLE: '[data-testid="assistant-toggle"]',
   MENTION_AUTOCOMPLETE: '[data-testid="mention-autocomplete"]',
   MENTION_OPTION_ASSISTANT: '[data-testid="mention-option-assistant"]',
 
-  // LLM Assistant (@coach) — Phase B confirmed write actions
+  // LLM Assistant (@ref) — Phase B confirmed write actions
   ACTION_CARD: '[data-testid="action-card"]',
   ACTION_CARD_STATUS: '[data-testid="action-card-status"]',
   ACTION_CARD_CONFIRM_BUTTON: '[data-testid="action-card-confirm-button"]',

@@ -1,8 +1,8 @@
 /**
- * LLM Assistant (@coach) — Phase B E2E tests (confirmed write actions)
+ * LLM Assistant (@ref) — Phase B E2E tests (confirmed write actions)
  *
  * Backend must run ASSISTANT_ADAPTER=mock (default) + JOB_QUEUE=memory
- * (default) — see e2e-scenarios.md "LLM Assistant (@coach) — Phase B
+ * (default) — see e2e-scenarios.md "LLM Assistant (@ref) — Phase B
  * confirmed write actions", which these specs implement.
  *
  * MockAssistantClient's deterministic keyword router (B7) fakes only the
@@ -87,7 +87,7 @@ async function loginFrontend(page: any, token: string) {
   await page.evaluate((t: string) => localStorage.setItem('auth_token', t), token)
 }
 
-async function sendCoachMessage(page: any, text: string) {
+async function sendRefMessage(page: any, text: string) {
   await page.locator(SELECTORS.GROUP_MESSAGE_INPUT).fill(text)
   await page.locator(SELECTORS.GROUP_MESSAGE_SEND_BUTTON).click()
 }
@@ -97,25 +97,25 @@ async function waitForActionCard(page: any, timeout = 8000) {
   await expect(page.locator(SELECTORS.ACTION_CARD).last()).toBeVisible({ timeout })
 }
 
-test.describe('LLM Assistant (@coach) — Phase B confirmed write actions', () => {
+test.describe('LLM Assistant (@ref) — Phase B confirmed write actions', () => {
   test.beforeEach(async () => {
     if (!(await serversRunning())) {
       test.skip()
     }
   })
 
-  test('score via Coach: card appears, proposer confirms, card renders confirmed', async ({ page }) => {
+  test('score via Ref: card appears, proposer confirms, card renders confirmed', async ({ page }) => {
     const owner = createTestUser()
     const opponent = createTestUser()
     const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
     const { playerId: opponentPlayerId } = await signupAndGetToken(opponent)
-    const groupId = await createGroup(ownerToken, `Coach Score Group ${Date.now()}`)
+    const groupId = await createGroup(ownerToken, `Ref Score Group ${Date.now()}`)
     await seedCasualSession(groupId, [ownerPlayerId, opponentPlayerId])
 
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await sendCoachMessage(page, `@coach beat ${opponent.name} 6-4, 6-3`)
+    await sendRefMessage(page, `@ref beat ${opponent.name} 6-4, 6-3`)
     await waitForActionCard(page)
 
     const card = page.locator(SELECTORS.ACTION_CARD).last()
@@ -133,19 +133,19 @@ test.describe('LLM Assistant (@coach) — Phase B confirmed write actions', () =
     const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
     const { playerId: bobId } = await signupAndGetToken(bob)
     const { playerId: carolId } = await signupAndGetToken(carol)
-    const groupId = await createGroup(ownerToken, `Coach Repeat Group ${Date.now()}`)
+    const groupId = await createGroup(ownerToken, `Ref Repeat Group ${Date.now()}`)
     await seedCasualSession(groupId, [ownerPlayerId, bobId])
     await seedCasualSession(groupId, [ownerPlayerId, carolId])
 
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await sendCoachMessage(page, `@coach beat ${bob.name} 6-4, 6-3`)
+    await sendRefMessage(page, `@ref beat ${bob.name} 6-4, 6-3`)
     await waitForActionCard(page)
     await page.locator(SELECTORS.ACTION_CARD).last().locator(SELECTORS.ACTION_CARD_CONFIRM_BUTTON).click()
     await expect(page.locator(SELECTORS.ACTION_CARD_STATUS).last()).toContainText(/confirmed/i, { timeout: 8000 })
 
-    await sendCoachMessage(page, `@coach beat ${carol.name} 6-2, 6-1`)
+    await sendRefMessage(page, `@ref beat ${carol.name} 6-2, 6-1`)
     await expect(page.locator(SELECTORS.ACTION_CARD)).toHaveCount(2, { timeout: 8000 })
     await page.locator(SELECTORS.ACTION_CARD).last().locator(SELECTORS.ACTION_CARD_CONFIRM_BUTTON).click()
     await expect(page.locator(SELECTORS.ACTION_CARD_STATUS).last()).toContainText(/confirmed/i, { timeout: 8000 })
@@ -156,12 +156,12 @@ test.describe('LLM Assistant (@coach) — Phase B confirmed write actions', () =
     const opponent = createTestUser()
     const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
     const { token: opponentToken, playerId: opponentPlayerId } = await signupAndGetToken(opponent)
-    const { groupId } = await createGroupWithMember(ownerToken, `Coach Bystander Group ${Date.now()}`, opponent)
+    const { groupId } = await createGroupWithMember(ownerToken, `Ref Bystander Group ${Date.now()}`, opponent)
     await seedCasualSession(groupId, [ownerPlayerId, opponentPlayerId])
 
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
-    await sendCoachMessage(page, `@coach beat ${opponent.name} 6-4, 6-3`)
+    await sendRefMessage(page, `@ref beat ${opponent.name} 6-4, 6-3`)
     await waitForActionCard(page)
 
     const bystanderContext = await browser.newContext()
@@ -179,12 +179,12 @@ test.describe('LLM Assistant (@coach) — Phase B confirmed write actions', () =
     const opponent = createTestUser()
     const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
     const { playerId: opponentPlayerId } = await signupAndGetToken(opponent)
-    const groupId = await createGroup(ownerToken, `Coach Dismiss Group ${Date.now()}`)
+    const groupId = await createGroup(ownerToken, `Ref Dismiss Group ${Date.now()}`)
     await seedCasualSession(groupId, [ownerPlayerId, opponentPlayerId])
 
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
-    await sendCoachMessage(page, `@coach beat ${opponent.name} 6-4, 6-3`)
+    await sendRefMessage(page, `@ref beat ${opponent.name} 6-4, 6-3`)
     await waitForActionCard(page)
 
     const card = page.locator(SELECTORS.ACTION_CARD).last()
@@ -199,24 +199,24 @@ test.describe('LLM Assistant (@coach) — Phase B confirmed write actions', () =
     const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
     const { playerId: sunilAId } = await signupAndGetToken(sunilA)
     const { playerId: sunilBId } = await signupAndGetToken(sunilB)
-    const groupId = await createGroup(ownerToken, `Coach Ambiguous Group ${Date.now()}`)
+    const groupId = await createGroup(ownerToken, `Ref Ambiguous Group ${Date.now()}`)
     await seedCasualSession(groupId, [ownerPlayerId, sunilAId])
     await seedCasualSession(groupId, [ownerPlayerId, sunilBId])
 
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
-    await sendCoachMessage(page, '@coach beat Sunil 6-4, 6-3')
+    await sendRefMessage(page, '@ref beat Sunil 6-4, 6-3')
 
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toBeVisible({ timeout: 8000 })
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toContainText(/sunil/i)
     await expect(page.locator(SELECTORS.ACTION_CARD)).toHaveCount(0)
   })
 
-  test('casual launch via Coach: poll creator drafts, confirms via the sheet, tournament is created', async ({ page }) => {
+  test('casual launch via Ref: poll creator drafts, confirms via the sheet, tournament is created', async ({ page }) => {
     const owner = createTestUser()
     const opponent = createTestUser()
     const { token: ownerToken } = await signupAndGetToken(owner)
-    const { groupId } = await createGroupWithMember(ownerToken, `Coach Launch Group ${Date.now()}`, opponent)
+    const { groupId } = await createGroupWithMember(ownerToken, `Ref Launch Group ${Date.now()}`, opponent)
 
     // Seed a poll and close it via the real API (not the assistant) — the
     // draft-time check is "who created THIS poll", set up out of band.
@@ -234,7 +234,7 @@ test.describe('LLM Assistant (@coach) — Phase B confirmed write actions', () =
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await sendCoachMessage(page, '@coach launch a session for everyone who voted in')
+    await sendRefMessage(page, '@ref launch a session for everyone who voted in')
     await waitForActionCard(page)
 
     const card = page.locator(SELECTORS.ACTION_CARD).last()
@@ -248,14 +248,14 @@ test.describe('LLM Assistant (@coach) — Phase B confirmed write actions', () =
     await expect(page).toHaveURL(/\/tournament\//, { timeout: 8000 })
   })
 
-  test('NEGATIVE — a non-creator asking Coach to launch gets a polite decline, no card', async ({ page }) => {
+  test('NEGATIVE — a non-creator asking Ref to launch gets a polite decline, no card', async ({ page }) => {
     const owner = createTestUser()
     const member = createTestUser()
     const { token: ownerToken } = await signupAndGetToken(owner)
     const { token: memberToken, groupId } = await (async () => {
       const { groupId, memberPlayerId } = await createGroupWithMember(
         ownerToken,
-        `Coach Launch Decline Group ${Date.now()}`,
+        `Ref Launch Decline Group ${Date.now()}`,
         member
       )
       void memberPlayerId
@@ -277,7 +277,7 @@ test.describe('LLM Assistant (@coach) — Phase B confirmed write actions', () =
     await loginFrontend(page, memberToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
 
-    await sendCoachMessage(page, '@coach launch a session for everyone who voted in')
+    await sendRefMessage(page, '@ref launch a session for everyone who voted in')
 
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toBeVisible({ timeout: 8000 })
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toContainText(/poll creator/i)

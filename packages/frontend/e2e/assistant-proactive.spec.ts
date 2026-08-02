@@ -1,8 +1,8 @@
 /**
- * LLM Assistant (@coach) — Phase C proactive E2E tests (deadline nudges, T3.1)
+ * LLM Assistant (@ref) — Phase C proactive E2E tests (deadline nudges, T3.1)
  *
  * Backend must run ASSISTANT_ADAPTER=mock (default) + JOB_QUEUE=memory
- * (default) — see e2e-scenarios.md "LLM Assistant (@coach) — Phase C
+ * (default) — see e2e-scenarios.md "LLM Assistant (@ref) — Phase C
  * proactive (nudges, recap, digest)", which these specs implement.
  *
  * The nudge sweep is driven synchronously via the NODE_ENV!=production
@@ -98,7 +98,7 @@ async function loginFrontend(page: any, token: string) {
   await page.evaluate((t: string) => localStorage.setItem('auth_token', t), token)
 }
 
-test.describe('LLM Assistant (@coach) — Phase C proactive nudges', () => {
+test.describe('LLM Assistant (@ref) — Phase C proactive nudges', () => {
   test.beforeEach(async () => {
     if (!(await serversRunning())) {
       test.skip()
@@ -241,7 +241,7 @@ test.describe('LLM Assistant (@coach) — Phase C proactive nudges', () => {
   })
 })
 
-test.describe('LLM Assistant (@coach) — Phase C proactive recap', () => {
+test.describe('LLM Assistant (@ref) — Phase C proactive recap', () => {
   test.beforeEach(async () => {
     if (!(await serversRunning())) {
       test.skip()
@@ -287,7 +287,7 @@ test.describe('LLM Assistant (@coach) — Phase C proactive recap', () => {
   })
 })
 
-test.describe('LLM Assistant (@coach) — Phase C weekly digest', () => {
+test.describe('LLM Assistant (@ref) — Phase C weekly digest', () => {
   test.beforeEach(async () => {
     if (!(await serversRunning())) {
       test.skip()

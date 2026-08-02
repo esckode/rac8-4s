@@ -131,7 +131,7 @@ test.describe('Player Personalization — pending-actions FE surfaces', () => {
     await expect(chip).toContainText(/report score/i)
 
     await chip.click()
-    await expect(page.locator(SELECTORS.GROUP_MESSAGE_INPUT)).toHaveValue(/^@coach beat /)
+    await expect(page.locator(SELECTORS.GROUP_MESSAGE_INPUT)).toHaveValue(/^@ref beat /)
 
     await scoreTheOnlyMatch(tournamentId, scopedOwnerToken)
     await page.reload()
