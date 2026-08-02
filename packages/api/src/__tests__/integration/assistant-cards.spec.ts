@@ -9,7 +9,7 @@
  * Covers:
  *  - schema: status CHECK constraint
  *  - createCard(): atomically inserts the assistant message (type='assistant',
- *    player_id=NULL, sender 'Coach') + the card row + backfills
+ *    player_id=NULL, sender 'Ref') + the card row + backfills
  *    message.metadata.cardId, in one transaction
  *  - claimCard(): atomic pending-only flip (returns null when the card is
  *    already confirmed/failed/cancelled — no double-flip)
@@ -74,7 +74,7 @@ describe('assistant_cards schema + AssistantCardRepository (B1)', () => {
     )
     const msg = await pool.query(
       `INSERT INTO messaging.group_messages (conversation_id, player_id, sender_name_snapshot, body, type)
-       VALUES ($1, NULL, 'Coach', 'proposal', 'assistant') RETURNING id`,
+       VALUES ($1, NULL, 'Ref', 'proposal', 'assistant') RETURNING id`,
       [conv.rows[0].id]
     )
     await expect(
@@ -96,7 +96,7 @@ describe('assistant_cards schema + AssistantCardRepository (B1)', () => {
       proposerPlayerId: player.id,
       action: 'propose_score',
       args: { matchId: 'm1', score: '2-1' },
-      body: 'Coach drafted a score — You 2 – 1 Sunil.',
+      body: 'Ref drafted a score — You 2 – 1 Sunil.',
     })
 
     expect(card.status).toBe('pending')
@@ -113,9 +113,9 @@ describe('assistant_cards schema + AssistantCardRepository (B1)', () => {
       [card.messageId]
     )
     expect(msgRow.rows[0].player_id).toBeNull()
-    expect(msgRow.rows[0].sender_name_snapshot).toBe('Coach')
+    expect(msgRow.rows[0].sender_name_snapshot).toBe('Ref')
     expect(msgRow.rows[0].type).toBe('assistant')
-    expect(msgRow.rows[0].body).toBe('Coach drafted a score — You 2 – 1 Sunil.')
+    expect(msgRow.rows[0].body).toBe('Ref drafted a score — You 2 – 1 Sunil.')
     expect(msgRow.rows[0].metadata).toEqual({ cardId: card.id })
     expect(conversationId).toBeTruthy()
   })

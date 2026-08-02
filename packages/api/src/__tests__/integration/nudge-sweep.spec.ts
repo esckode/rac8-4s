@@ -304,7 +304,7 @@ describe('processNudgeSweep', () => {
     for (let i = 0; i < 2; i++) {
       await pool.query(
         `INSERT INTO messaging.group_messages (conversation_id, player_id, sender_name_snapshot, body, type, metadata)
-         VALUES ($1, NULL, 'Coach', 'Prior nudge', 'assistant', $2)`,
+         VALUES ($1, NULL, 'Ref', 'Prior nudge', 'assistant', $2)`,
         [conversationId, JSON.stringify({ nudge: `deadline48:seed-${uid()}` })]
       )
     }

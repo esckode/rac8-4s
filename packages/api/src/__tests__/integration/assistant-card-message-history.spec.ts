@@ -85,7 +85,7 @@ describe('B3.0 — card state on message history', () => {
       proposerPlayerId: proposer.id,
       action: 'propose_score',
       args: { tournamentId: 't1', matchId: 'm1', score: '6-4, 6-3' },
-      body: 'Coach drafted a score — Proposer 6-4, 6-3 Opponent.',
+      body: 'Ref drafted a score — Proposer 6-4, 6-3 Opponent.',
     })
 
     const history = await msgRepo.getGroupHistory({ conversationId })
@@ -127,7 +127,7 @@ describe('B3.0 — card state on message history', () => {
       proposerPlayerId: proposer.id,
       action: 'propose_score',
       args: { tournamentId: 't1', matchId: 'm1', score: '6-4, 6-3' },
-      body: 'Coach drafted a score.',
+      body: 'Ref drafted a score.',
     })
 
     const res = await request(app)
@@ -155,7 +155,7 @@ describe('B3.0 — card state on message history', () => {
       proposerPlayerId: proposer.id,
       action: 'propose_score',
       args: { tournamentId: 't1', matchId: 'm1', score: '6-4, 6-3' },
-      body: 'Coach drafted a score.',
+      body: 'Ref drafted a score.',
     })
     await cardRepo.claimCard(card.id, 'confirmed', { ok: true })
 

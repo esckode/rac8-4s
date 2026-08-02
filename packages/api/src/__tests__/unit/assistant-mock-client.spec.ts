@@ -47,7 +47,7 @@ describe('MockAssistantClient', () => {
 
   it('declines write requests without calling any tool', async () => {
     const client = new MockAssistantClient()
-    const result = await client.runTurn(input('@coach change my score to 3-0'))
+    const result = await client.runTurn(input('@ref change my score to 3-0'))
     expect(result.text).toMatch(/read-only|change scores/i)
     expect(result.toolRounds).toBe(0)
     expect(tools.getMyMatches).not.toHaveBeenCalled()
@@ -129,7 +129,7 @@ describe('MockAssistantClient', () => {
   it('anything else falls back to the canned mock reply', async () => {
     const client = new MockAssistantClient()
     const result = await client.runTurn(input('how many points is the first-set tiebreak?'))
-    expect(result.text).toBe('[mock] Coach reply')
+    expect(result.text).toBe('[mock] Ref reply')
     expect(result.toolRounds).toBe(0)
   })
 
@@ -147,7 +147,7 @@ describe('MockAssistantClient', () => {
         status: 'card_posted', cardId: 'card-1', messageId: 'msg-1',
       })
       const client = new MockAssistantClient()
-      const result = await client.runTurn(input('@coach beat Sunil 6-4, 6-3'))
+      const result = await client.runTurn(input('@ref beat Sunil 6-4, 6-3'))
 
       expect(proposeScoreModule.proposeScore).toHaveBeenCalledWith(ctx, { opponentName: 'Sunil', score: '6-4, 6-3' })
       expect(result.text).not.toMatch(/recorded|updated|scored|done/i)
@@ -163,7 +163,7 @@ describe('MockAssistantClient', () => {
         ],
       })
       const client = new MockAssistantClient()
-      const result = await client.runTurn(input('@coach beat Sunil 6-4, 6-3'))
+      const result = await client.runTurn(input('@ref beat Sunil 6-4, 6-3'))
 
       expect(result.text).toMatch(/sunil a/i)
       expect(result.text).toMatch(/sunil b/i)
@@ -174,7 +174,7 @@ describe('MockAssistantClient', () => {
         status: 'not_found', message: "I couldn't find a pending match against \"Ghost\".",
       })
       const client = new MockAssistantClient()
-      const result = await client.runTurn(input('@coach beat Ghost 6-4, 6-3'))
+      const result = await client.runTurn(input('@ref beat Ghost 6-4, 6-3'))
       expect(result.text).toMatch(/couldn't find/i)
     })
   })
@@ -189,7 +189,7 @@ describe('MockAssistantClient', () => {
         status: 'card_posted', cardId: 'card-2', messageId: 'msg-3',
       })
       const client = new MockAssistantClient()
-      const result = await client.runTurn(input('@coach launch a session for everyone who voted in'))
+      const result = await client.runTurn(input('@ref launch a session for everyone who voted in'))
 
       expect(proposeCasualLaunchModule.proposeCasualLaunch).toHaveBeenCalledWith(ctx, { pollQuestion: 'Sunday morning?' })
       expect(result.toolRounds).toBe(1)
@@ -203,14 +203,14 @@ describe('MockAssistantClient', () => {
         status: 'declined', message: 'Only the poll creator can launch a tournament from it.',
       })
       const client = new MockAssistantClient()
-      const result = await client.runTurn(input('@coach launch a session for everyone who voted in'))
+      const result = await client.runTurn(input('@ref launch a session for everyone who voted in'))
       expect(result.text).toMatch(/only the poll creator/i)
     })
 
     it('no poll exists in the group: reports not-found without calling the tool', async () => {
       mockFindPollsByGroup.mockResolvedValue([])
       const client = new MockAssistantClient()
-      const result = await client.runTurn(input('@coach launch a session for everyone who voted in'))
+      const result = await client.runTurn(input('@ref launch a session for everyone who voted in'))
       expect(proposeCasualLaunchModule.proposeCasualLaunch).not.toHaveBeenCalled()
       expect(result.text).toMatch(/couldn't find/i)
     })

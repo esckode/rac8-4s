@@ -48,7 +48,7 @@ function makeRepo(opts: { failSend?: boolean } = {}) {
           id: `reply-${sent.length}`,
           conversationId: 'conv-1',
           playerId: null,
-          senderName: 'Coach',
+          senderName: 'Ref',
           body: input.body,
           type: 'assistant',
           createdAt: new Date(),
@@ -83,7 +83,7 @@ const payload = {
   conversationId: 'conv-1',
   groupId: 'group-1',
   playerId: 'player-1',
-  body: '@coach hello',
+  body: '@ref hello',
 }
 
 const LIMITS = { playerPerHour: 10, groupPerHour: 30, dailyBudgetUsd: 5 }

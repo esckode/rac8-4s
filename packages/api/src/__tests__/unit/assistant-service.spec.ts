@@ -65,7 +65,7 @@ function makeRepo(world: FakeWorld) {
           id: 'reply-1',
           conversationId: 'conv-1',
           playerId: null,
-          senderName: 'Coach',
+          senderName: 'Ref',
           body: input.body,
           type: 'assistant',
           createdAt: new Date(),
@@ -107,7 +107,7 @@ const payload: AssistantJobPayload = {
   conversationId: 'conv-1',
   groupId: 'group-1',
   playerId: 'player-1',
-  body: '@coach who am I playing next?',
+  body: '@ref who am I playing next?',
 }
 
 function world(overrides: Partial<FakeWorld> = {}): FakeWorld {
@@ -116,7 +116,7 @@ function world(overrides: Partial<FakeWorld> = {}): FakeWorld {
     alreadyReplied: false,
     recentMessages: [
       { senderName: 'Bob', body: 'anyone up for saturday?', type: 'text' },
-      { senderName: 'Alice', body: '@coach who am I playing next?', type: 'text' },
+      { senderName: 'Alice', body: '@ref who am I playing next?', type: 'text' },
     ],
     ...overrides,
   }
@@ -161,7 +161,7 @@ describe('handleAssistantJob', () => {
     expect(emitted[0]).toMatchObject({
       key: 'conv-1',
       event: 'message.created',
-      data: { type: 'assistant', senderName: 'Coach', body: 'Saturday 9am vs Bob.' },
+      data: { type: 'assistant', senderName: 'Ref', body: 'Saturday 9am vs Bob.' },
     })
   })
 

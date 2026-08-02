@@ -121,7 +121,7 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
       proposerPlayerId: proposerId,
       action: 'propose_score',
       args: { tournamentId, matchId, score },
-      body: 'Coach drafted a score.',
+      body: 'Ref drafted a score.',
       expiresInSeconds: opts.expiresInSeconds ?? 900,
     })
     return card
@@ -344,7 +344,7 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
         proposerPlayerId: alice.id,
         action: 'propose_poll',
         args: { question: 'In for tonight?', targetTime: null, autoCloseAt: null, autoLaunch: false, minPlayers: null, launchMatchFormat: null },
-        body: 'Coach drafted a poll.',
+        body: 'Ref drafted a poll.',
       })
 
       const aliceToken = await token(alice.id, alice.email)
@@ -368,7 +368,7 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
         proposerPlayerId: alice.id,
         action: 'propose_poll',
         args: { question: '   ', targetTime: null, autoCloseAt: null, autoLaunch: false, minPlayers: null, launchMatchFormat: null },
-        body: 'Coach drafted a poll.',
+        body: 'Ref drafted a poll.',
       })
 
       const aliceToken = await token(alice.id, alice.email)
@@ -392,7 +392,7 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
         proposerPlayerId: alice.id,
         action: 'propose_poll_vote',
         args: { pollId: poll.pollId, choice: 'in' },
-        body: 'Coach drafted a vote.',
+        body: 'Ref drafted a vote.',
       })
 
       const aliceToken = await token(alice.id, alice.email)
@@ -417,7 +417,7 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
         proposerPlayerId: alice.id,
         action: 'propose_poll_vote',
         args: { pollId: poll.pollId, choice: 'in' },
-        body: 'Coach drafted a vote.',
+        body: 'Ref drafted a vote.',
       })
       await pollRepo.closePoll(poll.messageId, groupId, alice.id)
 
@@ -449,7 +449,7 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
         proposerPlayerId: proposerId,
         action: 'propose_casual_launch',
         args: { pollId, messageId, inVoterNames: ['Alice'], defaultFormat: 'singles' },
-        body: 'Coach drafted a tournament launch.',
+        body: 'Ref drafted a tournament launch.',
       })
       return card
     }

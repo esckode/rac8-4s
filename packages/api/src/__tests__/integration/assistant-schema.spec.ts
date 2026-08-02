@@ -1,5 +1,5 @@
 /**
- * A1 — LLM Assistant (@coach): schema + repository support
+ * A1 — LLM Assistant (@ref): schema + repository support
  *
  * RED tests (TDD): written FIRST; fail until migration 049 and the two new
  * GroupMessageRepository methods land.
@@ -7,7 +7,7 @@
  * Covers:
  *  1. group_messages accepts type='assistant' (049 widens the CHECK)
  *  2. player_groups.assistant_enabled exists and defaults true (049)
- *  3. sendAssistantMessage inserts a Coach row (player_id NULL, snapshot 'Coach')
+ *  3. sendAssistantMessage inserts a Ref row (player_id NULL, snapshot 'Ref')
  *  4. getRecentMessages returns newest-N in chronological order with type + senderName
  */
 
@@ -69,7 +69,7 @@ describe('assistant schema + repository (migration 049)', () => {
     const inserted = await pool.query(
       `INSERT INTO messaging.group_messages
          (conversation_id, player_id, sender_name_snapshot, body, type)
-       VALUES ($1, NULL, 'Coach', 'hello from coach', 'assistant')
+       VALUES ($1, NULL, 'Ref', 'hello from coach', 'assistant')
        RETURNING id, type`,
       [conversationId]
     )
@@ -100,7 +100,7 @@ describe('assistant schema + repository (migration 049)', () => {
     expect(res.rows[0].assistant_enabled).toBe(true)
   })
 
-  it('sendAssistantMessage inserts a Coach row and returns it', async () => {
+  it('sendAssistantMessage inserts a Ref row and returns it', async () => {
     const player = await createPlayer(pool)
     const groupId = await createGroup(pool, player.id)
 
@@ -111,7 +111,7 @@ describe('assistant schema + repository (migration 049)', () => {
 
     expect(conversationId).toBeTruthy()
     expect(message.playerId).toBeNull()
-    expect(message.senderName).toBe('Coach')
+    expect(message.senderName).toBe('Ref')
     expect(message.type).toBe('assistant')
     expect(message.body).toBe('Saturday 9am vs Bob, Court 2.')
   })
@@ -164,7 +164,7 @@ describe('assistant schema + repository (migration 049)', () => {
     // chronological: oldest of the window first, newest last
     expect(recent[recent.length - 1].body).toBe('coach chimes in')
     expect(recent[recent.length - 1].type).toBe('assistant')
-    expect(recent[recent.length - 1].senderName).toBe('Coach')
+    expect(recent[recent.length - 1].senderName).toBe('Ref')
     expect(recent[recent.length - 2].body).toBe('msg 25')
     expect(recent[0].body).toBe('msg 7') // 26 rows total → window starts at #7
     expect(recent[0].senderName).toBe(player.name)

@@ -3,7 +3,7 @@
  * type='assistant' message bodies (RED first).
  *
  * assistant rows are never authored by the erased player (sender is always
- * 'Coach', player_id NULL) — anonymizeGroupMessagesFor (which matches on
+ * 'Ref', player_id NULL) — anonymizeGroupMessagesFor (which matches on
  * player_id) never touches them. This is a separate, best-effort scrub:
  * exact-substring replace of the player's pre-erasure display name with
  * "Former player" inside assistant bodies. Paraphrases are out of scope
