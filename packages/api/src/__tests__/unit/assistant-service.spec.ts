@@ -146,7 +146,7 @@ describe('handleAssistantJob', () => {
     expect(calls[0].contextBlock.indexOf('anyone up for saturday?')).toBeLessThan(
       calls[0].contextBlock.indexOf('who am I playing next?')
     )
-    expect(calls[0].systemPrompt).toContain('You are Coach')
+    expect(calls[0].systemPrompt).toContain('You are Ref')
 
     // reply row with idempotency provenance
     expect(sent).toHaveLength(1)
