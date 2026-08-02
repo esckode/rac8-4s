@@ -148,7 +148,7 @@ describe('A6 — assistant toggle + intro message', () => {
       [group.id]
     )
     expect(rows.rows).toHaveLength(1)
-    expect(rows.rows[0].body).toContain("I'm Coach")
+    expect(rows.rows[0].body).toContain("I'm Ref")
   })
 
   it('repeated true→true PATCH does not duplicate the intro', async () => {
