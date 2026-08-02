@@ -92,7 +92,7 @@ describe('P13 Phase 12 — batched transactional settle', () => {
     }
   })
 
-  it('batches a doubles apply into ~3 data statements instead of 14', async () => {
+  it('batches a doubles apply into ~4 data statements instead of 14', async () => {
     const [t1p1, t1p2, t2p1, t2p2] = await fourDoublesPlayers()
     const matchId = uniqueMatchId()
     const participants: MatchParticipants = {
@@ -114,8 +114,45 @@ describe('P13 Phase 12 — batched transactional settle', () => {
       })
       querySpy.mockRestore()
 
-      // 1 locked select + 1 upsert + 1 history insert.
-      expect(dataStatements.length).toBeLessThanOrEqual(3)
+      // 1 seed insert (ON CONFLICT DO NOTHING, Task 14.1/ISSUE-48) + 1 locked
+      // select + 1 upsert + 1 history insert.
+      expect(dataStatements.length).toBeLessThanOrEqual(4)
+    }
+  })
+
+  it('seeds every unseeded participant before locking, so a first-match settle locks all four (Task 14.1, ISSUE-48)', async () => {
+    const [t1p1, t1p2, t2p1, t2p2] = await fourDoublesPlayers()
+    const matchId = uniqueMatchId()
+    const participants: MatchParticipants = {
+      format: 'doubles',
+      team1: [t1p2, t1p1], // deliberately unsorted input
+      team2: [t2p2, t2p1],
+      winningTeam: 'team1',
+    }
+
+    const conn = await pool.connect()
+    const querySpy = jest.spyOn(conn, 'query')
+    try {
+      await applyRatingForMatch(pool, matchId, SPORT, participants)
+    } finally {
+      const seedIndex = querySpy.mock.calls.findIndex(
+        ([text]) => typeof text === 'string' && /INSERT INTO public\.player_ratings/i.test(text) && /DO NOTHING/i.test(text)
+      )
+      const lockIndex = querySpy.mock.calls.findIndex(
+        ([text]) => typeof text === 'string' && /FOR UPDATE/i.test(text)
+      )
+      querySpy.mockRestore()
+
+      expect(seedIndex).toBeGreaterThanOrEqual(0)
+      expect(lockIndex).toBeGreaterThan(seedIndex)
+    }
+
+    // Proxy for "the FOR UPDATE actually locked something, not just queried an
+    // empty result": every participant now has a row, seeded then moved once.
+    for (const id of [t1p1, t1p2, t2p1, t2p2]) {
+      const row = await repo.getFor(id, SPORT, 'doubles')
+      expect(row).toBeDefined()
+      expect(row!.matchesPlayed).toBe(1)
     }
   })
 
@@ -145,6 +182,56 @@ describe('P13 Phase 12 — batched transactional settle', () => {
     for (const id of [t1p1, t1p2, t2p1, t2p2]) {
       expect(await repo.getFor(id, SPORT, 'doubles')).toBeUndefined()
     }
+  })
+
+  it("a settle that throws after the seed insert leaves no seed rows behind (Task 14.1 — ISSUE-47's guarantee extended to the new statement)", async () => {
+    const [t1p1, t1p2, t2p1, t2p2] = await fourDoublesPlayers()
+    const matchId = uniqueMatchId()
+    const participants: MatchParticipants = {
+      format: 'doubles',
+      team1: [t1p1, t1p2],
+      team2: [t2p1, t2p2],
+      winningTeam: 'team1',
+    }
+
+    // Fail a statement that runs after the seed insert but before commit —
+    // the seed row it just wrote must roll back with everything else.
+    const failure = jest
+      .spyOn(RatingsRepository.prototype, 'upsertMany')
+      .mockRejectedValueOnce(new Error('boom after seed'))
+
+    try {
+      await expect(applyRatingForMatch(pool, matchId, SPORT, participants)).rejects.toThrow('boom after seed')
+    } finally {
+      failure.mockRestore()
+    }
+
+    for (const id of [t1p1, t1p2, t2p1, t2p2]) {
+      expect(await repo.getFor(id, SPORT, 'doubles')).toBeUndefined()
+    }
+  })
+
+  it('singles with one already-seeded and one unseeded participant locks both (Task 14.1)', async () => {
+    const p1 = uniquePlayerId()
+    const p2 = uniquePlayerId()
+    await createTestPlayer(client, p1)
+    await createTestPlayer(client, p2)
+
+    // p1 already has a rating row from an earlier match; p2 has none yet.
+    await repo.upsert(p1, SPORT, 'singles', 300, 3)
+
+    const matchId = uniqueMatchId()
+    const participants: MatchParticipants = { format: 'singles', player1Id: p1, player2Id: p2, winnerId: p2 }
+
+    await applyRatingForMatch(pool, matchId, SPORT, participants)
+
+    const after1 = await repo.getFor(p1, SPORT, 'singles')
+    const after2 = await repo.getFor(p2, SPORT, 'singles')
+    expect(after1?.matchesPlayed).toBe(4)
+    expect(after2?.matchesPlayed).toBe(1)
+    // p1 moved from its real 300 baseline, not from SEED_DEFAULT — the seed
+    // insert's ON CONFLICT DO NOTHING must not have clobbered the existing row.
+    expect(after1!.rating).toBeLessThan(300)
   })
 
   it('a correction that throws partway leaves no partial movement', async () => {
