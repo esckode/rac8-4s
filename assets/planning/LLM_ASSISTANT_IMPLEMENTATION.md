@@ -977,7 +977,10 @@ Re-verified before starting Phase C planning:
 
 ## Phase N — Group trigger rename `@coach` → `@ref`
 
-**Status: 📋 Planned (not started).** Decisions locked in
+**Status: 📋 Planned (not started).** ⚠ **Re-audited 2026-08-01** against the tree before hand-off:
+the baseline still holds (101/32), but the phase was keyed entirely on the `@coach` **trigger** and
+missed the `Coach` **display name** — see N0's 🔴 bullet, the new **N3b**, and the second DoD grep gate.
+Decisions locked in
 [LLM_ASSISTANT_DESIGN.md](./LLM_ASSISTANT_DESIGN.md) **§12 (N-Q1–N-Q8, grilled 2026-07-25)** — do
 not relitigate here. Every step TDD ([RED]→[GREEN]) like Phases A/B/C.
 
@@ -991,7 +994,7 @@ chat…"*. A9.2 is the **owner-approval gate on that exact text**. Approving it 
 approving copy the rename immediately falsifies, forcing a second approval round. Do Phase N, then
 send the privacy text for approval once.
 
-### N0 — Context pack (verified 2026-07-25)
+### N0 — Context pack (verified 2026-07-25, re-audited 2026-08-01)
 
 - **Scope: the group trigger only.** `detectAssistantTrigger` has exactly **one** call site —
   `routes/player-groups.ts:697`. The 1:1 route does **not** use it (inside a `type='coach'`
@@ -1016,6 +1019,35 @@ send the privacy text for approval once.
   - `trigger.ts`, `prompt.ts`, `docs/assistant-help.md`, and the e2e specs / `e2e/config.ts`.
   - Comment-only (safe, update for consistency): `auth.ts:87` (which confirms the reserved-name
     enforcement point), `group-message-repository.ts:196`, `conversation-repository.ts:156`.
+- 🔴 **The rename has TWO halves, and the `@coach` baseline only sees one** *(added 2026-08-01, from a
+  pre-implementation review of this phase)*. `@coach` is the **trigger**; `Coach` is the **display
+  name**. Every count and gate in this phase was keyed on the first, so a grep-clean branch can still
+  ship a bot that introduces itself as Coach in the prose users actually read. The bare-`Coach`
+  functional set — **none of it contains the string `@coach`**, so none of it appears in the 101/32
+  baseline:
+  - `prompt.ts:20` — `You are Coach, the assistant in a racket-sports tournament app's group chat`.
+    ⚠ N3 names this file, but the DoD grep gate structurally cannot check it.
+  - `emit-card.ts:29` — `senderName: 'Coach'`, the value that becomes `sender_name_snapshot`. This is
+    the source N3's [RED] asserts against; the assertion was specified without naming the producer.
+  - `propose-score.ts:114`, `propose-poll.ts:53`, `propose-casual-launch.ts:67` — **user-visible group
+    message bodies**: `Coach drafted a score — …`, `Coach drafted a poll — …`, `Coach drafted a
+    tournament launch from …`. Not previously named anywhere in Phase N.
+  - `assistant-client.ts:252,349` — the mock adapter's canned `'[mock] Coach reply'`. **Every e2e
+    assistant spec sees this string** (`ASSISTANT_ADAPTER=mock`), so it is effectively user-visible for
+    the whole test suite.
+  - Downstream assertions on those two shapes (`'Coach drafted a …'`, `senderName: 'Coach'`), likewise
+    unnamed: `assistant-card-confirm.spec.ts`, `assistant-card-message-history.spec.ts`,
+    `group-notify-selector.spec.ts`, `nudge-sweep.spec.ts`, `assistant-prompt.spec.ts`,
+    `assistant-service.spec.ts`, `assistant-processor.spec.ts`.
+- **The unit/integration specs carrying `@coach` were never listed either** — implied by the [RED]
+  steps and found by `--findRelatedTests`, but absent from the scope count, which makes the work read
+  smaller than it is: `assistant-trigger.spec.ts` (9 hits), `assistant-enqueue.spec.ts` (8),
+  `assistant-mock-client.spec.ts` (7), `GroupChatPanel.composerChip.spec.tsx` (5),
+  `GroupChatPanel.assistant.spec.tsx` (2), `assistant-service.spec.ts` (2),
+  `MentionAutocomplete.assistant.spec.tsx`, `ActionCard.spec.tsx`, `useGroupMessages.send.spec.ts`,
+  `assistant-processor.spec.ts`, `assistant-schema.spec.ts` (1 each).
+- **Baseline re-verified 2026-08-01: still exactly 101 hits / 32 files.** No drift since 2026-07-25.
+  The one stale line reference: the single call site is now `player-groups.ts:699`, not `:697`.
 - **No HL/REQUIREMENTS reconciliation:** both contain **zero** `@coach` references (verified), so
   §9's source-of-truth requirement does not apply.
 
@@ -1024,7 +1056,7 @@ send the privacy text for approval once.
 - `e2e-scenarios.md`: update the assistant scenarios' trigger text to `@ref`; the selection-map rows
   are unchanged (same spec files). Same "scenario docs before code" convention as C1 and B6.
 
-### N2 — Trigger + reserved names *(the only functional change)*
+### N2 — Trigger + reserved names *(the only change to trigger behaviour — but see N3's no-arbitration instruction and N3b's display strings, which are also behavioural)*
 
 - **[RED]** `trigger.ts` tests: `@ref` triggers (case-insensitive, word-boundary, mid-message);
   **`@coach` no longer triggers**; `isReservedDisplayName` rejects **both** `ref` and `coach`.
@@ -1032,8 +1064,14 @@ send the privacy text for approval once.
   and `RESERVED_DISPLAY_NAMES = ['ref', 'coach']` — **keeping `coach` reserved** (N-Q7: otherwise a
   player registers under the retired identity and impersonates it, while historical message bodies
   still contain literal `@coach`).
+- ⚠ **This is a restructure, not a value swap.** `RESERVED_DISPLAY_NAMES` is currently *derived* from
+  the trigger constant — `const RESERVED_DISPLAY_NAMES = [ASSISTANT_TRIGGER_NAME]` (`trigger.ts:16`).
+  Renaming the constant silently un-reserves `coach`, which is exactly the impersonation N-Q7 forbids.
+  The array has to become an explicit two-element literal.
 - Verify the signup and group-invite-accept paths reject both names (they call
-  `isReservedDisplayName`; confirm no separate hardcoded list exists).
+  `isReservedDisplayName`; confirm no separate hardcoded list exists). **Two enforcement sites, not
+  one** — `auth.ts:87-89` (signup) and `player-groups.ts:313` (invite accept); both carry a comment
+  naming "the @coach assistant" that updates with them.
 
 ### N3 — Persona, display name, and the no-arbitration instruction
 
@@ -1045,6 +1083,25 @@ send the privacy text for approval once.
   **there is no reject/dispute path anywhere in the codebase**. This is the one behavioral addition
   in Phase N, not a cosmetic rename.
 - Leave `coach-prompt.ts` alone (1:1 advises; N-Q1).
+
+### N3b — The display-name half *(added 2026-08-01; see N0's 🔴 bullet)*
+
+Everything here is user-visible and **invisible to the `@coach` grep**. Skipping it ships `@ref`
+triggering a bot that still signs its messages Coach.
+
+- **[RED]** assert on the new strings, not the old: `emit-card.ts` writes `senderName: 'Ref'`; a
+  proposed score/poll/launch body reads `Ref drafted a …`; the mock adapter returns
+  `'[mock] Ref reply'`.
+- **[GREEN]** `emit-card.ts:29`, `propose-score.ts:114`, `propose-poll.ts:53`,
+  `propose-casual-launch.ts:67`, `assistant-client.ts:252,349`.
+- ⚠ **`assistant-client.ts` is the mock every e2e assistant spec reads.** Change it and the e2e
+  assertions on `[mock] Coach reply` in the same commit, or N6 goes red for a reason that looks like a
+  rename bug and isn't.
+- ⚠ **`coach-client.ts` is the 1:1 mock — leave it alone** (N-Q1). The two clients are separate files;
+  do not "consolidate" them while you are in here.
+- **Historical message bodies are out of scope** — `sender_name_snapshot` and stored bodies are
+  snapshots by design (N0). Dev/test fixtures carrying `'Coach drafted a …'` are updated only where a
+  test asserts on them.
 
 ### N4 — Frontend
 
@@ -1075,6 +1132,8 @@ send the privacy text for approval once.
   (§8 — `JOB_QUEUE=bullmq` routes replies and sweeps through the queue consumer).
 - Also update `personalization-pending-actions.spec.ts` and `personalization-availability.spec.ts`
   if they assert chip text (both reference `@coach`).
+- ⚠ **Also the assertions on the mock's reply text and card bodies** (`[mock] Coach reply`,
+  `Coach drafted a …`) — they live in these same specs and change with N3b, not with the trigger.
 
 ### N7 — Wrap-up
 
@@ -1084,7 +1143,7 @@ send the privacy text for approval once.
 
 ## Definition of done (Phase N)
 
-- [ ] N1–N7 built with [RED]→[GREEN] commit history.
+- [ ] N1–N7, **including N3b**, built with [RED]→[GREEN] commit history.
 - [ ] `npx jest --findRelatedTests $(git diff --name-only main...HEAD)` per workspace, clean
       (§11 — expect this to be wide: `trigger.ts` is imported by the express app).
 - [ ] `npx playwright test assistant assistant-actions assistant-proactive --project=chromium
@@ -1098,6 +1157,21 @@ send the privacy text for approval once.
       `GroupChatPanel.tsx`, `MentionAutocomplete.tsx`, `PrivacyPolicy.tsx`, `docs/assistant-help.md`,
       and every e2e spec + `e2e/config.ts`. Remaining hits are permitted **only** as deliberate
       historical prose (design §2/§12 supersession notes, this document's own history).
+- [ ] **Second grep gate — the display-name half** *(added 2026-08-01; the gate above cannot see it,
+      which is the whole point of N0's 🔴 bullet)*. The group surface must not describe itself as
+      Coach:
+      ```bash
+      grep -rn "\bCoach\b" packages/api/src packages/frontend/src packages/frontend/e2e docs \
+        --include='*.ts' --include='*.tsx' --include='*.md' \
+        | grep -viE "coach-(client|constants|prompt|processor)|routes/coach\.ts|CoachChat|COACH_|coachMemory|type='coach'|coach\.spec"
+      ```
+      Everything the filter excludes is the **1:1 surface, which keeps the Coach name** (N-Q1).
+      Everything that survives it is either renamed to Ref or is deliberate historical prose — and if
+      it is prose, say so in the commit rather than widening the filter. ⚠ **Widening the exclude list
+      to make this pass is the failure mode**; the filter names identities, not files you got tired of.
+- [ ] `prompt.ts` contains no `Coach` persona line and `emit-card.ts` writes `senderName: 'Ref'` —
+      called out separately because both are single occurrences that a bulk find-and-replace over
+      `@coach` leaves untouched.
 - [ ] A player cannot register or be invited as **either** `ref` or `coach`.
 - [ ] Coverage floors unchanged or raised (§13) — this is a rename, so no floor should move; if one
       drops, something was deleted that shouldn't have been.

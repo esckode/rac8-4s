@@ -85,16 +85,51 @@ here.
 
 ### 📐 Design → needs an implementation plan
 
-- **Skill ratings (P13)** — **grilled 2026-07-30
-  ([RATINGS_DESIGN.md](assets/planning/RATINGS_DESIGN.md) §3, R1–R14)**. Private per-player rating on
-  a 0–500 NTRP-shaped scale, keyed per sport × format, seeded from an optional self-rating (default
-  270), updated **on score confirmation** with gap-scaled movement; doubles averages the pair; casual
-  counts in full; no inactivity decay. Shown only to its owner on `/profile`, and used internally to
-  balance auto-paired doubles. Next: create `RATINGS_IMPLEMENTATION.md` — migration
-  (`player_ratings` + `player_rating_history`), the update service hooked to the confirmation path,
-  the lazy per-sport self-rating prompt, the `/profile` panel, and the one-line
-  `dsr-service.ts` erase step. **Derive the constants rather than porting Elo's** — standard values
-  assume a ~400-point spread, and the 500 cap breaks zero-sum at the ceiling.
+- **Casual sessions — the ledger model** — **grilled 2026-07-31**
+  ([PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) §13). Casual doubles stops being a
+  generated round-robin with system-assigned teams and becomes a **time-boxed result ledger**: players
+  form their own pairs, log what they actually played, and the session auto-closes on a duration
+  (default 24h, set at creation). A pairing **suggestion** — weighted toward pairs who haven't partnered
+  recently — posts to group chat an hour before the start; it is advice, not an assignment. Every score
+  posts to group chat, which is the falsifiability answer now that no fixture list exists to check
+  claims against. §13 supersedes parts of 11.11/11.14 and retires RATINGS_DESIGN R2/R20 — see that
+  doc's §3c, where measurement (not argument) overturned rating-based pairing. Next: create
+  `CASUAL_SESSIONS_IMPLEMENTATION.md`.
+  - ⚠ **ISSUE-31 is the trap** — a 🔴 whose symptom was *"a group-launched casual tournament never
+    generates matches — there is nothing to play."* Removing fixture generation recreates it unless the
+    log-a-result affordance ships in the **same** change.
+  - ⚠ **The launch path is duplicated** — `player-groups.ts:959-965` and
+    `auto-close-processor.ts:107-114` both create registrations and call `createGroupsForDoubles`.
+    Change both or they diverge.
+  - ✅ **Auto-close is already written and dead.** `casual-idle-sweep.ts`'s `sweepIdleCasualTournaments`
+    closes idle casual tournaments and reports scored-vs-total, but has **no callers** and is never
+    registered in `worker-entrypoint.ts`. Needs a duration trigger instead of idle, plus the wiring
+    `registerAutoCloseSweepJob` already models.
+  - **Depends on `RATINGS_IMPLEMENTATION.md` Phase 11 for the deletion only** — that phase removes
+    `player_ratings` from the pairing path; this track owns what replaces it.
+
+- 🚧 **Skill ratings (P13)** — **grilled ×4, R1–R29**
+  ([RATINGS_DESIGN.md](assets/planning/RATINGS_DESIGN.md) §3, §3a–§3c); plan exists and is **in progress
+  on `feat/ratings-p13`** ([RATINGS_IMPLEMENTATION.md](assets/planning/RATINGS_IMPLEMENTATION.md),
+  Phases 0–8 built). *(Bullet corrected 2026-07-31 — it still described the first grill, and five of its
+  statements had since been superseded.)* Private per-player rating on a **100–500** NTRP-shaped scale
+  (R18 narrowed it from 0–500), keyed per sport × format, seeded from an optional self-rating (default
+  270), updated **on score submission** (R15 — confirmation is unbuilt and the wrong shape for casual,
+  see §3a) with gap-scaled movement; doubles averages the pair; casual counts in full; no inactivity
+  decay.
+  - ⚠ **The rating is now display-only (R27).** "Used internally to balance auto-paired doubles" was the
+    functional justification (R2) and it is **retired** — measurement showed R20's pairing produced one
+    distinct partner per player forever (§3c). Pairing moves to
+    [PLAYER_GROUPS_DESIGN.md](assets/planning/PLAYER_GROUPS_DESIGN.md) §13 and stops reading ratings.
+  - ⚠ **The self-rating prompt is not being built** (Step 5.3, owner call 2026-07-31) — it existed to
+    feed pairing. The endpoint stays; there is no UI, so every player holds `SEED_DEFAULT`, which is
+    harmless once nothing consumes the number.
+  - **Remaining:** Phase 11 (remove rating-based pairing) → Phase 12 (batched transactional settle,
+    closing [ISSUE-47](assets/planning/UAT_ISSUES.md#issue-47)/[ISSUE-48](assets/planning/UAT_ISSUES.md#issue-48),
+    which **must not merge unfixed**) → Phase 13 (last-10-partners panel, R28) → Phase 10 (test debt:
+    P13 currently has **zero** e2e coverage and the coverage ratchet has never run on this branch).
+  - **Derive the constants rather than porting Elo's** — standard values assume a ~400-point spread, and
+    the 500 cap breaks zero-sum at the ceiling. *(Done: Phase 0, signed off 2026-07-30.)*
 - *(done)* ~~**Player Groups** → `PLAYER_GROUPS_IMPLEMENTATION.md`~~ — **✅ Built & merged** (G0.1–G5.1,
   migrations 038–045). See the Built queue above.
 - *(done)* ~~**PWA-first frontend** (FRONTEND_PLATFORM_STRATEGY.md) → create
@@ -139,9 +174,17 @@ here.
   naming "Coach" for both surfaces, including *"When you @mention Coach in a group chat"* (line 41),
   and A9.2 is the owner-approval gate on that exact text. Approving first forces a second approval
   round. It's also free right now: the bot is gated off (`ASSISTANT_ADAPTER` unset ⇒ inert), so no
-  real group has ever seen `@coach`. Verified scope: **101 occurrences across 32 files**, of which
-  the functional ones are `trigger.ts`, `prompt.ts`, `GroupChatPanel.tsx` (the P7 chip inserts
-  `@coach` text), `PrivacyPolicy.tsx`, `docs/assistant-help.md`, and the e2e specs. Touches: `trigger.ts` (constants, regex, `RESERVED_DISPLAY_NAMES`
+  real group has ever seen `@coach`. Verified scope: **101 occurrences across 32 files** (re-verified
+  2026-08-01, no drift), of which the functional ones are `trigger.ts`, `prompt.ts`,
+  `GroupChatPanel.tsx` (the P7 chip inserts `@coach` text), `PrivacyPolicy.tsx`,
+  `docs/assistant-help.md`, and the e2e specs.
+  🔴 **Plus a second half that count does not see** *(added 2026-08-01, pre-implementation review —
+  Phase N was keyed entirely on the `@coach` **trigger** and missed the `Coach` **display name**)*:
+  `prompt.ts:20`'s persona, `emit-card.ts:29`'s `senderName: 'Coach'`, the `Coach drafted a …` group
+  message bodies in `propose-score.ts`/`propose-poll.ts`/`propose-casual-launch.ts`, and
+  `assistant-client.ts:252,349`'s `'[mock] Coach reply'` — **none contain the string `@coach`**, so a
+  grep-clean branch still ships a bot that signs its messages Coach. Covered by the new
+  **N3b** step and a second DoD grep gate. Touches: `trigger.ts` (constants, regex, `RESERVED_DISPLAY_NAMES`
   gains `ref` **and keeps `coach`** — else the retired identity is impersonable), `prompt.ts` persona
   **plus an explicit "you do not arbitrate disputes" instruction** (N-Q6: "ref" invites
   "@ref that score is wrong" and there is **no reject/dispute path** in the codebase — only
@@ -192,6 +235,13 @@ here.
   is the surface now blocked. Still worth building eventually for correctness; no longer urgent.
   **Must NOT clear pending partner claims** when it closes registration — see the note in
   `UAT_ISSUES.md`.
+
+- **`GET /tournaments/available` does one COUNT per tournament in the page** — surfaced by the
+  2026-07-31 hot-path DB sweep, recorded here rather than filed because the only surface that reaches it
+  is the blocked one. `tournaments.ts:1858-1861` awaits `countRegistrationsForTournament(t.id)` per row
+  inside `Promise.all`, so each request bursts `limit` connections against a pool of 10 — the same shape
+  as P-3 in § 🔍 Hot-path DB gaps, and the same fix (one grouped COUNT over the page's ids). Harmless
+  while browse is off; **it goes hot on the same day the surface does.**
 
 ### 🔧 Reconciliation (doc + test debt from recent decisions)
 > Resolve each by **updating the source-of-truth docs (`rac8-4s-HL.md` §9, `REQUIREMENTS.md`) + the
@@ -331,6 +381,87 @@ here.
   logging nothing, for a different reason, this whole time. Fix: move the `dotenv.config()` call so it
   runs first regardless of hoisting — e.g. a separate tiny entry script that calls it before dynamically
   `import()`-ing the real entrypoint, or load env via `node --env-file` instead of the `dotenv` package.
+
+### 🔍 Hot-path DB gaps (surfaced by the daily-usage query sweep, 2026-07-31)
+> Asked of the DB operations a player hits in ordinary daily use: which degrade UX at tens of thousands
+> of users. **Everything below is correct today and cannot be reproduced at current data volume** — that
+> is why it is here and not in `UAT_ISSUES.md`, which requires a reproduce-first verify step. The four
+> defects that same sweep found *are* filed there, as
+> [ISSUE-49–52](assets/planning/UAT_ISSUES.md#issue-49).
+>
+> Split by what triggers them. **Player-driven** items multiply by DAU and dominate; **lifecycle-driven**
+> items fire once per tournament transition. Ordering caveat: a lifecycle item that holds a transaction
+> or a pool connection can still stall player traffic, which is why P-5 sits above its siblings.
+>
+> Scale shape, given the casual-unlisted-groups scope: tens of thousands of users means **many small
+> groups, not a few huge ones**, so per-query row counts stay modest. The binding constraint is request
+> volume against a 10-connection pool, not slow individual queries — measure fixes in requests
+> eliminated, not ms saved.
+
+**Player-driven** (fires on ordinary daily use):
+
+- **P-1 🔴 The unread badge counts every message ever written, per group.** `getGroupsForPlayer`
+  (`packages/api/src/repositories/group-repository.ts:300-303`) computes `message_count` with a
+  correlated `COUNT(*)` over all non-system messages in each of the player's groups. `useGroupUnread`
+  lives in the app shell (`ResponsiveLayout.tsx:160`), so it fires on **every page**, on mount *and*
+  every window focus — in a PWA, every app-switch back into the tab. The client only uses the value as a
+  diff against a localStorage last-seen count (`useGroupUnread.ts:50`), so the server does unbounded
+  work to produce a number the client immediately subtracts. **Fix:** count unread directly from
+  `messaging.group_message_recipients` on `read_at IS NULL`, bounded by actual unread and driven by the
+  existing `(player_id, read_at)` index — `/player/notifications/unread` already does exactly this for
+  personal notifications. ⚠ The hook polls rather than using SSE for a stated reason: a persistent
+  app-wide SSE connection "breaks Playwright's `networkidle` wait." That is a test-tooling constraint,
+  not a product one — don't treat the poll as load-bearing without revisiting it.
+- **P-2 🔴 `GET /player/snapshot` issues `4 + G + T` sequential round-trips.** PlayHub loads it on every
+  visit (`PlayHub.tsx:52`). `buildPlayerSnapshot` (`assistant/player-snapshot.ts:73-91`) takes up to 100
+  tournaments, then awaits one `findMatchesByPlayer` **per tournament, in sequence**, plus a sequential
+  `findById` per group-linked tournament. It grows monotonically with player tenure and never recovers —
+  a two-year player is permanently slower than a new one. It also pays P-1's cost, since
+  `buildCoachToolContext` (`assistant/tools.ts:105`) calls `getGroupsForPlayer` first. Root cause is
+  reuse: both builders were written for the **coach worker**, where 100 queries vanish next to an LLM
+  round-trip. **Fix:** one query — `findMatchesByPlayer` already filters `tournament_id = $1`; make it
+  `= ANY($1)`. Also drop the `COUNT(DISTINCT t.id)` in `listTournamentsByPlayer` (`db.ts:539`) whose
+  `total` the caller discards. `getMyMatches` (`assistant/tools.ts:158-172`) repeats the same pattern
+  and takes the same fix, but stays worker-side so it is lower priority.
+- **P-3 🟠 Participant list does 2N lookups.** `tournaments.ts:2040-2050` awaits `findById(player_id)`
+  plus `findById(partner_id)` per registration inside `Promise.all`. The `Promise.all` does not fix the
+  N+1, it relocates the failure: latency stays flat while the request bursts N connections against a
+  pool of 10, starving other traffic instead of being slow itself. Bounded by group size under the
+  casual scope, so real but not urgent. **Fix:** one `WHERE id = ANY($1)` over the collected ids.
+- **P-4 🟡 Standings are computed twice per score.** `score-service.ts:160-177` enqueues
+  `standings.recalculate` **and** runs `processStandingsRecalculate` inline whenever a broadcast bus
+  exists — which is the dev/e2e default. The inline call exists because the in-memory queue has no
+  consumer, but under `JOB_QUEUE=bullmq` both paths run, at 2 queries per group each. *(The other half
+  of the score path — ~14 sequential statements for a doubles rating — is planned work: batched to ~3
+  in `RATINGS_IMPLEMENTATION.md` **Phase 12**. That was Phase 9 until 2026-07-31; the statement count is
+  now fixed by batching inside one transaction rather than by moving the work to a worker.)*
+
+**Lifecycle-driven** (fires on tournament state transitions):
+
+- **P-5 🟠 R20 auto-pairing is an N+1 inside the group-creation transaction.** `db.ts:1127-1135` awaits
+  `ratingsRepo.getFor(p, sport, 'doubles')` once per consenting leftover, sequentially, **with the
+  transaction open** — so a 32-player roster holds one of ten pool connections across 32 round-trips.
+  Ranked above its lifecycle siblings for that reason, not its frequency; though note it is not rare
+  either, since per RATINGS_DESIGN R12 casual is ~100% of real play and every group-launched doubles
+  tournament runs it. **Fix:** one `WHERE player_id = ANY($1)` — the results already land in a `Map`.
+  ✅ **Resolved as a side effect of R26** *(2026-07-31)* — `RATINGS_IMPLEMENTATION.md` **Phase 11**
+  deletes this loop outright: pairing stops reading ratings and takes partner history in one grouped
+  query. ⚠ That query joins `public.tournaments` on `group_id`, which **has no index** — add one, or
+  P-5 is traded for a seq scan on the same path.
+- **P-6 🟡 teams-formed does one registration query per team.**
+  `workers/teams-formed-processor.ts:49-52`. Worker-side, and player-name lookups are already memoized
+  via `nameCache`, so this is the smallest item here. **Fix:** batch the registration lookup across all
+  teams.
+
+**Infrastructure:**
+
+- **P-7 🟠 Connection pool size is not configurable.** `db-connections.ts:25` hardcodes `max: 10`
+  (and `min: 2`), read from no env var and set nowhere in `infra/`. Raising it buys headroom, not slope
+  — a request holding a connection across P-2's ~100 sequential queries consumes it regardless of the
+  ceiling, and Postgres caps total connections by instance memory, multiplied by instance count. At this
+  scale the usual answer is RDS Proxy / PgBouncer rather than a large per-instance pool. Wiring it to
+  config is [ISSUE-49](assets/planning/UAT_ISSUES.md#issue-49); **choosing the number, and whether a
+  pooler is needed, belongs with the prod cutover** (see 🚀 below).
 
 ### 🚀 Production readiness (before multi-instance prod cutover)
 > Cross-cutting gaps surfaced during the messaging V2 build — **not** blocking the build (V1–V6 done), but
