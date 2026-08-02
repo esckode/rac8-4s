@@ -68,7 +68,7 @@ reproduce-first bar. These four are the ones that are **defects right now**, ind
 | ├ [44b](#issue-44b) | ✅ Resolved | 🔴 | Codemod the remaining ~48 files (depends on 44a) | frontend |
 | ├ [44c](#issue-44c) | ✅ Resolved | 🟠 | Add the lint guard so the broken form cannot regress | frontend · lint |
 | └ [44d](#issue-44d) | 🔲 Open | 🟠 | Visual review of the app-wide layout shift (human, not an agent) | frontend · design |
-| [ISSUE-45](#issue-45) | 🔲 Open | 🟠 | `seed-test-accounts.spec.ts` fails on a FK violation — test isolation is leaking | test · db |
+| [ISSUE-45](#issue-45) | 🔲 Open | 🟠 | `seed-test-accounts.spec.ts` fails on a FK violation — e2e debris vs. a destructively re-seeded fixed identity | test · db |
 | [ISSUE-46](#issue-46) | ⏸ Tabled | 🔴 | Organizer score override only partially built — Standings button is a placebo | frontend |
 | [ISSUE-47](#issue-47) | ✅ Resolved | 🟠 | Rating application is not transactional — a failed doubles settle moves two of four players | api · data |
 | [ISSUE-48](#issue-48) | ✅ Resolved | 🟡 | Rating read-modify-write takes no lock — concurrent scores silently lose an update | api · data |
@@ -100,8 +100,27 @@ sequenced:
   layout app-wide**.
 - **ISSUE-43 is deferred, not unscoped** — direction is decided, build waits on the DSR cascade.
 
-Suggested order: **ISSUE-44** (only 🔴, and self-contained) → **ISSUE-39 → ISSUE-40** (40 builds on
-39's log line; do not reorder) → **ISSUE-41 + ISSUE-42** (same `auth.ts` object, one pass).
+**Suggested order — re-prioritized 2026-08-02**, after ISSUE-39/40/41/42/44a/44b/44c/47/48 closed. The
+previous ordering (44 → 39 → 40 → 41+42) is spent; every issue it named is resolved.
+
+1. **ISSUE-45** — highest leverage despite being 🟠: it is the merge gate (§11 requires a full run) and
+   it fails deterministically, in isolation, every time. ⚠ **Correction 2026-08-02:** this list first
+   claimed it was the tractable instance of the flaky trio and that one leak explained all four. It
+   does not — see its [verified root cause](#issue-45). Different mechanism, no shared fix; the trio
+   stays untriaged.
+2. **ISSUE-52** — small, and mirrors a check that already exists on the tournament route. **Bundle the
+   unnumbered `coach.ts` `flushHeaders()` gap** (under "Still open") into the same pass: same route, same
+   handler, one change instead of two.
+3. **ISSUE-50** — real defect on the hottest read path. Needs the most care of the four: the
+   `include`/`matches` interaction flagged in its Fix section is where a naive cache hit breaks it.
+4. **ISSUE-51** — mechanical hoist with a hard assertable invariant (seed array byte-identical). Cheap.
+5. **ISSUE-49** — cheap config wiring; natural to fold into whatever next touches pool sizing.
+
+**[ISSUE-44d](#issue-44d) runs in parallel and is not agent work.** It is the only thing between
+ISSUE-44 — the sole live 🔴 — and archival, and it is explicitly a human judgement call.
+
+**Not in the queue:** [ISSUE-46](#issue-46) (tabled, owner 2026-07-30) and [ISSUE-43](#issue-43)
+(deferred, waiting on the DSR cascade). Do not pick either up.
 
 ---
 
@@ -619,25 +638,63 @@ error: update or delete on table "players" violates foreign key constraint
 Reproduced identically on `7bee748` — the commit immediately *before* any ISSUE-39–44 work — with the
 same constraint name. Do not attribute it to the score-logging, audit or Tailwind changes.
 
-### Likely root cause
+### ~~Likely root cause~~ — superseded 2026-08-02, see below
 
-Leftover `player_groups` rows in the shared dev database reference the seeded player, so the spec's
-delete/recreate hits the FK. That points at a **test-isolation leak**, which CLAUDE.md §7 forbids
-outright: *"Never autocommit or write directly to the shared DB in tests — a full run must leave row
-counts unchanged."* Something is writing outside the transactional harness (`getTestPool()`), most
-likely a group-creation path that commits.
+> *Original hypothesis, kept because it shaped the first fix direction:* leftover `player_groups` rows
+> reference the seeded player, pointing at an integration test writing outside `getTestPool()` in
+> violation of CLAUDE.md §7. **Right about the leftover rows, wrong about who wrote them** — and that
+> difference changes the fix entirely.
 
-Note this is a *different* failure mode from the two flaky specs recorded under "Still open" below
-(`reset-password.spec.ts`, `partner-invite-by-email.spec.ts`) — those only fail under parallel load and
-pass in isolation. This one fails in isolation too, so it is deterministic, not a race.
+### Verified root cause *(2026-08-02, confirmed against the live dev DB)*
+
+**The spec is correctly isolated and is not at fault.** It uses the harness properly
+(`seed-test-accounts.spec.ts:25-26` — `getTestPool()` then `beginTransaction`), and `seedTestAccounts`
+takes an **injected** pool (`scripts/seed-test-accounts.ts:23`), so under test it runs entirely on the
+suite connection. No integration test is escaping the harness. There is no §7 violation here.
+
+The blocking row is **committed data created by e2e runs**:
+
+```
+player_groups: acd982cb-3bba-4791-a12c-cd50843de03a  "Pickleball Fundays"
+  created_by = player_1785279941972_tq7i6jkv2i  (= player@test.com)   2026-07-30 16:16:40+00
+```
+
+`player@test.com` is a **fixed seed identity** (`seed-test-accounts.ts:16`). The spec's repair path
+deletes and recreates that player, and the delete hits `player_groups_created_by_fkey` against a row
+that is *committed* — visible to the suite transaction, but impossible for it to roll back or affect.
+Hence deterministic, in isolation, permanently, until that row is dealt with.
+
+Playwright drives the real API on :3001, which commits by design — e2e **cannot** use the transactional
+harness, so this is not a leak in the §7 sense. The defect is that a durable fixed identity is reachable
+as an actor in e2e, combined with a seed script that assumes it may freely delete and recreate that
+identity. Confirmed at scale: 3,593 committed `player_groups` rows, `created_by` overwhelmingly random
+`test-<ts>-<n>-<rand>@example.com` e2e players.
+
+⚠ **This is NOT the same failure as the flaky trio** under "Still open" (`reset-password.spec.ts`,
+`partner-invite-by-email.spec.ts`, `assistant-anthropic-client.spec.ts`). Those are parallel-load races
+within a run; this is committed cross-run debris. **Fixing this will not fix those** — an earlier note
+in this file suggested a shared cause, which the evidence above rules out.
 
 ### Fix
 
-Find the writer that escapes the harness rather than special-casing the spec. Starting points: whatever
-creates `player_groups` rows during integration runs, and whether it uses `this.pool.connect()` +
-`BEGIN/COMMIT` (translated to savepoints by the harness) or a raw autocommitting client. **Do not**
-"fix" this by deleting rows in a `beforeAll` — that hides the leak and leaves the shared DB dirty for
-every other suite.
+Do **not** hunt for a harness-escaping writer — there isn't one. The real decision is how a durable seed
+identity and destructive re-seeding coexist. Options, in rough order of preference:
+
+1. **Make the seed script non-destructive** — repair/upsert in place rather than delete-and-recreate, so
+   a pre-existing FK reference is simply irrelevant. Smallest change; fixes the spec and the CLI path at
+   once.
+2. **Stop e2e acting as the fixed seed identities** — have group-creating specs seed a throwaway owner
+   (already the convention in `e2e/README.md`), leaving `player@test.com` unreferenced.
+
+⚠ **Do not** "fix" this by deleting rows in a `beforeAll` — it hides the debris, leaves the shared DB
+dirty for every other suite, and breaks again the next time e2e runs.
+
+⚠ **Do not** clear the debris before reproducing. **On a clean database this bug does not reproduce at
+all**, so a fresh DB shows green against an unfixed tree. A dump of the dirty state is the repro.
+
+**Separate, larger, do not fold in:** the dev DB holds 198,782 players / 13,365 accounts / 3,593 groups
+of uncleaned e2e debris (361 MB). That is a real problem and it is why this one bites, but it is not
+this issue.
 
 ### Verify
 
