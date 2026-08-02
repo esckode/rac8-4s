@@ -4,19 +4,21 @@
 > **Read the design first** — §3c in particular. This plan assumes its decisions and does not re-argue
 > them, and the fourth pass **reversed** two of them.
 
-**Date:** 2026-07-30 · **Status re-planned 2026-07-31:** 🔧 **In progress on `feat/ratings-p13`.**
+**Date:** 2026-07-30 · **Status re-planned 2026-08-02:** 🔧 **In progress on `feat/ratings-p13`.**
 
 **Phases 0–8 ✅ built** (each red-then-green; per-phase commit refs below). ⚠ **Phase 8 is superseded
 and Phase 9 was dropped before it was built** — the R26–R29 grill established that R20's pairing yields
 one distinct partner per player forever, so pairing stops consuming the rating (R26), the rating becomes
 display-only (R27), and with no consumer needing freshness the async work loses its case (R29).
 
-**Phases 11 → 12 → 13 → 10 built 2026-07-31** (commit refs in Task 14.4; the per-phase 🔲 markers below
-are stale until that task runs). **Not building:** Step 5.3, Phase 9.
+**Phases 11 → 12 → 13 → 10 built 2026-07-31**, markers flipped and commit refs recorded 2026-08-02
+(Task 14.4). **Not building:** Step 5.3, Phase 9.
 
 **Remaining: [Phase 14](#phase-14--post-verification-fixes--not-built)** — the fixes from the
-2026-08-01 verification of that delivery. **[ISSUE-48](./UAT_ISSUES.md#issue-48) is still open** (Task
-14.1: a player's *first* match in a sport/format settles without a lock) and **must not merge unfixed**.
+2026-08-01 verification of that delivery. **Tasks 14.1–14.4 and 14.7 are done**, including
+[ISSUE-48](./UAT_ISSUES.md#issue-48) (Task 14.1: a player's *first* match in a sport/format settling
+without a lock — now closed). **Tasks 14.5 (e2e sweep reconciliation) and 14.6 (coverage-gate scope
+call) remain** before this branch merges.
 
 Every step is **TDD-first** per CLAUDE.md §4: write the test, watch it fail *and read why*, commit the
 failing test, then implement and commit separately (§11). Every step names the model it is sized for.
@@ -599,7 +601,7 @@ opaquely.
 
 ---
 
-## Phase 10 — Test debt and merge gate 🔲 NOT BUILT
+## Phase 10 — Test debt and merge gate ✅ built (`a58851e` e2e spec, `ec5f418` §0a, `cc40fce` ratchet, `3288729` stale-spec repairs)
 
 **Model: Sonnet.** Mechanical individually, but it reaches four files and one step is easy to get
 backwards (10.3). Runs **last** — 10.2's ratchet reads whatever coverage the finished branch produces,
@@ -703,7 +705,7 @@ for this branch — flag it to the owner rather than editing it here (Task 14.3)
 
 ---
 
-## Phase 11 — Remove rating-based pairing (R26) 🔲 NOT BUILT
+## Phase 11 — Remove rating-based pairing (R26) ✅ built (`0b6531f` → `ae99e66`)
 
 **Model: Sonnet.** Touches live pairing code, and two easily-dropped rules sit inside the block being
 removed. Read design §3c first — do not re-derive the decision.
@@ -796,11 +798,11 @@ GROUP BY 1, 2
 
 ---
 
-## Phase 12 — Batched transactional settle (R29) 🔲 NOT BUILT
+## Phase 12 — Batched transactional settle (R29) ✅ built (`6ff510d` → `d5f87e1`, then `3381875` → `6bf7d7c`)
 
 **Model: Sonnet.** Transaction and locking semantics, and the test harness rewrites savepoints
-underneath. Closes [ISSUE-47](./UAT_ISSUES.md#issue-47) and [ISSUE-48](./UAT_ISSUES.md#issue-48), which
-**must not merge unfixed**.
+underneath. Closes [ISSUE-47](./UAT_ISSUES.md#issue-47) outright and [ISSUE-48](./UAT_ISSUES.md#issue-48)
+for players who already had a rating row — the first-match gap this left is Task 14.1, which closed it.
 
 This is Phase 9's Step 9.2 without the queue. One transaction, one lock, and the batching falls out.
 
@@ -831,7 +833,7 @@ correct — it just now guards an all-or-nothing unit instead of a partial one.
 
 ---
 
-## Phase 13 — `/profile`: last 10 partners (R28) 🔲 NOT BUILT
+## Phase 13 — `/profile`: last 10 partners (R28) ✅ built (`9e8f839` → `823fa6c`, then `4f8ea00` → `e4fac69`)
 
 **Model: Haiku.** One read endpoint and one panel, against a page and a pattern that both already exist.
 
@@ -874,9 +876,8 @@ route is own-only and deduplicated, and the frontend gates pass (22 suites / 210
 The tasks below are what did **not** hold. **Order: 14.1 → 14.2 → 14.7 (code) → 14.3 → 14.4 → 14.6
 (process/docs) → 14.5 (sweep last — 14.1 changes API code).**
 
-⚠ **The per-phase status markers above are stale** — Phases 10–13 still read 🔲 NOT BUILT and their
-commits are not recorded. **Task 14.4 owns fixing that**; until it runs, trust the git log over the
-markers.
+✅ **The per-phase status markers above were stale and are now fixed (Task 14.4, 2026-08-02)** — Phases
+10–13 now read `✅ built` with their commit refs.
 
 | Task | Work | Model | Why |
 |---|---|---|---|
@@ -1007,11 +1008,16 @@ npm --workspace=packages/frontend exec -- jest --findRelatedTests $FILES --bail
   14.6), none are P13 code
 - frontend — 22 suites, **210 passed**
 
+**Re-run 2026-08-02, corrected commands, after Task 14.1/14.2/14.7's fixes landed:**
+- api — 139 suites, **1895 passed, 3 failed**; same 3 `seed-test-accounts.spec.ts` failures, same cause
+  (Task 14.6, pre-existing/environmental — confirmed untouched by this branch)
+- frontend — 22 suites, **210 passed**
+
 ⚠ **CLAUDE.md §11 carries the same broken command.** Flag it to the owner; do **not** edit CLAUDE.md as
 part of this branch.
 
 **Done when:** the corrected commands are in Step 10.4 and both have been run to a real, non-empty
-result.
+result. ✅ Done 2026-08-02.
 
 ### Task 14.4 — status markers, DoD boxes, and six uncommitted docs 🟡
 
@@ -1115,36 +1121,47 @@ Neither is a defect; both are the code and the plan disagreeing, which is how a 
 *Status audited 2026-07-31 against the branch. Unticked ≠ not started — see each note.*
 *⚠ Re-audited 2026-08-01 — see Phase 14; several boxes below have evidence now, and Task 14.4 owns
 ticking them.*
+*✅ Re-audited 2026-08-02 (Task 14.4), against Tasks 14.1–14.3 and 14.7's evidence. Tasks 14.5 and 14.6
+still block the two remaining boxes — do not tick either from this session's own report alone.*
 
 - [x] **Design doc §4's `dsr-service.ts` path corrected (Step 6.1) and §7's "hooked to score
       confirmation" line updated to *submission*.** Both done — `RATINGS_DESIGN.md:242` reads
       "submission (not confirmation — see R15)", and the wrong `services/` path is gone.
-- [~] **Every step committed as failing-test-then-implementation (CLAUDE.md §11).** Holds for Phases
-      1–8, each visible as a red-then-green pair in the log. Phases 5.3, 9 and 10 are unbuilt.
-- [~] **No `-[--token]` classes introduced.** True for what shipped; still binding on Step 5.3's
-      control.
-- [ ] **`jest --findRelatedTests $(git diff --name-only main...HEAD)` green per workspace** — Step 10.4.
-- [ ] **Coverage floors not breached; ratchet run once at the end, not per step (§13).** 🔴 **Not run at
-      all** — `git diff main...HEAD -- '*jest.config.js'` is empty, so eight phases of new code have
-      contributed nothing to the floors. Step 10.2.
-- [ ] **§0a grep clean.** One known hit to adjudicate (`Profile.spec.tsx:68`) — Step 10.3.
-- [ ] **Full e2e sweep once before merge (§8).** 🔴 **P13 has no e2e spec at all** — `grep -rln "rating"
-      packages/frontend/e2e/` returns nothing, so the sweep currently proves only that ratings did not
-      *break* scoring. Step 10.1 adds the spec and its selection-map row. **After Phase 9 the sweep also
-      requires `npm run dev:worker`** (Step 9.6); without it ratings silently no-op rather than failing
-      loudly.
-- [ ] **[ISSUE-47](./UAT_ISSUES.md#issue-47) and [ISSUE-48](./UAT_ISSUES.md#issue-48) closed** — the
-      non-transactional settle and the unlocked read-modify-write. Both are defects in Phases 3–4 as
-      built and must not merge as-is; **Phase 12** fixes both at once.
+- [x] **Every step committed as failing-test-then-implementation (CLAUDE.md §11).** Holds for Phases
+      1–8 and 10–13, each visible as a red-then-green pair in the log (Phase 14's tasks the same way).
+      Phase 5.3 and Phase 9 are deliberately unbuilt (not "incomplete" — see their sections).
+- [x] **No `-[--token]` classes introduced.** True for what shipped; Step 5.3's control (unbuilt) is
+      moot.
+- [x] **`jest --findRelatedTests $(git diff --name-only main...HEAD)` green per workspace** — Step
+      10.4, corrected command (Task 14.3). Re-run 2026-08-02: api 139 suites / 1895 passed / 3 failed
+      (all `seed-test-accounts.spec.ts`, Task 14.6, pre-existing/environmental — not P13 code); frontend
+      22 suites / 210 passed.
+- [ ] **Coverage floors not breached; ratchet run once at the end, not per step (§13).** Frontend raised
+      in `cc40fce` and re-verified green. API floors are not breached (measured 2026-08-01: 88.41%
+      stmts / 77.89% branches / 88.70% funcs / 88.89% lines against a 75-branch floor), **but
+      `npm run test:coverage` cannot complete for the api workspace** (Task 14.6's blocker) and the api
+      ratchet has never run on this branch. **Blocked on Task 14.6.**
+- [x] **§0a grep clean.** Task 14.2: `LOGISTIC_BASE` extracted, API-side grep returns no matches; §0a
+      widened to the frontend surfaces and the wire-format-fixture exception (`Profile.spec.tsx`) is
+      written into the doc rather than left implicit.
+- [ ] **Full e2e sweep once before merge (§8).** Step 10.1 added `ratings.spec.ts` and its
+      selection-map row. **Blocked on Task 14.5** — the reported 436/1 sweep count doesn't reconcile
+      against the 250-block selection map (~63 unaccounted for) and needs a clean re-run plus a written
+      breakdown before this is trustworthy.
+- [x] **[ISSUE-47](./UAT_ISSUES.md#issue-47) and [ISSUE-48](./UAT_ISSUES.md#issue-48) closed** —
+      ISSUE-47 (non-transactional settle) by Phase 12 (`6bf7d7c`); ISSUE-48 (unlocked read-modify-write)
+      by Phase 12 for existing rows and **Task 14.1** (`95d8463`) for a player's first match in a
+      (sport, format), which Phase 12 alone left open. See `UAT_ISSUES.md`.
 - [x] **Step 5.3 placement decided by the owner** — decided 2026-07-31: **not building.** R27 made the
       rating display-only, so the seed prompt lost its justification. The endpoint stays.
-- [ ] **Phase 8's R20 pairing removed by Phase 11**, verified by the Step 11.2 grep: `db.ts` must not
-      appear among files referencing `RatingsRepository`/`player_ratings`, and
-      `ratings-constants.ts:20`'s "load-bearing for R20 pairing gate" clause is gone. ⚠ Merging Phase 11
-      half-done leaves the app pairing on a rating the design says nothing consumes.
-- [ ] **Casual pairing is a known interim state, not the end state.** Phase 11 leaves consenting
-      leftovers on a random shuffle (pre-Phase-8 behaviour). PLAYER_GROUPS_DESIGN §13 replaces it. This
-      branch is not the place to close that; it *is* the place to stop reading ratings.
+- [x] **Phase 8's R20 pairing removed by Phase 11**, verified by the Step 11.2 grep re-run 2026-08-02:
+      `grep -rn "RatingsRepository\|player_ratings" packages/api/src --include=*.ts | grep -v __tests__`
+      lists only the subsystem itself, `dsr-service.ts`, and `routes/player.ts` — `db.ts` does not
+      appear.
+- [x] **Casual pairing is a known interim state, not the end state.** Phase 11 (built) leaves consenting
+      leftovers on a random shuffle (pre-Phase-8 behaviour), confirmed by the grep above. PLAYER_GROUPS_
+      DESIGN §13 replaces it in a later track; this branch's job was only to stop reading ratings, which
+      it now does.
 
 ## Deliberately out of scope
 

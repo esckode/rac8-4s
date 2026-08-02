@@ -24,12 +24,13 @@ shipped.
 `REQUIREMENTS.md`'s "Audit Logging" section against the actual code, ISSUE-44 from a live UAT report
 (invite/create-group buttons appeared to have no submit button).
 
-**2 issues filed 2026-07-31 (ISSUE-47–48)** — both found by reading the P13 ratings write path while
-designing its move to the worker (`RATINGS_DESIGN.md` §3b). Neither was introduced by that design work:
-both are in Phase 3/4 as built. ⚠ **Unlike every other issue in this file, these are not shipped
-defects** — the ratings code exists only on `feat/ratings-p13` and is absent from `main`. They are
-filed rather than fixed silently because they are real and easy to lose, but the right time to fix them
-is **before that branch merges**.
+**2 issues filed 2026-07-31 (ISSUE-47–48), both resolved 2026-08-02** — both found by reading the P13
+ratings write path while designing its move to the worker (`RATINGS_DESIGN.md` §3b). Neither was
+introduced by that design work: both were in Phase 3/4 as built. ⚠ **Unlike every other issue in this
+file, these were never shipped defects** — the ratings code exists only on `feat/ratings-p13` and is
+absent from `main`. They were filed rather than fixed silently because they were real and easy to lose;
+ISSUE-47 closed with Phase 12, ISSUE-48 needed Phase 12 plus P13 Task 14.1 for the first-match gap Phase
+12 alone left open. See each issue's section for commit refs.
 
 **4 issues filed 2026-07-31 (ISSUE-49–52)** — from a sweep of the DB operations on daily player hot
 paths, done against a "tens of thousands of users" question. Most of that sweep's findings are
@@ -69,8 +70,8 @@ reproduce-first bar. These four are the ones that are **defects right now**, ind
 | └ [44d](#issue-44d) | 🔲 Open | 🟠 | Visual review of the app-wide layout shift (human, not an agent) | frontend · design |
 | [ISSUE-45](#issue-45) | 🔲 Open | 🟠 | `seed-test-accounts.spec.ts` fails on a FK violation — test isolation is leaking | test · db |
 | [ISSUE-46](#issue-46) | ⏸ Tabled | 🔴 | Organizer score override only partially built — Standings button is a placebo | frontend |
-| [ISSUE-47](#issue-47) | 🔲 Open | 🟠 | Rating application is not transactional — a failed doubles settle moves two of four players | api · data |
-| [ISSUE-48](#issue-48) | 🔲 Open | 🟡 | Rating read-modify-write takes no lock — concurrent scores silently lose an update | api · data |
+| [ISSUE-47](#issue-47) | ✅ Resolved | 🟠 | Rating application is not transactional — a failed doubles settle moves two of four players | api · data |
+| [ISSUE-48](#issue-48) | ✅ Resolved | 🟡 | Rating read-modify-write takes no lock — concurrent scores silently lose an update | api · data |
 | [ISSUE-49](#issue-49) | 🔲 Open | 🟡 | The whole `config.database` block is dead — four settable env vars do nothing | api · config |
 | [ISSUE-50](#issue-50) | 🔲 Open | 🟠 | `StandingsCache` is never read or populated — only invalidated | api · perf |
 | [ISSUE-51](#issue-51) | 🔲 Open | 🟡 | Bracket generation recomputes each group's standings once per advancing rank | api · perf |
@@ -732,6 +733,11 @@ submission succeeds and logs `score.overridden` with `organizerId` and `reason`.
 that design work — present in Phase 3 as built. **Unmerged**: lives on `feat/ratings-p13`, not `main`,
 so fix it before that branch lands.*
 
+**✅ Resolved 2026-08-02** — `RATINGS_IMPLEMENTATION.md` Phase 12 (`6ff510d` → `d5f87e1`, then
+`3381875` → `6bf7d7c`) wraps the whole settle in one transaction, taking `SELECT … FOR UPDATE` on every
+participant before writing, exactly as the Fix section below specifies. Verified by
+`ratings-settle-transaction.spec.ts`'s "a settle that throws partway leaves no partial movement" case.
+
 ### Symptom
 
 A doubles rating application that fails partway leaves **two of four players moved and two not**. The
@@ -780,6 +786,15 @@ and `rating_history` has no rows for that `match_id`.
 
 *Found 2026-07-31 alongside [ISSUE-47](#issue-47), same read-through. Also unmerged — same branch, same
 "fix before it lands" window.*
+
+**✅ Resolved 2026-08-02, in two parts:**
+- Phase 12 (`6ff510d` → `d5f87e1`, then `3381875` → `6bf7d7c`) added the `SELECT … FOR UPDATE` this
+  issue's Fix section asks for — closing it for any player who already had a `player_ratings` row.
+- That left a first-match gap: `FOR UPDATE` locks only rows that already exist, so a player's *first*
+  match in a (sport, format) was still computed from an unlocked read — this issue's exact shape,
+  narrowed to first matches. **P13 Task 14.1** (`95d8463`) closed it by seeding a row for every
+  participant (`ON CONFLICT DO NOTHING`) inside the same transaction, before the lock. Verified by
+  `ratings-settle-transaction.spec.ts`'s seed-before-lock and mixed seeded/unseeded cases.
 
 ### Symptom
 
