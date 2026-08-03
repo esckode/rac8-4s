@@ -35,9 +35,19 @@ const TEST_ACCOUNTS = [
   { email: 'sasi@test.com', name: 'Sasi', password: 'testpass123', role: 'player' as const },
 ]
 
-async function seedTestAccounts(pool: Pool): Promise<void> {
+interface SeedFailure {
+  email: string
+  error: string
+}
+
+interface SeedResult {
+  failures: SeedFailure[]
+}
+
+async function seedTestAccounts(pool: Pool): Promise<SeedResult> {
   const accountRepo = new AccountRepository(pool)
   const playerRepo = new PlayerRepository(pool)
+  const failures: SeedFailure[] = []
 
   for (const account of TEST_ACCOUNTS) {
     try {
@@ -90,12 +100,13 @@ async function seedTestAccounts(pool: Pool): Promise<void> {
 
       log.info('account.created', { email: account.email, role: account.role, playerId: player.id })
     } catch (err) {
-      log.error('account.creation.failed', {
-        email: account.email,
-        error: err instanceof Error ? err.message : String(err),
-      })
+      const error = err instanceof Error ? err.message : String(err)
+      log.error('account.creation.failed', { email: account.email, error })
+      failures.push({ email: account.email, error })
     }
   }
+
+  return { failures }
 }
 
 export { seedTestAccounts, TEST_ACCOUNTS }
@@ -106,13 +117,26 @@ if (require.main === module) {
     connectionString: process.env.DATABASE_URL || 'postgresql://localhost/tournament_app',
   })
 
+  // Written with console, not the logger, on purpose: the logger registers no
+  // transport at all when LOG_LEVEL is unset (logger.ts), which is the default
+  // for `npm run seed:accounts`. A CLI must report its own outcome regardless.
   seedTestAccounts(pool)
-    .then(() => {
+    .then(({ failures }) => {
+      if (failures.length > 0) {
+        console.error(`seed:accounts FAILED for ${failures.length} of ${TEST_ACCOUNTS.length} accounts:`)
+        for (const f of failures) {
+          console.error(`  ${f.email}: ${f.error}`)
+        }
+        process.exit(1)
+      }
       log.info('seed.complete')
+      console.log(`seed:accounts ok — ${TEST_ACCOUNTS.length} accounts present`)
       process.exit(0)
     })
     .catch((err) => {
-      log.error('seed.error', { error: err instanceof Error ? err.message : String(err) })
+      const error = err instanceof Error ? err.message : String(err)
+      log.error('seed.error', { error })
+      console.error(`seed:accounts FAILED: ${error}`)
       process.exit(1)
     })
     .finally(() => {
