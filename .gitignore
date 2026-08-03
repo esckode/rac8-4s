@@ -44,8 +44,15 @@ temp/
 .browser-data*/
 .browser-data/
 
-# Claude Code local config
-.claude/
+# Claude Code local config — machine-specific (settings.local.json, worktrees).
+# Skills are the exception: they encode this repo's workflow rules and must be
+# reviewed alongside the CLAUDE.md sections they cite, so they are tracked.
+#
+# NOTE: this must be `.claude/*`, not `.claude/`. Git does not descend into an
+# excluded *directory*, so a `!` negation under `.claude/` can never re-include
+# anything. Excluding the contents instead leaves the directory readable.
+.claude/*
+!.claude/skills/
 
 # Screenshots (for design reference, not versioned)
 screenshots/
