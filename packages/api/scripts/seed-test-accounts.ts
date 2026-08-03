@@ -18,6 +18,15 @@ const TEST_ACCOUNTS = [
     password: 'testpass123',
     role: 'player' as const,
   },
+  // A named cohort, so group/tournament flows can be walked with more than two
+  // identities that survive a DB reset. Created 2026-08-03 via real signup during
+  // the ISSUE-44d walkthrough; added here so `npm run seed:accounts` restores them.
+  { email: 'sunil@test.com', name: 'Sunil', password: 'testpass123', role: 'player' as const },
+  { email: 'vimal@test.com', name: 'Vimal', password: 'testpass123', role: 'player' as const },
+  { email: 'anil@test.com', name: 'Anil', password: 'testpass123', role: 'player' as const },
+  { email: 'raj@test.com', name: 'Raj', password: 'testpass123', role: 'player' as const },
+  { email: 'sudhakar@test.com', name: 'Sudhakar', password: 'testpass123', role: 'player' as const },
+  { email: 'sasi@test.com', name: 'Sasi', password: 'testpass123', role: 'player' as const },
 ]
 
 async function seedTestAccounts(pool: Pool): Promise<void> {
