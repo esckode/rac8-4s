@@ -37,7 +37,10 @@ paths, done against a "tens of thousands of users" question. Most of that sweep'
 **volume-dependent** and are recorded in [`BACKLOG.md`](../../BACKLOG.md) § 🔍 Hot-path DB gaps instead:
 they are correct today and cannot be reproduced at current data levels, so they fail this file's
 reproduce-first bar. These four are the ones that are **defects right now**, independent of scale.
-**Number the next one 53.**
+
+**1 issue filed 2026-08-03 (ISSUE-53)** — found during the [ISSUE-44d](#issue-44d) visual review: the
+Browse tab was present in the nav under review, which the shipped configuration does not have.
+**Number the next one 54.**
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -76,6 +79,7 @@ reproduce-first bar. These four are the ones that are **defects right now**, ind
 | [ISSUE-50](#issue-50) | 🔲 Open | 🟠 | `StandingsCache` is never read or populated — only invalidated | api · perf |
 | [ISSUE-51](#issue-51) | 🔲 Open | 🟡 | Bracket generation recomputes each group's standings once per advancing rank | api · perf |
 | [ISSUE-52](#issue-52) | 🔲 Open | 🟠 | Coach SSE route ignores `sseMaxConnectionsPerUser` — unbounded streams per user | api |
+| [ISSUE-53](#issue-53) | 🔲 Open | 🟠 | `PUBLIC_DISCOVERY_ENABLED` differs per environment and is never set explicitly — local review validates an app that doesn't ship | config · dev-env |
 
 **Implementation status, 2026-07-30.** ISSUE-39/40/41/42 and 44a/44b/44c are implemented on branch
 `fix/uat-issues-39-44`, each TDD (failing test committed before implementation). Verified: full
@@ -1075,6 +1079,110 @@ distributed counter in this issue.
 Reproduce first: open 10 concurrent `EventSource` connections to `/player/coach/events` as one player
 and confirm all 10 connect. After the fix the 6th returns 429, and closing one frees a slot. Confirm the
 tournament route's behaviour is unchanged.
+
+---
+
+## ISSUE-53 — `PUBLIC_DISCOVERY_ENABLED` differs per environment and is never set explicitly 🟠 {#issue-53}
+
+*Found 2026-08-03 at the start of the [ISSUE-44d](#issue-44d) visual review — the nav under review had a
+Browse tab, which the shipped configuration does not have. Verified live against the running dev stack.*
+
+### Symptom
+
+The same build presents a **different navigation and a different route set** depending on which
+environment it runs in, and no environment states which it wants:
+
+- **Local dev/e2e:** `GET /api/config` returns `{"publicDiscoveryEnabled":true}` — the bottom nav
+  carries a fifth tab (Browse), `/browse` and `/tournament/:id/browse` render, and
+  `POST /tournaments/:id/register` is open.
+- **Deployed (UAT/prod):** the flag is off — four tabs, both browse routes render `NotFound`, and the
+  register route 404s.
+
+So any manual walkthrough, screenshot, or design review done locally is validating an app that does not
+ship. That is exactly how this was found: the 44d review opened on a nav with one tab too many.
+
+### Root cause
+
+Three separate places, each individually defensible, that together mean **no environment declares its
+intent**:
+
+1. **`.env.example:87` ships `PUBLIC_DISCOVERY_ENABLED=true`.** Every dev who bootstraps from the
+   example gets discovery on. ⚠ **This is deliberate and the comment above it explains why**
+   (`.env.example:82-86`): it keeps `browse-tournaments.spec.ts`,
+   `tournament-public-registration.spec.ts` and `tournament-discovery-registration.spec.ts` exercising
+   the blocked machinery. **Do not treat this as a typo to flip** — see the Decision below.
+2. **The deployed env file never sets it at all.** `infra/modules/api/user_data.sh.tpl:35-47` writes
+   `/etc/tournament-app/env` with `NODE_ENV`, `LOG_LEVEL`, `JOB_QUEUE` etc. and no
+   `PUBLIC_DISCOVERY_ENABLED`. Deployed environments are correct **only by omission** — `config.ts:785`
+   is `process.env.PUBLIC_DISCOVERY_ENABLED === 'true'`, so an unset var falls to `false`. Nothing in
+   that template records that this is a decision, so the next person adding env vars has no signal, and
+   a single well-meaning line ships public discovery.
+3. **`scripts/e2e-setup.js` does not check it.** It checks Postgres, the API, the frontend, the worker
+   and the register rate-limit override — but not the one flag that changes which specs run.
+
+### Decision *(owner, 2026-08-03)* — correct in **every** environment, explicitly
+
+Set it explicitly everywhere, to the shipped value, rather than relying on defaults or omission:
+
+| Environment | File | Value |
+|---|---|---|
+| Local dev | `packages/api/.env` | `false` |
+| Example / bootstrap | `.env.example` | `false`, with the rewritten comment below |
+| UAT / prod | `infra/modules/api/user_data.sh.tpl` | `false`, written explicitly into the env file |
+| CI / e2e default | inherits local | `false` |
+
+**The cost is real and must be handled, not ignored.** With the flag off, the three discovery specs
+self-skip via `skipIfPublicDiscoveryDisabled()` (`fixtures.ts:47-52`), as does one case in
+`auth.spec.ts:448`. That guard exists precisely so this is a clean skip rather than a failure — but a
+permanently-skipped spec is a spec nobody notices rotting. The fix therefore includes an **opt-in
+override** so the machinery still gets exercised on purpose:
+
+```bash
+PUBLIC_DISCOVERY_ENABLED=true npm run dev --workspace=packages/api
+```
+
+Document that one line in `.env.example`'s comment and in `packages/frontend/e2e/README.md`, replacing
+the current "set true here" rationale. The default becomes *fidelity to the shipped app*; exercising
+blocked machinery becomes a deliberate act.
+
+**Do NOT delete the three specs or the skip guard.** ISSUE-29 is explicitly reversible and this is the
+machinery that comes back with one flag flip.
+
+### Fix
+
+1. `packages/api/.env` → `PUBLIC_DISCOVERY_ENABLED=false`.
+2. `.env.example:82-87` → flip to `false` and rewrite the comment: state that this mirrors the shipped
+   default, and give the inline-override command for running the discovery specs.
+3. `infra/modules/api/user_data.sh.tpl` → add `PUBLIC_DISCOVERY_ENABLED=false` to the `ENVFILE`
+   heredoc (`:35-47`), next to `LOG_LEVEL`, with a one-line comment naming ISSUE-29. Explicit beats
+   correct-by-omission: it is the only thing that makes the decision visible where env vars are edited.
+4. `scripts/e2e-setup.js` → add a check that reads `GET /api/config` and **reports** the flag's value
+   alongside the existing rate-limit-override line. Report, don't enforce — both values are legitimate;
+   the defect is not knowing which one you're running.
+5. `packages/frontend/e2e/README.md` → document the override next to the existing conventions.
+
+### Verify
+
+Reproduce first: with the current tree, `curl -s localhost:3001/api/config` returns
+`publicDiscoveryEnabled: true` and the bottom nav shows five tabs including Browse.
+
+After the fix:
+- `curl -s localhost:3001/api/config` → `{"publicDiscoveryEnabled":false}`; nav shows four tabs; `/browse`
+  renders NotFound.
+- `node scripts/e2e-setup.js` prints the flag's current value.
+- `npx playwright test browse-tournaments.spec.ts --project=chromium --reporter=line` → **skipped, not
+  failed**.
+- Same spec with `PUBLIC_DISCOVERY_ENABLED=true` on the API → runs and passes, proving the override works
+  and the machinery is intact.
+- `cd infra && tofu validate` (and `fmt`) after the template edit.
+
+### Note
+
+This does **not** change product scope. Public discovery stays blocked per
+[ISSUE-29](COMPLETED_UAT_ISSUES.md#issue-29); Browse could not show first-release tournaments anyway —
+`db.ts:312` filters `t.visibility = 'public'` while every group-launched casual tournament is created
+`visibility: 'unlisted'` (`player-groups.ts:943`, `app.ts:278`/`323`, `auto-close-processor.ts:99`).
+With discovery on, Browse renders an empty list plus a registration path ISSUE-29 deliberately closed.
 
 ---
 
