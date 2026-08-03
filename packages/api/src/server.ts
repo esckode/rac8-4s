@@ -41,9 +41,18 @@ async function main() {
     const migrationsDir = path.resolve(__dirname, '../../../db/migrations')
     await runMigrations(pool, migrationsDir)
 
-    // Seed test accounts in development mode
+    // Seed test accounts in development mode. Boot continues on failure — missing
+    // dev fixtures are not a reason to refuse to serve — but it must not be silent:
+    // an unreported partial seed looks exactly like a working environment until a
+    // login mysteriously fails.
     if (process.env.NODE_ENV === 'development') {
-      await seedTestAccounts(pool)
+      const { failures } = await seedTestAccounts(pool)
+      if (failures.length > 0) {
+        log.error('seed.incomplete', {
+          failed: failures.length,
+          emails: failures.map((f) => f.email),
+        })
+      }
     }
 
     // Load configuration with environment overrides
