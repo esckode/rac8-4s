@@ -105,6 +105,32 @@ describe('seedTestAccounts (ISSUE-25)', () => {
     expect(groups.rows).toHaveLength(1)
   })
 
+  // A seeder that cannot reach the database used to log each failure at `error`
+  // and resolve anyway. With LOG_LEVEL unset the logger registers no transport
+  // (logger.ts), so `npm run seed:accounts` printed nothing and exited 0 while
+  // seeding nothing at all. Failures must be returned to the caller so the CLI
+  // can report them and exit non-zero.
+  it('reports failures to the caller instead of resolving silently', async () => {
+    const brokenPool = {
+      query: () => Promise.reject(new Error('connection refused')),
+      connect: () => Promise.reject(new Error('connection refused')),
+    } as unknown as Pool
+
+    const result = await seedTestAccounts(brokenPool)
+
+    expect(result.failures).toHaveLength(TEST_ACCOUNTS.length)
+    expect(result.failures[0]).toEqual({
+      email: TEST_ACCOUNTS[0].email,
+      error: 'connection refused',
+    })
+  })
+
+  it('reports no failures on a successful seed', async () => {
+    const result = await seedTestAccounts(pool)
+
+    expect(result.failures).toEqual([])
+  })
+
   it('repairs an existing unlinked account instead of skipping it', async () => {
     // Simulate the pre-fix seeder's shape directly: an account with no linked player.
     const created = await accountRepo.create('player@test.com', 'player', 'active')
