@@ -1,3 +1,9 @@
+// Must stay the FIRST import — this file is also an entrypoint (`npm run
+// seed:accounts`), and without it DATABASE_URL is unset, so the standalone run
+// silently seeds nothing. See src/load-env.ts for why a same-file dotenv call
+// would be too late.
+import '../src/load-env'
+
 import { Pool } from 'pg'
 import bcryptjs from 'bcryptjs'
 import { getLogger } from '../src/logger'
