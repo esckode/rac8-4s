@@ -156,6 +156,24 @@ describe('NotificationCard', () => {
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
+  it('marks its own notification row read on successful accept (ISSUE-63)', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, groupId: 'group-789', playerId: 'p1', token: 'DOWNGRADE-TOKEN' }),
+    })
+    renderCard(inviteMessage)
+
+    fireEvent.click(screen.getByTestId('notification-invite-accept'))
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/player/notifications/msg-1/read',
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
+  })
+
   it('does not throw a hooks-order error when a non-invite notification renders after an invite one', () => {
     // ISSUE-57's own trap: useNavigate() must be called at the component's top
     // level, not inside the `if (groupInviteToken && groupId)` branch — doing

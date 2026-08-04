@@ -8,6 +8,7 @@ import React from 'react'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { Notifications } from '../../pages/Notifications'
+import { notificationUnreadStore } from '../../state/notification-unread-state'
 
 const sampleMessages = [
   {
@@ -50,6 +51,7 @@ describe('P2.4 — Notifications page', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     localStorage.clear()
+    notificationUnreadStore.set(0)
   })
 
   afterEach(() => {
@@ -145,7 +147,7 @@ describe('P2.4 — Notifications page', () => {
       if (url === '/player/notifications/messages') {
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ messages: [inviteMessage] }) })
       }
-      if (url === '/player/notifications/read') {
+      if (url === '/player/notifications/read' || url === '/player/notifications/msg-invite/read') {
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true }) })
       }
       if (url === '/player/groups/group-789/invites/accept') {
@@ -160,6 +162,70 @@ describe('P2.4 — Notifications page', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('notification-invite-accept')).not.toBeInTheDocument()
+    })
+  })
+
+  // ─── ISSUE-63: actionable notifications survive mark-all-read ──────────────
+
+  it('mark-all-read leaves the badge counting a pending invite, not zero', async () => {
+    const inviteMessage = {
+      id: 'msg-invite',
+      body: "You've been invited to join Pickleball Fundays",
+      type: 'system',
+      createdAt: '2026-06-30T12:00:00Z',
+      metadata: {
+        groupId: 'group-789', groupName: 'Pickleball Fundays',
+        groupInviteToken: 'invite-token-abc', inviteEmail: 'invitee@test.local',
+      },
+    }
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url === '/player/notifications/messages') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ messages: [inviteMessage, sampleMessages[0]] }) })
+      }
+      if (url === '/player/notifications/read') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true }) })
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+    renderPage()
+
+    await waitFor(() => {
+      // Only the invite (still actionable) counts — the ordinary message doesn't.
+      expect(notificationUnreadStore.get()).toBe(1)
+    })
+  })
+
+  it('accepting the invite drops the badge to 0', async () => {
+    const inviteMessage = {
+      id: 'msg-invite',
+      body: "You've been invited to join Pickleball Fundays",
+      type: 'system',
+      createdAt: '2026-06-30T12:00:00Z',
+      metadata: {
+        groupId: 'group-789', groupName: 'Pickleball Fundays',
+        groupInviteToken: 'invite-token-abc', inviteEmail: 'invitee@test.local',
+      },
+    }
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url === '/player/notifications/messages') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ messages: [inviteMessage] }) })
+      }
+      if (url === '/player/notifications/read' || url === '/player/notifications/msg-invite/read') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true }) })
+      }
+      if (url === '/player/groups/group-789/invites/accept') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, token: 'x' }) })
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+    renderPage()
+
+    await waitFor(() => expect(notificationUnreadStore.get()).toBe(1))
+
+    fireEvent.click(await screen.findByTestId('notification-invite-accept'))
+
+    await waitFor(() => {
+      expect(notificationUnreadStore.get()).toBe(0)
     })
   })
 })
