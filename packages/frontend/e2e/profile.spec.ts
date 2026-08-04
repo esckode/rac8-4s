@@ -95,7 +95,7 @@ test.describe('Player Personalization — Profile page', () => {
   })
 
   test('NEGATIVE — unauthenticated visitor is redirected away from /profile', async ({ page }) => {
-    await page.goto(`http://localhost:5173${ROUTES.PROFILE}`, { waitUntil: 'networkidle' })
+    await page.goto(`http://localhost:5173${ROUTES.PROFILE}`)
     await expect(page).toHaveURL(/\/login/)
   })
 })

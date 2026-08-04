@@ -99,7 +99,7 @@ test.describe('Skill Ratings (P13) — /ratings page', () => {
     await submitScore(tournamentId, bundle.matches.group[0].id, playerToken)
 
     await linkAccountAndLogin(page, playerEmail, playerName)
-    await page.goto('http://localhost:5173/ratings', { waitUntil: 'networkidle' })
+    await page.goto('http://localhost:5173/ratings')
 
     const row = page.locator('[data-testid="rating-pickleball-singles"]')
     await expect(row).toBeVisible({ timeout: 8000 })
@@ -123,7 +123,7 @@ test.describe('Skill Ratings (P13) — /ratings page', () => {
     }
 
     await linkAccountAndLogin(page, playerEmail, playerName)
-    await page.goto('http://localhost:5173/ratings', { waitUntil: 'networkidle' })
+    await page.goto('http://localhost:5173/ratings')
 
     const row = page.locator('[data-testid="rating-pickleball-singles"]')
     await expect(row).toBeVisible({ timeout: 8000 })
@@ -134,7 +134,7 @@ test.describe('Skill Ratings (P13) — /ratings page', () => {
     const user = createTestUser()
     await signupViaApi(user)
     await loginFrontend(page, user)
-    await page.goto('http://localhost:5173/ratings', { waitUntil: 'networkidle' })
+    await page.goto('http://localhost:5173/ratings')
 
     await expect(page.locator('[data-testid="rating-empty-state"]')).toBeVisible({ timeout: 8000 })
     await expect(page.locator('[data-testid="partners-empty-state"]')).toBeVisible()
@@ -149,7 +149,7 @@ test.describe('Skill Ratings (P13) — /ratings page', () => {
     await submitScore(tournamentId, bundle.matches.group[0].id, playerToken)
 
     await linkAccountAndLogin(page, playerEmail, playerName)
-    await page.goto('http://localhost:5173/ratings', { waitUntil: 'networkidle' })
+    await page.goto('http://localhost:5173/ratings')
 
     // The focus player's partner is whichever teammate isn't them — assert
     // some partner row rendered rather than pinning a specific id, since

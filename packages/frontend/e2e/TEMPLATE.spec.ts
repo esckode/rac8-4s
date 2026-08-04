@@ -66,7 +66,7 @@ test.describe('Feature Group Name E2E', () => {
       })
 
       // When: [User action]
-      await page.goto('/some-page', { waitUntil: 'networkidle' })
+      await page.goto('/some-page')
 
       // Then: [Expected outcome]
       await expect(page.locator('text=Success')).toBeVisible()
@@ -119,7 +119,8 @@ test.describe('Feature Group Name E2E', () => {
 //    - Use helper functions for setup (apiCall, createTestUser)
 //    - Use semantic selectors (button:has-text, input[type="email"])
 //    - Use flexible URL matching: /\/path1|\/path2/
-//    - Wait for network: { waitUntil: 'networkidle' }
+//    - Wait for a stable, always-present element after navigation:
+//      await expect(page.locator('...')).toBeVisible({ timeout: 10000 })
 //
 // 3. Use unique test data to avoid conflicts:
 //    ✅ const email = `test-${Date.now()}@example.com`
@@ -134,10 +135,10 @@ test.describe('Feature Group Name E2E', () => {
 //    ❌ .class-name (unless stable)
 //
 // 5. Use flexible waiting:
-//    ✅ await page.goto('/path', { waitUntil: 'networkidle' })
 //    ✅ await page.waitForURL(/\/path\//)
 //    ✅ await expect(page.locator('...')).toBeVisible()
-//    ❌ await page.goto('/path')
+//    ❌ await page.goto('/path', { waitUntil: 'networkidle' }) — ISSUE-62: never
+//       fires once a persistent per-player SSE stream is open
 //    ❌ await page.waitForTimeout(2000)
 //
 // 6. Name file matching test content:

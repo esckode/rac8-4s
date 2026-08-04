@@ -38,9 +38,10 @@ test.describe('Bottom nav label geometry (ISSUE-26)', () => {
     test(`every nav label sits fully inside its item and the viewport at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 })
       await loginAsFreshPlayer(page)
-      await page.goto('/play', { waitUntil: 'networkidle' })
+      await page.goto('/play')
 
       const items = page.locator('.responsive-bottom-nav-item')
+      await expect(items.first()).toBeVisible({ timeout: 10000 })
       const count = await items.count()
       expect(count).toBeGreaterThan(0)
 
@@ -82,8 +83,9 @@ const AUTH_ROUTES = ['/login', '/signup', '/forgot-password', '/reset-password']
 test.describe('Auth page shell geometry (ISSUE-23)', () => {
   for (const route of AUTH_ROUTES) {
     test(`${route} shell is fluid below 640px and capped above it`, async ({ page }) => {
-      await page.goto(route, { waitUntil: 'networkidle' })
+      await page.goto(route)
       const shell = page.getByTestId('auth-shell')
+      await expect(shell).toBeVisible({ timeout: 10000 })
 
       await page.setViewportSize({ width: 360, height: 740 })
       let box = await shell.boundingBox()
@@ -110,8 +112,9 @@ test.describe('Auth page shell geometry (ISSUE-23)', () => {
   test('Login: no content clips at any width — the footer link stays inside the viewport', async ({ page }) => {
     for (const width of [360, 440, 640, 1024]) {
       await page.setViewportSize({ width, height: 760 })
-      await page.goto('/login', { waitUntil: 'networkidle' })
+      await page.goto('/login')
       const footerLink = page.getByRole('button', { name: /create an account/i })
+      await expect(footerLink).toBeVisible({ timeout: 10000 })
       const box = await footerLink.boundingBox()
       expect(box).not.toBeNull()
       expect(box!.x).toBeGreaterThanOrEqual(0)

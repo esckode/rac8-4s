@@ -133,7 +133,8 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       // Post-login destination is /play (ISSUE-28/29), not /browse.
       await page.waitForURL(ROUTES.PLAY, { timeout: TIMEOUTS.PAGE_LOAD })
 
-      await page.goto(ROUTES.BROWSE, { waitUntil: 'networkidle' })
+      await page.goto(ROUTES.BROWSE)
+      await expect(page.locator('h1:has-text("Browse")')).toBeVisible({ timeout: 10000 })
 
       // When: I click on a singles tournament card
       const tournamentCard = page.locator(SELECTORS.TOURNAMENT_CARDS).first()
@@ -147,15 +148,16 @@ test.describe('Tournament Discovery & Registration E2E', () => {
           timeout: TIMEOUTS.PAGE_LOAD,
         })
 
-        // And: I should see tournament details
-        // Wait for page content to load
-        await page.waitForLoadState('networkidle')
-        await page.waitForTimeout(1000) // Additional wait for content rendering
-
-        const pageContent = await page.textContent('body')
-        expect(pageContent?.length).toBeGreaterThan(100) // Should have substantive content
-        // Page should show tournament name or format information
-        expect(pageContent).toMatch(/tournament|singles|details|standings/i)
+        // And: I should see tournament details — poll instead of a blind
+        // sleep, since there's no single locator target for "page content
+        // has rendered" here (ISSUE-62: 'networkidle' never fires once a
+        // persistent per-player SSE stream is open).
+        await expect(async () => {
+          const pageContent = await page.textContent('body')
+          expect(pageContent?.length).toBeGreaterThan(100) // Should have substantive content
+          // Page should show tournament name or format information
+          expect(pageContent).toMatch(/tournament|singles|details|standings/i)
+        }).toPass({ timeout: 10000 })
       }
     })
 
@@ -176,7 +178,8 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       // Post-login destination is /play (ISSUE-28/29), not /browse.
       await page.waitForURL(ROUTES.PLAY, { timeout: TIMEOUTS.PAGE_LOAD })
 
-      await page.goto(ROUTES.BROWSE, { waitUntil: 'networkidle' })
+      await page.goto(ROUTES.BROWSE)
+      await expect(page.locator('h1:has-text("Browse")')).toBeVisible({ timeout: 10000 })
 
       // When: I click on a doubles tournament card (search for one with "doubles" in text)
       const allCards = page.locator(SELECTORS.TOURNAMENT_CARDS)
@@ -199,15 +202,14 @@ test.describe('Tournament Discovery & Registration E2E', () => {
         })
 
         // And: the page should indicate "Doubles" format
-        // And: I should see "Team" or "Partner" references
-        // Wait for page content to load
-        await page.waitForLoadState('networkidle')
-        await page.waitForTimeout(1000) // Additional wait for content rendering
-
-        const pageContent = await page.textContent('body')
-        expect(pageContent?.length).toBeGreaterThan(100) // Should have substantive content
-        // Page should show tournament information
-        expect(pageContent).toMatch(/tournament|doubles|details|standings/i)
+        // And: I should see "Team" or "Partner" references — poll instead
+        // of a blind sleep (see the singles scenario above for why).
+        await expect(async () => {
+          const pageContent = await page.textContent('body')
+          expect(pageContent?.length).toBeGreaterThan(100) // Should have substantive content
+          // Page should show tournament information
+          expect(pageContent).toMatch(/tournament|doubles|details|standings/i)
+        }).toPass({ timeout: 10000 })
       }
     })
   })
@@ -227,9 +229,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       // This test is blocked until tournaments exist in the database
       const testTournamentId = '1' // placeholder
 
-      await page.goto(ROUTES.TOURNAMENT_DETAIL(testTournamentId), {
-        waitUntil: 'networkidle',
-      })
+      await page.goto(ROUTES.TOURNAMENT_DETAIL(testTournamentId))
 
       // Then: I should see a registration form
       const emailInput = page.locator('input[placeholder*="email"], input[type="email"]')
@@ -250,9 +250,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
 
       const testTournamentId = '1' // placeholder
 
-      await page.goto(ROUTES.TOURNAMENT_DETAIL(testTournamentId), {
-        waitUntil: 'networkidle',
-      })
+      await page.goto(ROUTES.TOURNAMENT_DETAIL(testTournamentId))
 
       // When: I fill in email and name in the registration form
       const emailInput = page.locator('input[type="email"], input[placeholder*="email"]').first()
@@ -290,7 +288,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       )
 
       // And: I am an unauthenticated guest on its public browse page
-      await page.goto(ROUTES.TOURNAMENT_BROWSE(tournamentId), { waitUntil: 'networkidle' })
+      await page.goto(ROUTES.TOURNAMENT_BROWSE(tournamentId))
 
       // When: I fill in my details and my partner's email
       const user = createTestUser()
@@ -322,7 +320,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       )
 
       // And: I am an unauthenticated guest on its public browse page
-      await page.goto(ROUTES.TOURNAMENT_BROWSE(tournamentId), { waitUntil: 'networkidle' })
+      await page.goto(ROUTES.TOURNAMENT_BROWSE(tournamentId))
 
       // Then: the auto-pair consent checkbox defaults checked
       await expect(page.locator(SELECTORS.AUTO_PAIR_CONSENT_CHECKBOX)).toBeChecked()
@@ -362,9 +360,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
 
       const testTournamentId = '1' // placeholder
 
-      await page.goto(ROUTES.TOURNAMENT_DETAIL(testTournamentId), {
-        waitUntil: 'networkidle',
-      })
+      await page.goto(ROUTES.TOURNAMENT_DETAIL(testTournamentId))
 
       // When: I try to submit the registration form
       const registerButton = page.locator('button:has-text("Register")').first()
@@ -390,9 +386,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
 
       const testTournamentId = '1' // placeholder
 
-      await page.goto(ROUTES.TOURNAMENT_DETAIL(testTournamentId), {
-        waitUntil: 'networkidle',
-      })
+      await page.goto(ROUTES.TOURNAMENT_DETAIL(testTournamentId))
 
       // When: I try to register again
       const registerButton = page.locator('button:has-text("Register"), button:has-text("Already Registered")')
@@ -455,7 +449,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       const magicToken = registrationData.magicLinkToken
 
       // When: I navigate to /signup?token=xyz
-      await page.goto(`${ROUTES.SIGNUP}?token=${magicToken}`, { waitUntil: 'networkidle' })
+      await page.goto(`${ROUTES.SIGNUP}?token=${magicToken}`)
 
       // And: email is pre-filled from the magic link
       const emailInput = page.locator(SELECTORS.EMAIL_INPUT)
@@ -559,7 +553,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       const tournament = { ...createTestTournament(), matchFormat: 'singles' }
       const { id: tournamentId } = await createTournamentWithOpenRegistration(tournament, organizerToken)
 
-      await page.goto(`/tournament/${tournamentId}/join?token=not-a-real-token`, { waitUntil: 'networkidle' })
+      await page.goto(`/tournament/${tournamentId}/join?token=not-a-real-token`)
 
       await expect(page.getByRole('alert')).toBeVisible({ timeout: TIMEOUTS.PAGE_LOAD })
       await expect(page.getByRole('link', { name: /register again/i })).not.toBeVisible()
@@ -609,7 +603,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
       const magicToken = registrationData.magicLinkToken
 
       // When: I navigate to /signup?token=xyz
-      await page.goto(`${ROUTES.SIGNUP}?token=${magicToken}`, { waitUntil: 'networkidle' })
+      await page.goto(`${ROUTES.SIGNUP}?token=${magicToken}`)
 
       // And: I complete the signup with pre-filled email
       const emailInput = page.locator(SELECTORS.EMAIL_INPUT)

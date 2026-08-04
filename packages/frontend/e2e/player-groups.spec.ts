@@ -283,13 +283,10 @@ test.describe('G2.5 — Player Groups', () => {
     // and excludes the viewer's OWN messages, so this needs a genuine second
     // member — sending from the viewer's own token would never count as
     // unread under the new semantics.
-    // P0.4/ISSUE-56: the badge is driven by useGroupsWithUnread polling
-    // GET /player/groups on mount + window refocus (matching
-    // useNotificationUnread/usePendingActions) — deliberately not a
-    // persistent app-wide SSE connection, which broke Playwright's
-    // networkidle wait when tried for the notifications badge (see
-    // useNotificationUnread.ts). Dispatching a focus event below simulates
-    // a real tester returning to the app/tab, the mechanism's actual trigger.
+    // ISSUE-62: usePersonalEventsStream's app-wide SSE connection to
+    // /player/notifications/events pushes a group.unread.changed event live —
+    // no refocus needed. useGroupsWithUnread's own mount/focus poll remains
+    // a fallback, not the only update path.
     // The badge lives in the mobile bottom nav (hidden at >=640px) — set a
     // mobile viewport, matching this file's other nav-tab tests.
     await page.setViewportSize({ width: 390, height: 844 })
@@ -317,9 +314,6 @@ test.describe('G2.5 — Player Groups', () => {
 
     // The other member sends a message while the owner is elsewhere
     await sendGroupMessage(memberToken, groupId, `unread-${Date.now()}`)
-
-    // Simulate returning to the app (the poll's actual trigger)
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
 
     const badge = page.locator('[data-testid="groups-unread-badge"]')
     await expect(badge).toBeVisible({ timeout: 5000 })

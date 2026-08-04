@@ -33,7 +33,9 @@ test.describe('Public Tournament Registration (guest)', () => {
     await page.goto(ROUTES.HOME)
     await page.evaluate(() => localStorage.clear())
     await page.goto(ROUTES.TOURNAMENT_BROWSE(tournament.id))
-    await page.waitForLoadState('networkidle')
+    // ISSUE-62: 'networkidle' never fires once a persistent per-player SSE
+    // stream is open — wait for a stable, always-present element instead.
+    await expect(page.locator(`text=${tournament.name}`)).toBeVisible({ timeout: 10000 })
   })
 
   test('Scenario: Guest sees the public tournament details and registration form', async ({ page }) => {

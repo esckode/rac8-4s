@@ -395,7 +395,7 @@ test.describe('Authentication E2E', () => {
       await clearAuthState(page)
 
       // When: I navigate to /matches (a protected route; /browse is public discovery)
-      await page.goto('/matches', { waitUntil: 'networkidle' })
+      await page.goto('/matches')
 
       // Then: I should be redirected to /login
       await expect(page).toHaveURL('/login')
@@ -409,7 +409,7 @@ test.describe('Authentication E2E', () => {
       })
 
       // When: I navigate to /matches (a protected route; /browse is public discovery)
-      await page.goto('/matches', { waitUntil: 'networkidle' })
+      await page.goto('/matches')
 
       // Then: I should be redirected to /login
       await expect(page).toHaveURL('/login')
@@ -432,7 +432,7 @@ test.describe('Authentication E2E', () => {
 
       // When: I navigate to /matches (a protected route — ISSUE-28: redirects
       // to /play, which replaced MyTournamentsHub as the nav destination)
-      await page.goto('/matches', { waitUntil: 'networkidle' })
+      await page.goto('/matches')
 
       // Then: I should land on /play, not bounce to /login
       await expect(page).toHaveURL(/\/play/)
@@ -451,7 +451,7 @@ test.describe('Authentication E2E', () => {
       await clearAuthState(page)
 
       // When: I navigate to /browse (a PUBLIC route per the discovery design)
-      await page.goto('/browse', { waitUntil: 'networkidle' })
+      await page.goto('/browse')
 
       // Then: I stay on /browse (not redirected to /login) and see the browse page
       await expect(page).toHaveURL(/\/browse/)
@@ -475,7 +475,7 @@ test.describe('Authentication E2E', () => {
       })
 
       // Navigate to login
-      await page.goto('/login', { waitUntil: 'networkidle' })
+      await page.goto('/login')
 
       // Then: I should be redirected to /play or /dashboard
       // (authenticated users are redirected away from public login page)
@@ -536,7 +536,7 @@ test.describe('Authentication E2E', () => {
       expect(token).toBeTruthy()
 
       // When: I navigate between different pages (/signup, /login, /browse)
-      await page.goto('/login', { waitUntil: 'networkidle' })
+      await page.goto('/login')
 
       // Then: my token should remain in localStorage
       const tokenAfterNav = await getTokenFromPage(page)
@@ -546,7 +546,7 @@ test.describe('Authentication E2E', () => {
       await expect(page).toHaveURL(/\/play|\/dashboard|\/login/)
 
       // Navigate to browse explicitly
-      await page.goto('/browse', { waitUntil: 'networkidle' })
+      await page.goto('/browse')
       await expect(page).toHaveURL(/\/browse|\/dashboard/)
 
       // Token should still exist

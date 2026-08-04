@@ -36,7 +36,9 @@ test.describe('Browse Tournaments E2E (public discovery)', () => {
     await page.goto(ROUTES.HOME)
     await page.evaluate(() => localStorage.clear())
     await page.goto(ROUTES.BROWSE)
-    await page.waitForLoadState('networkidle')
+    // ISSUE-62: 'networkidle' never fires once a persistent per-player SSE
+    // stream is open — wait for a stable, always-present element instead.
+    await expect(page.locator('h1:has-text("Browse")')).toBeVisible({ timeout: 10000 })
   })
 
   test.describe('Feature: Public access', () => {
@@ -104,7 +106,6 @@ test.describe('Browse Tournaments E2E (public discovery)', () => {
     test('Scenario: Page is mobile responsive', async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 })
       await page.goto(ROUTES.BROWSE)
-      await page.waitForLoadState('networkidle')
       await expect(page.locator('h1:has-text("Browse")')).toBeVisible()
       await expect(page.locator('button:has-text("All")')).toBeVisible()
     })

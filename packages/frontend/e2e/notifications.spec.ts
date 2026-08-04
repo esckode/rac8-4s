@@ -103,13 +103,10 @@ test.describe('Feature: Notifications Center', () => {
     await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveCount(0)
 
     // Another member posts a message targeting them (an @mention) while they
-    // are on a different page. useNotificationUnread refetches on mount +
-    // window refocus (no persistent SSE connection — see the hook's comment:
-    // an app-wide connection broke Playwright's `networkidle` wait on every
-    // authenticated route), so returning to the app (a refocus) is what
-    // surfaces it, without a full page reload.
+    // are on a different page — no refocus, no reload. ISSUE-62:
+    // usePersonalEventsStream's app-wide SSE connection to
+    // /player/notifications/events pushes this live.
     await sendGroupMessage(ownerToken, groupId, `Hey @${mentioned.name} check this out`)
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
 
     await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toBeVisible({ timeout: 8000 })
     await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveText('1')
