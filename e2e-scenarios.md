@@ -2932,9 +2932,12 @@ per owner decision to build the real behavior rather than reframe scenarios arou
 narrower existing one. `notifications.spec.ts` seeds via `@mention`, not a bare message.
 
 ### ✅ Scenario: Unread badge reflects a new notification
-- **Given** a signed-in player with zero unread notifications
+- **Given** a signed-in player on an auth-gated shell page (`/play` — `/browse` is
+  `DiscoveryGate`-wrapped and renders no shell when discovery is off, ISSUE-62) with one unread
+  notification (the ISSUE-55 group-invite notification from this test's own setup)
 - **When** another member `@mentions` them in a group message while they are on a different page
-- **Then** the unread badge appears/increments without a full page reload
+- **Then** the unread badge increments (1 → 2) without a full page reload or refocus — proving
+  `usePersonalEventsStream`'s live SSE push, not a poll
 
 ### ✅ Scenario: Opening the notifications page lists and marks read
 - **Given** a player with ≥2 unread notifications

@@ -67,7 +67,11 @@ test.describe('Feature: Mobile & Responsive Design', () => {
 
     await page.goto('http://localhost:5173/')
     await page.evaluate((t: string) => localStorage.setItem('auth_token', t), playerToken)
-    await page.goto('http://localhost:5173/browse')
+    // ISSUE-62: /browse is wrapped in DiscoveryGate, which renders <NotFound />
+    // with PUBLIC_DISCOVERY_ENABLED=false — no nav at all, regardless of this
+    // test's own concern (the bottom nav's mobile layout). /play is auth-gated
+    // but outside DiscoveryGate, so it renders the shell on any environment.
+    await page.goto('http://localhost:5173/play')
 
     // Bottom nav should be visible at mobile width
     const bottomNav = page.locator('[class*="responsive-bottom-nav"]').first()

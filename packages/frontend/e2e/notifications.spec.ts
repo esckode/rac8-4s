@@ -105,9 +105,19 @@ test.describe('Feature: Notifications Center', () => {
     const groupId = await createGroup(ownerToken, `Notif Badge Group ${Date.now()}`)
     await inviteAndAccept(ownerToken, groupId, mentioned)
 
+    // ISSUE-62 (reopened): /browse is wrapped in DiscoveryGate, which renders
+    // <NotFound /> with PUBLIC_DISCOVERY_ENABLED=false — no nav (so the badge
+    // element can't exist) and no ResponsiveLayout (so usePersonalEventsStream
+    // never mounts, so no SSE connection is ever opened). The first assertion
+    // used to pass vacuously regardless of environment. /play is auth-gated
+    // but outside DiscoveryGate (App.tsx), so it renders the shell on any
+    // environment and actually exercises the live push.
     await loginFrontend(page, mentionedToken)
-    await page.goto('http://localhost:5173/browse')
-    await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveCount(0)
+    await page.goto('http://localhost:5173/play')
+    // ISSUE-65: inviteAndAccept (above) already posted a personal notification
+    // (ISSUE-55), so the badge starts at 1, not 0.
+    await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toBeVisible({ timeout: 8000 })
+    await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveText('1')
 
     // Another member posts a message targeting them (an @mention) while they
     // are on a different page — no refocus, no reload. ISSUE-62:
@@ -115,8 +125,7 @@ test.describe('Feature: Notifications Center', () => {
     // /player/notifications/events pushes this live.
     await sendGroupMessage(ownerToken, groupId, `Hey @${mentioned.name} check this out`)
 
-    await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toBeVisible({ timeout: 8000 })
-    await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveText('1')
+    await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveText('2')
   })
 
   test('Scenario: Opening the notifications page lists newest-first and marks read', async ({ page }) => {
@@ -165,8 +174,10 @@ test.describe('Feature: Notifications Center', () => {
     const mentionIndex = cardTexts.findIndex(t => t.includes('mentioned you'))
     expect(promotionIndex).toBeLessThan(mentionIndex)
 
-    // Badge clears once the page has marked everything read.
-    await page.goto('http://localhost:5173/browse')
+    // Badge clears once the page has marked everything read. ISSUE-62: /play
+    // instead of /browse — /browse's DiscoveryGate would make this pass
+    // vacuously (no nav at all) rather than genuinely proving the badge is 0.
+    await page.goto('http://localhost:5173/play')
     await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveCount(0)
   })
 

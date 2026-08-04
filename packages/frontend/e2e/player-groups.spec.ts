@@ -89,8 +89,13 @@ test.describe('G2.5 — Player Groups', () => {
     const user = createTestUser()
     const { token } = await signupAndGetToken(user)
 
+    // ISSUE-62: /browse is wrapped in DiscoveryGate, which renders <NotFound />
+    // with PUBLIC_DISCOVERY_ENABLED=false — no nav at all, regardless of this
+    // test's own concern (whether the nav tab renders and navigates). /play is
+    // auth-gated but outside DiscoveryGate, so it renders the shell on any
+    // environment.
     await loginFrontend(page, token)
-    await page.goto('http://localhost:5173/browse')
+    await page.goto('http://localhost:5173/play')
 
     // Nav tab should be visible
     const navTab = page.locator('[data-testid="nav-groups"]')
