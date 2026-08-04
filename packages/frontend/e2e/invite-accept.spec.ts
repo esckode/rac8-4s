@@ -212,7 +212,11 @@ test.describe('ISSUE-55 — Group invite accept from the Alerts tab', () => {
     await expect(page.getByText(groupName)).toBeVisible()
 
     await acceptButton.click()
-    await expect(acceptButton).not.toBeVisible({ timeout: 10000 })
+
+    // ISSUE-57: accepting navigates straight to the group's chat — no manual
+    // navigation to /groups needed.
+    await page.waitForURL(`**/groups/${groupId}`, { timeout: 10000 })
+    await expect(page.locator('[data-testid="group-chat-panel"]')).toBeVisible({ timeout: 5000 })
 
     // gap 5: accepting in-app must NOT downgrade the account holder's own session.
     const storedToken = await page.evaluate(() => localStorage.getItem('auth_token'))
