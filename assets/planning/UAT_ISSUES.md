@@ -61,7 +61,22 @@ players who haven't set a timezone yet.
 product questions (recorded under *Owner decisions* there). Verifying 66 surfaced a second, distinct
 defect in the same code path: suppression deletes the durable Notifications Center row rather than
 just the alert, contradicting the design's own justification for dropping instead of deferring.
-**Number the next one 68.**
+
+**ISSUE-68–70 filed 2026-08-04** during e2e verification of the ISSUE-66/67 fix. ISSUE-68 is the
+serious one and was found only because a *live* round-trip was attempted: the settings PATCH route
+never accepted any P9 field, so every notify toggle and quiet-hours edit has always returned 200 and
+saved nothing. ISSUE-69 and ISSUE-70 are pre-existing reds surfaced by the same run, both left by the
+2026-08-03 recovered-WIP pair (`bf62816`, `bcf043e`) and neither in the quiet-hours path.
+**Number the next one 71.**
+
+> **⚠️ Branch state for ISSUE-66–70 — read before picking any of these up.**
+> Work sits on **`fix/quiet-hours-noop`** (off `main`, **not merged**; `main` is untouched at
+> `f7f9423`). ISSUE-66 and ISSUE-67 are committed and verified across 4 commits. **ISSUE-68's fix is
+> written and verified but still uncommitted in the working tree** — commit it first, before
+> anything else on this branch. ISSUE-69 and ISSUE-70 are documented only, and both are blocked on
+> an owner decision that should not be guessed. Per-issue detail is in each *Status — 2026-08-04*
+> block. Migration `063` has already been applied to the dev database (1110 rows now
+> `enabled=false, 8, 17`); it is idempotent, so re-running is safe.
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -113,8 +128,11 @@ just the alert, contradicting the design's own justification for dropping instea
 | [ISSUE-65](#issue-65) | ✅ Resolved | 🟠 | Notification specs predate ISSUE-55's in-app invites — assert counts that no longer hold | e2e · test-debt |
 | [ISSUE-63](#issue-63) | ✅ Resolved | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
 | [ISSUE-64](#issue-64) | ✅ Resolved | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
-| [ISSUE-66](#issue-66) | 🔲 Open | 🟠 | Default quiet hours contradict their own migration's intent, and default to UTC for any player without a timezone — silently drops notifications | api |
-| [ISSUE-67](#issue-67) | 🔲 Open | 🟠 | Suppressed notifications lose their durable inbox row, not just the alert — the design's own compensating control | api |
+| [ISSUE-66](#issue-66) | ✅ Fixed (unmerged) | 🟠 | Default quiet hours contradict their own migration's intent, and default to UTC for any player without a timezone — silently drops notifications | api |
+| [ISSUE-67](#issue-67) | ✅ Fixed (unmerged) | 🟠 | Suppressed notifications lose their durable inbox row, not just the alert — the design's own compensating control | api |
+| [ISSUE-68](#issue-68) | ✅ Fixed (uncommitted) | 🔴 | `PATCH /api/auth/me/settings` silently discards every P9 field — the whole notification-preferences UI has never saved | api |
+| [ISSUE-69](#issue-69) | 🔲 Open | 🟡 | The up-next strip renders only on `/browse`, so it is unreachable while discovery is off — a shipped P6 feature with no route | frontend |
+| [ISSUE-70](#issue-70) | 🔲 Open | 🟡 | Chat redesign dropped the avatar on your own messages, leaving `personalization-ui.spec.ts` red on main | frontend · test-debt |
 
 ### Implementation sequence for ISSUE-56–64
 
@@ -2972,6 +2990,41 @@ change — it is the exact predicate the client-side implementation will need.
 3. Toggle quiet hours on in Profile, reload, confirm the window persisted — and confirm a mention
    inside that window still notifies (inert by design, decision 2).
 
+### Status — 2026-08-04
+
+**✅ Code complete and verified. ⚠️ Not merged — branch `fix/quiet-hours-noop`, off `main`.**
+
+- `9cc6a24` (schema, behavior-neutral) — migration `063` adds `quiet_hours_enabled BOOLEAN NOT NULL
+  DEFAULT false` and backfills `start`/`end` to `COALESCE(…, 8)` / `COALESCE(…, 17)`; repository
+  gains the field across the interface, `rowToSettings` and `upsert` (params renumbered `$1–$11`).
+  Split out on purpose: ts-jest type-checks, so a test naming `quietHoursEnabled` cannot compile —
+  let alone fail behaviorally — until the type exists.
+- `a1e21b4` (RED) — two genuine behavioral failures, read from the assertion output, not a summary:
+  window still gating (`Expected: 1, Received: 0`) and inbox row absent (`Expected: true, Received:
+  false`). The defaults and round-trip tests are green on arrival; they are contract documentation.
+- `5b2e536` (GREEN) — `notify-gate.ts` drops the quiet-hours evaluation and the `now` parameter that
+  existed only to serve it (one caller updated, `nudge-processor.ts`). `Profile.tsx` gets the
+  enabled checkbox with the window disabled until it is on. `disableQuietHours` deleted from
+  `app.ts` and its single e2e caller.
+- **Verified:** 112 api suites / 1614 tests and 4 frontend suites / 51 tests via
+  `jest --findRelatedTests` over the changed files (§11); e2e `personalization-quiet-hours` (2) and
+  `notifications` (5) green on chromium. Migration applied to the dev DB — all 1110 rows now read
+  `enabled=false, 8, 17`, so the 67 rows carrying the accidental default are neutralized.
+- **Deviation from the plan, stated rather than silent:** the `?? 8` / `?? 17` fallbacks in
+  `Profile.tsx` were kept, not removed. They were never the defect — the defect was that they made
+  the UI *look* configured when it wasn't. The checkbox now carries that meaning, and the fallbacks
+  still guard the render before `settings` loads (React warns on `value={null}`).
+- **Fixed in passing, flagged here:** `bf62816` left a *second* red on `main` that its own message
+  did not mention — converting the window from number inputs to `<select>`s made `toHaveValue` read
+  a string, so `Profile.spec.tsx`'s numeric assertion had been failing since 2026-08-03.
+
+**Pending before merge:**
+
+1. Full both-browser e2e sweep — the §11 merge gate, not run yet.
+2. `node scripts/ratchet-coverage.mjs` — not run; new branches in `auth.ts` and `Profile.tsx` may
+   move the floors.
+3. Merge to `main` (prefer fast-forward, §11).
+
 ---
 
 ## ISSUE-67 — Suppressed notifications lose their inbox row, not just the alert 🟠 {#issue-67}
@@ -3053,3 +3106,227 @@ Restructure the loop so the record is unconditional and only the alert channel i
 1. Uncheck "Notify me about mentions" in Profile.
 2. Have someone `@mention` you in a group.
 3. Alerts shows the mention; no notify job is enqueued.
+
+### Status — 2026-08-04
+
+**✅ Code complete and verified. ⚠️ Not merged — same branch as [ISSUE-66](#issue-66).**
+
+- `5b2e536` — in `player-groups.ts`, `notifyPlayer(...)` moves *above* the
+  `shouldEnqueueNotify` guard, so the gate now covers only the `jobQueue.add` beneath it. The
+  ordering is the whole fix; nothing else changed in that loop.
+- Test added in `notify-prefs.spec.ts` under its own `describe`, asserting through
+  `GET /player/notifications/messages` rather than the repository, so it covers what the player
+  actually sees. Uses the file's existing `await new Promise(r => setTimeout(r, 100))` settle idiom,
+  since `notifyPlayer` is deliberately fire-and-forget.
+- **Scope confirmed by reading the other two call sites, not assumed:** `poll-service.ts:133` and
+  `nudge-processor.ts:217` enqueue a job and nothing else inside the gated loop, and both are
+  backstopped by P5 pending-actions. Only the mention path performed a DB write inside the gate, and
+  only a bare mention has no P5 equivalent. They were left untouched.
+
+**Pending before merge:** covered by [ISSUE-66](#issue-66)'s pending list — same branch, same gates.
+
+---
+
+## ISSUE-68 — `PATCH /api/auth/me/settings` silently discards every P9 field 🔴 {#issue-68}
+
+*Found 2026-08-04 during e2e verification of [ISSUE-66](#issue-66). Found only because the fix was
+exercised through the live route rather than the repository — see "Why nobody caught it".*
+
+### Symptom
+
+Every control in Profile's notification section is decorative. The three notify toggles
+(`notifyMentions`, `notifyPolls`, `notifyNudges`) and the quiet-hours window all PATCH to
+`/api/auth/me/settings`, which returns **200 with the unchanged settings** and writes nothing. A
+player unchecks "Notify me about mentions", sees no error, reloads, and the box is ticked again.
+
+Confirmed against the live API, not inferred — fresh account, one PATCH:
+
+```
+request : {"notifyMentions":false,"quietHoursEnabled":true,"quietHoursStart":22}
+response: notifyMentions: True | quietHoursEnabled: False | quietHoursStart: 8
+```
+
+### Root cause
+
+`routes/auth.ts:371` destructures a fixed allowlist — `timezone`, `timezoneManual`, `tableDensity`,
+`coachMemoryEnabled` — and builds `updates` only from those. P9 shipped its columns (migration
+054), its repository plumbing, its gate, and its Profile controls, but never added its fields here.
+Unlisted keys are not rejected; they are simply never read, so `updates` stays empty and
+`upsert` faithfully writes back what was already there. The 200 makes it look like it worked.
+
+### Why nobody caught it
+
+`notify-prefs.spec.ts` had a test named **`PATCH /api/auth/me/settings round-trips notify prefs and
+quiet hours`** whose body called `settingsRepo.upsert(...)` directly and never issued a request. It
+asserted the repository — which was always correct — under a name claiming route coverage. The one
+layer with the bug was the one layer no test touched.
+
+### Fix
+
+Extend the handler's allowlist to the six P9 fields, validating booleans as booleans and the
+quiet-hours bounds as integers 0–23 or null (matching the `CHECK` constraints in 054). Applied as
+two small loops rather than six near-identical blocks — the repetition is what made the original
+omission easy to miss.
+
+Tests: the mislabeled test is renamed to say it covers the repository, and a real route-level
+round-trip plus validation-rejection cases now live in `player-settings.spec.ts`, which already had
+the linked-account-token helper.
+
+### Verify
+
+1. Profile → untick "Notify me about mentions", reload. It stays unticked.
+2. Switch quiet hours on, set 10pm–7am, reload. Both the toggle and the window persist.
+
+### Status — 2026-08-04
+
+**✅ Fix written and verified. ⚠️ UNCOMMITTED — working tree only, on `fix/quiet-hours-noop`.**
+
+This is the one piece of work not yet in a commit. Files currently dirty:
+
+| File | Change |
+|---|---|
+| `packages/api/src/routes/auth.ts` | six P9 fields added to the PATCH allowlist, via two validation loops |
+| `packages/api/src/__tests__/integration/player-settings.spec.ts` | route round-trip + null-clear + 4 rejection cases (`it.each`) |
+| `packages/api/src/__tests__/integration/notify-prefs.spec.ts` | mislabeled test renamed to say it covers the repository |
+
+- **Verified:** those two suites are green (24 tests), and a live PATCH against the running dev API
+  now returns `notifyMentions: False | quietHoursEnabled: True | quietHoursStart: 22` where before
+  the fix it returned `True | False | 8`.
+- Validation matches migration 054's `CHECK` constraints: bounds are integers 0–23 **or null**
+  (null is meaningful — it clears a bound).
+- Written as two loops rather than six near-identical `if` blocks. The existing per-field style is
+  exactly what let six fields go missing unnoticed; repeating it would preserve that failure mode.
+
+**Pending:**
+
+1. **Commit it.** Suggested split: the `auth.ts` fix and its tests as one commit — the tests here
+   are a regression net for an already-live bug, so the RED/GREEN split in §11 is less useful than
+   for new behavior. State in the message that the route was returning 200 while discarding input.
+2. **`npx jest --findRelatedTests src/routes/auth.ts` has NOT been run.** This was interrupted
+   mid-run. `auth.ts` is cross-cutting — expect a wide set (the `app.ts` equivalent pulled 112
+   suites). Per §11 the wide answer is the correct one; run it before merging.
+3. Consider whether `role: 'organizer'` accounts should reach these fields at all —
+   `requireOrganizerAuth` gates the route, and the settings are player-scoped. Out of scope here,
+   noted because it was visible while editing the handler.
+
+---
+
+## ISSUE-69 — The up-next strip has no reachable route while discovery is off 🟡 {#issue-69}
+
+*Found 2026-08-04 during e2e verification of [ISSUE-66](#issue-66).*
+
+### Symptom
+
+`UpNextStrip` (P6) is rendered by exactly one page — `BrowseTournaments.tsx`, i.e. `/browse`. That
+route is wrapped in `DiscoveryGate`, which renders `<NotFound />` when `PUBLIC_DISCOVERY_ENABLED` is
+false ([ISSUE-29](#issue-29) turned public browse off deliberately). So in the shipped configuration
+the up-next strip cannot be displayed anywhere: a built, tested, styled component with no route.
+
+### Impact on tests
+
+`personalization-quiet-hours.spec.ts` asserted `up-next-match` after navigating to `/browse`. That
+assertion could only ever fail on a discovery-off environment, so it was dropped with a pointer to
+this issue; the nav badge assertion in the same test still carries the pending-actions proof and now
+runs against `/play` (`/browse` also cost it the nav shell — the same trap
+[ISSUE-62](#issue-62)/`66ede49` fixed in three other specs and missed here).
+
+### Fix — not designed here
+
+The product question is where the strip belongs now that `/browse` is gated. `/play` is the obvious
+candidate (auth-gated, outside `DiscoveryGate`, already the pending-actions hub), but that is a
+layout decision, not a test fix. Whatever route it lands on, restore the e2e assertion there.
+
+### Status — 2026-08-04
+
+**🔲 Not started.** Only the blocking e2e assertion was removed, on `fix/quiet-hours-noop`
+(uncommitted, in `personalization-quiet-hours.spec.ts`) — no product change attempted.
+
+**Blocked on an owner decision, and should not be implemented before it:** where does the strip
+live? This is a layout call about what `/play` shows above the fold, not something to infer.
+
+**Context for whoever picks this up:**
+
+- The component is `packages/frontend/src/components/shared/UpNextStrip.tsx` — complete, styled,
+  and unit-tested (`__tests__/UpNextStrip.spec.tsx`). Nothing is wrong with it; it has no caller
+  that can render.
+- Its only mount point is `BrowseTournaments.tsx`. Confirm with
+  `grep -rn "UpNextStrip" packages/frontend/src` — one page, one import.
+- `/browse` sits inside `DiscoveryGate` in `App.tsx`, which renders `<NotFound />` when
+  `PUBLIC_DISCOVERY_ENABLED=false`. That flag is off deliberately per [ISSUE-29](#issue-29), so this
+  is the shipped configuration, not a local misconfiguration.
+- It is fed by `GET /api/auth/me/pending-actions` (`routes/auth.ts`), which is already caller-scoped
+  and dual-auth aware. **No API work is needed** — this is purely a question of which page mounts
+  the component.
+- Selector `UP_NEXT_MATCH` already exists in `e2e/config.ts`. After the move, restore the two
+  dropped assertions in `personalization-quiet-hours.spec.ts` (they asserted visibility and an
+  `href` of `/tournament/${tournamentId}/details`) and re-add the `tournamentId` binding from
+  `seedScheduledSession`, which was removed with them.
+- Watch for double-render: if the strip is added to `/play` while `/browse` keeps its copy, a
+  discovery-**on** environment would show it twice. Prefer moving it over adding a second mount.
+
+---
+
+## ISSUE-70 — Chat redesign dropped the avatar on your own messages 🟡 {#issue-70}
+
+*Found 2026-08-04 during e2e verification of [ISSUE-66](#issue-66). Pre-existing on `main`.*
+
+### Symptom
+
+`personalization-ui.spec.ts:84` — *"chat shows initials avatars with stable colors across reload"* —
+fails on `main` with `element(s) not found` for `[data-testid="avatar"]`. Reproduced on `main`
+itself, in isolation (not parallel-load flakiness).
+
+### Root cause
+
+`GroupChatPanel.tsx:411` renders the avatar only for messages from other people:
+
+```jsx
+{!isOwnMessage && m.playerId && (
+  <Avatar playerId={m.playerId} name={m.senderName ?? ''} />
+)}
+```
+
+The spec posts a message as the logged-in player and then looks for an avatar, which is now never
+drawn for own messages. Introduced by `bcf043e` *"wip(chat): redesigned message bubbles, avatar
+shading, badge color"* — the same recovered working tree as `bf62816` (see
+[ISSUE-66](#issue-66)'s *Owner decisions*). That commit declared KNOWN BREAKAGE for two
+`MyGroups.spec.tsx` cases but did not mention this e2e.
+
+### Fix — not designed here
+
+Whether your own messages should show your avatar is a chat-design call for the redesign's author,
+not a test fix. Decide that first; then either restore the avatar or point the spec at a message
+from another sender. Note the two `MyGroups.spec.tsx` cases `bcf043e` did flag are still outstanding
+and belong to the same decision.
+
+### Status — 2026-08-04
+
+**🔲 Not started.** Diagnosed only — no code touched. Independent of `fix/quiet-hours-noop`;
+reproduces on `main`.
+
+**Blocked on an owner decision:** should your own chat messages show your avatar? Most messengers
+say no (the alignment already identifies you), which suggests the *spec* is what should change —
+but `bcf043e` was recovered WIP, so its intent was never stated, and this should not be guessed.
+
+**Context for whoever picks this up:**
+
+- Reproduce: `npx playwright test personalization-ui.spec.ts --project=chromium --reporter=line -g
+  "stable colors"`. Fails in isolation, so it is **not** the known parallel-load flakiness.
+- The conditional is `GroupChatPanel.tsx:411` — `{!isOwnMessage && m.playerId && <Avatar … />}`.
+  Note `GroupChatPanel.tsx:390` still renders an avatar unconditionally for the *card* branch, so
+  the two branches now disagree with each other; worth reconciling in the same pass.
+- The spec (`personalization-ui.spec.ts:84`) posts as the logged-in player, then takes
+  `SELECTORS.AVATAR.first()`. If the decision is "own messages stay bare", the spec needs a second
+  sender — `notifications.spec.ts`'s `createMentionableUser` helper is the existing pattern for
+  seeding a distinguishable second player.
+- **Do not fix this by loosening the selector.** The test's purpose is colour stability across
+  reload for a *known* player; matching whatever avatar happens to be on screen would keep it green
+  while proving nothing.
+- Same decision covers the two `MyGroups.spec.tsx` cases `bcf043e` flagged itself — *"renders
+  message card with Name · time format"* and *"renders two messages from different senders with
+  distinguishable names"* — which fail because the redesign hid sender name + timestamp behind
+  click-to-expand. Resolve all three together; they are one design question, not three bugs.
+- ⚠️ **General lesson from this pair of commits.** `bf62816` and `bcf043e` were both recovered from
+  an uncommitted working tree on 2026-08-03 and committed as-is. Between them they left **four**
+  red tests on `main`, and their messages disclosed only two. When something in this area fails
+  unexpectedly, check those two commits before assuming your own change caused it.
