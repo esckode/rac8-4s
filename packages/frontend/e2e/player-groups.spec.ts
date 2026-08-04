@@ -279,30 +279,44 @@ test.describe('G2.5 — Player Groups', () => {
 
   test('Unread badge appears on My Groups nav tab when there are unseen messages', async ({ page }) => {
     // G2.5: "Unread badge on My Groups nav tab"
-    // Navigate away from groups, trigger a new message, then check the badge is shown.
-    // P0.4: the badge is driven by useGroupUnread polling GET /player/groups on
-    // mount + window refocus (matching useNotificationUnread/usePendingActions) —
-    // deliberately not a persistent app-wide SSE connection, which broke
-    // Playwright's networkidle wait when tried for the notifications badge
-    // (see useNotificationUnread.ts). Dispatching a focus event below simulates
+    // ISSUE-56: unread is now server-side (player_group_members.last_read_at)
+    // and excludes the viewer's OWN messages, so this needs a genuine second
+    // member — sending from the viewer's own token would never count as
+    // unread under the new semantics.
+    // P0.4/ISSUE-56: the badge is driven by useGroupsWithUnread polling
+    // GET /player/groups on mount + window refocus (matching
+    // useNotificationUnread/usePendingActions) — deliberately not a
+    // persistent app-wide SSE connection, which broke Playwright's
+    // networkidle wait when tried for the notifications badge (see
+    // useNotificationUnread.ts). Dispatching a focus event below simulates
     // a real tester returning to the app/tab, the mechanism's actual trigger.
     // The badge lives in the mobile bottom nav (hidden at >=640px) — set a
     // mobile viewport, matching this file's other nav-tab tests.
     await page.setViewportSize({ width: 390, height: 844 })
 
-    const user = createTestUser()
-    const { token } = await signupAndGetToken(user)
-    const groupId = await createGroup(token, `Badge Group ${Date.now()}`)
+    const owner = createTestUser()
+    const member = createTestUser()
+    const { token: ownerToken } = await signupAndGetToken(owner)
+    // Pre-create the member so they exist for invite-accept (existing players skip age gate)
+    await signupAndGetToken(member)
 
-    await loginFrontend(page, token)
+    const groupId = await createGroup(ownerToken, `Badge Group ${Date.now()}`)
+    const invRes = await apiCall(`/player/groups/${groupId}/invites`, 'POST', { email: member.email }, ownerToken)
+    const { rawToken: invToken } = await invRes.json()
+    const acceptRes = await apiCall(`/player/groups/${groupId}/invites/accept`, 'POST', {
+      token: invToken, email: member.email,
+    })
+    const { token: memberToken } = await acceptRes.json()
+
+    await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
     await expect(page.locator('[data-testid="group-chat-panel"]')).toBeVisible({ timeout: 5000 })
 
     // Navigate away so the group is "unread"
     await page.goto('http://localhost:5173/matches')
 
-    // Another actor sends a message (owner sends to their own group — the token is for this user)
-    await sendGroupMessage(token, groupId, `unread-${Date.now()}`)
+    // The other member sends a message while the owner is elsewhere
+    await sendGroupMessage(memberToken, groupId, `unread-${Date.now()}`)
 
     // Simulate returning to the app (the poll's actual trigger)
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
@@ -310,9 +324,16 @@ test.describe('G2.5 — Player Groups', () => {
     const badge = page.locator('[data-testid="groups-unread-badge"]')
     await expect(badge).toBeVisible({ timeout: 5000 })
 
-    // Opening the group resets the unread count
+    // The list row also shows its own unread count
+    await page.goto('http://localhost:5173/groups')
+    await expect(page.locator('[data-testid="group-unread-badge"]')).toHaveText('1')
+
+    // Opening the group resets the unread count everywhere
     await page.goto(`http://localhost:5173/groups/${groupId}`)
     await expect(page.locator('[data-testid="group-chat-panel"]')).toBeVisible({ timeout: 5000 })
     await expect(badge).not.toBeVisible()
+
+    await page.goto('http://localhost:5173/groups')
+    await expect(page.locator('[data-testid="group-unread-badge"]')).not.toBeVisible()
   })
 })

@@ -1926,13 +1926,17 @@ Then a system event row "Sam joined" appears (data-testid="group-system-event")
   And it is visually distinct from regular message cards
 ```
 
-### Scenario: Unread badge on My Groups nav tab
+### Scenario: Unread badge on My Groups nav tab (ISSUE-56 — server-side, per-group)
 
 ```gherkin
-Given there are unread group messages the player has not seen
-When the player is on a different tab (e.g. /matches)
+Given a second group member posts a message while the player is on a different tab
+  (unread excludes the player's own messages, so this needs a genuine second actor)
+When the player returns to the app (a window focus event)
 Then the 👥 My Groups nav tab shows an unread badge (data-testid="groups-unread-badge")
-  And the badge disappears after visiting the group and reading the messages
+  — count of groups with unread, not total messages
+  And the group's row on /groups shows its own count (data-testid="group-unread-badge")
+When the player opens that group
+Then both badges clear — the server-side last_read_at is now current
 ```
 
 ### Scenario: Invite-by-email from Members panel
