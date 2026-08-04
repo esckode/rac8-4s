@@ -17,6 +17,7 @@ import { useAuth } from '../hooks/useAuth'
 import { PollCard, type PollChoice } from './PollCard'
 import { ActionCard } from './ActionCard'
 import { LaunchConfirmSheet } from './LaunchConfirmSheet'
+import { RatingSeedPrompt } from './RatingSeedPrompt'
 import { MentionAutocomplete } from './MentionAutocomplete'
 import { parseMentions } from '../utils/parseMentions'
 import { ReconnectingIndicator } from './shared'
@@ -78,6 +79,14 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
     inVoterNames: string[]
     defaultFormat: 'singles' | 'doubles'
   } | null>(null)
+  // ISSUE-60: self-rating seed prompt, shown after a successful launch if the
+  // launching player is themselves an In-voter with no existing rating for
+  // the tournament's sport. The launch route has no sport field in its
+  // request/response today — every group-launched casual tournament is
+  // 'tennis' server-side (player-groups.ts's launch handler defaults to it
+  // when the caller omits one, which the frontend always does) — so that is
+  // the sport checked here, not a guess.
+  const [ratingPrompt, setRatingPrompt] = useState<{ tournamentId: string } | null>(null)
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -191,6 +200,19 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
     }
   }, [groupId])
 
+  // ISSUE-60: after a successful launch, go straight to the tournament
+  // UNLESS the launching player is themselves an In-voter — then the
+  // rating-seed prompt shows first and navigation waits for it to close
+  // (skip or submit). The launch already succeeded server-side either way;
+  // this only defers the client-side redirect, never the launch itself.
+  const goToTournamentAfterLaunch = useCallback((tournamentId: string, registeredPlayerIds: string[]) => {
+    if (user?.playerId && registeredPlayerIds.includes(user.playerId)) {
+      setRatingPrompt({ tournamentId })
+    } else {
+      navigate(`/tournament/${tournamentId}`)
+    }
+  }, [navigate, user?.playerId])
+
   const handleConfirmLaunch = useCallback(async (opts: { matchFormat: string }) => {
     if (!launchSheet) return
     const token = localStorage.getItem('auth_token')
@@ -205,9 +227,9 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
     if (res.ok) {
       const data = await res.json()
       setLaunchSheet(null)
-      navigate(`/tournament/${data.tournamentId}`)
+      goToTournamentAfterLaunch(data.tournamentId, data.registeredPlayerIds ?? [])
     }
-  }, [groupId, launchSheet, navigate])
+  }, [groupId, launchSheet, goToTournamentAfterLaunch])
 
   const handleConfirmCardLaunch = useCallback(async (opts: { matchFormat: string }) => {
     if (!cardLaunchSheet) return
@@ -228,8 +250,8 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
       body: JSON.stringify({ tournamentId: data.tournamentId }),
     })
     setCardLaunchSheet(null)
-    navigate(`/tournament/${data.tournamentId}`)
-  }, [groupId, cardLaunchSheet, navigate])
+    goToTournamentAfterLaunch(data.tournamentId, data.registeredPlayerIds ?? [])
+  }, [groupId, cardLaunchSheet, goToTournamentAfterLaunch])
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
@@ -441,6 +463,20 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
           defaultFormat={cardLaunchSheet.defaultFormat}
           onConfirm={handleConfirmCardLaunch}
           onCancel={() => setCardLaunchSheet(null)}
+        />
+      )}
+
+      {/* ISSUE-60: self-rating seed prompt, shown after a launch the current
+          player is themselves registered in — 'tennis' is the only sport a
+          group launch ever creates today (see goToTournamentAfterLaunch). */}
+      {ratingPrompt && (
+        <RatingSeedPrompt
+          sport="tennis"
+          onDone={() => {
+            const tournamentId = ratingPrompt.tournamentId
+            setRatingPrompt(null)
+            navigate(`/tournament/${tournamentId}`)
+          }}
         />
       )}
 

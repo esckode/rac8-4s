@@ -40,17 +40,19 @@ describe('RatingSeedPrompt (ISSUE-60)', () => {
     })
   })
 
-  it('does not render when the player already has a rating for the sport', async () => {
+  it('does not render when the player already has a rating for the sport, and still calls onDone (never blocks the caller)', async () => {
     mockFetch.mockImplementation((url: string) => {
       if (url === '/player/ratings') {
         return Promise.resolve(ratingsResponse([{ sport: 'tennis', format: 'singles', rating: 300, matchesPlayed: 3, provisional: true }]))
       }
       return Promise.resolve({ ok: false, json: async () => ({}) })
     })
-    render(<RatingSeedPrompt sport="tennis" onDone={jest.fn()} />)
+    const onDone = jest.fn()
+    render(<RatingSeedPrompt sport="tennis" onDone={onDone} />)
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledWith('/player/ratings', expect.anything()))
     expect(screen.queryByText(/how would you rate yourself/i)).not.toBeInTheDocument()
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
   })
 
   it('presents the min/max/seedDefault scale from the API response, not hardcoded numbers', async () => {
@@ -125,11 +127,22 @@ describe('RatingSeedPrompt (ISSUE-60)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('never blocks — renders nothing while the ratings check is in flight or fails', async () => {
+  it('never blocks — renders nothing and still calls onDone when the ratings check fails', async () => {
     mockFetch.mockImplementation(() => Promise.resolve({ ok: false, status: 500, json: async () => ({}) }))
-    render(<RatingSeedPrompt sport="tennis" onDone={jest.fn()} />)
+    const onDone = jest.fn()
+    render(<RatingSeedPrompt sport="tennis" onDone={onDone} />)
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalled())
     expect(screen.queryByText(/how would you rate yourself/i)).not.toBeInTheDocument()
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+  })
+
+  it('never blocks — calls onDone immediately when there is no auth token to check with', async () => {
+    localStorage.clear()
+    const onDone = jest.fn()
+    render(<RatingSeedPrompt sport="tennis" onDone={onDone} />)
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })

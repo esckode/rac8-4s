@@ -68,6 +68,10 @@ on* — no internals, no SQL, no dev framing.
   it's still converging and moves faster than an established one.
 - This is a separate page from **Profile** — Profile is account settings and preferences, Ratings
   is your stats.
+- When a group poll gets launched into a casual tournament and you're one of the "In" voters, you
+  may be asked "How would you rate yourself at {sport}?" the first time you play that sport — this
+  only appears once per sport. It's optional: skip it and your rating starts at the default and
+  adjusts as you play. Answering just gives matchmaking a better starting point.
 
 ## Finding and joining tournaments
 

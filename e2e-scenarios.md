@@ -190,7 +190,7 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 | **Partner Confirmation** | 5 | `partner-requests.spec.ts` | `npx playwright test partner-requests` |
 | **Bracket - Singles** | 3 | `bracket-singles.spec.ts` | `npx playwright test bracket-singles` |
 | **Bracket - Doubles** | 2 | `bracket-doubles.spec.ts` | `npx playwright test bracket-doubles` |
-| **Casual tournaments (round-robin / social mixer)** | 8 | `casual-tournament.spec.ts` | `npx playwright test casual-tournament` |
+| **Casual tournaments (round-robin / social mixer)** | 7 | `casual-tournament.spec.ts` | `npx playwright test casual-tournament` |
 | **Organizer Tournament Management** | 3 | `organizer-management.spec.ts` | `npx playwright test organizer-management` |
 | **Organizer Home** | 1 | `organizer-home.spec.ts` | `npx playwright test organizer-home` |
 | **Real-Time Updates** | 4 | `real-time-updates.spec.ts` | `npx playwright test real-time-updates` |
@@ -2028,6 +2028,20 @@ Then the score is accepted
   And standings update
 ```
 
+**Scenario: Self-rating seed prompt on poll launch (ISSUE-60)**
+```
+Given I am an "In" voter on a poll being launched into a casual tournament
+  And I have no existing rating for that tournament's sport
+When the launch completes
+Then a prompt asks "How would you rate yourself at {sport}?"
+  using the min/max/seedDefault scale from GET /player/ratings
+When I skip the prompt
+Then no PUT /player/ratings/seed call is made
+  And I am not blocked — I still land on the tournament
+When I later have a scored match in that sport and launch again from a new poll
+Then the prompt does not appear a second time
+```
+
 **Scenario: Pair + individual leaderboards render**
 ```
 Given a group has at least one completed casual tournament
@@ -2050,6 +2064,7 @@ Then POST /tournaments/:id/end-session is called
 **Implementation (G4.8):**
 - RTL unit: `packages/frontend/src/__tests__/components/LeaderboardPanel.spec.tsx`
 - RTL unit: updated `packages/frontend/src/__tests__/components/PollCard.spec.tsx` (launch button)
+- RTL unit: `packages/frontend/src/components/__tests__/RatingSeedPrompt.spec.tsx` (ISSUE-60)
 - Playwright e2e: `packages/frontend/e2e/casual-tournament.spec.ts` (best-effort)
 
 ## Feature: Player Groups — invite accept (P1.7)

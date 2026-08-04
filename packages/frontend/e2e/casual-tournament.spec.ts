@@ -161,6 +161,19 @@ test.describe('G4.8 — Casual tournament', () => {
       // No confirm sheet — launch fired directly (no format selection required)
     }
 
+    // ISSUE-60: the owner just registered themselves (via their own 'in'
+    // vote) into a tournament for a sport they've never rated, so the
+    // self-rating seed prompt appears before the redirect. Skip it — this
+    // test is about match generation, not the rating prompt. It loads via
+    // its own async fetch, so this must actually wait (isVisible() does not).
+    const ratingSkip = page.locator('[data-testid="rating-seed-skip"]')
+    try {
+      await ratingSkip.waitFor({ state: 'visible', timeout: 5000 })
+      await ratingSkip.click()
+    } catch {
+      // No rating prompt — nothing to dismiss
+    }
+
     // ISSUE-30: the post-launch redirect used to send the browser to a
     // literal, unsubstituted '/tournament/:tournamentId/standings' URL.
     // The client-side navigate() lands on the bare route first, which then
@@ -188,6 +201,83 @@ test.describe('G4.8 — Casual tournament', () => {
     expect(matchesRes.ok).toBe(true)
     const { matches } = await matchesRes.json()
     expect(matches.length).toBeGreaterThan(0)
+  })
+
+  test('Self-rating seed prompt: skip seeds default, prompt does not repeat after a scored match (ISSUE-60)', async ({ page }) => {
+    const owner = createTestUser()
+    const member = createTestUser()
+    const { token: ownerToken } = await signupAndGetToken(owner)
+    const { token: memberToken } = await signupAndGetToken(member)
+    const groupName = `Rating Seed Group ${Date.now()}`
+    const groupId = await createGroup(ownerToken, groupName)
+
+    const invRes = await apiCall(`/player/groups/${groupId}/invites`, 'POST', { email: member.email }, ownerToken)
+    const { rawToken } = await invRes.json()
+    await apiCall(`/player/groups/${groupId}/invites/accept`, 'POST', {
+      token: rawToken, email: member.email,
+    })
+
+    async function launchFromNewPoll(question: string) {
+      const poll = await createPoll(ownerToken, groupId, question)
+      await castVote(ownerToken, groupId, poll.pollId, 'in')
+      await castVote(memberToken, groupId, poll.pollId, 'in')
+      await closePoll(ownerToken, groupId, poll.messageId)
+
+      await page.goto(`http://localhost:5173/groups/${groupId}`)
+      // Earlier launched polls keep their (now inert) launch button in the
+      // chat history, so scope to the newest poll card, not the first match.
+      const launchButton = page.locator(SELECTORS.POLL_LAUNCH_BUTTON).last()
+      await expect(launchButton).toBeVisible({ timeout: 5000 })
+      await launchButton.click()
+      const confirmBtn = page.locator(SELECTORS.LAUNCH_CONFIRM_BUTTON)
+      try {
+        await confirmBtn.waitFor({ state: 'visible', timeout: 3000 })
+        await confirmBtn.click()
+      } catch {
+        // No confirm sheet — launch fired directly
+      }
+    }
+
+    // First launch: the owner has never rated tennis, so the prompt appears.
+    await loginFrontend(page, ownerToken)
+    await launchFromNewPoll('Game on?')
+    await expect(page.getByText('How would you rate yourself at tennis?')).toBeVisible({ timeout: 5000 })
+
+    await page.getByTestId('rating-seed-skip').click()
+
+    // Skipping still lands the player on the tournament — never blocked —
+    // and creates no rating row (PUT /player/ratings/seed is never called
+    // on skip); the player sits at SEED_DEFAULT by omission, per the
+    // component's "is skippable without submitting anything" contract.
+    await page.waitForURL(/\/tournament\/(?!:tournamentId)[^/]+\/standings/, { timeout: 10000 })
+    const afterSkip = await (await apiCall('/player/ratings', 'GET', undefined, ownerToken)).json()
+    const singlesAfterSkip = afterSkip.ratings.find((r: any) => r.sport === 'tennis' && r.format === 'singles')
+    expect(singlesAfterSkip).toBeUndefined()
+
+    // Score a match in that tournament so the owner has real match history.
+    let tournamentId: string | undefined
+    for (let attempt = 0; attempt < 10 && !tournamentId; attempt++) {
+      const listRes = await apiCall('/player/tournaments?limit=20', 'GET', undefined, ownerToken)
+      const { tournaments } = await listRes.json()
+      const match = (tournaments as Array<{ id: string; name: string }>).find(t => t.name.startsWith(groupName))
+      if (match) tournamentId = match.id
+      else await page.waitForTimeout(300)
+    }
+    expect(tournamentId).toBeDefined()
+
+    const { token: scopedOwnerToken } = await signupAndGetToken(owner, tournamentId)
+    const matchesRes = await apiCall(`/tournaments/${tournamentId}/matches`, 'GET', undefined, scopedOwnerToken)
+    const { matches } = await matchesRes.json()
+    expect(matches.length).toBeGreaterThan(0)
+    const scoreRes = await apiCall(`/tournaments/${tournamentId}/matches/${matches[0].id}/score`, 'POST', { score: '6-4, 6-3' }, scopedOwnerToken)
+    expect(scoreRes.ok).toBe(true)
+
+    // Relaunch the same sport from a second poll: the owner already has a
+    // tennis rating now, so the prompt must not appear, and the launch must
+    // still navigate through (RatingSeedPrompt's onDone-on-every-path fix).
+    await launchFromNewPoll('Round two?')
+    await page.waitForURL(/\/tournament\/(?!:tournamentId)[^/]+\/standings/, { timeout: 10000 })
+    await expect(page.getByText('How would you rate yourself at tennis?')).not.toBeVisible()
   })
 
   test('Leaderboard panel renders when group has leaderboard data', async ({ page }) => {
