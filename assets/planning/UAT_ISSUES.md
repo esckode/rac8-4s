@@ -96,7 +96,7 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-60](#issue-60) | 🔲 Open | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
 | [ISSUE-61](#issue-61) | ✅ Resolved | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
 | [ISSUE-62](#issue-62) | 🔲 Open | 🟡 | Badges never update live — no SSE push for notification/group unread (blocked on 52 + 61) | frontend · api |
-| [ISSUE-63](#issue-63) | 🔲 Open | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
+| [ISSUE-63](#issue-63) | ✅ Resolved | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
 | [ISSUE-64](#issue-64) | ✅ Resolved | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
 
 ### Implementation sequence for ISSUE-56–64
@@ -2298,6 +2298,42 @@ owe someone a response" — that is what makes it worth looking at.
 1. Receive an invite plus an ordinary notification.
 2. Open Alerts, do not accept, navigate away → badge shows 1, not 0.
 3. Accept the invite → badge clears.
+
+### Status — 2026-08-03 (step 8 of the sequence)
+
+**✅ Resolved.**
+
+- Branch: `fix/issue-63-actionable-notifications-survive-mark-read` (off `main`, merged back after
+  this step).
+- Red: `test(notifications): [RED] actionable notifications survive mark-all-read (ISSUE-63)`
+  (`734c0cd`) — new `packages/api/src/__tests__/integration/notifications-read.spec.ts` (3 cases:
+  mark-all-read clears an ordinary notification, leaves a pending-invite one unread; `GET
+  /notifications/unread` still counts it; new `POST /notifications/:messageId/read` clears one
+  specific row); `NotificationCard.spec.tsx` + `Notifications.spec.tsx` extended.
+- Green: `feat(notifications): [GREEN] actionable notifications survive mark-all-read (ISSUE-63)`
+  (`a9695aa`) — mark-all-read's `UPDATE` gained `AND (gm.metadata->>'groupInviteToken') IS NULL`;
+  new `POST /player/notifications/:messageId/read` route; `NotificationCard`'s `handleAccept` fires
+  it (fire-and-forget) alongside the existing `onAccepted?.()`.
+- **Second bug found and fixed, not in the original root-cause text**: `Notifications.tsx`'s
+  mark-all-read handler called `notificationUnreadStore.clear()` unconditionally — so even once the
+  backend correctly preserved `read_at` for the invite row, the frontend was optimistically zeroing
+  the badge anyway on every successful `POST /notifications/read`, independent of what the server
+  actually left unread. Fixed by computing the still-actionable count from the fetched messages
+  (`metadata.groupInviteToken` truthy — the same criterion the backend excludes on) and calling
+  `.set()` with that instead of `.clear()`; each card's `onAccepted` now also decrements the store
+  by one when its own invite resolves.
+- Verified: 21/21 new/changed jest cases green (`NotificationCard.spec.tsx` +
+  `Notifications.spec.tsx`); 3/3 API cases green; `personal-notifications.spec.ts` +
+  `group-invite.spec.ts` regression-checked, unaffected; `useNotificationUnread.spec.ts` +
+  `state/*` regression-checked, unaffected; wide `--findRelatedTests` — api: 1581/1582 green (the
+  pre-existing, already-flagged `notify-prefs.spec.ts` failure only); frontend: 41/41 green.
+- e2e: `invite-accept` — all 7 cases pass. `notifications.spec.ts` — 3 of its 6 cases fail, but on
+  navigation to `/browse` (`Page not found`, `EMPTY_STATE`/badge locator timeouts downstream of
+  that), which is the already-tracked **ISSUE-53** (`PUBLIC_DISCOVERY_ENABLED=false` on the
+  currently-running dev API) — none of the 3 reach the mark-read code path before failing, so this
+  is not a regression from this change.
+- docs/assistant-help.md updated per §9.
+- Nothing left open.
 
 ---
 
