@@ -85,7 +85,7 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-49](#issue-49) | 🔲 Open | 🟡 | The whole `config.database` block is dead — four settable env vars do nothing | api · config |
 | [ISSUE-50](#issue-50) | 🔲 Open | 🟠 | `StandingsCache` is never read or populated — only invalidated | api · perf |
 | [ISSUE-51](#issue-51) | 🔲 Open | 🟡 | Bracket generation recomputes each group's standings once per advancing rank | api · perf |
-| [ISSUE-52](#issue-52) | 🔲 Open | 🟠 | Coach SSE route ignores `sseMaxConnectionsPerUser` — unbounded streams per user | api |
+| [ISSUE-52](#issue-52) | ✅ Resolved | 🟠 | Coach SSE route ignores `sseMaxConnectionsPerUser` — unbounded streams per user | api |
 | [ISSUE-53](#issue-53) | 🔲 Open | 🟠 | `PUBLIC_DISCOVERY_ENABLED` differs per environment and is never set explicitly — local review validates an app that doesn't ship | config · dev-env |
 | [ISSUE-54](#issue-54) | ✅ Resolved | 🔴 | Creating a second group is impossible — "Create your first group" button only appears when groups are empty | frontend |
 | [ISSUE-55](#issue-55) | ✅ Resolved | 🔴 | Pending group invites are invisible in the app — users can only accept via email magic links | frontend |
@@ -94,7 +94,7 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-58](#issue-58) | 🔲 Open | 🟠 | Profile page missing Account section — can't view email or edit display name | frontend · api |
 | [ISSUE-59](#issue-59) | 🔲 Open | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
 | [ISSUE-60](#issue-60) | 🔲 Open | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
-| [ISSUE-61](#issue-61) | 🔲 Open | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
+| [ISSUE-61](#issue-61) | ✅ Resolved | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
 | [ISSUE-62](#issue-62) | 🔲 Open | 🟡 | Badges never update live — no SSE push for notification/group unread (blocked on 52 + 61) | frontend · api |
 | [ISSUE-63](#issue-63) | 🔲 Open | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
 | [ISSUE-64](#issue-64) | 🔲 Open | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
@@ -1131,6 +1131,12 @@ Reproduce first: open 10 concurrent `EventSource` connections to `/player/coach/
 and confirm all 10 connect. After the fix the 6th returns 429, and closing one frees a slot. Confirm the
 tournament route's behaviour is unchanged.
 
+### Status — 2026-08-03
+
+**✅ Resolved, landed together with [ISSUE-61](#issue-61)** — see that issue's Status block for the
+branch, commits, and verification detail (one shared `sse-connection-limiter.ts` helper, applied to
+both routes in the same change).
+
 ---
 
 ## ISSUE-53 — `PUBLIC_DISCOVERY_ENABLED` differs per environment and is never set explicitly 🟠 {#issue-53}
@@ -2032,6 +2038,29 @@ They should land together, since a limit enforced on one route and not the other
 
 Open more than the configured number of group chats as one user across tabs; the surplus connection
 is refused rather than accepted.
+
+### Status — 2026-08-03
+
+**✅ Resolved, landed with [ISSUE-52](#issue-52) as planned (one shared cap, both routes).**
+
+- Branch: `fix/issue-61-52-sse-connection-cap` (off `main`).
+- Red: `test(sse): [RED] cap concurrent group-chat + coach streams per user` (`fee052b`) — new
+  `packages/api/src/__tests__/integration/group-events-sse-cap.spec.ts` +
+  `coach-events-sse-cap.spec.ts`. Raw `http.get` against a real `app.listen(0)` server (supertest
+  hangs on a successful SSE response, per the existing `tournament-events-auth.spec.ts` precedent
+  — it never calls `res.end()`).
+- Green: `feat(sse): [GREEN] cap concurrent group-chat + coach streams per user` (`59671cb`) — new
+  `packages/api/src/sse-connection-limiter.ts` (`createSseConnectionLimiter`, extracted from
+  `tournaments.ts:2764-2771`'s inline Map), wired into `player-groups.ts`'s `/:groupId/events`
+  (keyed on `session.playerId`) and `coach.ts`'s `/events` (keyed on the resolved account
+  `playerId`). Per-process only, matching the tournament route's existing behavior — no
+  distributed counter, as the issue explicitly scoped out.
+- Verified: both new specs green; `tournament-events-auth.spec.ts`, `tournament-events-flush.spec.ts`,
+  `coach-routes.spec.ts`, `group-invite.spec.ts` regression-checked, unaffected;
+  `--findRelatedTests` on the 5 touched files green.
+- Nothing left open. `coach.ts`'s route did already have `flushHeaders()` — the older
+  "bundle the flushHeaders() gap" note elsewhere in this doc predates this issue's actual text and
+  doesn't apply; not touched.
 
 ---
 
