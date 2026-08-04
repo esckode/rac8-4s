@@ -387,7 +387,9 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
                 <p className="text-xs text-(--ink-500) mt-1 px-1 flex items-center gap-1.5">
                   {m.senderName != null ? (
                     <>
-                      {m.playerId && <Avatar playerId={m.playerId} name={m.senderName} />}
+                      {/* ISSUE-70: no avatar on your own — same rule as the
+                          message bubbles below, which this branch contradicted. */}
+                      {m.playerId && !isCreator && <Avatar playerId={m.playerId} name={m.senderName} />}
                       <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
                     </>
                   ) : (
