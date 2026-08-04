@@ -1686,6 +1686,38 @@ the coverage the original never had.
 4. A signs in on a second browser → still clear (this is the case that fails today).
 5. A group with >99 unread shows `99+`.
 
+### Status — 2026-08-03, backend only (step 2 of the sequence)
+
+**Backend ✅ done and merged to `main`. Frontend (Fix steps 5-10) is step 4 of the sequence — not
+started yet; do not mark this issue Resolved until that lands too.**
+
+- Branch: `fix/issue-56-backend-group-unread` (off `main`, merged back after this step).
+- Red: `test(groups): [RED] server-side per-group read state (ISSUE-56 backend)` (`c1daf98`) — new
+  `packages/api/src/__tests__/integration/group-unread.spec.ts`, 6 cases covering `unreadCount`
+  (excludes system messages, excludes the caller's own messages, fresh-member-is-caught-up),
+  `PATCH /:groupId/read` (stamps, idempotent, 403 non-member).
+- Green: `feat(groups): [GREEN] server-side per-group read state (ISSUE-56 backend)` (`beddd68`) —
+  migration `062_group_last_read.sql`; `GroupRepository.getGroupsForPlayer`'s new `unread_count`
+  subquery; `GroupRepository.markGroupRead`; `PATCH /player/groups/:groupId/read` route.
+- **Trap worth recording**: the whole jest suite runs inside one outer transaction
+  (`getTestPool()`'s harness), so Postgres `now()` is frozen to that transaction's start for its
+  entire run — a member row inserted with `DEFAULT now()` and a message inserted moments "later" in
+  wall-clock time land on the *identical* timestamp. Tests asserting "unread since I joined" had to
+  explicitly backdate `last_read_at` via `now() - interval '1 hour'` rather than relying on insert
+  order. Anyone writing a future test against `created_at`/`last_read_at`-style ordering in this repo
+  will hit the same thing.
+- Verified: new spec green (6/6); `assistant-toggle.spec.ts`, `assistant-digest-toggle.spec.ts`,
+  `group-invite.spec.ts`, `repositories/group-repository.spec.ts`, `groups.spec.ts`
+  regression-checked, unaffected; `--findRelatedTests` on the 4 touched files green apart from the
+  pre-existing `notify-prefs.spec.ts` failure (unrelated `wip(profile)` commit, already flagged
+  there).
+- Left open for step 4 (frontend): `useGroupList.ts` doesn't read `unreadCount` yet;
+  `group-unread-state.ts`'s `getLastSeenCount`/`markGroupSeen`/`group-last-seen:` keys are still
+  live (client-side shadow state, now redundant but not yet removed); `groupUnreadStore`'s
+  `Subscriber` signature hasn't changed; `useGroupUnread.ts` still diffs client-side;
+  `ResponsiveLayout.tsx`'s Groups badge is untouched; `MyGroups.tsx` has no per-row badge;
+  `useGroupMessages.ts`'s mark-read effect doesn't call the new PATCH.
+
 ### As originally filed
 
 The original text claimed the Alerts badge should increment for all group messages and polls. The
