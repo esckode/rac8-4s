@@ -21,6 +21,7 @@ import { AssistantCardRepository } from '../repositories/assistant-card-reposito
 import { PlayerMemoryRepository } from '../repositories/player-memory-repository'
 import { confirmRemember } from '../services/memory-service'
 import { getLogger } from '../logger'
+import { createSseConnectionLimiter } from '../sse-connection-limiter'
 
 const log = getLogger('coach')
 
@@ -56,6 +57,9 @@ export default function coachRouter(deps: AppDependencies): Router {
   const groupMsgRepo = new GroupMessageRepository(deps.db as any)
   const cardRepo = new AssistantCardRepository(deps.db as any)
   const memoryRepo = new PlayerMemoryRepository(deps.db as any)
+  // ISSUE-52: caps concurrent /events streams per user, mirroring the
+  // tournament events route's existing sseMaxConnectionsPerUser check.
+  const coachEventsSseLimiter = createSseConnectionLimiter()
 
   async function resolveAccountPlayerId(authHeader: string | undefined): Promise<string> {
     const account = await requireOrganizerAuth(authHeader, deps.jwtConfig, deps.tokenStore)
@@ -245,6 +249,13 @@ export default function coachRouter(deps: AppDependencies): Router {
       }
 
       const playerId = await resolveAccountPlayerId(authHeader)
+
+      // ISSUE-52: cap concurrent streams per user
+      if (!coachEventsSseLimiter.tryAcquire(playerId, deps.config.limits.sseMaxConnectionsPerUser)) {
+        log.warn('sse.rate.limited', { playerId })
+        return res.status(429).json({ code: 'TOO_MANY_REQUESTS', message: 'Too many active SSE connections' })
+      }
+
       const conversationId = await conversationRepo.resolveCoachConversation(playerId)
 
       res.setHeader('Content-Type', 'text/event-stream')
@@ -260,6 +271,7 @@ export default function coachRouter(deps: AppDependencies): Router {
 
       req.on('close', () => {
         unsubscribe()
+        coachEventsSseLimiter.release(playerId)
       })
     } catch (err) {
       next(err)

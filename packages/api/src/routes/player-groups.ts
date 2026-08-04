@@ -33,6 +33,7 @@ import {
   generatePlayerSession,
 } from '../auth/magic-link'
 import { getLogger } from '../logger'
+import { createSseConnectionLimiter } from '../sse-connection-limiter'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
 import { PlayerSettingsRepository } from '../repositories/player-settings-repository'
 import { ConversationRepository } from '../repositories/conversation-repository'
@@ -95,6 +96,9 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   const tournamentRepo = new TournamentRepository(deps.db as any)
   const cardRepo = new AssistantCardRepository(deps.db as any)
   const tournamentGroupRepo = new TournamentGroupRepository(deps.db as any)
+  // ISSUE-61: caps concurrent /:groupId/events streams per user, mirroring
+  // the tournament events route's existing sseMaxConnectionsPerUser check.
+  const groupEventsSseLimiter = createSseConnectionLimiter()
 
   // Dual-auth: accept either a guest magic-link player session or a
   // registered account's JWT carrying a linked playerId (same shim as
@@ -584,6 +588,12 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           return res.status(403).json({ code: 'FORBIDDEN', message: 'Access denied' })
         }
 
+        // ISSUE-61: cap concurrent streams per user
+        if (!groupEventsSseLimiter.tryAcquire(session.playerId, deps.config.limits.sseMaxConnectionsPerUser)) {
+          log.warn('sse.rate.limited', { groupId, playerId: session.playerId })
+          return res.status(429).json({ code: 'TOO_MANY_REQUESTS', message: 'Too many active SSE connections' })
+        }
+
         const conversationId = await conversationRepo.resolveGroupConversation(groupId)
 
         res.setHeader('Content-Type', 'text/event-stream')
@@ -599,6 +609,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
 
         req.on('close', () => {
           unsubscribe()
+          groupEventsSseLimiter.release(session.playerId)
         })
       } catch (err) {
         next(handleGroupError(err))
