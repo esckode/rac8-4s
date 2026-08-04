@@ -120,6 +120,36 @@ describe('ISSUE-7 — guest nav does not leak auth-gated tabs', () => {
       expect(screen.getByTestId('nav-notifications')).toBeInTheDocument()
       expect(screen.queryByTestId('nav-signin')).not.toBeInTheDocument()
     })
+
+    // ISSUE-59: the bottom nav is fixed at 5 tabs for an authenticated user —
+    // Browse never claims a 6th slot, even when discovery is enabled. It
+    // moves into the More sheet instead.
+    it('authenticated user never sees a Browse tab, even when publicDiscoveryEnabled is true (ISSUE-59)', async () => {
+      await renderAuthenticated(true)
+
+      expect(screen.queryByTestId('nav-browse')).not.toBeInTheDocument()
+      expect(screen.getByTestId('nav-groups')).toBeInTheDocument()
+      expect(screen.getByTestId('nav-play')).toBeInTheDocument()
+      expect(screen.getByTestId('nav-ratings')).toBeInTheDocument()
+      expect(screen.getByTestId('nav-notifications')).toBeInTheDocument()
+      expect(screen.getByTestId('nav-more')).toBeInTheDocument()
+    })
+
+    it('Browse appears in the More sheet for an authenticated user when publicDiscoveryEnabled is true (ISSUE-59)', async () => {
+      await renderAuthenticated(true)
+
+      screen.getByTestId('nav-more').click()
+      const dialog = await screen.findByRole('dialog', { name: 'More options' })
+      expect(within(dialog).getByText('Browse')).toBeInTheDocument()
+    })
+
+    it('Browse does NOT appear in the More sheet when publicDiscoveryEnabled is false', async () => {
+      await renderAuthenticated(false)
+
+      screen.getByTestId('nav-more').click()
+      const dialog = await screen.findByRole('dialog', { name: 'More options' })
+      expect(within(dialog).queryByText('Browse')).not.toBeInTheDocument()
+    })
   })
 
   // ISSUE-27: emoji nav icons render differently per platform and cannot be

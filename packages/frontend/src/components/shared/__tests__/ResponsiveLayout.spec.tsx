@@ -153,4 +153,32 @@ describe('ResponsiveLayout', () => {
     expect(profileLink).toBeInTheDocument()
     expect(profileLink.closest('a')).toHaveAttribute('href', '/profile')
   })
+
+  // ISSUE-59: bottom nav is fixed at exactly 5 tabs for an authenticated
+  // user, in this order — regardless of publicDiscoveryEnabled.
+  it('renders exactly 5 bottom-nav tabs in order: Groups, Play, Ratings, Alerts, More', async () => {
+    await renderAuthenticated(
+      <ResponsiveLayout showNav>
+        <div>Content</div>
+      </ResponsiveLayout>
+    )
+
+    const nav = screen.getByLabelText('Mobile navigation')
+    const items = within(nav).getAllByRole('link').concat(within(nav).getAllByRole('button'))
+    expect(items).toHaveLength(5)
+
+    const testIds = ['nav-groups', 'nav-play', 'nav-ratings', 'nav-notifications', 'nav-more']
+    testIds.forEach((testId, i) => {
+      expect(items[i]).toHaveAttribute('data-testid', testId)
+    })
+  })
+
+  it('the Ratings tab links to /ratings', async () => {
+    await renderAuthenticated(
+      <ResponsiveLayout showNav>
+        <div>Content</div>
+      </ResponsiveLayout>
+    )
+    expect(screen.getByTestId('nav-ratings').closest('a')).toHaveAttribute('href', '/ratings')
+  })
 })

@@ -1,10 +1,11 @@
 /**
- * S1.3 — Profile page (P0); S5.3 notify/density; S7.3 availability grid (P12); P13 ratings (P7)
+ * S1.3 — Profile page (P0); S5.3 notify/density; S7.3 availability grid (P12)
  *
  * Renders settings from GET /api/auth/me + availability from
  * GET /api/auth/me/availability; density/notify/quiet-hours PATCH
  * /api/auth/me/settings; the availability grid PUTs the full grid to
- * /api/auth/me/availability on every toggle; ratings from GET /player/ratings (P13 Phase 7).
+ * /api/auth/me/availability on every toggle. Ratings/partners moved to the
+ * dedicated Ratings page (ISSUE-59) — see Ratings.spec.tsx.
  */
 
 import React from 'react'
@@ -53,53 +54,12 @@ function availabilityResponse(
   return { ok: true, json: async () => ({ slots, updatedAt }) }
 }
 
-function ratingsResponse(
-  ratings: Array<{ sport: string; format: string; rating: number; matchesPlayed: number; provisional: boolean }> = []
-) {
-  return {
-    ok: true,
-    headers: {
-      get: () => undefined,
-    },
-    json: async () => ({
-      // Wire-format fixture for the GET /player/ratings response (Step 7.1)
-      // — these restate the API's response shape, not a rating constant
-      // (RATINGS_IMPLEMENTATION.md §0a trap 2/Step 10.3). The frontend has
-      // no `@core` alias to import the real constants from.
-      ratings,
-      min: 100,
-      max: 500,
-      seedDefault: 270,
-    }),
-  }
-}
-
-function partnersResponse(
-  partners: Array<{ playerId: string; name: string; lastPartneredAt: string }> = []
-) {
-  return {
-    ok: true,
-    headers: {
-      get: () => undefined,
-    },
-    json: async () => ({ partners }),
-  }
-}
-
 /** Routes each fetch call by URL so tests don't depend on call order. */
 function mockFetchRouter(
   avail: { slots?: Array<{ weekday: number; dayPart: string }>; updatedAt?: string | null } = {},
-  meOverrides: Parameters<typeof meResponse>[0] = {},
-  ratings: Array<{ sport: string; format: string; rating: number; matchesPlayed: number; provisional: boolean }> = [],
-  partners: Array<{ playerId: string; name: string; lastPartneredAt: string }> = []
+  meOverrides: Parameters<typeof meResponse>[0] = {}
 ) {
   mockFetch.mockImplementation((url: string) => {
-    if (url.includes('/player/partners')) {
-      return Promise.resolve(partnersResponse(partners))
-    }
-    if (url.includes('/player/ratings')) {
-      return Promise.resolve(ratingsResponse(ratings))
-    }
     if (url.includes('/api/auth/me/availability')) {
       return Promise.resolve(availabilityResponse(avail.slots ?? [], avail.updatedAt ?? null))
     }
@@ -279,71 +239,17 @@ describe('Profile', () => {
     expect(screen.queryByTestId('availability-reconfirm-prompt')).not.toBeInTheDocument()
   })
 
-  // ── P13 Phase 7 — Your Rating panel ──────────────────────────────────────
-
-  it('renders a rating with the (provisional) label when provisional', async () => {
-    mockFetchRouter(
-      {},
-      {},
-      [{ sport: 'Tennis', format: 'singles', rating: 320, matchesPlayed: 5, provisional: true }]
-    )
+  // ISSUE-59: ratings + partners moved to the dedicated Ratings page — Profile
+  // must not render them (or fetch their endpoints) anymore.
+  it('does not render the ratings or partners sections (moved to /ratings, ISSUE-59)', async () => {
+    mockFetchRouter()
     render(<Profile />)
     await waitFor(() => {
-      expect(screen.getByTestId('rating-Tennis-singles')).toBeInTheDocument()
-      expect(screen.getByText(/320/)).toBeInTheDocument()
-      expect(screen.getByText(/provisional/)).toBeInTheDocument()
+      expect(screen.getByTestId('profile-page')).toBeInTheDocument()
     })
-  })
-
-  it('renders a rating without the (provisional) label when not provisional', async () => {
-    mockFetchRouter(
-      {},
-      {},
-      [{ sport: 'Tennis', format: 'doubles', rating: 280, matchesPlayed: 10, provisional: false }]
-    )
-    render(<Profile />)
-    await waitFor(() => {
-      expect(screen.getByTestId('rating-Tennis-doubles')).toBeInTheDocument()
-      expect(screen.getByText(/280/)).toBeInTheDocument()
-    })
-    expect(screen.queryByText(/provisional/)).not.toBeInTheDocument()
-  })
-
-  it('renders a not-yet-played state for a sport with no buckets', async () => {
-    mockFetchRouter({}, {}, [])
-    render(<Profile />)
-    await waitFor(() => {
-      expect(screen.getByTestId('rating-empty-state')).toBeInTheDocument()
-      expect(screen.getByText(/not yet played/i)).toBeInTheDocument()
-    })
-  })
-
-  // ── P13 Phase 13 — last-10-partners panel ────────────────────────────────
-
-  it('renders each partner by name with the date last partnered (Task 14.7)', async () => {
-    const lastPartneredAt1 = '2026-07-20T00:00:00.000Z'
-    const lastPartneredAt2 = '2026-07-10T00:00:00.000Z'
-    mockFetchRouter({}, {}, [], [
-      { playerId: 'player_1', name: 'Alex Kim', lastPartneredAt: lastPartneredAt1 },
-      { playerId: 'player_2', name: 'Sam Rivera', lastPartneredAt: lastPartneredAt2 },
-    ])
-    render(<Profile />)
-    await waitFor(() => {
-      expect(screen.getByTestId('partner-player_1')).toBeInTheDocument()
-      expect(screen.getByText('Alex Kim')).toBeInTheDocument()
-      expect(screen.getByText(new Date(lastPartneredAt1).toLocaleDateString())).toBeInTheDocument()
-      expect(screen.getByTestId('partner-player_2')).toBeInTheDocument()
-      expect(screen.getByText('Sam Rivera')).toBeInTheDocument()
-      expect(screen.getByText(new Date(lastPartneredAt2).toLocaleDateString())).toBeInTheDocument()
-    })
-  })
-
-  it('renders an empty state for a player who has never played doubles', async () => {
-    mockFetchRouter({}, {}, [], [])
-    render(<Profile />)
-    await waitFor(() => {
-      expect(screen.getByTestId('partners-empty-state')).toBeInTheDocument()
-    })
-    expect(screen.queryByTestId(/^partner-/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Your Rating')).not.toBeInTheDocument()
+    expect(screen.queryByText('Recent Partners')).not.toBeInTheDocument()
+    expect(mockFetch).not.toHaveBeenCalledWith(expect.stringContaining('/player/ratings'), expect.anything())
+    expect(mockFetch).not.toHaveBeenCalledWith(expect.stringContaining('/player/partners'), expect.anything())
   })
 })
