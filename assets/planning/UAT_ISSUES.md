@@ -90,7 +90,7 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-54](#issue-54) | ✅ Resolved | 🔴 | Creating a second group is impossible — "Create your first group" button only appears when groups are empty | frontend |
 | [ISSUE-55](#issue-55) | ✅ Resolved | 🔴 | Pending group invites are invisible in the app — users can only accept via email magic links | frontend |
 | [ISSUE-56](#issue-56) | ✅ Resolved | 🟠 | Group unread is per-device and invisible per group — no way to tell *which* group has new messages | frontend · api |
-| [ISSUE-57](#issue-57) | 🔲 Open | 🟡 | Accepting a group invite from Alerts doesn't navigate to the group | frontend · navigation |
+| [ISSUE-57](#issue-57) | ✅ Resolved | 🟡 | Accepting a group invite from Alerts doesn't navigate to the group | frontend · navigation |
 | [ISSUE-58](#issue-58) | ✅ Resolved | 🟠 | Profile page missing Account section — can't view email or edit display name | frontend · api |
 | [ISSUE-59](#issue-59) | ✅ Resolved | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
 | [ISSUE-60](#issue-60) | 🔲 Open | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
@@ -1817,6 +1817,29 @@ an excuse to store the guest session it mints.
 3. The app navigates to `/groups/{groupId}` and the chat renders.
 4. B is a member (members list, can post).
 5. B is still signed in as the same account — no session downgrade.
+
+### Status — 2026-08-03 (step 7 of the sequence)
+
+**✅ Resolved.**
+
+- Branch: `fix/issue-57-invite-accept-navigates` (off `main`, merged back after this step).
+- Red: `test(notifications): [RED] accepting an invite navigates to the group (ISSUE-57)`
+  (`9e4e310`) — new `NotificationCard.spec.tsx` cases: navigates to `/groups/<id>` on success;
+  does NOT navigate on `TOKEN_INVALID`; a regression guard using `rerender` to a differently-shaped
+  notification, catching the documented hooks-order trap directly (mocks `useNavigate` via
+  `jest.mock('react-router-dom', ...)`).
+- Green: `feat(notifications): [GREEN] accepting an invite navigates to the group (ISSUE-57)`
+  (`3c8b4f0`) — `useNavigate()` called at `NotificationCard`'s top level (it already had
+  `handleAccept` there too, from an earlier eslint `no-inner-declarations` fix during ISSUE-55 —
+  so this issue's own documented trap was already half-avoided); `navigate(`/groups/${groupId}`)`
+  added after `onAccepted?.()` on success only.
+- Verified: 10/10 `NotificationCard.spec.tsx`, 8/8 `Notifications.spec.tsx` (regression) green;
+  wide `--findRelatedTests` on the 2 touched files: 38/38 green, no pre-existing failures even.
+- e2e: updated `invite-accept.spec.ts`'s existing ISSUE-55 case to assert the actual new
+  behavior — waits on the URL becoming `/groups/:id` and the chat panel rendering, instead of a
+  manual `page.goto('/groups')` — all 7 cases in the file pass.
+- docs/assistant-help.md updated per §9.
+- Nothing left open.
 
 ---
 
