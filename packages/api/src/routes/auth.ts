@@ -338,12 +338,17 @@ export default function authRouter(deps: AppDependencies) {
         ? await playerSettingsRepo.getOrDefaults(account.player_id)
         : { ...DEFAULT_PLAYER_SETTINGS }
 
+      // ISSUE-58: Profile's Account section needs the current display name
+      // to seed its editable field.
+      const player = account.player_id ? await playerRepo.findById(account.player_id) : null
+
       // Return user info (without password_hash or other sensitive data)
       return res.status(200).json({
         id: account.id,
         email: account.email,
         role: account.role,
         playerId: account.player_id ?? null,
+        name: player?.name ?? null,
         settings,
       })
     } catch (err) {

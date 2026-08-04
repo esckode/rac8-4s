@@ -7,6 +7,7 @@ import { buildPlayerSnapshot } from '../assistant/player-snapshot'
 import { RatingsRepository } from '../repositories/ratings-repository'
 import { seedRatingForSport } from '../services/ratings-service'
 import { RATING_MIN, RATING_MAX, SEED_DEFAULT, PROVISIONAL_MATCHES } from '../services/ratings-constants'
+import { isReservedDisplayName } from '../assistant/trigger'
 import { getLogger } from '../logger'
 
 const log = getLogger('player')
@@ -154,6 +155,41 @@ export default function playerRouter(deps: AppDependencies) {
       log.info('read_receipt.preferences.updated', { playerId: payload.playerId, shareReadReceipts: req.body.shareReadReceipts })
 
       res.json({ shareReadReceipts: updated.share_read_receipts })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  const MAX_NAME_LENGTH = 50
+
+  // PATCH /player/name - update the caller's display name (ISSUE-58, Profile
+  // Account section). Names are how @mentions resolve (player-groups.ts),
+  // so a rename changes who future @OldName mentions reach; past messages
+  // are unaffected — they carry sender_name_snapshot.
+  router.patch('/name', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePlayerId(req.headers.authorization)
+
+      const { name } = req.body
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'name is required' })
+      }
+      const trimmed = name.trim()
+      if (trimmed.length > MAX_NAME_LENGTH) {
+        return res.status(400).json({
+          code: 'VALIDATION_ERROR',
+          message: `name must not exceed ${MAX_NAME_LENGTH} characters`,
+        })
+      }
+      if (isReservedDisplayName(trimmed)) {
+        return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'name is reserved' })
+      }
+
+      const player = await playerRepo.updateName(playerId, trimmed)
+
+      log.info('player.renamed', { playerId })
+
+      res.json({ name: player.name })
     } catch (err) {
       next(err)
     }

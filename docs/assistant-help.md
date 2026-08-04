@@ -32,6 +32,12 @@ on* — no internals, no SQL, no dev framing.
   yet), Profile shows a prompt to sign up instead of a settings form — there's no account to save
   preferences against yet. Create a password first (see Signing up and logging in above), then
   your settings live here.
+- The **Account** section at the top shows your email (read-only) and lets you change your
+  **display name** — the name shown in group chat and how `@mentions` reach you. Renaming takes
+  effect immediately for new messages and mentions; your name on **past** messages stays as it
+  was when you sent them.
+- **Change password** sends a reset code to your email — the same flow as "Forgot password" on
+  the login page. Use the emailed code on the reset-password page to set a new one.
 - **Table density** controls how compact standings and other tables render — "Comfortable" or
   "Compact".
 - **Notifications**: three toggles control whether you get pushed for @mentions, new polls, and

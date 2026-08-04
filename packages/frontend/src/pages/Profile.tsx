@@ -66,6 +66,14 @@ export const Profile: React.FC = () => {
   // honest state instead of fake defaults the guest can't actually save.
   const [unauthorized, setUnauthorized] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // ISSUE-58: Account section — email (read-only), editable display name,
+  // change-password (reuses the existing emailed-code flow).
+  const [accountEmail, setAccountEmail] = useState('')
+  const [nameInput, setNameInput] = useState('')
+  const [nameSaving, setNameSaving] = useState(false)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [passwordResetSending, setPasswordResetSending] = useState(false)
+  const [passwordResetSent, setPasswordResetSent] = useState(false)
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([])
   const [availabilityUpdatedAt, setAvailabilityUpdatedAt] = useState<string | null>(null)
   const [memories, setMemories] = useState<CoachMemory[]>([])
@@ -90,6 +98,8 @@ export const Profile: React.FC = () => {
       .then(data => {
         if (!data) return
         setSettings(data.settings)
+        setAccountEmail(data.email)
+        setNameInput(data.name ?? '')
 
         fetch('/api/auth/me/availability', { headers })
           .then(res => (res.ok ? res.json() : null))
@@ -121,6 +131,49 @@ export const Profile: React.FC = () => {
       body: JSON.stringify(body),
     })
     setSaveError(res.ok ? null : 'Could not save your changes. Please try again.')
+  }
+
+  async function handleNameSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = nameInput.trim()
+    if (!trimmed || nameSaving) return
+    setNameSaving(true)
+    setNameError(null)
+    try {
+      const token = localStorage.getItem('auth_token')
+      const res = await fetch('/player/name', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ name: trimmed }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { message?: string }
+        setNameError(body.message ?? 'Could not save your name')
+        return
+      }
+      const data = await res.json()
+      setNameInput(data.name)
+    } finally {
+      setNameSaving(false)
+    }
+  }
+
+  async function handleChangePassword() {
+    if (passwordResetSending) return
+    setPasswordResetSending(true)
+    try {
+      await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: accountEmail }),
+      })
+      setPasswordResetSent(true)
+    } finally {
+      setPasswordResetSending(false)
+    }
   }
 
   async function handleDensityChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -237,6 +290,53 @@ export const Profile: React.FC = () => {
           {saveError}
         </p>
       )}
+
+      <section className="rounded-xl border border-(--border) p-4 bg-(--surface) space-y-3">
+        <h2 className="text-base font-semibold text-(--ink-800)">Account</h2>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-(--ink-700)">Email</span>
+          <span data-testid="account-email" className="text-sm text-(--ink-900)">{accountEmail}</span>
+        </div>
+        <form onSubmit={handleNameSubmit} className="flex gap-2 items-center">
+          <label htmlFor="display-name-input" className="sr-only">Display name</label>
+          <input
+            id="display-name-input"
+            data-testid="display-name-input"
+            type="text"
+            value={nameInput}
+            onChange={e => setNameInput(e.target.value)}
+            className="flex-1 text-sm border border-(--border) rounded-lg px-3 py-2 text-(--ink-900) bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--court-400)"
+          />
+          <button
+            data-testid="display-name-save"
+            type="submit"
+            disabled={nameSaving || !nameInput.trim()}
+            className="text-sm font-medium text-(--court-600) hover:text-(--court-800) px-3 py-2 rounded-lg hover:bg-(--court-50) transition-colors disabled:opacity-50"
+          >
+            {nameSaving ? 'Saving…' : 'Save'}
+          </button>
+        </form>
+        {nameError && (
+          <p data-testid="display-name-error" role="alert" className="text-xs text-(--rose-700)">
+            {nameError}
+          </p>
+        )}
+        <div className="pt-2 border-t border-(--border)">
+          <button
+            data-testid="change-password-button"
+            onClick={handleChangePassword}
+            disabled={passwordResetSending}
+            className="text-sm font-medium text-(--court-600) hover:text-(--court-800) disabled:opacity-50"
+          >
+            {passwordResetSending ? 'Sending…' : 'Change password'}
+          </button>
+          {passwordResetSent && (
+            <p data-testid="password-reset-confirmation" className="mt-2 text-xs text-(--ink-500)">
+              Check your email for a reset code
+            </p>
+          )}
+        </div>
+      </section>
 
       <section className="rounded-xl border border-(--border) p-4 bg-(--surface) space-y-3">
         <h2 className="text-base font-semibold text-(--ink-800)">Display</h2>

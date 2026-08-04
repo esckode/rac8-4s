@@ -925,6 +925,18 @@ export class PlayerRepository {
     if (!player) throw new NotFoundError('Player')
     return player
   }
+
+  // ISSUE-58: Profile's Account section — editable display name.
+  async updateName(playerId: string, name: string): Promise<PlayerRow> {
+    const now = new Date().toISOString()
+    await this.pool.query(
+      `UPDATE public.players SET name = $1, updated_at = $2 WHERE id = $3`,
+      [name, now, playerId]
+    )
+    const player = await this.findById(playerId)
+    if (!player) throw new NotFoundError('Player')
+    return player
+  }
 }
 
 export class GroupRepository {
