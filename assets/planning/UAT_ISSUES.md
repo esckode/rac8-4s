@@ -95,7 +95,7 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-59](#issue-59) | ✅ Resolved | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
 | [ISSUE-60](#issue-60) | ✅ Resolved | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
 | [ISSUE-61](#issue-61) | ✅ Resolved | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
-| [ISSUE-62](#issue-62) | 🔲 Open | 🟡 | Badges never update live — no SSE push for notification/group unread (blocked on 52 + 61) | frontend · api |
+| [ISSUE-62](#issue-62) | ✅ Resolved | 🟡 | Badges never update live — no SSE push for notification/group unread (blocked on 52 + 61) | frontend · api |
 | [ISSUE-63](#issue-63) | ✅ Resolved | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
 | [ISSUE-64](#issue-64) | ✅ Resolved | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
 
@@ -2315,6 +2315,94 @@ rather than a clean rejection.
 
 With two browsers side by side, a message/invite sent in one increments the other's badge without
 navigation or refocus; the full e2e suite passes on both browser projects (§8).
+
+### Status — 2026-08-04 (step 10 of the sequence, last)
+
+**✅ Resolved.**
+
+- Branch: `fix/issue-62-live-badges-sse` (off `main`, merged back after this step).
+- Red/Green pair 1 (backend): `test(sse): [RED] per-player badge push stream + group-unread
+  fan-out` (`5e80657`) / `feat(sse): [GREEN] ...` (`f6bc5ef`) — new `GET
+  /player/notifications/events` (`player.ts`), capped via the ISSUE-61/52 shared limiter, subscribed
+  to a synthetic `player:<id>` channel (distinct from any real `conversation_id`, same `emit`/
+  `subscribe` interface). `GroupMessageRepository` now takes an optional `broadcastBus` and emits
+  `message.created` on that channel from `postPersonalNotification` — the `conversationId` it
+  already returned was "so the event can be broadcast" per its own docblock, but nothing ever did.
+  New `group-unread-broadcast.ts`'s `broadcastGroupUnreadChanged()` fans `group.unread.changed` out
+  to every *other* group member (excludes the sender) — wired at the two dominant real-traffic call
+  sites, text messages (`player-groups.ts`) and poll creation (`poll-service.ts`).
+- Red/Green pair 2 (frontend): `test(badges): [RED] usePersonalEventsStream ...` (`cef5421`) /
+  `feat(badges): [GREEN] ...` (`d12c5cd`) — new `usePersonalEventsStream`, mounted once app-wide in
+  `ResponsiveLayout` alongside the badge hooks it feeds: `message.created` calls
+  `notificationUnreadStore.increment()` directly; `group.unread.changed` calls a newly-exported
+  `refetchGroupUnread()` (pulled out of `useGroupsWithUnread`'s own mount/focus effect so both paths
+  share one implementation). Both hooks' existing mount+focus polling is untouched — it's now the
+  fallback for any gap around a reconnect, not the only update path. Docblocks in
+  `useNotificationUnread.ts`, `useGroupUnread.ts`, and `group-unread-state.ts` updated — they
+  previously documented deliberately avoiding a persistent app-wide connection specifically because
+  of the `networkidle` conflict this issue's step 3 lifts.
+- e2e (`0ec067a`, `46b9390`): 34 real `networkidle` occurrences across 8 spec files (+
+  `TEMPLATE.spec.ts`'s own guidance comment) rewritten — dropped where the following line already
+  auto-waits (`fill`/`toBeChecked`/`toHaveURL`/`inputValue` all retry internally), added an explicit
+  `toBeVisible` where it didn't (`count()`/`boundingBox()`/`textContent()` never auto-wait), and an
+  `expect(fn).toPass({ timeout })` poll for two `tournament-discovery-registration.spec.ts` spots
+  that read `page.textContent('body')` with no single locator target. The issue text said "38"; the
+  real count of *code* occurrences (excluding comments-only mentions) was 34 — pre-existing drift in
+  the issue filing, not something to chase further. `notifications.spec.ts` and
+  `player-groups.spec.ts`'s badge tests previously worked around the missing live push by manually
+  `dispatchEvent(new Event('focus'))`; both now assert the badge updates with **no** refocus at all —
+  run and confirmed passing against the real dev stack, not just left green by the sweep.
+- **Trap hit while writing the sweep, worth flagging for next time**: `locator.isVisible({ timeout
+  })` does not actually wait — the `timeout` option is silently ignored (Playwright docs call this
+  out explicitly). Discovered this again here after already documenting it in ISSUE-60's status
+  block; used `locator.waitFor({ state: 'visible', timeout })` throughout instead.
+- **Scope decision, not exhaustive by design**: `group.unread.changed` fan-out is wired at only the
+  two call sites that account for the overwhelming majority of real group activity (text messages,
+  poll creation). Deliberately **not** wired at: poll-close/`card.updated` (these update an
+  *existing* message's status, not a new one — no new unread to signal), the assistant-toggle intro
+  message (`player-groups.ts`'s rare one-off `PATCH /:groupId` → Ref-intro path), and
+  `auto-close-processor.ts`'s worker-originated system messages. None of these are wrong to add
+  later; they were left out to keep this change reviewable rather than chasing every
+  message-creating code path in the same commit.
+- **Known, pre-existing limitation, not fixed here**: the SSE broadcast bus defaults to an
+  in-process `EventEmitter` (`SSE_BUS=redis` + `REDIS_URL` switches to the Redis pub/sub
+  implementation). `postPersonalNotification` calls from **worker**-process code
+  (`teams-formed-processor.ts`, reached via `worker-entrypoint.ts`) were still wired with the same
+  `broadcastBus` plumbing for production correctness (where Redis is configured), but in this repo's
+  local dev/e2e default (no `REDIS_URL`), a worker-originated personal notification's `message.created`
+  emit lands on the *worker* process's own in-memory bus instance and never reaches a browser
+  connected to the *API server* process's SSE route — the same cross-process gap the ISSUE-61/52
+  connection-cap work already flagged as out of scope (per-process only, no distributed counter).
+  Not new to this change; just newly relevant here since it's the same bus.
+- Verified: 8/8 new backend cases green (4 SSE integration + 4 `group-unread-broadcast` unit); 8/8
+  new frontend cases green (`usePersonalEventsStream` × 3, existing `useGroupUnread`/
+  `useNotificationUnread` suites unaffected). Wide `--findRelatedTests` — api: 1634/1636 green, the
+  2 failures are `notify-prefs.spec.ts` (the already-flagged pre-existing default-value mismatch) and
+  `assistant-dsr-scrub.spec.ts` (new to this run, but confirmed **not** a regression: it asserts an
+  `ORDER BY gm.created_at` result with no tiebreaker, and this suite's harness freezes Postgres
+  `now()` to transaction start — two rows genuinely can share an identical timestamp, so ordering
+  across ties is undefined; reran the file alone and it passed 3/3, meaning it's a pre-existing flake
+  under concurrent suite load, not something my change touches). Frontend: 215/217 green, the 2
+  failures are the already-flagged pre-existing `MyGroups.spec.tsx` `GroupChatPanel` "Name · time"
+  chat-redesign WIP breakage.
+- e2e: `browse-tournaments`, `layout`, `profile`, `tournament-public-registration`, `auth` (32/32,
+  1 legitimately skipped) all green after the sweep. `ratings.spec.ts` — 4 failures, all
+  the already-tracked **ISSUE-53** (`PUBLIC_DISCOVERY_ENABLED=false` on the shared dev server 404s
+  `POST /tournaments/:id/register`, which these tests' fixtures call directly — confirmed by the
+  exact error text, unrelated to networkidle/badges). `tournament-discovery-registration.spec.ts` —
+  all 14 skip cleanly via its own `skipIfPublicDiscoveryDisabled()` guard, same root cause.
+  `player-groups.spec.ts` full file — 9 passed, 1 failed (`My Groups nav tab is present and
+  navigates to /groups`), also ISSUE-53: that test navigates straight to `/browse`, which 404s, so
+  the bottom nav (and `nav-groups`) never renders — confirmed via the exact locator-not-found error,
+  not a badge/networkidle regression. `notifications.spec.ts` — 2 passed (including the live-push
+  case, run and confirmed **without** the focus-dispatch workaround), 3 failed, same ISSUE-53
+  `/browse` root cause (matches the exact 3-of-6 pattern already documented in ISSUE-63's status
+  block, before any of this issue's code existed).
+- Per §11, the full both-browser e2e sweep is deferred to the final definition-of-done step, not
+  run per-issue.
+- Nothing left open for this issue's actual scope. ISSUE-53 (`/browse` 404 on the shared dev server)
+  remains separately tracked and is the confounder behind every e2e failure/skip observed above —
+  none of them are regressions from this change.
 
 ---
 
