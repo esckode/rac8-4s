@@ -24,7 +24,7 @@ function meResponse(overrides: Partial<{
   notifyNudges: boolean
   quietHoursStart: number | null
   quietHoursEnd: number | null
-}> = {}) {
+}> = {}, accountOverrides: Partial<{ email: string; name: string | null }> = {}) {
   return {
     ok: true,
     json: async () => ({
@@ -32,6 +32,8 @@ function meResponse(overrides: Partial<{
       email: 'p@e.com',
       role: 'player',
       playerId: 'player_1',
+      name: 'Test Player',
+      ...accountOverrides,
       settings: {
         timezone: null,
         timezoneManual: false,
@@ -338,6 +340,85 @@ describe('Profile', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('profile-save-error')).not.toBeInTheDocument()
+    })
+  })
+
+  // ─── ISSUE-58: Account section (email, editable name, change password) ─────
+
+  it('renders an Account section with the email from /api/auth/me', async () => {
+    mockFetchRouter()
+    render(<Profile />)
+    await waitFor(() => {
+      expect(screen.getByTestId('account-email')).toHaveTextContent('p@e.com')
+    })
+  })
+
+  it('renders the current display name in the editable field', async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/api/auth/me/availability')) return Promise.resolve(availabilityResponse())
+      if (url.includes('/api/auth/me')) return Promise.resolve(meResponse({}, { name: 'Alice Example' }))
+      return Promise.resolve({ ok: false, json: async () => ({}) })
+    })
+    render(<Profile />)
+    await waitFor(() => {
+      expect(screen.getByTestId('display-name-input')).toHaveValue('Alice Example')
+    })
+  })
+
+  it('submitting a new display name PATCHes /player/name', async () => {
+    mockFetchRouter()
+    render(<Profile />)
+    await waitFor(() => expect(screen.getByTestId('display-name-input')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByTestId('display-name-input'), { target: { value: 'New Name' } })
+    fireEvent.click(screen.getByTestId('display-name-save'))
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(
+        ([url, opts]: [string, any]) => url === '/player/name' && opts?.method === 'PATCH'
+      )
+      expect(call).toBeDefined()
+      expect(JSON.parse(call[1].body)).toEqual({ name: 'New Name' })
+    })
+  })
+
+  it('shows an inline error when the rename is rejected', async () => {
+    mockFetchRouter()
+    render(<Profile />)
+    await waitFor(() => expect(screen.getByTestId('display-name-input')).toBeInTheDocument())
+
+    mockFetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url === '/player/name' && opts?.method === 'PATCH') {
+        return Promise.resolve({ ok: false, status: 400, json: async () => ({ code: 'VALIDATION_ERROR', message: 'name is reserved' }) })
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) })
+    })
+    fireEvent.change(screen.getByTestId('display-name-input'), { target: { value: 'Ref' } })
+    fireEvent.click(screen.getByTestId('display-name-save'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('display-name-error')).toHaveTextContent('name is reserved')
+    })
+  })
+
+  it('the Change password button posts to forgot-password and shows a confirmation', async () => {
+    mockFetchRouter()
+    render(<Profile />)
+    await waitFor(() => expect(screen.getByTestId('change-password-button')).toBeInTheDocument())
+
+    mockFetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url === '/api/auth/forgot-password' && opts?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: async () => ({}) })
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) })
+    })
+    fireEvent.click(screen.getByTestId('change-password-button'))
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(([url]: [string]) => url === '/api/auth/forgot-password')
+      expect(call).toBeDefined()
+      expect(JSON.parse(call[1].body)).toEqual({ email: 'p@e.com' })
+      expect(screen.getByTestId('password-reset-confirmation')).toHaveTextContent(/check your email/i)
     })
   })
 })
