@@ -1926,13 +1926,14 @@ Then a system event row "Sam joined" appears (data-testid="group-system-event")
   And it is visually distinct from regular message cards
 ```
 
-### Scenario: Unread badge on My Groups nav tab (ISSUE-56 — server-side, per-group)
+### Scenario: Unread badge on My Groups nav tab (ISSUE-56 — server-side, per-group; ISSUE-62 — live push)
 
 ```gherkin
-Given a second group member posts a message while the player is on a different tab
+Given a second group member posts a message while the player is on a different page
   (unread excludes the player's own messages, so this needs a genuine second actor)
-When the player returns to the app (a window focus event)
-Then the 👥 My Groups nav tab shows an unread badge (data-testid="groups-unread-badge")
+When the message is sent — no window focus, no navigation, no reload
+Then a group.unread.changed push on GET /player/notifications/events resyncs the store,
+  and the 👥 My Groups nav tab shows an unread badge (data-testid="groups-unread-badge")
   — count of groups with unread, not total messages
   And the group's row on /groups shows its own count (data-testid="group-unread-badge")
 When the player opens that group
@@ -2916,8 +2917,11 @@ Then the "Privacy Policy" text is a working link to /privacy
 **Implementation:** page testid `notifications-page`, card testid `notification-card`
 (promoted into `e2e/config.ts` SELECTORS); endpoints `GET /player/notifications/messages`,
 `GET /player/notifications/unread`, `POST /player/notifications/read`,
-`GET /player/notifications/events` (SSE); hook `useNotificationUnread` (owns a
-`ReconnectingEventSource`, backed by `notification-unread-state.ts`'s pub/sub store).
+`GET /player/notifications/events` (SSE, ISSUE-62); hook `useNotificationUnread`
+(mount + focus poll, backed by `notification-unread-state.ts`'s pub/sub store) is fed
+live by `usePersonalEventsStream` (owns the `ReconnectingEventSource`, mounted
+app-wide in `ResponsiveLayout`) incrementing the store on a `message.created` push —
+the poll remains the fallback for any gap around a reconnect.
 
 **Correction to the original seeding premise:** a plain (non-mention) group message did
 **not** post to a player's personal-notification feed — only membership-change events
