@@ -98,7 +98,7 @@ nothing on a discovery-off environment, and 65's two failures are stale arithmet
 | [ISSUE-59](#issue-59) | ✅ Resolved | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
 | [ISSUE-60](#issue-60) | ✅ Resolved | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
 | [ISSUE-61](#issue-61) | ✅ Resolved | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
-| [ISSUE-62](#issue-62) | 🔁 Reopened | 🟡 | Badges never update live — implementation looks complete, but its e2e proof is invalid on a discovery-off environment | frontend · api |
+| [ISSUE-62](#issue-62) | ✅ Resolved | 🟡 | Badges never update live — implementation looks complete, but its e2e proof is invalid on a discovery-off environment | frontend · api |
 | [ISSUE-65](#issue-65) | ✅ Resolved | 🟠 | Notification specs predate ISSUE-55's in-app invites — assert counts that no longer hold | e2e · test-debt |
 | [ISSUE-63](#issue-63) | ✅ Resolved | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
 | [ISSUE-64](#issue-64) | ✅ Resolved | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
@@ -2456,6 +2456,62 @@ the behaviour this issue exists to deliver.
 `:115` and `:188` are **not** this issue's. The status note above attributes all three to the
 `/browse` root cause; that holds for `:92` only — neither of the other two visits `/browse`. They are
 [ISSUE-65](#issue-65).
+
+### Status — 2026-08-04 (reopen resolved)
+
+**✅ Resolved.**
+
+- Branch: `fix/issue-62-notification-badge-shell-page` (off `main`, after [ISSUE-65](#issue-65) —
+  they collided on `notifications.spec.ts`, done in that order per instruction).
+- **Environment freshness verified before any e2e work**, per instruction — the prior session's
+  false-green conclusions traced to a 13-hour-stale `tsx watch`. Killed and restarted both the API
+  and frontend dev servers; probed `PATCH /player/name` (unauthenticated) → `401`, not `404`,
+  confirming current `main` code, not a stale build. `packages/api/.env` has
+  `PUBLIC_DISCOVERY_ENABLED=false` — every result in this issue and [ISSUE-65](#issue-65) was
+  produced under that setting. Worker not restarted: the invite/mention notification paths this
+  work depends on post synchronously in the API route handler (`player-groups.ts`), not via a
+  queued job — confirmed by reading the code, not assumed.
+- No separate `[RED]` commit: the failing state this fixes was already captured with real, quoted
+  reporter output in [ISSUE-65](#issue-65)'s own status block (`notifications.spec.ts:99`,
+  `element(s) not found` on `notification-unread-badge`, chromium, `--workers=1`) — re-deriving the
+  same failure here would restate evidence already on record, not add any. Single commit:
+  `fix(e2e): [GREEN] park badge/shell assertions off /browse` (`66ede49`).
+- Confirmed independently, matching the reopened note above: the implementation (route, `emit`, bus
+  injection, app-wide mount) needed no changes. `notifications.spec.ts:99` now parks on `/play`
+  (`ProtectedRoute` + `ResponsiveLayout`, outside `DiscoveryGate` — `App.tsx:136-145`) instead of
+  `/browse`. Its first badge assertion is also corrected from `0` to `1`: [ISSUE-65](#issue-65)'s
+  own fix established that `inviteAndAccept`'s setup already posts a personal notification, so the
+  badge legitimately starts non-zero once the page actually renders — the old `toHaveCount(0)` was
+  passing vacuously for two independent reasons stacked on each other, not one.
+- **Audit (fix step 2) found three more `/browse`-for-app-shell-chrome spots, none named by the
+  issue** — grepped `packages/frontend/e2e` for `goto.*\/browse` and checked each: excluded
+  `browse-tournaments.spec.ts` and `tournament-discovery-registration.spec.ts` (they test
+  `/browse`'s own content, not chrome incidentally observed through it); fixed:
+  - `notifications.spec.ts:178` — the tail of `:131` ("newest-first…"), asserting the badge
+    cleared post-mark-read. Same `DiscoveryGate` vacuous-pass shape as `:99`, just silent (a
+    `toHaveCount(0)` is trivially satisfied by "page doesn't exist" too, so it never failed loudly).
+  - `player-groups.spec.ts:93`, "My Groups nav tab is present and navigates to /groups" — parks on
+    `/browse` purely to observe the nav tab. (This is the exact test flagged as an ISSUE-53
+    confounder in the prior ISSUE-56–64 arc's own definition-of-done sweep — it was that, but also
+    this.)
+  - `mobile.spec.ts:70`, "Bottom tab navigation displays correctly on mobile" — same, for the
+    bottom nav's touch-target sizing.
+- Verified individually, chromium, `--workers=1`, `PUBLIC_DISCOVERY_ENABLED=false` (the environment
+  where this previously failed — the issue's own instruction: "a pass with discovery on proves
+  nothing here"):
+  - `notifications.spec.ts` (full file): **`5 passed (12.6s)`**
+  - `player-groups.spec.ts:84` alone: **`1 passed (4.4s)`**; full file: **`10 passed (21.0s)`**
+  - `mobile.spec.ts:55` alone: **`1 passed (3.8s)`**
+- `e2e-scenarios.md`'s "Unread badge reflects a new notification" scenario corrected to match: the
+  player starts at 1 unread (not 0), and the Then-clause now states what the assertion actually
+  proves (the SSE push, not a poll). No Test Organization row change — no tests added or removed
+  in any of the three files.
+- **Raised, not decided, per the issue's own instruction**: whether `ResponsiveLayout` should live
+  outside `DiscoveryGate` so a blocked route still renders the app shell around `NotFound`. Not
+  done — it would change what every blocked route renders app-wide, a product call.
+- Nothing left open for this issue's own scope. [ISSUE-65](#issue-65)'s status block separately
+  flags that the default quiet-hours window (8am–5pm UTC) also breaks 2 jest integration test
+  suites unrelated to either issue — not this issue's either.
 
 ---
 
