@@ -97,7 +97,7 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-61](#issue-61) | ✅ Resolved | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
 | [ISSUE-62](#issue-62) | 🔲 Open | 🟡 | Badges never update live — no SSE push for notification/group unread (blocked on 52 + 61) | frontend · api |
 | [ISSUE-63](#issue-63) | 🔲 Open | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
-| [ISSUE-64](#issue-64) | 🔲 Open | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
+| [ISSUE-64](#issue-64) | ✅ Resolved | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
 
 ### Implementation sequence for ISSUE-56–64
 
@@ -2298,3 +2298,25 @@ extending the `/me` endpoints to accept player sessions would not make it meanin
 1. Sign in via a magic link (guest session), open `/profile`.
 2. No settings form; a signup prompt instead.
 3. As a registered account, Profile behaves exactly as before.
+
+### Status — 2026-08-03 (step 5 of the sequence)
+
+**✅ Resolved.**
+
+- Branch: `fix/issue-64-profile-guest-session-guards` (off `main`, merged back after this step).
+- Red: `test(profile): [RED] honest state for guest sessions, visible save errors (ISSUE-64)`
+  (`cf10893`) — 4 new `Profile.spec.tsx` cases: 401 renders the signup prompt and skips the
+  settings form; the availability/coach-memory fetches don't fire on 401; a registered account is
+  unaffected; a failing PATCH surfaces `profile-save-error`, cleared on the next successful save.
+- Green: `feat(profile): [GREEN] honest state for guest sessions, visible save errors (ISSUE-64)`
+  (`cca0a8c`) — `/api/auth/me`'s 401 sets `unauthorized` instead of landing in `setSettings` as
+  `undefined`; the availability + coach-memory fetches are now sequenced *behind* confirming an
+  account exists (they were firing in parallel before, unconditionally) rather than individually
+  guarded, so a guest session fires zero of the three account-scoped requests; `patchSettings`
+  checks `res.ok` and sets/clears a visible error banner.
+- Verified: 18/19 `Profile.spec.tsx` green (the 1 failure is the pre-existing, already-flagged
+  `wip(profile)` quiet-hours bug, unrelated); wide `--findRelatedTests` on the 2 touched files:
+  44/45 green, same pre-existing failure only; e2e `profile.spec.ts` — both cases pass unaffected
+  (neither exercises a guest/magic-link session, so no update needed there).
+- docs/assistant-help.md updated per §9.
+- Nothing left open.
