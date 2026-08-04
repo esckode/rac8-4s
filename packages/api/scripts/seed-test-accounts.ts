@@ -25,14 +25,14 @@ const TEST_ACCOUNTS = [
     role: 'player' as const,
   },
   // A named cohort, so group/tournament flows can be walked with more than two
-  // identities that survive a DB reset. Created 2026-08-03 via real signup during
-  // the ISSUE-44d walkthrough; added here so `npm run seed:accounts` restores them.
-  { email: 'sunil@test.com', name: 'Sunil', password: 'testpass123', role: 'player' as const },
-  { email: 'vimal@test.com', name: 'Vimal', password: 'testpass123', role: 'player' as const },
-  { email: 'anil@test.com', name: 'Anil', password: 'testpass123', role: 'player' as const },
-  { email: 'raj@test.com', name: 'Raj', password: 'testpass123', role: 'player' as const },
-  { email: 'sudhakar@test.com', name: 'Sudhakar', password: 'testpass123', role: 'player' as const },
-  { email: 'sasi@test.com', name: 'Sasi', password: 'testpass123', role: 'player' as const },
+  // identities that survive a DB reset. Generic placeholder identities only —
+  // never seed real people's names or addresses here.
+  { email: 'alice@test.com', name: 'Alice', password: 'testpass123', role: 'player' as const },
+  { email: 'bob@test.com', name: 'Bob', password: 'testpass123', role: 'player' as const },
+  { email: 'carol@test.com', name: 'Carol', password: 'testpass123', role: 'player' as const },
+  { email: 'dave@test.com', name: 'Dave', password: 'testpass123', role: 'player' as const },
+  { email: 'erin@test.com', name: 'Erin', password: 'testpass123', role: 'player' as const },
+  { email: 'frank@test.com', name: 'Frank', password: 'testpass123', role: 'player' as const },
 ]
 
 interface SeedFailure {

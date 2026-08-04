@@ -194,21 +194,21 @@ test.describe('LLM Assistant (@ref) — Phase B confirmed write actions', () => 
 
   test('NEGATIVE — ambiguous opponent name yields a clarifying question, never a guess', async ({ page }) => {
     const owner = createTestUser()
-    const sunilA = { ...createTestUser(), name: `Sunil A ${Date.now()}` }
-    const sunilB = { ...createTestUser(), name: `Sunil B ${Date.now()}` }
+    const caseyA = { ...createTestUser(), name: `Casey A ${Date.now()}` }
+    const caseyB = { ...createTestUser(), name: `Casey B ${Date.now()}` }
     const { token: ownerToken, playerId: ownerPlayerId } = await signupAndGetToken(owner)
-    const { playerId: sunilAId } = await signupAndGetToken(sunilA)
-    const { playerId: sunilBId } = await signupAndGetToken(sunilB)
+    const { playerId: caseyAId } = await signupAndGetToken(caseyA)
+    const { playerId: caseyBId } = await signupAndGetToken(caseyB)
     const groupId = await createGroup(ownerToken, `Ref Ambiguous Group ${Date.now()}`)
-    await seedCasualSession(groupId, [ownerPlayerId, sunilAId])
-    await seedCasualSession(groupId, [ownerPlayerId, sunilBId])
+    await seedCasualSession(groupId, [ownerPlayerId, caseyAId])
+    await seedCasualSession(groupId, [ownerPlayerId, caseyBId])
 
     await loginFrontend(page, ownerToken)
     await page.goto(`http://localhost:5173/groups/${groupId}`)
-    await sendRefMessage(page, '@ref beat Sunil 6-4, 6-3')
+    await sendRefMessage(page, '@ref beat Casey 6-4, 6-3')
 
     await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toBeVisible({ timeout: 8000 })
-    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toContainText(/sunil/i)
+    await expect(page.locator(SELECTORS.ASSISTANT_MESSAGE).last()).toContainText(/casey/i)
     await expect(page.locator(SELECTORS.ACTION_CARD)).toHaveCount(0)
   })
 

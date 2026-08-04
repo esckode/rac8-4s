@@ -129,9 +129,9 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
   it('happy path: proposer confirms → mutates via the real score service, card confirmed, card.updated emitted', async () => {
     const alice = await createPlayer('Alice')
-    const sunil = await createPlayer('Sunil')
-    const groupId = await createGroupWithMembers(alice.id, [sunil.id])
-    const { tournamentId, matchId, match } = await seedPendingMatch(groupId, alice.id, sunil.id)
+    const casey = await createPlayer('Casey')
+    const groupId = await createGroupWithMembers(alice.id, [casey.id])
+    const { tournamentId, matchId, match } = await seedPendingMatch(groupId, alice.id, casey.id)
     const askerIsPlayer1 = match.player1_id === alice.id
     const score = askerIsPlayer1 ? '6-4, 6-3' : '4-6, 3-6'
     const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, score)
@@ -162,10 +162,10 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
   it('non-proposer group member → 403, card untouched', async () => {
     const alice = await createPlayer('Alice')
-    const sunil = await createPlayer('Sunil')
+    const casey = await createPlayer('Casey')
     const bystander = await createPlayer('Bystander')
-    const groupId = await createGroupWithMembers(alice.id, [sunil.id, bystander.id])
-    const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, sunil.id)
+    const groupId = await createGroupWithMembers(alice.id, [casey.id, bystander.id])
+    const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, casey.id)
     const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, '6-4, 6-3')
 
     const bystanderToken = await token(bystander.id, bystander.email)
@@ -180,10 +180,10 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
   it('a member outside the group entirely → 403', async () => {
     const alice = await createPlayer('Alice')
-    const sunil = await createPlayer('Sunil')
+    const casey = await createPlayer('Casey')
     const outsider = await createPlayer('Outsider')
-    const groupId = await createGroupWithMembers(alice.id, [sunil.id])
-    const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, sunil.id)
+    const groupId = await createGroupWithMembers(alice.id, [casey.id])
+    const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, casey.id)
     const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, '6-4, 6-3')
 
     const outsiderToken = await token(outsider.id, outsider.email)
@@ -197,9 +197,9 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
   it('expired card → 409, never mutates the match', async () => {
     const alice = await createPlayer('Alice')
-    const sunil = await createPlayer('Sunil')
-    const groupId = await createGroupWithMembers(alice.id, [sunil.id])
-    const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, sunil.id)
+    const casey = await createPlayer('Casey')
+    const groupId = await createGroupWithMembers(alice.id, [casey.id])
+    const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, casey.id)
     const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, '6-4, 6-3', { expiresInSeconds: -1 })
 
     const aliceToken = await token(alice.id, alice.email)
@@ -215,9 +215,9 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
   it('already confirmed → a second confirm 409s', async () => {
     const alice = await createPlayer('Alice')
-    const sunil = await createPlayer('Sunil')
-    const groupId = await createGroupWithMembers(alice.id, [sunil.id])
-    const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, sunil.id)
+    const casey = await createPlayer('Casey')
+    const groupId = await createGroupWithMembers(alice.id, [casey.id])
+    const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, casey.id)
     const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, '6-4, 6-3')
     const aliceToken = await token(alice.id, alice.email)
 
@@ -236,9 +236,9 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
   it('schema_version mismatch → 409, card untouched', async () => {
     const alice = await createPlayer('Alice')
-    const sunil = await createPlayer('Sunil')
-    const groupId = await createGroupWithMembers(alice.id, [sunil.id])
-    const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, sunil.id)
+    const casey = await createPlayer('Casey')
+    const groupId = await createGroupWithMembers(alice.id, [casey.id])
+    const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, casey.id)
     const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, '6-4, 6-3')
     const aliceToken = await token(alice.id, alice.email)
 
@@ -253,9 +253,9 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
   it('confirm after the match was already scored elsewhere → card flips to failed, no double score', async () => {
     const alice = await createPlayer('Alice')
-    const sunil = await createPlayer('Sunil')
-    const groupId = await createGroupWithMembers(alice.id, [sunil.id])
-    const { tournamentId, matchId, match } = await seedPendingMatch(groupId, alice.id, sunil.id)
+    const casey = await createPlayer('Casey')
+    const groupId = await createGroupWithMembers(alice.id, [casey.id])
+    const { tournamentId, matchId, match } = await seedPendingMatch(groupId, alice.id, casey.id)
     const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, '6-4, 6-3')
 
     // Someone else scores the match through the normal path before the card is confirmed
@@ -287,9 +287,9 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
   describe('cancel', () => {
     it('proposer cancels a pending card → cancelled, card.updated emitted', async () => {
       const alice = await createPlayer('Alice')
-      const sunil = await createPlayer('Sunil')
-      const groupId = await createGroupWithMembers(alice.id, [sunil.id])
-      const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, sunil.id)
+      const casey = await createPlayer('Casey')
+      const groupId = await createGroupWithMembers(alice.id, [casey.id])
+      const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, casey.id)
       const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, '6-4, 6-3')
 
       const conversationId = await conversationRepo.resolveGroupConversation(groupId)
@@ -317,15 +317,15 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
     it('non-proposer cannot cancel → 403', async () => {
       const alice = await createPlayer('Alice')
-      const sunil = await createPlayer('Sunil')
-      const groupId = await createGroupWithMembers(alice.id, [sunil.id])
-      const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, sunil.id)
+      const casey = await createPlayer('Casey')
+      const groupId = await createGroupWithMembers(alice.id, [casey.id])
+      const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, casey.id)
       const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, '6-4, 6-3')
 
-      const sunilToken = await token(sunil.id, sunil.email)
+      const caseyToken = await token(casey.id, casey.email)
       const res = await request(app)
         .post(`/player/groups/${groupId}/assistant-cards/${card.id}/cancel`)
-        .set('Authorization', `Bearer ${sunilToken}`)
+        .set('Authorization', `Bearer ${caseyToken}`)
         .send({})
 
       expect(res.status).toBe(403)
@@ -521,17 +521,17 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
     it('non-proposer cannot complete → 403', async () => {
       const alice = await createPlayer('Alice')
-      const sunil = await createPlayer('Sunil')
-      const groupId = await createGroupWithMembers(alice.id, [sunil.id])
+      const casey = await createPlayer('Casey')
+      const groupId = await createGroupWithMembers(alice.id, [casey.id])
       const poll = await pollRepo.createPoll({ groupId, creatorPlayerId: alice.id, question: 'Not you?' })
       const card = await createLaunchCard(groupId, alice.id, poll.pollId, poll.messageId)
       const t = await TournamentFactory.create(pool, `organizer_${uid()}`)
       await pool.query(`UPDATE public.tournaments SET group_id = $1 WHERE id = $2`, [groupId, t.id])
 
-      const sunilToken = await token(sunil.id, sunil.email)
+      const caseyToken = await token(casey.id, casey.email)
       const res = await request(app)
         .post(`/player/groups/${groupId}/assistant-cards/${card.id}/complete`)
-        .set('Authorization', `Bearer ${sunilToken}`)
+        .set('Authorization', `Bearer ${caseyToken}`)
         .send({ tournamentId: t.id })
 
       expect(res.status).toBe(403)
@@ -561,9 +561,9 @@ describe('Confirm/cancel routes for assistant cards (B2.3)', () => {
 
     it('using /complete on a propose_score card is rejected (wrong action)', async () => {
       const alice = await createPlayer('Alice')
-      const sunil = await createPlayer('Sunil')
-      const groupId = await createGroupWithMembers(alice.id, [sunil.id])
-      const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, sunil.id)
+      const casey = await createPlayer('Casey')
+      const groupId = await createGroupWithMembers(alice.id, [casey.id])
+      const { tournamentId, matchId } = await seedPendingMatch(groupId, alice.id, casey.id)
       const card = await createScoreCard(groupId, alice.id, tournamentId, matchId, '6-4, 6-3')
 
       const aliceToken = await token(alice.id, alice.email)

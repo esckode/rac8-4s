@@ -96,7 +96,7 @@ describe('assistant_cards schema + AssistantCardRepository (B1)', () => {
       proposerPlayerId: player.id,
       action: 'propose_score',
       args: { matchId: 'm1', score: '2-1' },
-      body: 'Ref drafted a score — You 2 – 1 Sunil.',
+      body: 'Ref drafted a score — You 2 – 1 Casey.',
     })
 
     expect(card.status).toBe('pending')
@@ -115,7 +115,7 @@ describe('assistant_cards schema + AssistantCardRepository (B1)', () => {
     expect(msgRow.rows[0].player_id).toBeNull()
     expect(msgRow.rows[0].sender_name_snapshot).toBe('Ref')
     expect(msgRow.rows[0].type).toBe('assistant')
-    expect(msgRow.rows[0].body).toBe('Ref drafted a score — You 2 – 1 Sunil.')
+    expect(msgRow.rows[0].body).toBe('Ref drafted a score — You 2 – 1 Casey.')
     expect(msgRow.rows[0].metadata).toEqual({ cardId: card.id })
     expect(conversationId).toBeTruthy()
   })

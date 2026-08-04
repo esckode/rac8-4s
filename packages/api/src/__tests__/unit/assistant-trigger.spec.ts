@@ -44,7 +44,7 @@ describe('isReservedDisplayName', () => {
     }
   )
 
-  it.each(['Refree Bob', 'Coachman Bob', 'Sunil', ''])('accepts %j', (name) => {
+  it.each(['Refree Bob', 'Coachman Bob', 'Casey', ''])('accepts %j', (name) => {
     expect(isReservedDisplayName(name)).toBe(false)
   })
 })

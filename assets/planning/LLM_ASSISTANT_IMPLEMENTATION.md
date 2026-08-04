@@ -497,13 +497,13 @@ Phase A. Execution order: B0 follow-up → B6 scenario docs → B1 → B2 → B3
 - **Score frame:** the model emits the score **asker-relative**; `propose_score` loads the match
   row and normalizes to the player1-relative string the score route expects **at draft time**;
   `args` stores the route-ready form; confirm replays args verbatim. The card *displays*
-  asker-relative ("You 2 – 1 Sunil").
+  asker-relative ("You 2 – 1 Casey").
 - **Args are ids-only:** `opponent_name` (and any name) is resolved at draft and discarded;
   `args` holds `match_id`/`tournament_id`/`poll_id` + score/response/config. DSR posture: nothing
   to scrub in args; erasure cascade tombstones `proposer_player_id` (standard FK treatment); the
   message `body` gets the existing A9.3 exact-name scrub; DSR **export includes the player's
   cards** (they're the proposer's data).
-- **Card body is a human-readable summary** ("Coach drafted a score — Alice 2–1 Sunil (Tuesday
+- **Card body is a human-readable summary** ("Coach drafted a score — Alice 2–1 Casey (Tuesday
   RR). Only Alice can confirm, within 15 minutes.") — the durable/export/fallback record; the
   widget renders from the card row.
 - **Ambiguity → clarify, never guess:** if match/opponent resolution is ambiguous (two pending
@@ -638,14 +638,14 @@ Phase A. Execution order: B0 follow-up → B6 scenario docs → B1 → B2 → B3
   confirm → route-revalidation path with no model involved (only the NL→intent hop is faked).
   Scenarios (Gherkin into `e2e-scenarios.md` at B6; specs in `e2e/assistant-actions.spec.ts`):
   - **Score via Coach (repeat-use):** *(a)* member with a pending casual match sends
-    "@coach beat Sunil 2-1" → ActionCard appears with the parsed score → proposer taps Confirm →
+    "@coach beat Casey 2-1" → ActionCard appears with the parsed score → proposer taps Confirm →
     score visible in standings via SSE; *(b)* a **second** score on another match in the same
     session works identically (the repeat-use loop); *(c)* a *different* member sees the card but
     no Confirm button (proposer-only); *(d)* expired card (fixture ages `expiresAt`) renders inert
     and Confirm 409s server-side; *(e)* confirm after the match was already scored elsewhere →
     server revalidation rejects, card renders `failed` with the reason (via `card.updated`);
     *(f)* proposer taps **Dismiss** on a card → it renders `cancelled` for every member's view
-    live; *(g)* **ambiguity:** "@coach beat Sunil 2-1" with two seeded pending matches vs Sunil →
+    live; *(g)* **ambiguity:** "@coach beat Casey 2-1" with two seeded pending matches vs Casey →
     a clarifying question naming both candidates, **no card posted**.
   - **Casual launch via Coach:** *(a)* the **poll's creator** sends "@coach launch a session for
     everyone who voted in" with a closed poll seeded → card opens the existing

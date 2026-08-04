@@ -150,7 +150,7 @@ re-created automatically on every dev API boot when `NODE_ENV=development`.
 |---|---|
 | `organizer@test.com` | organizer |
 | `player@test.com` | player |
-| `sunil@test.com` `vimal@test.com` `anil@test.com` `raj@test.com` `sudhakar@test.com` `sasi@test.com` | player |
+| `alice@test.com` `bob@test.com` `carol@test.com` `dave@test.com` `erin@test.com` `frank@test.com` | player |
 
 Restore them after a DB reset:
 ```bash

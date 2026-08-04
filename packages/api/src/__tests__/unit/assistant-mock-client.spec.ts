@@ -147,9 +147,9 @@ describe('MockAssistantClient', () => {
         status: 'card_posted', cardId: 'card-1', messageId: 'msg-1',
       })
       const client = new MockAssistantClient()
-      const result = await client.runTurn(input('@ref beat Sunil 6-4, 6-3'))
+      const result = await client.runTurn(input('@ref beat Casey 6-4, 6-3'))
 
-      expect(proposeScoreModule.proposeScore).toHaveBeenCalledWith(ctx, { opponentName: 'Sunil', score: '6-4, 6-3' })
+      expect(proposeScoreModule.proposeScore).toHaveBeenCalledWith(ctx, { opponentName: 'Casey', score: '6-4, 6-3' })
       expect(result.text).not.toMatch(/recorded|updated|scored|done/i)
       expect(result.toolRounds).toBe(1)
     })
@@ -158,15 +158,15 @@ describe('MockAssistantClient', () => {
       (proposeScoreModule.proposeScore as jest.Mock).mockResolvedValue({
         status: 'ambiguous',
         candidates: [
-          { matchId: 'm1', tournamentName: 'Spring', opponentName: 'Sunil A' },
-          { matchId: 'm2', tournamentName: 'Spring', opponentName: 'Sunil B' },
+          { matchId: 'm1', tournamentName: 'Spring', opponentName: 'Casey A' },
+          { matchId: 'm2', tournamentName: 'Spring', opponentName: 'Casey B' },
         ],
       })
       const client = new MockAssistantClient()
-      const result = await client.runTurn(input('@ref beat Sunil 6-4, 6-3'))
+      const result = await client.runTurn(input('@ref beat Casey 6-4, 6-3'))
 
-      expect(result.text).toMatch(/sunil a/i)
-      expect(result.text).toMatch(/sunil b/i)
+      expect(result.text).toMatch(/casey a/i)
+      expect(result.text).toMatch(/casey b/i)
     })
 
     it('not_found: relays the tool message', async () => {
