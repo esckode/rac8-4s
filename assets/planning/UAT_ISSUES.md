@@ -99,7 +99,7 @@ nothing on a discovery-off environment, and 65's two failures are stale arithmet
 | [ISSUE-60](#issue-60) | ✅ Resolved | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
 | [ISSUE-61](#issue-61) | ✅ Resolved | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
 | [ISSUE-62](#issue-62) | 🔁 Reopened | 🟡 | Badges never update live — implementation looks complete, but its e2e proof is invalid on a discovery-off environment | frontend · api |
-| [ISSUE-65](#issue-65) | 🔲 Open | 🟠 | Notification specs predate ISSUE-55's in-app invites — assert counts that no longer hold | e2e · test-debt |
+| [ISSUE-65](#issue-65) | ✅ Resolved | 🟠 | Notification specs predate ISSUE-55's in-app invites — assert counts that no longer hold | e2e · test-debt |
 | [ISSUE-63](#issue-63) | ✅ Resolved | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
 | [ISSUE-64](#issue-64) | ✅ Resolved | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
 
@@ -2673,3 +2673,73 @@ clearable. **Raise this with the owner rather than changing behaviour under this
    all 5 pass.
 2. Re-run with a group whose setup has no invite, to confirm the assertions still hold.
 3. Both-browser sweep shows no new failures in this spec (§8).
+
+### Status — 2026-08-04
+
+**✅ Resolved.**
+
+- Branch: `fix/issue-65-notification-invite-arithmetic` (off `main`, merged back after this step).
+- Baseline evidence, taken before any edit (chromium, `--workers=1`, freshly restarted API,
+  `PUBLIC_DISCOVERY_ENABLED=false`): **`4 failed, 1 passed (2.1m)`** — `:92`, `:115`, `:154`
+  (`Tapping a notification deep-links to its source group`), `:188`. This is a wider list than
+  either this issue or [ISSUE-62](#issue-62) named — see the next bullet.
+- **A third failing test found, not named in this issue's filing**: `:154` uses
+  `NOTIFICATION_CARD).first()` to pick the @mention card and click it; `inviteAndAccept`'s ISSUE-55
+  invite notification (a `<div>` with an Accept button, not a `<Link>` — `NotificationCard.tsx:97-111`)
+  can render in that position instead, so the click stays on `/notifications` rather than
+  navigating. Same root cause as `:115`/`:188` (this issue's own "sweep the rest of the file"
+  instruction), so fixed here rather than filed separately.
+- Red: `test(e2e): [RED] scope notification assertions to seeded notifications` (`ddba8d9`) — scoped
+  `:115`'s count/position assertions to the two notifications it actually seeds (by body text,
+  comparing relative order rather than counting every card); scoped `:154`'s `.first()` to the
+  @mention card by body text; rewrote `:188` to assert absence of the muted group's specific
+  message notification (with a positive sanity check — the invite card — so the assertion can't
+  pass vacuously against a broken/empty page), per the issue's recommended first option rather than
+  avoiding the invite path. `e2e-scenarios.md`'s Test Organization row corrected `6` → `5`
+  (pre-existing drift — the file has always had 5 tests, unrelated to this change).
+  Verified against this commit alone: `3 failed, 2 passed (1.9m)` — `:92` (ISSUE-62's), `:115`,
+  `:154` still failed, on a second cause below.
+- **Second, undocumented cause found via the actual failure output, not assumed**: with the
+  arithmetic fixed, `:115` and `:154` still failed — `mentionCard`/`.filter({hasText: 'mentioned
+  you'})` found nothing. The server log for the whole run had **zero** `"mentioned you"` occurrences
+  across every test. Root cause: `player-groups.ts:734`'s `if (!(await shouldEnqueueNotify(...)))
+  continue` gates the in-app notification (`notifyPlayer`) together with the push job, and
+  `notify-gate.ts` checks quiet hours against `DEFAULT_PLAYER_SETTINGS` (`player-settings-repository.ts:29-34`:
+  `quietHoursStart: 8, quietHoursEnd: 17`) for any player who never set a preference — which a
+  freshly-seeded test player never does. Confirmed directly, not inferred: manually walked the
+  invite→mention flow against the live API/DB for a throwaway player at 08:20 UTC (inside the
+  window) — no notification. Set that player's `quiet_hours_start`/`end` to `NULL` directly in the
+  DB and repeated the identical flow — `"QuietOwner4 mentioned you in a group message"` appeared.
+  This makes the whole spec time-of-day-dependent: fails 8am–5pm UTC, passes outside it,
+  independent of the arithmetic fix above.
+- Asked the user how to handle this (out of either issue's filed scope): chose to fix the test
+  fixture now rather than file-and-defer or wait out the clock.
+- Green: `feat(test): [GREEN] disable default quiet hours for notification e2e players` (`3c17b45`)
+  — `/test/player-token` (`app.ts`, test-only, `NODE_ENV`-gated, pre-existing pattern) gains an
+  optional `disableQuietHours` flag that upserts `quietHoursStart`/`quietHoursEnd` to `NULL` for the
+  created player; opt-in, so the other 16 e2e specs calling this endpoint are unaffected.
+  `notifications.spec.ts`'s `signupAndGetToken` passes it. Verified: **`4 passed, 1 failed (47.1s)`**
+  — the 1 failure is `:92`/`:99` (line shifted by the edits) `Unread badge reflects a new
+  notification`, confirmed to be [ISSUE-62](#issue-62)'s (parks on `/browse`, unrelated to
+  arithmetic or quiet hours).
+- **This same quiet-hours default also breaks jest integration tests, not just this e2e file** —
+  found while running the wide `--findRelatedTests` check below, and deliberately verified as
+  pre-existing rather than assumed: `group-poll.spec.ts` (`G3.1 — notify-on-create: poll create
+  enqueues notify jobs per G2.4 levels › creating a poll notifies "all" and "mentions_polls"
+  members`) and `group-notify.spec.ts` both fail the same way (`shouldEnqueueNotify` gate closed by
+  default quiet hours), and both fail **identically with my `app.ts` change reverted** — I manually
+  swapped `app.ts` back to `main`'s exact version, reran both suites (`2 failed, 16 passed... 5
+  failed` total across the two files), confirmed the failures persist, then restored my change
+  (clean `git diff`, no residual). Not fixed here — out of this issue's scope, and touches jest test
+  setup across at least 2 other files, not just this one e2e spec. **Flagging for a follow-up issue,
+  not filing one myself.**
+- Verified: wide `--findRelatedTests` on `app.ts` (the only touched API file) — `1578 passed, 9
+  failed` (1587 total). Of the 9: `notify-prefs.spec.ts` (pre-existing, already-flagged elsewhere
+  this arc) and the 5 across `group-poll.spec.ts`/`group-notify.spec.ts` above (pre-existing,
+  proven above) account for all of them.
+- Product question raised, not decided, per the issue's own instruction: should an invite
+  notification be suppressed on mute or retro-marked read on accept? Not changed here.
+- Nothing left open for this issue's own scope. Two things flagged for elsewhere: the quiet-hours
+  default's effect on jest tests (above), and [ISSUE-62](#issue-62) inherits `:99`'s badge failure
+  plus whatever arithmetic it exposes once no longer parked on `/browse` (this issue's fix may have
+  changed what that test needs to assert — not verified here, that's the next issue).
