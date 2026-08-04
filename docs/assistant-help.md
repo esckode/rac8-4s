@@ -172,8 +172,9 @@ they beat you head-to-head.
   invited email.
 - **If you already have an account, the invite also shows up in-app.** Open **Alerts** (🔔) and
   you'll see a card with the group's name and an **Accept** button — no need to leave the app or
-  check email. Accepting an already-used invite shows "This invite is no longer valid" instead of
-  failing silently. Brand-new invitees (no account yet) still only get the email link.
+  check email. Accepting takes you straight into the group's chat. Accepting an already-used
+  invite shows "This invite is no longer valid" instead of failing silently. Brand-new invitees
+  (no account yet) still only get the email link.
 - Groups have **owners and members**. A group can have several owners. Owners can invite people,
   remove members, delete messages, promote members to owner, and change group settings. Members
   can chat, vote in polls, and create polls.

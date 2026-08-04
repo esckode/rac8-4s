@@ -12,7 +12,7 @@
  * the app.
  */
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 export interface NotificationMessage {
   id: string
@@ -37,6 +37,12 @@ export const NotificationCard: React.FC<{ message: NotificationMessage; onAccept
   const groupInviteToken = message.metadata?.groupInviteToken
   const inviteEmail = message.metadata?.inviteEmail
   const className = 'block rounded-lg p-3 text-sm bg-(--ink-50) border border-(--border)'
+
+  // ISSUE-57: must be called unconditionally, at the top level — calling it
+  // inside the `if (groupInviteToken && groupId)` branch below throws
+  // "Rendered more hooks than during the previous render" the moment a
+  // differently-shaped notification renders in its place.
+  const navigate = useNavigate()
 
   const [accepting, setAccepting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,6 +80,7 @@ export const NotificationCard: React.FC<{ message: NotificationMessage; onAccept
         return
       }
       onAccepted?.()
+      navigate(`/groups/${groupId}`)
     } finally {
       setAccepting(false)
     }
