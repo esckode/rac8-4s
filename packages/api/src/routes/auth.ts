@@ -379,6 +379,12 @@ export default function authRouter(deps: AppDependencies) {
         timezone?: string | null
         timezoneManual?: boolean
         tableDensity?: 'comfortable' | 'compact'
+        notifyMentions?: boolean
+        notifyPolls?: boolean
+        notifyNudges?: boolean
+        quietHoursEnabled?: boolean
+        quietHoursStart?: number | null
+        quietHoursEnd?: number | null
         coachMemoryEnabled?: boolean
       } = {}
 
@@ -408,6 +414,31 @@ export default function authRouter(deps: AppDependencies) {
           return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'coachMemoryEnabled must be a boolean' })
         }
         updates.coachMemoryEnabled = coachMemoryEnabled
+      }
+
+      // ISSUE-68: P9 shipped its Profile controls but never added its fields
+      // here, so every notify toggle and quiet-hours edit returned 200 and
+      // saved nothing. Looped rather than repeated per field — six identical
+      // blocks would only make the next omission easier to miss.
+      const body = req.body as Record<string, unknown>
+      for (const field of ['notifyMentions', 'notifyPolls', 'notifyNudges', 'quietHoursEnabled'] as const) {
+        const value = body[field]
+        if (value === undefined) continue
+        if (typeof value !== 'boolean') {
+          return res.status(400).json({ code: 'VALIDATION_ERROR', message: `${field} must be a boolean` })
+        }
+        updates[field] = value
+      }
+      for (const field of ['quietHoursStart', 'quietHoursEnd'] as const) {
+        const value = body[field]
+        if (value === undefined) continue
+        if (value !== null && (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 23)) {
+          return res.status(400).json({
+            code: 'VALIDATION_ERROR',
+            message: `${field} must be an integer 0-23 or null`,
+          })
+        }
+        updates[field] = value
       }
 
       const settings = await playerSettingsRepo.upsert(account.player_id, updates)

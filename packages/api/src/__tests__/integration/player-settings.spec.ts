@@ -133,6 +133,66 @@ describe('S1.1 — player_settings store', () => {
     expect(res.status).toBe(401)
   })
 
+  // ISSUE-68: P9 added these controls to Profile but never to this handler's
+  // allowlist, so every one of them returned 200 and silently changed nothing.
+  // notify-prefs.spec.ts appeared to cover it but called the repository direct.
+  it('PATCH round-trips the P9 notify prefs and quiet-hours fields', async () => {
+    const { token } = await createLinkedAccountToken()
+
+    const res = await request(app)
+      .patch('/api/auth/me/settings')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        notifyMentions: false,
+        notifyPolls: false,
+        notifyNudges: false,
+        quietHoursEnabled: true,
+        quietHoursStart: 22,
+        quietHoursEnd: 7,
+      })
+
+    expect(res.status).toBe(200)
+    expect(res.body.settings).toMatchObject({
+      notifyMentions: false,
+      notifyPolls: false,
+      notifyNudges: false,
+      quietHoursEnabled: true,
+      quietHoursStart: 22,
+      quietHoursEnd: 7,
+    })
+
+    const reread = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`)
+    expect(reread.body.settings).toMatchObject({ quietHoursEnabled: true, quietHoursStart: 22 })
+  })
+
+  it('PATCH accepts null to clear a quiet-hours bound', async () => {
+    const { token } = await createLinkedAccountToken()
+
+    const res = await request(app)
+      .patch('/api/auth/me/settings')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ quietHoursStart: null })
+
+    expect(res.status).toBe(200)
+    expect(res.body.settings.quietHoursStart).toBeNull()
+  })
+
+  it.each([
+    ['notifyMentions', 'yes'],
+    ['quietHoursEnabled', 1],
+    ['quietHoursStart', 24],
+    ['quietHoursEnd', 3.5],
+  ])('PATCH rejects an invalid %s', async (field, value) => {
+    const { token } = await createLinkedAccountToken()
+
+    const res = await request(app)
+      .patch('/api/auth/me/settings')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ [field]: value })
+
+    expect(res.status).toBe(400)
+  })
+
   it('DSR export includes the settings row', async () => {
     const { token, email } = await createLinkedAccountToken()
     await request(app)

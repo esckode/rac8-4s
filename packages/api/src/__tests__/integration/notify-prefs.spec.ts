@@ -117,11 +117,16 @@ describe('S5.1 — player_settings notify prefs + quiet hours (schema + PATCH)',
     })
   })
 
-  it('PATCH /api/auth/me/settings round-trips notify prefs and quiet hours', async () => {
+  // Named for the route until ISSUE-68, but it only ever exercised the
+  // repository — which is why nobody noticed the route dropped all of these
+  // fields on the floor. The route-level round-trip now lives in
+  // player-settings.spec.ts, where the account-token helper already is.
+  it('the repository round-trips notify prefs and quiet hours', async () => {
     const player = await createPlayer(pool)
     const res = await settingsRepo.upsert(player.id, {
       notifyMentions: false,
       notifyPolls: false,
+      quietHoursEnabled: true,
       quietHoursStart: 22,
       quietHoursEnd: 7,
     })
@@ -129,6 +134,7 @@ describe('S5.1 — player_settings notify prefs + quiet hours (schema + PATCH)',
       notifyMentions: false,
       notifyPolls: false,
       notifyNudges: true,
+      quietHoursEnabled: true,
       quietHoursStart: 22,
       quietHoursEnd: 7,
     })
