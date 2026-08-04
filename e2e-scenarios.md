@@ -194,7 +194,7 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 | **Organizer Tournament Management** | 3 | `organizer-management.spec.ts` | `npx playwright test organizer-management` |
 | **Organizer Home** | 1 | `organizer-home.spec.ts` | `npx playwright test organizer-home` |
 | **Real-Time Updates** | 4 | `real-time-updates.spec.ts` | `npx playwright test real-time-updates` |
-| **Notifications** | 6 | `notifications.spec.ts` | `npx playwright test notifications` |
+| **Notifications** | 5 | `notifications.spec.ts` | `npx playwright test notifications` |
 | **Poll cards** | 10 | `poll-cards.spec.ts` | `npx playwright test poll-cards` |
 | **Messaging (group feed)** | 5 | `messaging.spec.ts` | `npx playwright test messaging.spec` |
 | **Messaging (threads)** | 5 | `messaging-threads.spec.ts` | `npx playwright test messaging-threads` |

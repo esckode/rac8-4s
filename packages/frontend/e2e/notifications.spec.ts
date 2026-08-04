@@ -140,11 +140,23 @@ test.describe('Feature: Notifications Center', () => {
     await page.goto('http://localhost:5173/notifications')
     await expect(page.locator(SELECTORS.NOTIFICATIONS_PAGE)).toBeVisible()
 
+    // ISSUE-65: inviteAndAccept (above) now also posts a personal notification
+    // (ISSUE-55) — a 3rd card the arithmetic here predates. Scope to the two
+    // notifications this test actually seeds, by body text, instead of
+    // counting every card on the page.
     const cards = page.locator(SELECTORS.NOTIFICATION_CARD)
-    await expect(cards).toHaveCount(2, { timeout: 8000 })
-    // Newest-first: the promotion (posted second) must render before the mention.
-    await expect(cards.first()).toContainText('promoted to owner')
-    await expect(cards.last()).toContainText('mentioned you')
+    const promotionCard = cards.filter({ hasText: 'promoted to owner' })
+    const mentionCard = cards.filter({ hasText: 'mentioned you' })
+    await expect(promotionCard).toBeVisible({ timeout: 8000 })
+    await expect(mentionCard).toBeVisible({ timeout: 8000 })
+
+    // Newest-first: the promotion (posted second, after the mention) must
+    // render above it. The invite card is also present but isn't part of
+    // this ordering claim.
+    const cardTexts = await cards.allTextContents()
+    const promotionIndex = cardTexts.findIndex(t => t.includes('promoted to owner'))
+    const mentionIndex = cardTexts.findIndex(t => t.includes('mentioned you'))
+    expect(promotionIndex).toBeLessThan(mentionIndex)
 
     // Badge clears once the page has marked everything read.
     await page.goto('http://localhost:5173/browse')
@@ -164,7 +176,11 @@ test.describe('Feature: Notifications Center', () => {
     await loginFrontend(page, mentionedToken)
     await page.goto('http://localhost:5173/notifications')
 
-    const card = page.locator(SELECTORS.NOTIFICATION_CARD).first()
+    // ISSUE-65: inviteAndAccept (above) also posts an invite notification
+    // (ISSUE-55), which renders as a non-navigating Accept card, not a link —
+    // .first() is no longer reliably the @mention card. Scope to it by body
+    // text instead of position.
+    const card = page.locator(SELECTORS.NOTIFICATION_CARD).filter({ hasText: 'mentioned you' })
     await expect(card).toBeVisible({ timeout: 8000 })
     await card.click()
 
@@ -203,19 +219,18 @@ test.describe('Feature: Notifications Center', () => {
     )
     expect(muteRes.ok).toBe(true)
 
-    await loginFrontend(page, mutedToken)
-    await page.goto('http://localhost:5173/browse')
-    await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveCount(0)
-
-    // Owner @mentions the now-muted player.
+    // Owner @mentions the now-muted player — muting suppresses this specific
+    // group-message notification. ISSUE-55's own invite notification (from
+    // inviteAndAccept, above) legitimately remains: this scenario is about
+    // the group-message mute, not an empty inbox (ISSUE-65).
     await sendGroupMessage(ownerToken, groupId, `Hey @${muted.name}, are you there?`)
 
-    // Force a refetch (see the badge-update scenario above) and confirm no
-    // notification landed — badge stays absent.
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-    await expect(page.locator(SELECTORS.NOTIFICATION_UNREAD_BADGE)).toHaveCount(0)
-
+    await loginFrontend(page, mutedToken)
     await page.goto('http://localhost:5173/notifications')
-    await expect(page.locator(SELECTORS.EMPTY_STATE)).toBeVisible()
+    await expect(page.locator(SELECTORS.NOTIFICATIONS_PAGE)).toBeVisible()
+    // Sanity: the page genuinely loaded (the invite card) — not an empty or
+    // broken page, which would also satisfy the absence check below.
+    await expect(page.locator(SELECTORS.NOTIFICATION_CARD).filter({ hasText: 'invited' })).toBeVisible({ timeout: 8000 })
+    await expect(page.locator(SELECTORS.NOTIFICATION_CARD).filter({ hasText: 'mentioned you' })).toHaveCount(0)
   })
 })
