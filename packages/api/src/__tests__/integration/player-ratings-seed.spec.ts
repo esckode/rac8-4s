@@ -73,6 +73,28 @@ describe('PUT /player/ratings/seed (P13 Phase 5)', () => {
     expect(doubles?.rating).toBe(seedValue)
   })
 
+  // ISSUE-60: the frontend prompt round-trips through the public GET, not
+  // the repository directly — confirm that path too, and that a freshly
+  // seeded bucket still reads back as provisional (0 matches played).
+  it('a player seeded via this path reads back at that rating from GET /player/ratings, provisional: true', async () => {
+    const { token } = await playerToken()
+    const seedValue = RATING_MIN + 100
+
+    const seedRes = await request(app)
+      .put('/player/ratings/seed')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sport: SPORT, rating: seedValue })
+    expect(seedRes.status).toBe(200)
+
+    const getRes = await request(app)
+      .get('/player/ratings')
+      .set('Authorization', `Bearer ${token}`)
+    expect(getRes.status).toBe(200)
+
+    const singles = getRes.body.ratings.find((r: any) => r.sport === SPORT && r.format === 'singles')
+    expect(singles).toMatchObject({ rating: seedValue, matchesPlayed: 0, provisional: true })
+  })
+
   it('rejects a value below RATING_MIN with 400', async () => {
     const { token } = await playerToken()
 
