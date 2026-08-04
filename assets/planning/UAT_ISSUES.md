@@ -93,7 +93,7 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-57](#issue-57) | ✅ Resolved | 🟡 | Accepting a group invite from Alerts doesn't navigate to the group | frontend · navigation |
 | [ISSUE-58](#issue-58) | ✅ Resolved | 🟠 | Profile page missing Account section — can't view email or edit display name | frontend · api |
 | [ISSUE-59](#issue-59) | ✅ Resolved | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
-| [ISSUE-60](#issue-60) | 🔲 Open | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
+| [ISSUE-60](#issue-60) | ✅ Resolved | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
 | [ISSUE-61](#issue-61) | ✅ Resolved | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
 | [ISSUE-62](#issue-62) | 🔲 Open | 🟡 | Badges never update live — no SSE push for notification/group unread (blocked on 52 + 61) | frontend · api |
 | [ISSUE-63](#issue-63) | ✅ Resolved | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
@@ -2147,6 +2147,67 @@ The original text asked for a per-sport *and* per-format rating screen during si
 `POST /api/auth/me/ratings`, on the premise that new players have no rating at all. All four
 specifics were wrong; see *Corrections* above. The underlying observation — that no self-rating is
 ever collected — was correct and is what this issue now tracks.
+
+### Status — 2026-08-03 (step 9 of the sequence)
+
+**✅ Resolved.**
+
+- Branch: `fix/issue-60-rating-seed-prompt` (off `main`, merged back after this step).
+- Red: `test(ratings): [RED] self-rating seed prompt component (ISSUE-60)` (`c9898a0`) — new
+  `packages/frontend/src/components/__tests__/RatingSeedPrompt.spec.tsx` (7 cases: renders when
+  unrated, stays hidden when already rated, presents the API's own min/max/seedDefault rather than
+  hardcoded numbers, submits `{ sport, rating }` and calls `onDone`, is skippable without
+  submitting, suppresses silently on 409 `RATING_ALREADY_SCORED`, never blocks on a failed/in-flight
+  check); `player-ratings-seed.spec.ts` gained the read-back-via-`GET`-with-`provisional:true` case
+  named in Tests-first.
+- Green: `feat(ratings): [GREEN] self-rating seed prompt on poll launch (ISSUE-60)` (`1b4ce1e`) —
+  new `packages/frontend/src/components/RatingSeedPrompt.tsx`; wired into `GroupChatPanel.tsx` via a
+  `goToTournamentAfterLaunch(tournamentId, registeredPlayerIds)` helper that shows the prompt (sport
+  hardcoded `'tennis'` — see note below) only when the launching player is themselves one of the
+  newly-registered players, replacing the immediate `navigate()` call in both
+  `handleConfirmLaunch`/`handleConfirmCardLaunch`.
+- **Bug found and fixed before it ever shipped, via the e2e run below, not via the component spec**:
+  `RatingSeedPrompt`'s effect returned early (no UI, but also no `onDone()`) on every "nothing to
+  show" path — already-rated, no auth token, fetch failure. The 7 RED-phase component tests never
+  exercised `onDone` on those paths, so they passed against the buggy version. `GroupChatPanel`
+  defers its post-launch `navigate()` until `onDone` fires, so a player who already had a rating in
+  the tournament's sport would click launch and never leave the group page. Added 2 tests
+  (`does not render ... and still calls onDone`, `never blocks ... calls onDone immediately when
+  there is no auth token`) plus strengthened a 3rd, confirmed they failed for the right reason
+  against the in-progress implementation, then fixed: `onDone()` is now called on every terminal
+  path, not just submit/skip.
+- **Known, deliberate scope choice — sport is hardcoded `'tennis'`**: `POST
+  /player/groups/:groupId/polls/:messageId/launch` never receives a `sport` from the frontend, so
+  the backend's `req.body.sport || 'tennis'` default (`player-groups.ts`) makes every group-launched
+  casual tournament `'tennis'` today regardless. Passing the *real* launched tournament's sport
+  through to the prompt would require plumbing a field the launch response doesn't currently return;
+  hardcoding matches the backend's own existing default rather than inventing new wiring for a value
+  that's always the same in practice. Flagged here, not fixed — a genuine multi-sport casual launch
+  is out of this issue's scope.
+- Verified: 8/8 component cases green (post-fix); 10/10 `player-ratings-seed.spec.ts` cases green;
+  wide `--findRelatedTests` on the 4 touched frontend files — 195/197 green, the only 2 failures are
+  the pre-existing, already-flagged `MyGroups.spec.tsx` `GroupChatPanel` "Name · time" chat-redesign
+  WIP breakage (unrelated to this change, see the `bcf043e` commit note).
+- e2e: `casual-tournament.spec.ts` full file — 4 passed, 1 skipped (leaderboard tab not yet built,
+  pre-existing), 2 failed on the pre-existing, already-tracked ISSUE-53 (`PUBLIC_DISCOVERY_ENABLED`
+  is `false` on the shared dev API server, so the direct `/tournaments/:id/register` path 404s —
+  unrelated to poll-launch/rating code, confirmed by reading the failure's own request path). The
+  new ISSUE-60 case and the existing ISSUE-31 case (updated to dismiss the prompt, since its owner
+  fixture is a genuinely unrated new player) are both in the 4 that passed.
+- **Trap for next time**: Playwright's `locator.isVisible({ timeout })` does **not** wait — the
+  `timeout` option is ignored, so it is unsuitable for "is this thing about to appear" checks on
+  anything that loads asynchronously (this prompt fetches `GET /player/ratings` on mount). Use
+  `locator.waitFor({ state: 'visible', timeout })` in a try/catch instead, as the pre-existing
+  `LAUNCH_CONFIRM_BUTTON` check in this same file already does. Cost real time here: a first attempt
+  using `isVisible({ timeout: 3000 })` silently skipped the wait, let the modal open *after* the
+  check ran, and hung `waitForURL` for 10s per retry with no clear signal why.
+- `docs/assistant-help.md` updated (§9) — new bullet under **Ratings** explaining the one-time
+  prompt. `e2e-scenarios.md` updated — new Gherkin scenario under "Player Groups — casual tournament
+  (G4.8)", `RatingSeedPrompt.spec.tsx` added to that feature's Implementation list, the Test
+  Organization row count corrected from a pre-existing stale 8 to the actual 7.
+- Nothing left open for this issue. [ISSUE-59](#issue-59)'s Ratings page as a self-serve second home
+  for this prompt (mentioned in Fix step 5) was **not** built — it's explicitly a "later, if wanted"
+  follow-up, not part of this issue's Fix.
 
 ---
 
