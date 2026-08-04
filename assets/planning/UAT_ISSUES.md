@@ -38,9 +38,16 @@ paths, done against a "tens of thousands of users" question. Most of that sweep'
 they are correct today and cannot be reproduced at current data levels, so they fail this file's
 reproduce-first bar. These four are the ones that are **defects right now**, independent of scale.
 
-**1 issue filed 2026-08-03 (ISSUE-53)** — found during the [ISSUE-44d](#issue-44d) visual review: the
-Browse tab was present in the nav under review, which the shipped configuration does not have.
-**Number the next one 54.**
+**3 issues filed 2026-08-03 (ISSUE-53–55)** — ISSUE-53 found during the [ISSUE-44d](#issue-44d) visual review: the
+Browse tab was present in the nav under review, which the shipped configuration does not have. ISSUE-54 found during frontend testing: creating a second group is impossible from the UI. ISSUE-55 found during group invite testing: pending invites are only visible via email magic links, not in the app.
+
+**ISSUE-56–60 filed 2026-08-03, then verified and re-scoped in an owner grill the same day.**
+The verification pass corrected three of the five: ISSUE-56's premise (chat activity *is* badged —
+on the Groups tab, not Alerts), ISSUE-58's cost (no display-name endpoint exists at all), and
+ISSUE-60's root cause (players are **not** unrated, and the self-rating endpoint is already built).
+The grill split ISSUE-56's accumulated scope into **ISSUE-61–63** and spun ISSUE-58's guest-session
+defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *Owner decisions*.
+**Number the next one 65.**
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -80,6 +87,50 @@ Browse tab was present in the nav under review, which the shipped configuration 
 | [ISSUE-51](#issue-51) | 🔲 Open | 🟡 | Bracket generation recomputes each group's standings once per advancing rank | api · perf |
 | [ISSUE-52](#issue-52) | 🔲 Open | 🟠 | Coach SSE route ignores `sseMaxConnectionsPerUser` — unbounded streams per user | api |
 | [ISSUE-53](#issue-53) | 🔲 Open | 🟠 | `PUBLIC_DISCOVERY_ENABLED` differs per environment and is never set explicitly — local review validates an app that doesn't ship | config · dev-env |
+| [ISSUE-54](#issue-54) | ✅ Resolved | 🔴 | Creating a second group is impossible — "Create your first group" button only appears when groups are empty | frontend |
+| [ISSUE-55](#issue-55) | ✅ Resolved | 🔴 | Pending group invites are invisible in the app — users can only accept via email magic links | frontend |
+| [ISSUE-56](#issue-56) | 🔲 Open | 🟠 | Group unread is per-device and invisible per group — no way to tell *which* group has new messages | frontend · api |
+| [ISSUE-57](#issue-57) | 🔲 Open | 🟡 | Accepting a group invite from Alerts doesn't navigate to the group | frontend · navigation |
+| [ISSUE-58](#issue-58) | 🔲 Open | 🟠 | Profile page missing Account section — can't view email or edit display name | frontend · api |
+| [ISSUE-59](#issue-59) | 🔲 Open | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
+| [ISSUE-60](#issue-60) | 🔲 Open | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
+| [ISSUE-61](#issue-61) | 🔲 Open | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
+| [ISSUE-62](#issue-62) | 🔲 Open | 🟡 | Badges never update live — no SSE push for notification/group unread (blocked on 52 + 61) | frontend · api |
+| [ISSUE-63](#issue-63) | 🔲 Open | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
+| [ISSUE-64](#issue-64) | 🔲 Open | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
+
+### Implementation sequence for ISSUE-56–64
+
+**Do not pick these off in numeric order.** One hard dependency and three file collisions decide the
+order; ignoring them means rewriting the same regions two or three times.
+
+| # | Do | Why here |
+|---|---|---|
+| 1 | [ISSUE-61](#issue-61) **+** [ISSUE-52](#issue-52) together | One shared cap helper applied to both unguarded SSE routes. A limit enforced on one route and not the other buys nothing, so they are one change. Unblocks 62. |
+| 2 | [ISSUE-56](#issue-56) **backend only** — migration 062, `unread_count`, `PATCH /:groupId/read` | Pure API + schema, collides with nothing. Lets the frontend work land against a real endpoint. |
+| 3 | [ISSUE-59](#issue-59) | Restructures the bottom nav into a 5-item array **with badge slots**, and deletes the ratings/partners sections from `Profile.tsx`. Doing this first means steps 4 and 6 land into the new structure instead of being rewritten by it. |
+| 4 | [ISSUE-56](#issue-56) **frontend** | Plugs groups-with-unread into the nav array from step 3 and adds the per-row badges. |
+| 5 | [ISSUE-64](#issue-64) | Adds the `res.ok` guards and the guest branch to `Profile.tsx` — structural, so it precedes anything that adds new sections. |
+| 6 | [ISSUE-58](#issue-58) | Adds the Account section into the now-reduced, now-guarded Profile. |
+| 7 | [ISSUE-57](#issue-57) | Small, self-contained `NotificationCard.tsx` change. |
+| 8 | [ISSUE-63](#issue-63) | Also edits `NotificationCard.tsx` (clear the row on successful accept) — adjacent to 7 deliberately. |
+| 9 | [ISSUE-60](#issue-60) | Independent of everything above; slot it anywhere after step 1. |
+| 10 | [ISSUE-62](#issue-62) | **Blocked on 1**, and wants 4 done so it pushes the final badge semantics rather than the interim ones. The 38 `networkidle` rewrites make it the largest and last. |
+
+**The three collisions, stated explicitly** — if the order above is changed, these are what break:
+
+- **`components/shared/ResponsiveLayout.tsx`** — [ISSUE-59](#issue-59) rewrites the nav wholesale
+  (`:220-275` hardcoded JSX → array); [ISSUE-56](#issue-56) changes what the Groups badge counts
+  (`:160,231-233`). 59 before 56.
+- **`pages/Profile.tsx`** — three issues touch it: [ISSUE-59](#issue-59) removes two sections,
+  [ISSUE-64](#issue-64) wraps the form in a guest/account branch, [ISSUE-58](#issue-58) adds a
+  section. Remove → restructure → add.
+- **`components/NotificationCard.tsx`** — [ISSUE-57](#issue-57) adds navigation,
+  [ISSUE-63](#issue-63) adds read-state clearing on accept. Both edit `handleAccept`.
+
+**Per §11**: each of these is its own branch off `main` and its own TDD pair of commits (failing
+tests, then implementation). Steps 1 and 2 are backend-only and can proceed in parallel with nothing
+else; everything from step 3 on is a chain.
 
 **Implementation status, 2026-07-30.** ISSUE-39/40/41/42 and 44a/44b/44c are implemented on branch
 `fix/uat-issues-39-44`, each TDD (failing test committed before implementation). Verified: full
@@ -1186,6 +1237,237 @@ With discovery on, Browse renders an empty list plus a registration path ISSUE-2
 
 ---
 
+## ISSUE-54 — Creating a second group is impossible 🔴 {#issue-54}
+
+*Found 2026-08-03 during frontend testing on the Groups page.*
+
+### Symptom
+
+A user with one group (e.g., "Pickleball Fundays") cannot create a second group. The **"Create your first group"** button that appears when the groups list is empty vanishes once a group is created, leaving no visible way to add another group. The API supports group creation (`POST /player/groups`) but the UI only exposes it on the empty-list state.
+
+### Root cause
+
+`CreateGroupCta` has exactly two call sites and **both are gated on an empty state**
+(`grep -rn CreateGroupCta packages/frontend/src` → the definition at `MyGroups.tsx:62` plus these two):
+
+`packages/frontend/src/pages/MyGroups.tsx:188` — renders only when `groups.length === 0`:
+
+```typescript
+{groups.length === 0 && (
+  <div className="text-center pt-2 space-y-2">
+    <p data-testid="group-list-empty" className="text-(--ink-500)">
+      No groups yet. Ask a group owner to invite you, or start your own.
+    </p>
+    <CreateGroupCta onCreated={refetch} />
+  </div>
+)}
+```
+
+`packages/frontend/src/pages/PlayHub.tsx:116` — the only other usage, gated on
+`tournaments.length === 0 && !groupsLoading && !hasGroups`. Also unreachable once a group exists,
+so it is not a fallback path.
+
+Net: once a user owns one group, `POST /player/groups` has no reachable caller anywhere in the UI.
+
+### Requirement gaps
+
+| Question | Decision |
+|---|---|
+| Where does the persistent control live? | Header of My Groups, on the same row as `<h1>My Groups</h1>` (`MyGroups.tsx:184`). Above the fold regardless of list length; no scroll past N groups. |
+| Does `PlayHub.tsx` change? | **No.** Its CTA is scoped to its own empty state and two specs pin it there — `PlayHub.spec.tsx:112` and `play-hub.spec.ts:246` (asserts it *inside* `SELECTORS.EMPTY_STATE`). Leave that call site alone. |
+| Keep the `create-group-cta` testid? | **Yes.** `MyGroups.spec.tsx:197,213-214` and `PlayHub.spec.tsx:112` select by it. Renaming breaks three specs for no gain. |
+| Button label | "Create your first group" (`MyGroups.tsx:103`) is empty-state copy and wrong for a control that is always present. Use **"New group"** — reads correctly in both places (PlayHub's empty state already carries the heading "Create a group to start playing" above it). No trailing full stop. |
+| Does the open/closed form state need lifting? | No. `CreateGroupCta` owns `open` internally (`MyGroups.tsx:63`) and already resets it on success (`:88`). |
+| Keep the empty-state paragraph? | Yes — leave `group-list-empty` gated on `groups.length === 0`. Only the CTA moves. |
+
+### Fix
+
+`packages/frontend/src/pages/MyGroups.tsx` only:
+
+1. Move `<CreateGroupCta onCreated={refetch} />` out of the `groups.length === 0` block into the
+   header row next to the `<h1>` (`:184`), so it renders unconditionally.
+2. Change the button label at `:103` to `New group`.
+3. Keep the `group-list-empty` paragraph inside its existing conditional.
+
+The component is already reusable and self-contained — no props or state changes are needed.
+
+Per §9, this is user-visible behaviour: update `docs/assistant-help.md` in the same change so @coach
+can answer "how do I create another group".
+
+### Tests first (TDD — §4, §11)
+
+Red before implementation, committed separately:
+
+- `packages/frontend/src/components/__tests__/MyGroups.spec.tsx` — new case: **CTA is present when
+  the list already has ≥1 group.** Only the empty-state case is covered today (`:188`), which is why
+  this shipped. This is the test that must fail first.
+- Same spec: create-a-second-group flow — click `create-group-cta`, type into
+  `create-group-name-input`, submit, assert `POST /player/groups` fired and the list refetched.
+- E2E `packages/frontend/e2e/player-groups.spec.ts` (selection-map row "Player groups",
+  `e2e-scenarios.md:201`): seed a player who already owns a group, load `/groups`, create a second,
+  assert both render. Bump that row's scenario count in the same change (§8).
+- Regression check, do not break: `PlayHub.spec.tsx:112`, `play-hub.spec.ts:246`.
+
+Selection for the pre-merge run: `npx jest --findRelatedTests packages/frontend/src/pages/MyGroups.tsx --bail`
+in `packages/frontend`, plus `npx playwright test player-groups --project=chromium --reporter=line --max-failures=1`.
+
+### Verify (manual)
+
+1. Log in with an account that owns no groups → CTA visible on the empty state.
+2. Create a group → CTA still visible in the header after the list renders.
+3. Create a second group → it appears in the list.
+4. PlayHub with no tournaments and no groups → empty-state CTA still there.
+
+---
+
+## ISSUE-55 — Pending group invites are invisible in the app 🔴 {#issue-55}
+
+*Found 2026-08-03 during group invite testing. Companion to ISSUE-54 (missing create button).*
+
+### Symptom
+
+A user invited to join a group via email has no way to see or accept that invite from within the app. The **Alerts** page (`/notifications`) exists and shows notifications, but pending group invites never appear there — they only exist in the email link. If the user never leaves the app to check email, they will never know they have an invitation.
+
+### Root cause
+
+Deeper than "not routed to the notification stream" — **no persisted invite record exists at all**:
+
+- `POST /player/groups/:groupId/invites` (`packages/api/src/routes/player-groups.ts:402`) mints a
+  token with `generateGroupInviteToken(...)` into `deps.tokenStore` and emails the link. Nothing is
+  written to Postgres.
+- `TokenStore` (`packages/api/src/auth/token-store.ts:6`) is a key-value interface — `set`/`get`/`del`
+  by token key. It **cannot be queried by email or by group**.
+- There is no invites table: `db/migrations` ends at `061_player_ratings.sql`, and
+  `grep -rn invite db/migrations` returns nothing.
+- `/player/notifications/messages` (`packages/api/src/routes/player.ts:271-296`) is a plain SELECT
+  over `messaging.group_messages` in the player's `personal` conversation. It can only ever show rows
+  that were *written* at some point.
+
+So a pending invite exists solely as (a) a KV entry keyed by the token and (b) an email in someone's
+inbox. There is nothing to list. **Any in-app surface requires persisting something at send time** —
+this is a write-path change, not a read-path one.
+
+### Requirement gaps
+
+1. **Durable record vs notification row — pick one.**
+   - **(A) Post a notification at invite-send time — recommended.** In the send handler, look up
+     `playerRepo.findByEmail(...)` (`packages/api/src/db.ts:491`); if a player exists, call
+     `groupMsgRepo.postPersonalNotification(...)` (`group-message-repository.ts:365`). No migration,
+     no new endpoint, and it inherits the existing feed, unread badge, and SSE broadcast for free.
+   - **(B) New `player_group_invites` table** (migration `062_*`) + `GET /player/groups/invites/pending`.
+     Durable, revocable, listable by the owner — but it is a schema + endpoint + repository + a
+     client-side merge of two feeds.
+   - **Decision: (A).** Nothing currently filed asks for invite revocation or an owner-side "pending
+     invites" view, which is the only thing (B) buys. Revisit if that gets requested.
+
+2. **Invitees with no account are out of scope for the in-app path.** `findByEmail` returns nothing
+   for an email the system has never seen, so there is no player to attach a notification to. Email
+   stays the only channel for those, and the existing email send must be left untouched. The verify
+   steps below use an existing account (`bob@test.com`), which is exactly the covered case.
+
+3. **`postPersonalNotification` hardcodes the message type.** It inserts the literal `'system'`
+   (`group-message-repository.ts:396`), so the notification **cannot** carry `type: 'group_invite'`
+   as this issue originally assumed. Branch on `metadata` instead of adding a type parameter — that
+   matches how `NotificationCard` already distinguishes deep-links today (`metadata.groupId` vs
+   `metadata.registrationId`, `NotificationCard.tsx:23-24`).
+
+4. **The frontend has no session email — carry it in the metadata.** `localStorage` holds only
+   `auth_token` (`useGroupList.ts:45` and every other hook), and there is no `/player/profile`
+   endpoint returning an email. Since the send handler already knows the invited address, put both
+   `inviteEmail` and `groupInviteToken` in the notification metadata; the accept call then has
+   everything it needs and **no backend accept-endpoint change is required**. (The original
+   "derive email from JWT" step is therefore unnecessary — skip it.) Security note: this puts a
+   single-use, email-bound token in `group_messages.metadata`, readable only through that player's
+   own notification feed — equivalent exposure to the email already sent.
+
+5. **Accept returns a fresh session token — the in-app caller must ignore it.**
+   `POST /:groupId/invites/accept` ends by minting a *player session* and returning `{ token }`
+   (`player-groups.ts:373-393`). The magic-link page stores it; an already-logged-in **account**
+   holder must not, or they are silently downgraded to a guest player session. This is the same
+   dual-auth clobber class found during the personalization work — treat it as a hard requirement on
+   the frontend handler, and assert it in the test.
+
+6. **No age gate on the in-app path** — correcting this issue's original text. The gate lives in
+   `findOrCreatePlayerByEmail` and only fires for *new* players (`player-groups.ts:343-352`,
+   `db.ts:437`). A logged-in player has already attested, so there is no `DobScreen` step. Keep
+   `DobScreen` on the magic-link `InviteAcceptPage`, where a brand-new player can land.
+
+7. **Group name is not on `GroupRepository`.** The accept handler already does raw SQL against
+   `public.player_groups` (`player-groups.ts:335`), so `SELECT name FROM public.player_groups WHERE id = $1`
+   in the send handler matches local style. Don't add a repository method for one field.
+
+8. **Duplicate and expired invites.** Re-inviting the same email posts a second notification while
+   the older token stays valid until its 7-day TTL. Accepting is idempotent (membership insert is
+   `ON CONFLICT DO NOTHING`, `player-groups.ts:365`), so the worst case is a stale card whose Accept
+   returns `TOKEN_INVALID` (single-use). **Accepted for v1:** the card surfaces that error inline and
+   stays dismissible — it must not fail silently. No dedupe logic.
+
+### Fix (design A)
+
+**Backend** — `packages/api/src/routes/player-groups.ts`, send handler at `:402`, after the email send:
+
+1. `SELECT name FROM public.player_groups WHERE id = $1` for the group name.
+2. `const existing = await playerRepo.findByEmail(email.trim().toLowerCase())`.
+3. If found, fire-and-forget (same pattern as `postSystemEvent` at `:387`, `.catch` → `log.warn`):
+   ```typescript
+   groupMsgRepo.postPersonalNotification(
+     existing.id,
+     `You've been invited to join ${groupName}`,
+     { groupId, groupName, groupInviteToken: token, inviteEmail: email.trim().toLowerCase() }
+   )
+   ```
+4. Log `group.invite.notified` next to the existing `group.invite.sent` (§6: `noun.verb` past tense,
+   include `groupId` + actor).
+
+**Frontend**
+
+5. `NotificationCard.tsx` — widen `NotificationMessage['metadata']` with `groupName?`,
+   `groupInviteToken?`, `inviteEmail?`. When `groupInviteToken` is present, render the body plus an
+   inline **Accept** button (`data-testid="notification-invite-accept"`) instead of the plain
+   deep-link `<Link>`.
+6. On click: `POST /player/groups/${metadata.groupId}/invites/accept` with
+   `{ token: metadata.groupInviteToken, email: metadata.inviteEmail }` and the `Authorization` header.
+   **Discard `token` from the response** (gap 5). On success, refetch; on `TOKEN_INVALID`, show
+   "This invite is no longer valid" inline and keep the card dismissible.
+7. `Notifications.tsx` — thread a refetch callback down to `NotificationCard` so an accepted card
+   disappears.
+
+Per §9, update `docs/assistant-help.md` in the same change (how a player finds and accepts an invite
+without leaving the app).
+
+### Tests first (TDD — §4, §11)
+
+Red before implementation, committed separately:
+
+- `packages/api/src/__tests__/integration/group-invite.spec.ts` — invite to an email that **already
+  has a player** writes a personal notification carrying `groupInviteToken` + `inviteEmail`; invite
+  to an **unknown** email writes none and still sends the email.
+- Same spec: accepting with the metadata token adds membership and is idempotent on a second call.
+- `packages/frontend/src/components/__tests__/NotificationCard.spec.tsx` — renders an Accept button
+  when `metadata.groupInviteToken` is present; posts token + email; **does not write the response
+  `token` to `localStorage`** (gap 5); renders the inline error on `TOKEN_INVALID`.
+- `packages/frontend/src/__tests__/components/Notifications.spec.tsx` — card disappears after accept.
+- E2E: `packages/frontend/e2e/invite-accept.spec.ts` (selection-map row at `e2e-scenarios.md:204`) —
+  owner invites an existing account, invitee opens **Alerts**, accepts in-app, lands as a member.
+  `notifications.spec.ts` (row at `:197`) covers the feed rendering. Bump both scenario counts (§8).
+
+Selection for the pre-merge run: `npx jest --findRelatedTests` on the touched API + frontend files
+per workspace (expect the API side to be wide — the integration specs import the express app), plus
+`npx playwright test invite-accept --project=chromium --reporter=line --max-failures=1`.
+
+### Verify (manual)
+
+1. As a group owner, invite a second existing test account (e.g. `bob@test.com`).
+2. Log in as that account.
+3. Open the **Alerts** tab (🔔, bottom navigation).
+4. Confirm a card shows the group name and an **Accept** button.
+5. Click **Accept** → card disappears, group appears on My Groups.
+6. Confirm you are still signed in as the same account afterwards (gap 5 — no session downgrade).
+7. Invite an email with no account → no in-app card, email still delivered, magic link still works.
+8. Accept the same invite twice → second attempt shows the inline "no longer valid" message.
+
+---
+
 ## Not yet triaged / follow-ups
 
 **Decided, recorded so they are not re-raised:**
@@ -1275,3 +1557,618 @@ With discovery on, Browse renders an empty list plus a registration path ISSUE-2
     creation instead; see [ISSUE-21](COMPLETED_UAT_ISSUES.md#issue-21).
   - It is **orthogonal to ISSUE-21**, not a prerequisite: closing registration does not trigger
     group creation, so a lifecycle sweep would not resolve any claim. ISSUE-21 does not wait on it.
+
+- **Ratings page v2 — trend, head-to-head, W/L by format** *(owner, 2026-08-03, deliberately not
+  numbered)*. Cut from [ISSUE-59](#issue-59), whose v1 ships only what has data behind it. Each needs
+  a new endpoint: rating history (`public.player_rating_history` is populated but nothing exposes
+  it), per-partner head-to-head (`GET /player/partners` returns names and `lastPartneredAt` only),
+  and a global W/L by format (W/L exists per *group* via the leaderboard routes, never per player
+  across tournaments). They share one unresolved design question — what a player's record even means
+  across tournaments and casual play — so they wait on the **P13 ratings grill** rather than being
+  filed as work.
+
+---
+
+## ISSUE-56 — Group unread is per-device and invisible per group 🟠 {#issue-56}
+
+*Filed 2026-08-03 as "Alert badge only shows for group invites"; re-scoped the same day after
+verification disproved the premise. Original text preserved under "As originally filed" below.*
+
+### Symptom
+
+A user with several groups can see that *something* is unread but not *where*. The Groups tab shows
+one aggregate number across all groups; the My Groups list rows show only name, member count, and an
+Owner tag. Finding the new messages means opening groups one at a time.
+
+Separately, the count is wrong on any device but the one that read the messages: a second device, a
+cleared cache, or a fresh PWA install reports **every message in every group as unread**.
+
+### Root cause
+
+Group unread is computed entirely client-side. `getLastSeenCount` / `markGroupSeen`
+(`packages/frontend/src/state/group-unread-state.ts:24-36`) store the last-seen message count in a
+`localStorage` key per group (`group-last-seen:<groupId>`), and `useGroupUnread` diffs that against
+`messageCount` from `GET /player/groups`. There is no server-side read state for group chat —
+`messaging.group_message_recipients` rows are written only by `postPersonalNotification`
+(`group-message-repository.ts:405`), i.e. for the personal notification thread, never for group
+messages. So on a device that has never opened a group, `getLastSeenCount` returns 0 and the whole
+history reads as unread.
+
+The per-group data already exists in memory (`groupUnreadStore` keeps a `Map<groupId, count>`) but
+the store only exposes `total()`, and `MyGroups.tsx:201-216` renders no badge.
+
+**Not a defect, verified:** `messageCount` excludes system messages (`group-repository.ts:302-303`)
+and `markGroupSeen` records the same non-system count, so those two agree — the badge does clear
+correctly on the device that read them.
+
+### Owner decisions (grill, 2026-08-03)
+
+| Question | Decision |
+|---|---|
+| Should chat/polls go to the Alerts badge? | **No.** Two badges, two meanings: Groups = "activity in your groups", Alerts = "something targeted you". The @mention-only scope of the Notifications Center is deliberate (`player-groups.ts:700-704`) and stays. |
+| Client-side or server-side read state? | **Server-side.** No live data, so no backfill concern — but the column still ships as a numbered migration, because the runner records applied filenames in `public.schema_migrations` and skips them (`migrations.ts:29,48`); editing `039` in place would silently never apply. |
+| What does the Groups tab badge count? | **Number of groups with unread**, not total messages. |
+| What do the list rows show? | **Per-group unread count, capped at `99+`.** |
+| Live updates? | Out of scope here — [ISSUE-62](#issue-62), blocked on the SSE cap fixes. |
+
+### Fix
+
+**Backend**
+
+1. Migration `062_group_last_read.sql`:
+   ```sql
+   ALTER TABLE public.player_group_members
+     ADD COLUMN IF NOT EXISTS last_read_at TIMESTAMPTZ NOT NULL DEFAULT now();
+   ```
+   `NOT NULL DEFAULT now()` mirrors the existing `joined_at` column (`039_create_player_groups.sql:36`)
+   and settles two things at once: existing dev rows are stamped on migrate, and every future join
+   defaults to "caught up" — so no NULL branch is needed anywhere, and no application-level seeding
+   at join.
+2. `GroupRepository.getGroupsForPlayer` (`group-repository.ts:295-318`) already runs a per-group
+   correlated subquery for `message_count`; add a sibling `unread_count` over the same join with
+   `AND gm.created_at > m.last_read_at AND gm.player_id IS DISTINCT FROM $1` — the second clause
+   keeps the player's own messages out of their own unread count, which matters once another device
+   can post. Return it on the row.
+3. New route — `PATCH /player/groups/:groupId/read`, setting `last_read_at = now()` for the caller's
+   membership row. Idempotent; 403 for non-members. §6: log `group.read` at `info` with `groupId` +
+   `playerId`.
+
+**Frontend**
+
+5. `useGroupList.ts:9-16` — add `unreadCount: number` to `GroupSummary` (the API already sends
+   `messageCount`; this adds the new field alongside it).
+6. `group-unread-state.ts` — delete `getLastSeenCount` / `markGroupSeen` and the
+   `group-last-seen:` keys. `groupUnreadStore` stays but becomes a cache of the server number plus
+   optimistic clear-on-open. **The subscriber contract changes**: today `Subscriber` is
+   `(total: number) => void` and `notify()` pushes `total()`. The Groups badge now needs a *count of
+   groups*, so change the callback to `() => void` and let each consumer read what it wants via
+   `total()` / a new `groupsWithUnread()` / a per-group getter. Adding `groupsWithUnread()` alone is
+   not enough — the value never reaches a subscriber.
+7. `useGroupUnread.ts` — stop diffing; read `unreadCount` per group into the store. **The hook's
+   return value changes meaning**, from total unread messages to number of groups with unread; rename
+   it (e.g. `useGroupsWithUnread`) so the change is not silent at the call site.
+8. `ResponsiveLayout.tsx:160,231-233` — the Groups badge renders that count.
+9. `useGroupMessages.ts:188-194` — this effect currently depends on `[active, groupId, messages]`,
+   so it re-marks on **every message change while the panel is open**. A PATCH there would fire one
+   request per arriving message. Instead: fire the PATCH once when `active` flips true and once on
+   unmount/`active` flips false, and keep `clearGroupUnread(groupId)` on every message change for the
+   instant local response. The local clear is free; only the network call needs the narrower trigger.
+10. `MyGroups.tsx:201-216` — render a per-row badge, `data-testid="group-unread-badge"`, showing
+    `unreadCount > 99 ? '99+' : unreadCount`, omitted entirely at 0.
+
+### Tests first (TDD — §4, §11)
+
+Note this feature has **zero test coverage today** — nothing in `src` or `e2e` references
+`markGroupSeen`, `getLastSeenCount`, `group-last-seen`, or `groupUnreadStore`. The replacement gets
+the coverage the original never had.
+
+- `packages/api/src/__tests__/integration/` — `getGroupsForPlayer` returns `unreadCount` excluding
+  system messages and messages older than `last_read_at`; the PATCH stamps it; a fresh member joins
+  with nothing unread.
+- `packages/frontend/src/components/__tests__/MyGroups.spec.tsx` — badge renders for a group with
+  unread, is absent at 0, and shows `99+` above 99.
+- `ResponsiveLayout` spec — Groups badge counts *groups*, not messages (3 groups with 40 unread each
+  shows `3`).
+- E2E `player-groups.spec.ts` (selection map, `e2e-scenarios.md:201`) — second member posts, first
+  member's list shows the count, opening the group clears it. Bump the row's scenario count (§8).
+
+### Verify
+
+1. Two accounts in two groups; B posts 3 messages in one group.
+2. A's Groups tab shows `1` (one group has unread), that group's row shows `3`.
+3. A opens the group → both clear.
+4. A signs in on a second browser → still clear (this is the case that fails today).
+5. A group with >99 unread shows `99+`.
+
+### As originally filed
+
+The original text claimed the Alerts badge should increment for all group messages and polls. The
+mechanism it described is accurate — `notifyPlayer` fires only for `eventType === 'mentions'`
+(`player-groups.ts:707`), and polls only enqueue `messaging.notify` push/email jobs
+(`poll-service.ts:118-133`) — but the conclusion was wrong: group activity **is** badged, on the
+Groups tab, via `useGroupUnread`. Routing it to Alerts as well would double-count against that badge
+and, per the P9 comment at `player-groups.ts:681-690`, the "all" tier has no personal toggle
+(no `notify_messages` column), so it would bypass quiet hours.
+
+---
+
+## ISSUE-57 — Accepting a group invite doesn't navigate to the group 🟡 {#issue-57}
+
+*Found 2026-08-03 during frontend testing of group invite acceptance flow. Verified 2026-08-03;
+severity lowered 🔴 → 🟡 — the accept succeeds and membership is correct, only the landing is wrong.*
+
+### Symptom
+
+Clicking "Accept" on a group invite in the Alerts feed accepts the invite and removes the card, but
+leaves the user sitting on the Alerts page instead of taking them to the group they just joined.
+
+### Root cause
+
+`handleAccept` (`packages/frontend/src/components/NotificationCard.tsx:53-79`) calls `onAccepted?.()`
+and stops. Since the invite card renders as a `<div>` rather than the `<Link>` used for other
+notification types, nothing else provides navigation either.
+
+The email path does navigate: `InviteAcceptPage.tsx:61` calls
+`window.location.replace('/groups/${groupId}')`.
+
+### Owner decisions (grill, 2026-08-03)
+
+- **Navigate to the group chat on success**, so the in-app and email paths land identically.
+- **Use `useNavigate()`, not `window.location.href`** — a full reload discards SPA state and
+  refetches everything. `GroupDetail` calls `useGroupList()` which fetches on mount, so the freshly
+  joined group is present with no cache invalidation.
+
+### Fix
+
+`NotificationCard.tsx` — take `useNavigate()` and, after a successful accept:
+
+```typescript
+onAccepted?.()
+navigate(`/groups/${groupId}`)
+```
+
+⚠️ **Hooks-rules trap:** `handleAccept` is declared *inside* `if (groupInviteToken && groupId) {`
+(`:52`). `useNavigate()` must be called at the top level of `NotificationCard`, above that
+conditional — calling it inside throws "Rendered more hooks than during the previous render" the
+moment a non-invite notification renders.
+
+Keep discarding the `token` from the accept response (ISSUE-55 gap 5) — navigating must not become
+an excuse to store the guest session it mints.
+
+### Tests first (TDD — §4, §11)
+
+- `NotificationCard.spec.tsx` — on a successful accept, `useNavigate`'s spy is called with
+  `/groups/<id>`; on `TOKEN_INVALID`, it is **not** called and the inline error renders.
+- E2E `invite-accept.spec.ts` (selection map, `e2e-scenarios.md:204`) — accepting from Alerts lands
+  on the group chat.
+
+### Verify
+
+1. Player A invites Player B to a group.
+2. B opens Alerts, clicks Accept.
+3. The app navigates to `/groups/{groupId}` and the chat renders.
+4. B is a member (members list, can post).
+5. B is still signed in as the same account — no session downgrade.
+
+---
+
+## ISSUE-58 — Profile has no Account section: email invisible, name uneditable 🟠 {#issue-58}
+
+*Found 2026-08-03 during user testing of Profile page features.*
+
+### Symptom
+
+The Profile page (`/profile`) has sections for Display, Notifications, Availability, and Coach settings, but no Account section. Users cannot view or edit their personal account information like email address, display name, or password.
+
+### Root cause
+
+`Profile.tsx` renders six sections — Display (`:214`), Notifications (`:264`), Availability (`:331`),
+Coach (`:377`), Your Rating (`:427`), Recent Partners (`:468`) — and no Account section.
+
+It **already fetches** `/api/auth/me` at `:77`, which returns `id`, `email`, and `role`
+(`auth.ts:341-344`). So displaying the email needs no new request, only rendering.
+
+Two costs the original filing missed:
+
+- **There is no endpoint to change a display name.** No `UPDATE public.players SET name` exists
+  outside tests, and the auth router exposes only `signup`, `PATCH /me/settings`,
+  `PUT /me/availability`, `logout`, `forgot-password`, `reset-password`.
+- **Names are how `@mentions` resolve.** `parseMentions` extracts the raw string and
+  `player-groups.ts:687-690` matches it case-insensitively against member names, so a rename changes
+  who `@OldName` reaches. Past messages are unaffected — they carry `sender_name_snapshot`, which is
+  the intended behaviour.
+
+### Owner decisions (grill, 2026-08-03)
+
+| Question | Decision |
+|---|---|
+| Section contents | **Email (read-only) + editable display name + a password-change button.** |
+| Password change | **Reuse the existing emailed-code flow** (`POST /api/auth/forgot-password` → `/reset-password`). No new authenticated change-password endpoint — the email round-trip is the safer pattern and avoids securing a new surface. |
+| Rename ripple | Accepted. Reuse the existing `isReservedDisplayName` guard; historical `sender_name_snapshot` values stay as they were. |
+| Guest (magic-link) sessions | Out of scope here — the whole `/api/auth/me` family is account-gated. Split out as [ISSUE-64](#issue-64). |
+
+### Fix
+
+**Backend**
+
+1. `PATCH /player/name` — updates `public.players.name` for the caller. Use `/player`, not
+   `/api/auth/me`: it resolves via `resolvePlayerId`, which is the player-scoped auth used by the
+   rest of the player router, and it needs no new CloudFront behavior (§9) since `/player` is already
+   a mounted prefix. Validation: trim; reject empty; reject > 50 chars (the longest name the group
+   member list renders without wrapping); reject reserved names via `isReservedDisplayName`
+   (`assistant/trigger.ts`). §6: log `player.renamed` at `info` with `playerId`.
+
+**Frontend**
+
+2. `Profile.tsx` — add an **Account** section as the first section, above Display:
+   - email, read-only, from the `/api/auth/me` response already in hand;
+   - display name with an inline edit control calling the new PATCH;
+   - a "Change password" button that POSTs `/api/auth/forgot-password` for the signed-in email and
+     confirms "Check your email for a reset code".
+
+Per §9, update `docs/assistant-help.md` in the same change — @coach should be able to answer "how do
+I change my name or password".
+
+### Tests first (TDD — §4, §11)
+
+- API integration — rename succeeds and is reflected in `GET /player/groups` member lists; reserved
+  names are rejected; an empty/whitespace name is rejected.
+- `Profile.spec.tsx` — the Account section renders the email from `/api/auth/me`; submitting a new
+  name calls the PATCH; the password button posts to `forgot-password` and shows the confirmation.
+
+### Verify
+
+1. `/profile` shows an Account section at the top with the signed-in email.
+2. Change the display name → persists across reload.
+3. The new name appears in group member lists; **older chat messages keep the old name** (snapshot —
+   expected, not a bug).
+4. "Change password" sends the reset email and the emailed code works.
+
+---
+
+## ISSUE-59 — Ratings has no home; bottom nav must fix at 5 tabs 🟡 {#issue-59}
+
+*Found 2026-08-03 during frontend testing; user feedback on information architecture.*
+
+### Symptom
+
+Player ratings and partner information are not prominently displayed in the Profile page. The bottom navigation bar currently shows: Browse (when enabled), Play, Groups, Alerts, More — in that order. Ratings would be better served as a dedicated page with its own nav tab.
+
+### Requirement
+
+1. **Create new Ratings page** (`/ratings` or `/player/ratings`):
+   - Display player's current rating (per sport/format)
+   - Show rating history / trend over time
+   - Display recent partner pairings and head-to-head records
+   - Show W/L record breakdown by match format
+
+2. **Add star icon to bottom nav** for the Ratings page
+
+3. **Reorder bottom nav to**: Groups, Play, Ratings, Alerts, More
+   - Keeps social/group features first (Groups)
+   - Match/play features second (Play)
+   - Personal stats third (Ratings)
+   - Notifications fourth (Alerts)
+   - Overflow (More)
+
+4. **Remove ratings/partners from Profile page** — Profile should focus on account settings and preferences, not statistics
+
+### What actually exists
+
+Verified 2026-08-03 — only two of the five requested elements have data behind them:
+
+| Element | Status |
+|---|---|
+| Current rating per sport/format | ✅ `GET /player/ratings` returns rating, `matchesPlayed`, `provisional`, plus `min`/`max`/`seedDefault` |
+| Recent partners | ⚠️ `GET /player/partners` returns `playerId`, `name`, `lastPartneredAt` **only** (`player.ts:247-256`) |
+| Rating trend / history | ❌ `player_rating_history` is populated but no endpoint exposes it |
+| Head-to-head records | ❌ nothing computes them |
+| W/L by format | ❌ W/L exists per *group* (leaderboard routes), not globally per player |
+
+### Owner decisions (grill, 2026-08-03)
+
+| Question | Decision |
+|---|---|
+| Page scope | **Ship what exists** — current ratings (with the provisional flag) + the recent-partners list. |
+| The three missing features | Recorded under *Not yet triaged / follow-ups*, **not numbered** — P13 ratings hasn't been grilled, so what the page should show may still change. |
+| Nav slots | **Fix the bottom nav at 5 tabs: Groups, Play, Ratings, Alerts, More.** Browse moves into the More sheet when `PUBLIC_DISCOVERY_ENABLED` is on, instead of claiming a 6th slot. The nav stops changing shape based on an env var, which also removes the [ISSUE-53](#issue-53) surprise. |
+
+Note: paths in the original filing were slightly off — the file is
+`packages/frontend/src/components/shared/ResponsiveLayout.tsx`, and Profile's ratings/partners state
+is at `:70-71`. Groups/Alerts/More are **not** in the tab array at `:171-174`; they are hardcoded
+JSX at `:220-275`, so the reorder is more than editing one array.
+
+### Fix
+
+1. Create `packages/frontend/src/pages/Ratings.tsx` — current rating per sport/format from
+   `GET /player/ratings` (show the `provisional` state explicitly, since a seeded player sits at
+   `seedDefault` until 10 matches), plus the recent-partners list from `GET /player/partners`.
+2. Add a star icon to the nav icon set in `components/shared/ResponsiveLayout.tsx`.
+3. Restructure the bottom nav to a single 5-item array in the order Groups, Play, Ratings, Alerts,
+   More — folding in the currently-hardcoded Groups/Alerts/More JSX (`:220-275`) — and move the
+   conditional Browse entry into `MORE_ITEMS` (`:55-58`).
+   **Preserve these testids exactly**, all four are asserted by existing specs: `nav-groups`
+   (`:225`), `nav-notifications` (`:244`), `nav-more` (`:267`), and `notification-unread-badge`
+   (`:253`) — plus `nav-play` and `nav-browse`, which already come from the array. The array entries
+   therefore need an optional badge slot, since two of the five carry one (`MyGroupsUnreadBadge` at
+   `:233`, the notification badge at `:253`) and the Alerts item also carries a dynamic
+   `aria-label` (`:247`). Give the new tab `nav-ratings`.
+4. Wire `/ratings` in `App.tsx` behind auth.
+5. Remove the ratings/partners state, fetches, and both sections from `Profile.tsx`
+   (`:70-71`, `:98-104`, `:426-491`).
+
+Per §9, update `docs/assistant-help.md` in the same change.
+
+### Tests first (TDD — §4, §11)
+
+- `Ratings.spec.tsx` — renders a rating per sport/format, marks provisional ratings, renders the
+  partner list, and shows empty states for both.
+- `ResponsiveLayout` spec — exactly 5 tabs in the decided order; Browse never appears as a tab and
+  **does** appear in the More sheet when discovery is enabled.
+- `Profile.spec.tsx` — the ratings and partners sections are gone.
+- E2E: the Browse-tab assertions in the specs touched by [ISSUE-53](#issue-53) need updating in the
+  same change, plus `auth.spec.ts` if any nav-based route assertions move (§9).
+
+### Verify
+
+1. Bottom nav reads Groups, Play, Ratings, Alerts, More.
+2. Flip `PUBLIC_DISCOVERY_ENABLED` on → still 5 tabs, Browse now in the More sheet.
+3. Ratings tab loads current ratings and partners; a never-played account shows the seeded
+   provisional rating rather than an empty page.
+4. Profile no longer shows ratings or partners.
+
+---
+
+## ISSUE-60 — Self-rating seed prompt was never built 🟠 {#issue-60}
+
+*Filed 2026-08-03 as "Signup flow never asks for initial self-rating"; re-scoped the same day after
+verification found the premise wrong and the backend already built. Original text preserved below.*
+
+### Symptom
+
+`PUT /player/ratings/seed` is implemented, tested, and **unreachable** — no frontend code calls it
+(zero hits across `packages/frontend/src` and `packages/frontend/e2e`). A player therefore has no way
+to tell the system how good they are, and everyone stays at the default seed until matches accumulate.
+
+### Root cause
+
+The endpoint exists at `packages/api/src/routes/player.ts:197` with its design recorded in the
+docblock (P13 Phase 5 / R21): it takes **one self-rating per sport**, seeds **both** formats from it,
+is **skippable by design**, and returns `409 RATING_ALREADY_SCORED` once either format has a scored
+match, because seeding is only legal before the first score. R21 fires it **at tournament
+registration**. That registration-time prompt was never implemented on the frontend.
+
+### Corrections to the original filing
+
+- **New players are not unrated.** `SEED_DEFAULT = 270`, with `PROVISIONAL_MATCHES = 10` and
+  `K_PROVISIONAL = 24` (`services/ratings-constants.ts`) — unseeded players converge quickly by
+  design, so "matchmaking cannot pair them fairly" overstates the harm.
+- **`POST /api/auth/me/ratings` does not exist.** The endpoint is `PUT /player/ratings/seed`.
+- **Per-format prompting contradicts the design.** One value seeds singles *and* doubles.
+- **Signup is the wrong trigger point.** The endpoint requires a `sport`, and signup has no sport
+  context. `tournaments.sport` is `NOT NULL` (`001_create_tournaments.sql:4`), so registration knows
+  it; signup would have to ask "which sports do you play?" and seed sports the player may never enter.
+
+### Owner decisions (grill, 2026-08-03)
+
+- **Honour the endpoint's existing contract** — one value per sport, seeding both formats, skippable.
+- Signup-time collection is **not** pursued.
+- **Prompt on poll launch, not at registration.** R21 says "at tournament registration", but that
+  step does not exist in the flow that is actually used: casual tournaments enrol the poll's "In"
+  voters directly (`player-groups.ts:938-944`), and the `POST /register` call lives in
+  `TournamentBrowse.tsx` — the public-discovery path, disabled by default ([ISSUE-29](COMPLETED_UAT_ISSUES.md#issue-29),
+  [ISSUE-53](#issue-53)) and outside the casual-only scope. Poll launch is the real enrolment moment,
+  and the sport is known there from the tournament being created. **This supersedes R21's stated
+  trigger point; the endpoint contract is unchanged.**
+
+### Fix
+
+1. When a poll launch creates a casual tournament, any "In" voter with no existing rating for that
+   tournament's sport is prompted — skippable — with "How would you rate yourself at {sport}?",
+   before their first match is playable.
+2. Present the scale from `min` / `max` / `seedDefault` as returned by `GET /player/ratings`, rather
+   than hardcoding numbers in the UI.
+3. Submit `PUT /player/ratings/seed` with `{ sport, rating }`. On `409 RATING_ALREADY_SCORED`,
+   suppress the prompt silently — the player has already played this sport, which is a normal state,
+   not an error.
+4. Skipping leaves the player at `SEED_DEFAULT`; **never block the launch or the tournament on it**.
+   The launch already succeeded server-side by the time this shows.
+5. The prompt component should be reusable — [ISSUE-59](#issue-59)'s Ratings page is the natural
+   second home for it if a self-serve entry point is wanted later (see follow-ups).
+
+Per §9, update `docs/assistant-help.md` in the same change.
+
+### Tests first (TDD — §4, §11)
+
+- Component spec — the prompt renders for a player with no rating in that sport, submits
+  `{ sport, rating }`, is skippable, and is suppressed on a 409.
+- API integration — already covered for the endpoint itself; add the case that a player seeded via
+  this path reads back at that rating from `GET /player/ratings` with `provisional: true`.
+- E2E: launch a casual tournament from a poll with an unrated "In" voter → prompt appears; skip →
+  player sits at `seedDefault`; relaunch in the same sport after a scored match → no prompt.
+  Add the row to the selection map (§8).
+
+### As originally filed
+
+The original text asked for a per-sport *and* per-format rating screen during signup, submitted to
+`POST /api/auth/me/ratings`, on the premise that new players have no rating at all. All four
+specifics were wrong; see *Corrections* above. The underlying observation — that no self-rating is
+ever collected — was correct and is what this issue now tracks.
+
+---
+
+## ISSUE-61 — Group-chat SSE route ignores `sseMaxConnectionsPerUser` 🟠 {#issue-61}
+
+*Found 2026-08-03 while grilling [ISSUE-56](#issue-56). Companion to [ISSUE-52](#issue-52) — same
+hole, different route.*
+
+### Symptom
+
+A single user can hold unbounded concurrent group-chat SSE streams. The configured limit
+(`sseMaxConnectionsPerUser`, default 5 — `config.ts:526`) is never consulted.
+
+### Root cause
+
+Only the tournament events route enforces the cap (`tournaments.ts:2765`). The group-chat stream
+(`player-groups.ts:588`) sets the SSE headers and subscribes to the broadcast bus with no connection
+accounting at all. [ISSUE-52](#issue-52) records the identical defect on the coach route
+(`coach.ts:250`), so **two of the three SSE routes are unguarded**.
+
+This matters more than it did: the broadcast bus is single-instance, so every held stream pins a
+subscriber to one process, and [ISSUE-62](#issue-62) proposes adding a fourth always-on stream.
+
+### Fix
+
+Extract the counting logic used at `tournaments.ts:2765` into a shared helper and apply it to both
+unguarded routes — this issue covers the group-chat route, [ISSUE-52](#issue-52) the coach route.
+They should land together, since a limit enforced on one route and not the others buys nothing.
+
+### Tests first (TDD — §4, §11)
+
+- API integration — opening `sseMaxConnectionsPerUser + 1` group-chat streams as one player rejects
+  the last with the same status the tournament route uses; closing one frees a slot.
+
+### Verify
+
+Open more than the configured number of group chats as one user across tabs; the surplus connection
+is refused rather than accepted.
+
+---
+
+## ISSUE-62 — Badges never update live 🟡 {#issue-62}
+
+*Filed 2026-08-03 from the [ISSUE-56](#issue-56) grill. **Blocked on [ISSUE-52](#issue-52) +
+[ISSUE-61](#issue-61)** — do not start before the SSE connection cap is enforced everywhere.*
+
+### Symptom
+
+The Alerts and Groups badges only refresh on mount and on window refocus. A user sitting on any page
+sees no badge change when a message, invite, or poll arrives — the count appears only after they
+navigate or leave and return to the tab.
+
+### Root cause
+
+Deliberate, and documented: `useNotificationUnread.ts` and `useGroupUnread.ts` both fetch on mount +
+`focus` and explicitly avoid a persistent app-wide SSE connection, because that broke Playwright's
+`networkidle` wait on every authenticated route (see the docblocks in both hooks and
+`group-unread-state.ts:12-16`).
+
+The push side is nearly built: the broadcast bus is keyed by `conversationId`, personal notifications
+already live in a conversation that has one, and `postPersonalNotification`
+(`group-message-repository.ts:365-415`) already returns `conversationId` *specifically so the event
+can be broadcast* — no caller ever broadcasts it.
+
+### Owner decision (grill, 2026-08-03)
+
+Do it, **after** the connection cap is enforced on all three SSE routes. Adding a fourth always-on
+stream to a system whose limit is unenforced on two of three routes fails as resource exhaustion
+rather than a clean rejection.
+
+### Fix
+
+1. Broadcast on personal-notification write, using the `conversationId`
+   `postPersonalNotification` already returns.
+2. Add a per-player notification stream and subscribe the app-wide badge hooks to it; push group
+   unread changes the same way.
+3. **Rewrite the 38 `networkidle` waits across 10 e2e spec files** to explicit locator assertions.
+   `networkidle` is discouraged by Playwright itself and will never fire with a persistent stream
+   open — this is the bulk of the work and the main flake risk.
+
+### Verify
+
+With two browsers side by side, a message/invite sent in one increments the other's badge without
+navigation or refocus; the full e2e suite passes on both browser projects (§8).
+
+---
+
+## ISSUE-63 — Opening Alerts marks un-actioned invites read 🟠 {#issue-63}
+
+*Found 2026-08-03 while grilling [ISSUE-56](#issue-56); created by the [ISSUE-55](#issue-55) work
+that put invites into the notifications feed.*
+
+### Symptom
+
+Opening `/notifications` clears the badge for **everything**, including a group invite the user
+scrolled past but did not accept. The invite stays actionable for its 7-day TTL, but nothing ever
+nudges the user about it again.
+
+### Root cause
+
+`Notifications.tsx:31` fires `POST /player/notifications/read` immediately on load, fire-and-forget,
+and the handler (`player.ts:302-320`) stamps `read_at` on every unread recipient row in the player's
+personal conversation. There is no notion of an item that is *seen* but still *owed a response*.
+
+### Owner decision (grill, 2026-08-03)
+
+**Actionable notifications stay unread until they are actioned.** The badge should mean "you still
+owe someone a response" — that is what makes it worth looking at.
+
+### Fix
+
+1. Mark a notification actionable — the cleanest signal is its metadata already carrying an
+   unresolved action (`groupInviteToken` today; partner confirms are the obvious next case).
+2. Exclude those rows from the mark-all-read `UPDATE`, so the badge survives a visit to Alerts.
+3. Clear the individual row when the action completes — on successful invite accept, alongside the
+   existing `onAccepted()` refresh.
+
+### Tests first (TDD — §4, §11)
+
+- API integration — mark-all-read clears ordinary notifications and leaves one carrying a pending
+  invite; accepting the invite then clears it.
+- `Notifications.spec.tsx` — the badge does not drop to zero when the feed contains a pending invite.
+
+### Verify
+
+1. Receive an invite plus an ordinary notification.
+2. Open Alerts, do not accept, navigate away → badge shows 1, not 0.
+3. Accept the invite → badge clears.
+
+---
+
+## ISSUE-64 — Profile lies to guest (magic-link) sessions 🟠 {#issue-64}
+
+*Found 2026-08-03 while grilling [ISSUE-58](#issue-58).*
+
+### Symptom
+
+A player holding a magic-link session (not a registered account) can open `/profile` and see a fully
+rendered settings page — theme, timezone, notification toggles, quiet hours, coach memory — showing
+values that are not theirs. Every change appears to save and is silently discarded.
+
+### Root cause
+
+`/api/auth/me`, `/api/auth/me/settings`, and `/api/auth/me/availability` are all gated by
+`requireOrganizerAuth`, i.e. an account JWT. A guest player session gets 401 from all three.
+
+`Profile.tsx` never checks the response:
+
+- `:77-79` calls `.then(res => res.json())` with no `res.ok` guard, so the 401 body lands in
+  `setSettings(...)` as `undefined` — while its three sibling fetches in the same effect *do* guard.
+- Every field then renders through `settings?.x ?? <default>` (`:222-383`), so the page looks
+  populated and correct.
+- The save at `:111` is an unchecked `await fetch(...)` — the 401 is discarded silently.
+
+### Owner decision (grill, 2026-08-03)
+
+Profile stays **account-only**. Guests get an honest state, not fake defaults — the Account section
+from [ISSUE-58](#issue-58) is inherently account-scoped (email, password, account identity), so
+extending the `/me` endpoints to accept player sessions would not make it meaningful anyway.
+
+### Fix
+
+1. Add `res.ok` checks to the `/api/auth/me` GET and the settings PATCH, matching the sibling
+   fetches' existing pattern.
+2. On 401, render a "Sign up to save your preferences" state with a link to signup, instead of the
+   settings form.
+3. Surface a visible error if a save fails for any other reason.
+
+### Tests first (TDD — §4, §11)
+
+- `Profile.spec.tsx` — with a 401 from `/api/auth/me`, the settings form is absent and the signup
+  prompt renders; a failing PATCH surfaces an error rather than appearing to succeed.
+
+### Verify
+
+1. Sign in via a magic link (guest session), open `/profile`.
+2. No settings form; a signup prompt instead.
+3. As a registered account, Profile behaves exactly as before.
