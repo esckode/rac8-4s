@@ -252,4 +252,92 @@ describe('Profile', () => {
     expect(mockFetch).not.toHaveBeenCalledWith(expect.stringContaining('/player/ratings'), expect.anything())
     expect(mockFetch).not.toHaveBeenCalledWith(expect.stringContaining('/player/partners'), expect.anything())
   })
+
+  // ─── ISSUE-64: Profile is account-only — a guest (magic-link) session must ──
+  // ─── get an honest state, not fake defaults it can't actually save. ────────
+
+  it('renders a signup prompt instead of the settings form when /api/auth/me is 401 (guest session)', async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/api/auth/me')) {
+        return Promise.resolve({ ok: false, status: 401, json: async () => ({ message: 'Unauthorized' }) })
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) })
+    })
+    render(<Profile />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-signup-prompt')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('density-select')).not.toBeInTheDocument()
+    const link = screen.getByRole('link', { name: /sign up/i })
+    expect(link).toHaveAttribute('href', '/signup')
+  })
+
+  it('does not fetch availability or coach memories for a guest (401) session', async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url.includes('/api/auth/me')) {
+        return Promise.resolve({ ok: false, status: 401, json: async () => ({ message: 'Unauthorized' }) })
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) })
+    })
+    render(<Profile />)
+
+    await waitFor(() => expect(screen.getByTestId('profile-signup-prompt')).toBeInTheDocument())
+    expect(mockFetch).not.toHaveBeenCalledWith(expect.stringContaining('/api/auth/me/availability'), expect.anything())
+    expect(mockFetch).not.toHaveBeenCalledWith(expect.stringContaining('/player/coach/memories'), expect.anything())
+  })
+
+  it('a registered account still sees the full settings form (unaffected by the 401 guard)', async () => {
+    mockFetchRouter()
+    render(<Profile />)
+    await waitFor(() => {
+      expect(screen.getByTestId('density-select')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('profile-signup-prompt')).not.toBeInTheDocument()
+  })
+
+  it('surfaces a visible error when a settings save fails', async () => {
+    mockFetchRouter()
+    render(<Profile />)
+    await waitFor(() => expect(screen.getByTestId('density-select')).toBeInTheDocument())
+
+    mockFetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes('/api/auth/me/settings') && opts?.method === 'PATCH') {
+        return Promise.resolve({ ok: false, status: 500, json: async () => ({ message: 'Server error' }) })
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) })
+    })
+    fireEvent.change(screen.getByTestId('density-select'), { target: { value: 'compact' } })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-save-error')).toBeInTheDocument()
+    })
+  })
+
+  it('clears the save error once a save succeeds again', async () => {
+    mockFetchRouter()
+    render(<Profile />)
+    await waitFor(() => expect(screen.getByTestId('density-select')).toBeInTheDocument())
+
+    mockFetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes('/api/auth/me/settings') && opts?.method === 'PATCH') {
+        return Promise.resolve({ ok: false, status: 500, json: async () => ({ message: 'Server error' }) })
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) })
+    })
+    fireEvent.change(screen.getByTestId('density-select'), { target: { value: 'compact' } })
+    await waitFor(() => expect(screen.getByTestId('profile-save-error')).toBeInTheDocument())
+
+    mockFetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes('/api/auth/me/settings') && opts?.method === 'PATCH') {
+        return Promise.resolve({ ok: true, json: async () => ({}) })
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) })
+    })
+    fireEvent.change(screen.getByTestId('density-select'), { target: { value: 'comfortable' } })
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('profile-save-error')).not.toBeInTheDocument()
+    })
+  })
 })
