@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { useGroupUnread } from '../../hooks/useGroupUnread'
+import { useGroupsWithUnread } from '../../hooks/useGroupUnread'
 import { useNotificationUnread } from '../../hooks/useNotificationUnread'
 import { usePendingActions } from '../../hooks/usePendingActions'
 import { useAppConfig } from '../../context/AppConfigContext'
@@ -166,7 +166,7 @@ const BottomNav = () => {
   const location = useLocation()
   const { isAuthenticated } = useAuth()
   const { publicDiscoveryEnabled } = useAppConfig()
-  const groupsUnread = useGroupUnread()
+  const groupsUnread = useGroupsWithUnread()
   const notificationUnread = useNotificationUnread()
   const pendingActions = usePendingActions()
   const pendingGroupItems = pendingActions.openPolls.length + pendingActions.pendingCards.length

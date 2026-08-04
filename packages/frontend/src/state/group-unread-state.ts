@@ -1,41 +1,33 @@
 /**
- * GroupUnreadStore — G2.5
+ * GroupUnreadStore — G2.5 / ISSUE-56
  *
- * Tracks total unread message counts across all of the player's groups.
- * Written by two sources:
+ * Tracks per-group unread message counts, sourced from the server (ISSUE-56:
+ * GET /player/groups' unreadCount, computed against player_group_members.
+ * last_read_at). Written by two sources:
  *   1. useGroupMessages, while that group's chat SSE happens to be connected
  *      (only true while its panel is mounted — group-chat SSE is
  *      per-conversation, not app-wide; see useGroupMessages.ts).
- *   2. useGroupUnread (P0.4), which polls GET /player/groups on mount +
- *      window refocus and diffs each group's messageCount against the
- *      last-seen count recorded here — the mechanism that actually catches
- *      messages sent while the player is elsewhere. Deliberately NOT a
- *      persistent app-wide SSE connection: that broke Playwright's
- *      `networkidle` wait on every authenticated route (see
- *      useNotificationUnread.ts, usePendingActions.ts — same constraint).
- * Read by the My Groups nav tab badge.
+ *   2. useGroupsWithUnread, which polls GET /player/groups on mount +
+ *      window refocus and copies each group's unreadCount straight in — no
+ *      client-side diffing anymore (that was the pre-ISSUE-56 mechanism,
+ *      which was per-device and reset to "everything unread" on a fresh
+ *      device/cache, since it had no server-side read state to compare
+ *      against). Deliberately NOT a persistent app-wide SSE connection: that
+ *      broke Playwright's `networkidle` wait on every authenticated route
+ *      (see useNotificationUnread.ts, usePendingActions.ts — same
+ *      constraint).
+ * Read by the My Groups nav tab badge (groupsWithUnread — count of groups
+ * with unread, not total messages) and the per-row badges in the group list
+ * (which read unreadCount directly off each row, not from this store).
  *
- * V1: A message is "unread" if the group chat page is not currently open.
- * When the player opens a group, useGroupMessages signals clearGroupUnread()
- * so the badge goes to 0 for that group, and records the group's current
- * messageCount as "seen" so the next poll doesn't immediately re-flag it.
+ * A message is "unread" if the group chat page is not currently open, or if
+ * it was posted after the caller's last visit (server last_read_at). When
+ * the player opens a group, useGroupMessages signals clearGroupUnread() for
+ * the instant local response and PATCHes /:groupId/read to update
+ * last_read_at server-side.
  */
 
-const LAST_SEEN_KEY_PREFIX = 'group-last-seen:'
-
-/** The message count last acknowledged (seen) for a group. 0 if never recorded. */
-export function getLastSeenCount(groupId: string): number {
-  const raw = localStorage.getItem(`${LAST_SEEN_KEY_PREFIX}${groupId}`)
-  const n = raw ? parseInt(raw, 10) : 0
-  return Number.isFinite(n) ? n : 0
-}
-
-/** Record that the player has seen up to `count` messages in this group. */
-export function markGroupSeen(groupId: string, count: number): void {
-  localStorage.setItem(`${LAST_SEEN_KEY_PREFIX}${groupId}`, String(count))
-}
-
-type Subscriber = (total: number) => void
+type Subscriber = () => void
 
 class GroupUnreadStore {
   /** Per-groupId unread counts. */
@@ -46,6 +38,13 @@ class GroupUnreadStore {
     let sum = 0
     this.counts.forEach(v => { sum += v })
     return sum
+  }
+
+  /** Count of groups with at least one unread message (the nav badge's unit). */
+  groupsWithUnread(): number {
+    let n = 0
+    this.counts.forEach(v => { if (v > 0) n++ })
+    return n
   }
 
   setGroupUnread(groupId: string, count: number): void {
@@ -69,8 +68,7 @@ class GroupUnreadStore {
   }
 
   private notify(): void {
-    const t = this.total()
-    this.subscribers.forEach(cb => cb(t))
+    this.subscribers.forEach(cb => cb())
   }
 }
 

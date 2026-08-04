@@ -209,9 +209,19 @@ export const GroupList: React.FC = () => {
             <span className="font-semibold text-(--ink-900)">{g.name}</span>
             <span className="ml-2 text-xs text-(--ink-500)">{g.memberCount} members</span>
           </div>
-          {g.role === 'owner' && (
-            <span className="text-xs font-medium text-(--court-600)">Owner</span>
-          )}
+          <div className="flex items-center gap-2">
+            {g.unreadCount > 0 && (
+              <span
+                data-testid="group-unread-badge"
+                className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-(--rose-500) text-white rounded-full"
+              >
+                {g.unreadCount > 99 ? '99+' : g.unreadCount}
+              </span>
+            )}
+            {g.role === 'owner' && (
+              <span className="text-xs font-medium text-(--court-600)">Owner</span>
+            )}
+          </div>
         </Link>
       ))}
     </div>

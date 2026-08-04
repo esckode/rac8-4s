@@ -13,6 +13,7 @@ export interface GroupSummary {
   memberCount: number
   assistantEnabled: boolean
   digestEnabled: boolean
+  unreadCount: number
 }
 
 export interface UseGroupListResult {

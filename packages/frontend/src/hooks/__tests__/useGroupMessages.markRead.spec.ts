@@ -34,7 +34,12 @@ describe('useGroupMessages mark-read PATCH (ISSUE-56)', () => {
   })
 
   afterEach(() => {
-    delete (global as any).fetch
+    // Not `delete (global as any).fetch` here: RTL's auto-cleanup unmounts
+    // any still-rendered hook AFTER this afterEach runs (inner-scope hooks
+    // fire before the outer auto-cleanup one), and unmounting fires this
+    // hook's own cleanup, which calls fetch() for the mark-read PATCH — a
+    // deleted global.fetch turns that into a ReferenceError. Each test's
+    // beforeEach reassigns a fresh mock, so leaving it in place is safe.
     localStorage.clear()
   })
 

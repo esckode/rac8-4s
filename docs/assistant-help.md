@@ -43,6 +43,10 @@ on* — no internals, no SQL, no dev framing.
   you (an unscored match, an open poll, a card to confirm) — it clears once you act. In a group
   chat, the message box may suggest a one-tap action (report a score, cast a vote) based on
   what's pending for you there.
+- The Groups tab also shows a separate badge for **unread messages** — the number of groups
+  that have something new, not a total message count. Each group in your list shows its own
+  unread count too, so you can see which one to check without opening it. This is tracked
+  server-side, so it stays accurate across every device you're signed in on.
 - The bottom nav is always **Groups, Play, Ratings, Alerts, More** — five tabs, in that order.
   Browse (tournament discovery) isn't one of them; when it's turned on it lives inside **More**
   instead.

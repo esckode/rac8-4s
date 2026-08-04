@@ -1,23 +1,28 @@
 /**
- * useGroupUnread — G2.5 / P0.4
+ * useGroupsWithUnread — G2.5 / P0.4 / ISSUE-56
  *
- * Returns the total unread count across all groups (for the nav badge).
+ * Returns the count of groups with unread messages (for the nav badge) —
+ * not a total message count. Renamed from useGroupUnread when its return
+ * value's meaning changed (ISSUE-56): it used to be a total unread-message
+ * count derived from a client-side last-seen diff; it's now the number of
+ * groups with unread, read straight off the server's per-group unreadCount.
  *
  * Fetches GET /player/groups on mount + window refocus (matching
- * useNotificationUnread/usePendingActions), diffing each group's
- * messageCount against the last-seen count recorded in group-unread-state —
- * this is what catches messages sent while the player isn't on that group's
- * page. group-chat SSE (useGroupMessages) only supplements this while a
- * group's panel happens to be mounted; it never replaces the poll, since a
+ * useNotificationUnread/usePendingActions) and copies each group's
+ * server-computed unreadCount into the store — no more diffing against a
+ * localStorage last-seen count, which was per-device and reset to
+ * "everything unread" on a fresh device/cache (the bug ISSUE-56 fixed).
+ * group-chat SSE (useGroupMessages) only supplements this while a group's
+ * panel happens to be mounted; it never replaces the poll, since a
  * persistent app-wide SSE connection breaks Playwright's `networkidle` wait.
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { groupUnreadStore, getLastSeenCount } from '../state/group-unread-state'
+import { groupUnreadStore } from '../state/group-unread-state'
 
 interface GroupSummary {
   id: string
-  messageCount: number
+  unreadCount: number
 }
 
 // Module-level (not per-mount) so an in-flight request from a prior mount
@@ -26,11 +31,11 @@ interface GroupSummary {
 // resolve in call order.
 let latestRequestId = 0
 
-export function useGroupUnread(): number {
-  const [total, setTotal] = useState(() => groupUnreadStore.total())
+export function useGroupsWithUnread(): number {
+  const [count, setCount] = useState(() => groupUnreadStore.groupsWithUnread())
 
   useEffect(() => {
-    const unsub = groupUnreadStore.subscribe(setTotal)
+    const unsub = groupUnreadStore.subscribe(() => setCount(groupUnreadStore.groupsWithUnread()))
     return unsub
   }, [])
 
@@ -47,8 +52,7 @@ export function useGroupUnread(): number {
       .then((data: { groups: GroupSummary[] } | undefined) => {
         if (requestId !== latestRequestId) return // superseded by a newer request
         for (const group of data?.groups ?? []) {
-          const unread = Math.max(0, group.messageCount - getLastSeenCount(group.id))
-          groupUnreadStore.setGroupUnread(group.id, unread)
+          groupUnreadStore.setGroupUnread(group.id, group.unreadCount)
         }
       })
       .catch(() => {})
@@ -60,5 +64,5 @@ export function useGroupUnread(): number {
     return () => window.removeEventListener('focus', refetch)
   }, [refetch])
 
-  return total
+  return count
 }

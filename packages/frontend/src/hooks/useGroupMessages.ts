@@ -14,7 +14,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import ReconnectingEventSource from 'reconnecting-eventsource'
 import { GroupMessageStore } from '../state/group-message-state'
 import type { GroupMessageRecord, PollTally } from '../state/group-message-state'
-import { groupUnreadStore, markGroupSeen } from '../state/group-unread-state'
+import { groupUnreadStore } from '../state/group-unread-state'
 
 export type { GroupMessageRecord, PollTally }
 
@@ -181,16 +181,31 @@ export function useGroupMessages(groupId: string, active = false): UseGroupMessa
   }, [groupId, store])
 
   // Clear global unread for this group while the panel is active (user is
-  // viewing), and record the current count as "seen" so the next
-  // useGroupUnread poll doesn't immediately re-flag it. Depends on `messages`
-  // (not just `active`) so a late-arriving history fetch or a message
-  // received while actively viewing both re-mark the latest count as seen.
+  // viewing) — instant local response. Depends on `messages` (not just
+  // `active`) so a late-arriving history fetch or a message received while
+  // actively viewing both clear the badge immediately.
   useEffect(() => {
     if (active) {
       groupUnreadStore.clearGroupUnread(groupId)
-      markGroupSeen(groupId, messages.filter(m => m.type !== 'system').length)
     }
   }, [active, groupId, messages])
+
+  // ISSUE-56: PATCH the server-side read state once when the panel becomes
+  // active and once when it goes inactive (unmount, or active flips false) —
+  // NOT on every message. This effect intentionally does NOT depend on
+  // `messages`; if it did, it would fire one PATCH per arriving message.
+  useEffect(() => {
+    if (!active || !groupId) return
+    const token = localStorage.getItem('auth_token')
+    const markRead = () => {
+      fetch(`/player/groups/${groupId}/read`, {
+        method: 'PATCH',
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      }).catch(() => {})
+    }
+    markRead()
+    return () => { markRead() }
+  }, [active, groupId])
 
   // V1: count of text/announcement messages (no per-message read tracking for groups)
   const unreadCount = messages.filter(m => m.type !== 'system').length
