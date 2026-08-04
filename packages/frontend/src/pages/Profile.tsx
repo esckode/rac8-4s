@@ -15,6 +15,7 @@ interface ProfileSettings {
   notifyMentions: boolean
   notifyPolls: boolean
   notifyNudges: boolean
+  quietHoursEnabled: boolean
   quietHoursStart: number | null
   quietHoursEnd: number | null
   coachMemoryEnabled: boolean
@@ -197,6 +198,11 @@ export const Profile: React.FC = () => {
     const value = raw === '' ? null : Number(raw)
     setSettings(prev => (prev ? { ...prev, [field]: value } : prev))
     await patchSettings({ [field]: value })
+  }
+
+  async function handleQuietHoursToggle(checked: boolean) {
+    setSettings(prev => (prev ? { ...prev, quietHoursEnabled: checked } : prev))
+    await patchSettings({ quietHoursEnabled: checked })
   }
 
   async function handleAvailabilityToggle(weekday: number, dayPart: DayPart, checked: boolean) {
@@ -421,12 +427,25 @@ export const Profile: React.FC = () => {
           Notify me about deadline reminders
         </label>
 
-        <div className="flex items-center gap-3 pt-2">
-          <span className="text-sm text-(--ink-700)">Quiet hours</span>
+        <label className="flex items-center gap-2 text-sm text-(--ink-700) pt-2">
+          <input
+            type="checkbox"
+            data-testid="quiet-hours-enabled"
+            checked={settings?.quietHoursEnabled ?? false}
+            onChange={e => handleQuietHoursToggle(e.target.checked)}
+          />
+          Quiet hours
+        </label>
+        <p className="text-xs text-(--ink-500)">
+          Applies to phone notifications once those are available — email updates are unaffected.
+        </p>
+
+        <div className="flex items-center gap-3">
           <label htmlFor="quiet-hours-start" className="sr-only">Quiet hours start</label>
           <select
             id="quiet-hours-start"
             data-testid="quiet-hours-start"
+            disabled={!settings?.quietHoursEnabled}
             value={settings?.quietHoursStart ?? 8}
             onChange={e => handleQuietHoursChange('quietHoursStart', e.target.value)}
             className="text-sm border border-(--border) rounded-lg px-2 py-1 text-(--ink-900) bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--court-400)"
@@ -442,6 +461,7 @@ export const Profile: React.FC = () => {
           <select
             id="quiet-hours-end"
             data-testid="quiet-hours-end"
+            disabled={!settings?.quietHoursEnabled}
             value={settings?.quietHoursEnd ?? 17}
             onChange={e => handleQuietHoursChange('quietHoursEnd', e.target.value)}
             className="text-sm border border-(--border) rounded-lg px-2 py-1 text-(--ink-900) bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--court-400)"

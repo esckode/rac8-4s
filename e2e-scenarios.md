@@ -2761,13 +2761,28 @@ Then Ref's reply cites only aggregate counts ("5 of 6 free Tue evening")
   And neither player's name is tied to any specific slot
 ```
 
-### Scenario: A quiet-hours player gets no push but the item still appears in their badge/strip
+### Scenario: Quiet hours are stored and editable but suppress nothing (ISSUE-66)
 ```
-Given a player has quiet hours configured covering the current time
+Given a player has quiet hours enabled covering the current time
   And a deadline nudge would otherwise notify them as an affected player
 When the nudge sweep runs
-Then no messaging.notify job is enqueued for that player
+Then the messaging.notify job is still enqueued for that player
   And the pending item still appears in their own tab badge and up-next strip
+```
+
+Quiet hours gate nothing until a device notification channel exists. The only channel
+`messaging.notify` drives today is email, and suppressing a catch-up email buys no quiet while
+costing a notification the player never learns about. When push ships, quiet hours belong in the
+service worker, where the device knows its own local time rather than depending on a stored
+timezone that may be absent or stale.
+
+### Scenario: The quiet-hours toggle and window survive a reload
+```
+Given a player opens their profile
+Then quiet hours are switched off and the window is not editable
+When they switch quiet hours on and pick a 10pm-7am window
+  And they reload the page
+Then the toggle is still on and the window still reads 10pm to 7am
 ```
 
 **Implementation (P0–P12 / S0–S8):**

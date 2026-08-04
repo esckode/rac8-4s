@@ -1,21 +1,22 @@
 /**
  * Player Personalization (P9) — quiet hours E2E test
  *
- * See e2e-scenarios.md "Player Personalization (P0-P12)" scenario (13):
- * a quiet-hours player gets no push but the item still shows in
- * badge/strip. The "no push" half is already the authoritative
- * integration-level proof (notify-prefs.spec.ts asserts no job is
- * enqueued); this e2e proves the live stack doesn't let quiet hours
- * leak into pending-actions — the nudge sweep still runs, the group
- * still gets its reminder message, and the quiet-hours player's own
- * pending-actions payload is unaffected.
+ * See e2e-scenarios.md "Player Personalization (P0-P12)" scenario (13).
+ *
+ * ISSUE-66 made quiet hours a stored-but-inert setting: they persist and are
+ * editable in Profile, but gate nothing until a device notification channel
+ * exists (the only channel today is email, and quiet hours belong client-side
+ * once there's a service worker that knows the device's own local time). So
+ * this spec proves two things the integration tests can't:
+ *   1. the enabled flag + window round-trip through the real Profile UI, and
+ *   2. having them enabled and covering "now" suppresses nothing.
  *
  * Run: npx playwright test personalization-quiet-hours
  */
 
 import { test, expect } from '@playwright/test'
 import { apiCall, createTestUser } from './fixtures'
-import { API_CONFIG, SELECTORS } from './config'
+import { API_CONFIG, ROUTES, SELECTORS } from './config'
 
 async function serversRunning(): Promise<boolean> {
   try {
@@ -55,6 +56,7 @@ async function setQuietHoursCoveringNow(accountToken: string): Promise<void> {
   const res = await apiCall('/api/auth/me/settings', 'PATCH', {
     timezone: 'UTC',
     timezoneManual: true,
+    quietHoursEnabled: true,
     quietHoursStart: nowHour,
     quietHoursEnd: (nowHour + 1) % 24,
   }, accountToken)
@@ -110,5 +112,34 @@ test.describe('Player Personalization — quiet hours (P9, scenario 13)', () => 
     const matchLink = page.locator(SELECTORS.UP_NEXT_MATCH)
     await expect(matchLink).toBeVisible()
     await expect(matchLink).toHaveAttribute('href', `/tournament/${tournamentId}/details`)
+  })
+
+  // ISSUE-66: the control is inert by design, so the only thing that can break
+  // without anyone noticing is persistence — if a PATCH silently stopped
+  // storing the flag, no behavior would change today and the regression would
+  // surface only once push ships. This pins it.
+  test('the quiet-hours toggle and window persist across a reload', async ({ page }) => {
+    const user = createTestUser()
+    const { token } = await signupAccount(user)
+
+    await loginFrontend(page, token)
+    await page.goto(ROUTES.PROFILE)
+
+    const toggle = page.locator(SELECTORS.QUIET_HOURS_ENABLED)
+    await expect(toggle).toBeVisible({ timeout: 8000 })
+    await expect(toggle).not.toBeChecked()
+
+    // Off by default, so the window is not editable until it is switched on.
+    await expect(page.locator(SELECTORS.QUIET_HOURS_START)).toBeDisabled()
+
+    await toggle.check()
+    await page.locator(SELECTORS.QUIET_HOURS_START).selectOption('22')
+    await page.locator(SELECTORS.QUIET_HOURS_END).selectOption('7')
+
+    await page.reload()
+
+    await expect(page.locator(SELECTORS.QUIET_HOURS_ENABLED)).toBeChecked({ timeout: 8000 })
+    await expect(page.locator(SELECTORS.QUIET_HOURS_START)).toHaveValue('22')
+    await expect(page.locator(SELECTORS.QUIET_HOURS_END)).toHaveValue('7')
   })
 })

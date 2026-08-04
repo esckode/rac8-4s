@@ -22,6 +22,7 @@ function meResponse(overrides: Partial<{
   notifyMentions: boolean
   notifyPolls: boolean
   notifyNudges: boolean
+  quietHoursEnabled: boolean
   quietHoursStart: number | null
   quietHoursEnd: number | null
 }> = {}, accountOverrides: Partial<{ email: string; name: string | null }> = {}) {
@@ -138,12 +139,14 @@ describe('Profile', () => {
     })
   })
 
+  // The window controls are <select>s (bf62816 converted them from number
+  // inputs), so toHaveValue reads a string here, not a number.
   it('renders quiet hours inputs and PATCHes on change', async () => {
-    mockFetchRouter({}, { quietHoursStart: 22, quietHoursEnd: 7 })
+    mockFetchRouter({}, { quietHoursEnabled: true, quietHoursStart: 22, quietHoursEnd: 7 })
     render(<Profile />)
     await waitFor(() => {
-      expect(screen.getByTestId('quiet-hours-start')).toHaveValue(22)
-      expect(screen.getByTestId('quiet-hours-end')).toHaveValue(7)
+      expect(screen.getByTestId('quiet-hours-start')).toHaveValue('22')
+      expect(screen.getByTestId('quiet-hours-end')).toHaveValue('7')
     })
 
     fireEvent.change(screen.getByTestId('quiet-hours-start'), { target: { value: '23' } })
@@ -155,6 +158,29 @@ describe('Profile', () => {
       expect(call).toBeDefined()
       expect(JSON.parse(call[1].body)).toEqual({ quietHoursStart: 23 })
     })
+  })
+
+  // ISSUE-66: off by default, and the window is not editable until switched on
+  // — the toggle is the only "off" state, since every hour 0-23 is a valid bound.
+  it('leaves quiet hours off by default and disables the window until enabled', async () => {
+    mockFetchRouter()
+    render(<Profile />)
+    await waitFor(() => {
+      expect(screen.getByTestId('quiet-hours-enabled')).not.toBeChecked()
+    })
+    expect(screen.getByTestId('quiet-hours-start')).toBeDisabled()
+    expect(screen.getByTestId('quiet-hours-end')).toBeDisabled()
+
+    fireEvent.click(screen.getByTestId('quiet-hours-enabled'))
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(
+        ([url, opts]: [string, any]) => url.includes('/api/auth/me/settings') && opts?.method === 'PATCH'
+      )
+      expect(call).toBeDefined()
+      expect(JSON.parse(call[1].body)).toEqual({ quietHoursEnabled: true })
+    })
+    expect(screen.getByTestId('quiet-hours-start')).toBeEnabled()
   })
 
   // ── S7.3 — availability grid (P12) ────────────────────────────────────────

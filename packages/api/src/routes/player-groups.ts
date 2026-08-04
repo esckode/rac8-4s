@@ -731,19 +731,16 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
           )
           for (const recipientId of recipientIds) {
             const eventType = mentionedPlayerIds.has(recipientId) ? 'mentions' : null
-            if (!(await shouldEnqueueNotify(deps.db as any, recipientId, eventType))) continue
-            await deps.jobQueue.add(
-              'messaging.notify',
-              { conversationId, groupId },
-              // Hyphen, not colon — BullMQ rejects custom job IDs containing ':'.
-              { jobId: `notify-${conversationId}-${recipientId}` }
-            )
 
             // Notifications Center (P2.4) — @mentions only, matching "targeting
-            // them"; the shouldEnqueueNotify('mentions') gate above already
-            // covers the notifyMentions preference + quiet hours, and
-            // recipientIds itself already excludes muted members
+            // them"; recipientIds itself already excludes muted members
             // (group-notify-selector.ts).
+            //
+            // ISSUE-67: written before the gate and never gated by it. This row
+            // is what the player catches up from, and it is the reason dropping
+            // an alert outright — rather than deferring it — was acceptable
+            // (PERSONALIZATION_DESIGN.md:183). shouldEnqueueNotify governs the
+            // alert channel only; suppressing it must not erase the record.
             if (eventType === 'mentions') {
               notifyPlayer(
                 recipientId,
@@ -753,6 +750,14 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
                 log.warn('personal.notification.failed', { playerId: recipientId, error: e.message })
               })
             }
+
+            if (!(await shouldEnqueueNotify(deps.db as any, recipientId, eventType))) continue
+            await deps.jobQueue.add(
+              'messaging.notify',
+              { conversationId, groupId },
+              // Hyphen, not colon — BullMQ rejects custom job IDs containing ':'.
+              { jobId: `notify-${conversationId}-${recipientId}` }
+            )
           }
         }
 

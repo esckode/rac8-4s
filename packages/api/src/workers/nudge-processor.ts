@@ -214,7 +214,7 @@ export async function processNudgeSweep(deps: NudgeSweepDeps): Promise<void> {
         for (const playerId of affectedPlayerIds) {
           if (notifyLevelById.get(playerId) === 'muted') continue
           // P9 AND-layer: personal notify_nudges toggle + quiet hours.
-          if (!(await shouldEnqueueNotify(pool, playerId, 'nudges', now))) continue
+          if (!(await shouldEnqueueNotify(pool, playerId, 'nudges'))) continue
           await jobQueue.add(
             'messaging.notify',
             { conversationId, groupId },

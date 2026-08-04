@@ -455,6 +455,11 @@ export const SELECTORS = {
   NAV_PROFILE: '[data-testid="nav-profile"]',
   PROFILE_PAGE: '[data-testid="profile-page"]',
 
+  // Player Personalization (P9) — quiet hours (stored, inert until push exists)
+  QUIET_HOURS_ENABLED: '[data-testid="quiet-hours-enabled"]',
+  QUIET_HOURS_START: '[data-testid="quiet-hours-start"]',
+  QUIET_HOURS_END: '[data-testid="quiet-hours-end"]',
+
   // Player Personalization (P2/P3/P4)
   STANDINGS_ROW_YOU: '[data-testid="standings-row-you"]',
   AVATAR: '[data-testid="avatar"]',

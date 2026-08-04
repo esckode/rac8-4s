@@ -41,10 +41,13 @@ on* — no internals, no SQL, no dev framing.
 - **Table density** controls how compact standings and other tables render — "Comfortable" or
   "Compact".
 - **Notifications**: three toggles control whether you get pushed for @mentions, new polls, and
-  deadline reminders — each defaults to on. **Quiet hours** (a start/end hour) additionally drop
-  any push that would otherwise arrive during that window — nothing is queued up to send later.
-  Quiet hours never hide anything from you inside the app: your unscored matches, open polls,
-  and pending confirmations still show up on your badges and the up-next strip regardless.
+  deadline reminders — each defaults to on. Turning one off stops the alert only; the notification
+  still appears in your Alerts list so nothing is lost.
+- **Quiet hours** (an on/off switch plus a start/end hour, suggested 8am–5pm) are saved on your
+  profile but don't affect anything yet — they're switched off by default and will apply to phone
+  notifications once those exist. Email updates are never affected by them. Nothing is ever hidden
+  from you inside the app either: your unscored matches, open polls, and pending confirmations
+  show up on your badges and the up-next strip regardless.
 - **Availability** is a weekly grid (morning/afternoon/evening x each day) you can set in your
   profile. It's used only to suggest times where most of a group is free — ask "when can we
   play?" in a group chat and Ref will reply with a count like "4 of 6 free Saturday evening."
