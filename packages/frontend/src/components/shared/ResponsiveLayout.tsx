@@ -252,7 +252,7 @@ const BottomNav = () => {
                 <span
                   data-testid="notification-unread-badge"
                   style={{ position: 'absolute', top: -6, right: -6 }}
-                  className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-(--rose-500) text-white rounded-full"
+                  className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-(--gold-400) text-(--gold-900) rounded-full"
                 >
                   {notificationUnread > 99 ? '99+' : notificationUnread}
                 </span>

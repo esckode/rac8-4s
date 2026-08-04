@@ -56,6 +56,7 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   // Track the current user's vote per poll (keyed by pollId)
   const [pollVotes, setPollVotes] = useState<Record<string, PollChoice>>({})
@@ -375,13 +376,25 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
             )
           }
 
+          const isOwnMessage = m.playerId === user?.playerId
+          const isExpanded = expandedMessageId === m.id
+          const timeStr = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           return (
             <div
               key={m.id}
               data-testid="group-message-item"
-              className="rounded-lg p-3 text-sm bg-(--ink-50)"
+              className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} items-center`}
+              style={{ gap: '0rem' }}
             >
-              <p className="text-(--ink-900)">
+              {!isOwnMessage && m.playerId && (
+                <Avatar playerId={m.playerId} name={m.senderName ?? ''} />
+              )}
+              <div
+                className={`rounded-lg p-3 text-sm cursor-pointer transition-all ${isOwnMessage ? 'bg-(--court-100)' : 'bg-(--ink-50)'} ${isExpanded ? 'ring-2 ring-(--court-400)' : ''}`}
+                style={isOwnMessage ? { direction: 'ltr', maxWidth: '85%' } : { maxWidth: '85%' }}
+                onClick={() => setExpandedMessageId(isExpanded ? null : m.id)}
+              >
+              <p className={`${isOwnMessage ? 'text-(--court-900)' : 'text-(--ink-900)'}`}>
                 {parseMentions(m.body).map((seg, i) => {
                   if (seg.type === 'text') return <span key={i}>{seg.text}</span>
                   const isSelf = seg.name === user?.name
@@ -396,16 +409,16 @@ export const GroupChatPanel: React.FC<GroupChatPanelProps> = ({
                   )
                 })}
               </p>
-              <p className="text-xs text-(--ink-500) mt-1 flex items-center gap-1.5">
-                {m.senderName != null ? (
-                  <>
-                    {m.playerId && <Avatar playerId={m.playerId} name={m.senderName} />}
-                    <span>{m.senderName} · {new Date(m.createdAt).toLocaleTimeString()}</span>
-                  </>
-                ) : (
-                  new Date(m.createdAt).toLocaleTimeString()
-                )}
-              </p>
+              {isExpanded && (
+                <p className={`text-xs mt-1 ${isOwnMessage ? 'text-(--court-700)' : 'text-(--ink-500)'}`}>
+                  {m.senderName != null ? (
+                    <span>{m.senderName} · {timeStr}</span>
+                  ) : (
+                    timeStr
+                  )}
+                </p>
+              )}
+              </div>
             </div>
           )
         })}
