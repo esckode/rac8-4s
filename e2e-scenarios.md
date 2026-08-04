@@ -211,7 +211,7 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 | **Personalization (quiet hours)** | 2 | `personalization-quiet-hours.spec.ts` | `npx playwright test personalization-quiet-hours` |
 | **Personalization (pending actions)** | 4 | `personalization-pending-actions.spec.ts` | `npx playwright test personalization-pending-actions` |
 | **Personalization (digest movement)** | 2 | `personalization-digest-movement.spec.ts` | `npx playwright test personalization-digest-movement` |
-| **Player profile** | 3 | `profile.spec.ts` | `npx playwright test profile` |
+| **Player profile** | 4 | `profile.spec.ts` | `npx playwright test profile` |
 | **Skill ratings (P13)** | 5 | `ratings.spec.ts` | `npx playwright test ratings` |
 | **PWA install** | 2 | `pwa-install.spec.ts` | `npx playwright test pwa-install` |
 | **PWA hygiene (no stale caches)** | 2 | `pwa-hygiene.spec.ts` | `npx playwright test pwa-hygiene` |
@@ -2643,6 +2643,16 @@ Then PATCH /api/auth/me/settings persists it
 Given no auth token
 When the visitor navigates to /profile
 Then they are redirected to /login (same protected-route behavior as /matches)
+```
+
+### Scenario: Account section — email visible, renaming persists and reaches @mentions (ISSUE-58)
+```gherkin
+Given an authenticated player on /profile
+Then the Account section shows their email (data-testid="account-email")
+When they change the display name and save
+Then PATCH /player/name persists it
+  And reloading /profile shows the new name
+  And the new name appears in the group Members panel
 ```
 
 ### Scenario: Standings auto-scrolls to and highlights the viewer's row

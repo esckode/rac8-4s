@@ -66,6 +66,34 @@ test.describe('Player Personalization — Profile page', () => {
     await expect(page.locator(SELECTORS.DENSITY_SELECT)).toHaveValue('compact', { timeout: 8000 })
   })
 
+  test('Account section shows the email and renaming persists across reload and group member lists (ISSUE-58)', async ({ page }) => {
+    const user = createTestUser()
+    await signupViaApi(user)
+    await loginFrontend(page, user)
+
+    // Create a group so the renamed member list can be checked below.
+    const meRes = await apiCall('/api/auth/login', 'POST', { email: user.email, password: user.password })
+    const { token } = await meRes.json()
+    const groupRes = await apiCall('/player/groups', 'POST', { name: `Rename E2E Group ${Date.now()}` }, token)
+    const { id: groupId } = await groupRes.json()
+
+    await page.click(SELECTORS.NAV_PROFILE)
+    await expect(page.locator(SELECTORS.PROFILE_PAGE)).toBeVisible()
+    await expect(page.locator('[data-testid="account-email"]')).toHaveText(user.email)
+
+    const newName = `Renamed ${Date.now()}`
+    await page.fill('[data-testid="display-name-input"]', newName)
+    await page.click('[data-testid="display-name-save"]')
+    await expect(page.locator('[data-testid="display-name-input"]')).toHaveValue(newName, { timeout: 5000 })
+
+    await page.reload()
+    await expect(page.locator('[data-testid="display-name-input"]')).toHaveValue(newName, { timeout: 8000 })
+
+    await page.goto(`http://localhost:5173/groups/${groupId}`)
+    await page.click('[data-testid="group-tab-members"]')
+    await expect(page.locator(`text=${newName}`)).toBeVisible({ timeout: 8000 })
+  })
+
   test('NEGATIVE — unauthenticated visitor is redirected away from /profile', async ({ page }) => {
     await page.goto(`http://localhost:5173${ROUTES.PROFILE}`, { waitUntil: 'networkidle' })
     await expect(page).toHaveURL(/\/login/)
