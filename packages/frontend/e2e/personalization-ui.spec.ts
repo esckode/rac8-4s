@@ -105,7 +105,10 @@ test.describe('Player Personalization — FE quick wins', () => {
     // not from the player we log in as. Loosening the selector instead would
     // keep this green while proving nothing about a *known* player's colour.
     const other = createTestUser()
-    const otherToken = await inviteAndAccept(ownerToken, groupId, other)
+    // Sign the invitee up first: accepting an invite for an unknown email would
+    // create a player, which the age gate refuses without a dob attestation.
+    const { token: otherToken } = await signupAndGetToken(other)
+    await inviteAndAccept(ownerToken, groupId, other)
     await apiCall(`/player/groups/${groupId}/messages`, 'POST', { body: 'hello there' }, otherToken)
 
     await loginFrontend(page, ownerToken)
