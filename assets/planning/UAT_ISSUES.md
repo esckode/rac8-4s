@@ -47,7 +47,10 @@ on the Groups tab, not Alerts), ISSUE-58's cost (no display-name endpoint exists
 ISSUE-60's root cause (players are **not** unrated, and the self-rating endpoint is already built).
 The grill split ISSUE-56's accumulated scope into **ISSUE-61–63** and spun ISSUE-58's guest-session
 defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *Owner decisions*.
-**Number the next one 65.**
+**ISSUE-65 filed 2026-08-04** during independent verification of the ISSUE-56–64 arc, which also
+**reopened [ISSUE-62](#issue-62)**. Both concern `notifications.spec.ts`: 62's badge test proves
+nothing on a discovery-off environment, and 65's two failures are stale arithmetic left by
+[ISSUE-55](#issue-55). **Number the next one 66.**
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -95,7 +98,8 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-59](#issue-59) | ✅ Resolved | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
 | [ISSUE-60](#issue-60) | ✅ Resolved | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
 | [ISSUE-61](#issue-61) | ✅ Resolved | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
-| [ISSUE-62](#issue-62) | ✅ Resolved | 🟡 | Badges never update live — no SSE push for notification/group unread (blocked on 52 + 61) | frontend · api |
+| [ISSUE-62](#issue-62) | 🔁 Reopened | 🟡 | Badges never update live — implementation looks complete, but its e2e proof is invalid on a discovery-off environment | frontend · api |
+| [ISSUE-65](#issue-65) | 🔲 Open | 🟠 | Notification specs predate ISSUE-55's in-app invites — assert counts that no longer hold | e2e · test-debt |
 | [ISSUE-63](#issue-63) | ✅ Resolved | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
 | [ISSUE-64](#issue-64) | ✅ Resolved | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
 
@@ -2350,8 +2354,10 @@ navigation or refocus; the full e2e suite passes on both browser projects (§8).
   real count of *code* occurrences (excluding comments-only mentions) was 34 — pre-existing drift in
   the issue filing, not something to chase further. `notifications.spec.ts` and
   `player-groups.spec.ts`'s badge tests previously worked around the missing live push by manually
-  `dispatchEvent(new Event('focus'))`; both now assert the badge updates with **no** refocus at all —
-  run and confirmed passing against the real dev stack, not just left green by the sweep.
+  `dispatchEvent(new Event('focus'))`; both now assert the badge updates with **no** refocus at all.
+  ⚠️ **This claim did not hold — see *Reopened* below.** `notifications.spec.ts:92` fails
+  reproducibly on a discovery-off environment; the removal of the `focus` dispatch left that test
+  with no working update path there.
 - **Trap hit while writing the sweep, worth flagging for next time**: `locator.isVisible({ timeout
   })` does not actually wait — the `timeout` option is silently ignored (Playwright docs call this
   out explicitly). Discovered this again here after already documenting it in ISSUE-60's status
@@ -2403,6 +2409,53 @@ navigation or refocus; the full e2e suite passes on both browser projects (§8).
 - Nothing left open for this issue's actual scope. ISSUE-53 (`/browse` 404 on the shared dev server)
   remains separately tracked and is the confounder behind every e2e failure/skip observed above —
   none of them are regressions from this change.
+
+### Reopened — 2026-08-04 (independent verification)
+
+**The implementation is not in question; its e2e proof is.** Re-verified independently: the route
+(`player.ts:433`), the `player:<id>` emit from `postPersonalNotification`
+(`group-message-repository.ts:419`), the bus injection (`player-groups.ts:93`) and the app-wide mount
+(`ResponsiveLayout.tsx:172`) are all correctly wired. Nothing above needs rebuilding.
+
+**What is wrong:** `notifications.spec.ts:92` ("Unread badge reflects a new notification") parks the
+player on `/browse` and then asserts the badge appears live. `/browse` is wrapped in `DiscoveryGate`,
+and **`ResponsiveLayout` sits inside that gate** (`App.tsx:100-105`). With
+`PUBLIC_DISCOVERY_ENABLED=false` the gate renders `<NotFound />`, so on that environment the page has:
+
+- no bottom nav → the badge element cannot exist, and
+- no `ResponsiveLayout` → **`usePersonalEventsStream` never mounts**, so no SSE connection is opened
+  at all.
+
+The test therefore proves nothing on a discovery-off box, and its first assertion
+(`toHaveCount(0)` on the badge) passes *vacuously* because the nav is absent. The status note above
+is right that the trigger is ISSUE-53 — but the conclusion "not a regression, nothing to do" does not
+follow: this issue's own commit removed the `dispatchEvent(new Event('focus'))` that previously made
+the test pass regardless of environment, so the coverage is now strictly worse than before.
+
+**Reproduced 2026-08-04:** 3 failed / 2 passed in `notifications.spec.ts` with `--workers=1` in
+isolation (so not parallel-load flake), against a freshly restarted API on current `main`.
+
+### What to fix
+
+1. **Park the badge test on an auth-gated page that renders the shell** — `/play` or `/matches`, not
+   `/browse`. That makes the assertion exercise the SSE push on **any** environment, which is the
+   whole point of the test.
+2. Audit the other badge assertion moved in `0ec067a` (`player-groups.spec.ts`) for the same
+   dependency, and any other spec that parks on `/browse` to observe app-shell chrome.
+3. Re-run `notifications.spec.ts` and `player-groups.spec.ts` on a **discovery-off** environment and
+   confirm the live push genuinely works there. Only then mark this resolved.
+4. Consider whether `ResponsiveLayout` belongs outside `DiscoveryGate` so a blocked route still
+   renders the app shell around `NotFound`. That is a product call, not required by this issue —
+   raise it rather than deciding it.
+
+**Do not** re-add the `focus` dispatch as the fix. That would hide whether the push works, which is
+the behaviour this issue exists to deliver.
+
+### Note on the other two failures in this spec
+
+`:115` and `:188` are **not** this issue's. The status note above attributes all three to the
+`/browse` root cause; that holds for `:92` only — neither of the other two visits `/browse`. They are
+[ISSUE-65](#issue-65).
 
 ---
 
@@ -2555,3 +2608,68 @@ extending the `/me` endpoints to accept player sessions would not make it meanin
   (neither exercises a guest/magic-link session, so no update needed there).
 - docs/assistant-help.md updated per §9.
 - Nothing left open.
+
+---
+
+## ISSUE-65 — Notification specs predate ISSUE-55's in-app invites 🟠 {#issue-65}
+
+*Found 2026-08-04 during independent verification of the ISSUE-56–64 arc. Root cause traced to
+[ISSUE-55](#issue-55) (commit `0811a9c`), which landed **before** that arc — these were already
+failing when it started, and were mis-attributed to [ISSUE-53](#issue-53) in
+[ISSUE-62](#issue-62)'s status note.*
+
+### Symptom
+
+Two tests in `packages/frontend/e2e/notifications.spec.ts` fail reproducibly — confirmed in isolation
+with `--workers=1`, so not parallel-load flake:
+
+| Test | Failure |
+|---|---|
+| `:115` "Opening the notifications page lists newest-first and marks read" | `toHaveCount` — Expected 2, Received 3 |
+| `:188` "Notify-level mute is honored" | `empty-state` locator not found |
+
+### Root cause
+
+Both tests call `inviteAndAccept(ownerToken, groupId, member)` in setup. Since
+[ISSUE-55](#issue-55), inviting an email that already has a player **posts a personal notification**
+("You've been invited to join {group}") via `postPersonalNotification`. Both specs were written when
+an invite produced no notification at all, so their arithmetic is now off by exactly one:
+
+- `:115` seeds two notifications deliberately (an `@mention`, then a promotion, with a 50 ms gap so
+  ordering is verifiable) and asserts `toHaveCount(2)`. The invite silently adds a third — hence
+  "Received: 3". The ordering assertion that follows is also now checking the wrong rows.
+- `:188` mutes a group and asserts the notifications page is **empty**. The invite notification was
+  created *before* the mute was applied, so the page legitimately has one card and `empty-state`
+  never renders.
+
+Neither is a product defect — the notifications are correct. The specs encode a stale assumption.
+
+### Fix
+
+Prefer **scoping the assertions** over bumping the expected numbers — a bare `toHaveCount(3)` would
+break again the next time setup gains a notification.
+
+1. `:115` — assert on the two seeded notifications specifically (filter by body text, as the test
+   already does for ordering) rather than counting every card on the page. Keep the newest-first
+   assertion meaningful by comparing the relative order of those two, not of all three.
+2. `:188` — the intent is "muting suppresses the *group message* notification", not "the page is
+   empty". Either assert the absence of the muted group's message notification specifically, or have
+   the setup avoid the invite path (e.g. add the member directly) so `empty-state` is a valid
+   expectation. The first is a truer test of the stated scenario.
+3. Sweep the rest of `notifications.spec.ts` and any other spec whose setup calls `inviteAndAccept`
+   for the same stale arithmetic — `grep -rln "inviteAndAccept" packages/frontend/e2e`.
+
+### Product question to raise, not decide
+
+Should an invite notification be suppressed when the invitee subsequently mutes that group, or
+retro-marked read on accept? Today it persists as an ordinary notification after acceptance, which is
+arguably clutter — and it interacts with [ISSUE-63](#issue-63), which deliberately keeps *actionable*
+invites unread. Once accepted, the invite is no longer actionable, so it should probably become
+clearable. **Raise this with the owner rather than changing behaviour under this issue.**
+
+### Verify
+
+1. `npx playwright test notifications.spec.ts --project=chromium --reporter=line --workers=1` →
+   all 5 pass.
+2. Re-run with a group whose setup has no invite, to confirm the assertions still hold.
+3. Both-browser sweep shows no new failures in this spec (§8).
