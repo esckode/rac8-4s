@@ -101,15 +101,19 @@ describe('S5.1 — player_settings notify prefs + quiet hours (schema + PATCH)',
     expect(byName.has('quiet_hours_end')).toBe(true)
   })
 
-  it('getOrDefaults returns notify toggles true and quiet hours null when no row exists', async () => {
+  // ISSUE-66: "off" is an explicit flag, not a null sentinel — start/end stay
+  // populated with the suggested 8am-5pm window so the Profile control has
+  // something to show, and quietHoursEnabled alone decides whether it applies.
+  it('getOrDefaults returns notify toggles true and quiet hours off with 8-17 populated when no row exists', async () => {
     const player = await createPlayer(pool)
     const settings = await settingsRepo.getOrDefaults(player.id)
     expect(settings).toMatchObject({
       notifyMentions: true,
       notifyPolls: true,
       notifyNudges: true,
-      quietHoursStart: null,
-      quietHoursEnd: null,
+      quietHoursEnabled: false,
+      quietHoursStart: 8,
+      quietHoursEnd: 17,
     })
   })
 
@@ -297,7 +301,13 @@ describe('S5.1 — AND-layer: notify_nudges gates the nudge-sweep notify path', 
   })
 })
 
-describe('S5.1 — quiet hours drop the push entirely', () => {
+// ISSUE-66: quiet hours are stored and surfaced in Profile but gate nothing.
+// The only channel messaging.notify drives today is email (notify-processor.ts
+// takes an emailAdapter; there is no web push in the repo), and suppressing a
+// catch-up email costs a lost record for no interruption saved. When a device
+// channel exists, quiet hours belong client-side in the service worker, where
+// the device knows its own local time without a stored-timezone guess.
+describe('S5.1 — quiet hours are stored but inert until a device channel exists (ISSUE-66)', () => {
   let pool: Pool
   let app: Express
   let tokenStore: InMemoryTokenStore
@@ -318,7 +328,7 @@ describe('S5.1 — quiet hours drop the push entirely', () => {
     await rollbackTransaction()
   })
 
-  it('an "all" member currently in their own quiet-hours window gets no job', async () => {
+  it('an "all" member inside their own enabled quiet-hours window still gets the job', async () => {
     const owner = await createPlayer(pool)
     const ownerToken = await playerToken(owner, tokenStore)
     const group = await createGroupViaApi(app, ownerToken)
@@ -329,6 +339,7 @@ describe('S5.1 — quiet hours drop the push entirely', () => {
     await settingsRepo.upsert(quiet.id, {
       timezone: 'UTC',
       timezoneManual: true,
+      quietHoursEnabled: true,
       quietHoursStart: nowHour,
       quietHoursEnd: (nowHour + 1) % 24,
     })
@@ -338,6 +349,87 @@ describe('S5.1 — quiet hours drop the push entirely', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ body: 'Hello during your quiet hours' })
 
-    expect(notifyJobsFor(jobQueue, quiet.id)).toBe(0)
+    expect(notifyJobsFor(jobQueue, quiet.id)).toBe(1)
+  })
+
+  it('the enabled flag and window round-trip through PATCH even though nothing reads them', async () => {
+    const player = await createPlayer(pool)
+    const saved = await settingsRepo.upsert(player.id, {
+      quietHoursEnabled: true,
+      quietHoursStart: 22,
+      quietHoursEnd: 7,
+    })
+    expect(saved).toMatchObject({ quietHoursEnabled: true, quietHoursStart: 22, quietHoursEnd: 7 })
+
+    const reread = await settingsRepo.getOrDefaults(player.id)
+    expect(reread).toMatchObject({ quietHoursEnabled: true, quietHoursStart: 22, quietHoursEnd: 7 })
+  })
+})
+
+// ISSUE-67: shouldEnqueueNotify gates the alert channel only. The durable
+// Notifications Center row is the compensating control that made "drop the
+// push, don't defer it" acceptable (PERSONALIZATION_DESIGN.md:183), so it must
+// survive suppression. Quiet hours no longer reach this path after ISSUE-66,
+// but the per-event toggles still do.
+describe('ISSUE-67 — suppression drops the alert, not the durable inbox row', () => {
+  let pool: Pool
+  let app: Express
+  let tokenStore: InMemoryTokenStore
+  let jobQueue: InMemoryJobQueue
+  let settingsRepo: PlayerSettingsRepository
+
+  beforeAll(async () => {
+    pool = await getTestPool()
+    await beginTransaction(pool)
+    jobQueue = new InMemoryJobQueue()
+    const deps = createTestApp(pool, { jobQueue })
+    app = deps.app
+    tokenStore = deps.tokenStore
+    settingsRepo = new PlayerSettingsRepository(pool)
+  })
+
+  afterAll(async () => {
+    await rollbackTransaction()
+  })
+
+  it('mentioned member with notify_mentions=false gets no job but still gets a notification row', async () => {
+    const owner = await createPlayer(pool)
+    const ownerToken = await playerToken(owner, tokenStore)
+    const group = await createGroupViaApi(app, ownerToken)
+
+    const playerRepo = new PlayerRepository(pool)
+    const mentionedName = `MentionMe-${uid()}`
+    const mentionedPlayer = await playerRepo.findOrCreatePlayerByEmail(
+      `notifyprefs-issue67-${uid()}@test.local`,
+      mentionedName,
+      undefined,
+      undefined,
+      defaultAdultAttestation()
+    )
+    const mentioned = {
+      id: mentionedPlayer.id,
+      email: mentionedPlayer.email,
+      name: mentionedPlayer.name ?? mentionedName,
+    }
+    await addMemberWithLevel(pool, group.id, mentioned.id, 'mentions_polls')
+    await settingsRepo.upsert(mentioned.id, { notifyMentions: false })
+
+    await request(app)
+      .post(`/player/groups/${group.id}/messages`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ body: `Hey @${mentioned.name} check this out` })
+
+    await new Promise(r => setTimeout(r, 100)) // fire-and-forget notification settle
+
+    // The alert is suppressed — that part already worked.
+    expect(notifyJobsFor(jobQueue, mentioned.id)).toBe(0)
+
+    // ...but the record the player catches up from must survive.
+    const mentionedToken = await playerToken(mentioned, tokenStore)
+    const res = await request(app)
+      .get('/player/notifications/messages')
+      .set('Authorization', `Bearer ${mentionedToken}`)
+    expect(res.status).toBe(200)
+    expect(res.body.messages.some((m: any) => m.body.includes('mentioned you'))).toBe(true)
   })
 })
