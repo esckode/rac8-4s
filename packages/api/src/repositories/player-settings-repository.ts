@@ -29,8 +29,8 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
   notifyMentions: true,
   notifyPolls: true,
   notifyNudges: true,
-  quietHoursStart: null,
-  quietHoursEnd: null,
+  quietHoursStart: 8,
+  quietHoursEnd: 17,
   coachMemoryEnabled: true,
 }
 

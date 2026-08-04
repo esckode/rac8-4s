@@ -44,6 +44,21 @@ function slotKey(weekday: number, dayPart: DayPart): string {
   return `${weekday}-${dayPart}`
 }
 
+function formatHourLabel(hour: number): string {
+  if (hour === 0) return '12am'
+  if (hour < 12) return `${hour}am`
+  if (hour === 12) return '12pm'
+  return `${hour - 12}pm`
+}
+
+function generateHourOptions(): { value: number; label: string }[] {
+  const options = []
+  for (let i = 0; i < 24; i++) {
+    options.push({ value: i, label: formatHourLabel(i) })
+  }
+  return options
+}
+
 export const Profile: React.FC = () => {
   const [settings, setSettings] = useState<ProfileSettings | null>(null)
   const [loading, setLoading] = useState(true)
@@ -107,6 +122,12 @@ export const Profile: React.FC = () => {
     const tableDensity = e.target.value as 'comfortable' | 'compact'
     setSettings(prev => (prev ? { ...prev, tableDensity } : prev))
     await patchSettings({ tableDensity })
+  }
+
+  async function handleTimezoneChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const timezone = e.target.value || null
+    setSettings(prev => (prev ? { ...prev, timezone, timezoneManual: !!timezone } : prev))
+    await patchSettings({ timezone, timezoneManual: !!timezone })
   }
 
   async function handleNotifyToggle(field: NotifyToggleField, checked: boolean) {
@@ -206,6 +227,37 @@ export const Profile: React.FC = () => {
             <option value="compact">Compact</option>
           </select>
         </div>
+        <div className="flex items-center gap-3">
+          <label htmlFor="timezone-select" className="text-sm text-(--ink-700)">
+            Timezone
+          </label>
+          <select
+            id="timezone-select"
+            data-testid="timezone-select"
+            value={settings?.timezone ?? ''}
+            onChange={handleTimezoneChange}
+            className="text-sm border border-(--border) rounded-lg px-3 py-2 text-(--ink-900) bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--court-400)"
+          >
+            <option value="">Auto-detect</option>
+            <option value="America/New_York">Eastern (ET)</option>
+            <option value="America/Chicago">Central (CT)</option>
+            <option value="America/Denver">Mountain (MT)</option>
+            <option value="America/Los_Angeles">Pacific (PT)</option>
+            <option value="America/Anchorage">Alaska (AKT)</option>
+            <option value="Pacific/Honolulu">Hawaii (HST)</option>
+            <option value="Europe/London">London (GMT/BST)</option>
+            <option value="Europe/Paris">Central European (CET/CEST)</option>
+            <option value="Europe/Moscow">Moscow (MSK)</option>
+            <option value="Asia/Dubai">Dubai (GST)</option>
+            <option value="Asia/Kolkata">India (IST)</option>
+            <option value="Asia/Bangkok">Bangkok (ICT)</option>
+            <option value="Asia/Hong_Kong">Hong Kong (HKT)</option>
+            <option value="Asia/Tokyo">Tokyo (JST)</option>
+            <option value="Asia/Seoul">Seoul (KST)</option>
+            <option value="Australia/Sydney">Sydney (AEDT/AEST)</option>
+            <option value="Pacific/Auckland">Auckland (NZDT/NZST)</option>
+          </select>
+        </div>
       </section>
 
       <section className="rounded-xl border border-(--border) p-4 bg-(--surface) space-y-3">
@@ -244,28 +296,34 @@ export const Profile: React.FC = () => {
         <div className="flex items-center gap-3 pt-2">
           <span className="text-sm text-(--ink-700)">Quiet hours</span>
           <label htmlFor="quiet-hours-start" className="sr-only">Quiet hours start</label>
-          <input
+          <select
             id="quiet-hours-start"
             data-testid="quiet-hours-start"
-            type="number"
-            min={0}
-            max={23}
-            value={settings?.quietHoursStart ?? ''}
+            value={settings?.quietHoursStart ?? 8}
             onChange={e => handleQuietHoursChange('quietHoursStart', e.target.value)}
-            className="w-16 text-sm border border-(--border) rounded-lg px-2 py-1 text-(--ink-900) bg-(--surface)"
-          />
+            className="text-sm border border-(--border) rounded-lg px-2 py-1 text-(--ink-900) bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--court-400)"
+          >
+            {generateHourOptions().map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
           <span className="text-sm text-(--ink-500)">to</span>
           <label htmlFor="quiet-hours-end" className="sr-only">Quiet hours end</label>
-          <input
+          <select
             id="quiet-hours-end"
             data-testid="quiet-hours-end"
-            type="number"
-            min={0}
-            max={23}
-            value={settings?.quietHoursEnd ?? ''}
+            value={settings?.quietHoursEnd ?? 17}
             onChange={e => handleQuietHoursChange('quietHoursEnd', e.target.value)}
-            className="w-16 text-sm border border-(--border) rounded-lg px-2 py-1 text-(--ink-900) bg-(--surface)"
-          />
+            className="text-sm border border-(--border) rounded-lg px-2 py-1 text-(--ink-900) bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--court-400)"
+          >
+            {generateHourOptions().map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
       </section>
 
