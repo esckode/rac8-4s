@@ -47,7 +47,7 @@ on* — no internals, no SQL, no dev framing.
   profile but don't affect anything yet — they're switched off by default and will apply to phone
   notifications once those exist. Email updates are never affected by them. Nothing is ever hidden
   from you inside the app either: your unscored matches, open polls, and pending confirmations
-  show up on your badges and the up-next strip regardless.
+  show up on your badges and the up-next strip at the top of Play regardless.
 - **Availability** is a weekly grid (morning/afternoon/evening x each day) you can set in your
   profile. It's used only to suggest times where most of a group is free — ask "when can we
   play?" in a group chat and Ref will reply with a count like "4 of 6 free Saturday evening."

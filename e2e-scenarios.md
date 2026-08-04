@@ -2705,7 +2705,7 @@ Then the badge decrements to "1" without a manual refresh (SSE-triggered refetch
 ### Scenario: "Up next" strip lists the player's nearest pending item and deep-links to it
 ```
 Given a player with an unscored match and no other pending items
-When they open the authenticated home (/browse)
+When they open the play hub (/play)
 Then an up-next strip appears at the top naming the match
   And tapping it deep-links to the match's tournament page
 Given a player with nothing pending
@@ -2794,7 +2794,8 @@ Then the toggle is still on and the window still reads 10pm to 7am
   reworks, migrations `052`–`056`
 - Frontend: `pages/Profile.tsx`, `shared/Avatar.tsx`, `shared/formatLocal.ts`,
   `hooks/usePendingActions.ts`, `ResponsiveLayout.tsx` (badges, avatar entry),
-  `BrowseTournaments.tsx` (up-next strip), `GroupChatPanel.tsx` (composer chip)
+  `PlayHub.tsx` (up-next strip — moved off `BrowseTournaments.tsx`, ISSUE-69),
+  `GroupChatPanel.tsx` (composer chip)
 
 ## Feature: 1:1 Coach (private per-player conversation + opt-in memory)
 

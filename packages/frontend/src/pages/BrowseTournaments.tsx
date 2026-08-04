@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { usePendingActions } from '../hooks/usePendingActions'
-import { UpNextStrip } from '../components/shared/UpNextStrip'
 import { statusBadge } from '../utils/tournamentStatus'
 import { selectFeatured } from '../utils/featuredSelection'
 
@@ -107,8 +106,6 @@ export const BrowseTournaments: React.FC = () => {
           🔍
         </button>
       </div>
-
-      <UpNextStrip actions={pendingActions} />
 
       {/* Search */}
       <div style={{ padding: '12px 20px' }}>

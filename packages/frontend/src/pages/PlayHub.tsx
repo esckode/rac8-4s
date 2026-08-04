@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useGroupList } from '../hooks/useGroupList'
 import { fetchPlayerTournaments, fetchPlayerSnapshot, type PlayerTournamentSummary, type PlayerSnapshot } from '../api/client'
+import { usePendingActions } from '../hooks/usePendingActions'
+import { UpNextStrip } from '../components/shared/UpNextStrip'
 import { useOfflineSnapshot } from '../pwa/OfflineSnapshotContext'
 import { SnapshotUpdatedAt } from '../pwa/SnapshotUpdatedAt'
 import { CreateGroupCta } from './MyGroups'
@@ -30,6 +32,7 @@ export const PlayHub: React.FC = () => {
   const { isAuthenticated, isGuest } = useAuth()
   const { updatedAtFor } = useOfflineSnapshot()
   const { groups, loading: groupsLoading } = useGroupList()
+  const pendingActions = usePendingActions()
   const [tournaments, setTournaments] = useState<PlayerTournamentSummary[]>([])
   const [snapshot, setSnapshot] = useState<PlayerSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
@@ -83,6 +86,12 @@ export const PlayHub: React.FC = () => {
         <h1 className="text-3xl font-bold text-(--ink-900)">Play</h1>
         <SnapshotUpdatedAt updatedAt={updatedAtFor('/player/tournaments')} />
       </div>
+
+      {/* ISSUE-69: the up-next strip (P6) leads the hub — what needs doing
+          comes before the passive next-match card. Its previous and only
+          mount was /browse, which renders <NotFound /> under DiscoveryGate
+          while discovery is off, so the feature was unreachable. */}
+      <UpNextStrip actions={pendingActions} />
 
       {isGuest && (
         <div
