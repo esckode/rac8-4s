@@ -294,6 +294,28 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
     }
   })
 
+  // PATCH /player/groups/:groupId/read — ISSUE-56: stamp the caller's membership row
+  // as caught-up. Idempotent; 403 for non-members.
+  router.patch('/:groupId/read', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const session = await resolvePlayerSession(req.headers.authorization)
+      const groupId = req.params.groupId as string
+
+      const memberRole = await groupRepo.getMemberRole(deps.db as any, groupId, session.playerId)
+      if (memberRole === null) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Access denied' })
+      }
+
+      await groupRepo.markGroupRead(groupId, session.playerId)
+
+      log.info('group.read', { groupId, playerId: session.playerId })
+
+      return res.status(200).json({ ok: true })
+    } catch (err) {
+      next(handleGroupError(err))
+    }
+  })
+
   // ─── G1.3 Invite routes ────────────────────────────────────────────────────
   // §10: /:groupId/invites/accept (static suffix) registered before /:groupId/invites
   // Both are registered before /:groupId/members to keep member param routes after.

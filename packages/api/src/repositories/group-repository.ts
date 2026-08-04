@@ -294,13 +294,17 @@ export class GroupRepository {
    */
   async getGroupsForPlayer(
     playerId: string
-  ): Promise<Array<{ id: string; name: string; role: 'owner' | 'member'; memberCount: number; assistantEnabled: boolean; digestEnabled: boolean; groupTimezone: string | null; messageCount: number }>> {
+  ): Promise<Array<{ id: string; name: string; role: 'owner' | 'member'; memberCount: number; assistantEnabled: boolean; digestEnabled: boolean; groupTimezone: string | null; messageCount: number; unreadCount: number }>> {
     const result = await this.pool.query(
       `SELECT g.id, g.name, m.role, g.assistant_enabled, g.digest_enabled, g.group_timezone,
               (SELECT COUNT(*) FROM public.player_group_members WHERE group_id = g.id)::int AS member_count,
               (SELECT COUNT(*) FROM messaging.group_messages gm
                  JOIN messaging.conversations c ON c.id = gm.conversation_id
-                 WHERE c.group_id = g.id::text AND gm.type != 'system')::int AS message_count
+                 WHERE c.group_id = g.id::text AND gm.type != 'system')::int AS message_count,
+              (SELECT COUNT(*) FROM messaging.group_messages gm
+                 JOIN messaging.conversations c ON c.id = gm.conversation_id
+                 WHERE c.group_id = g.id::text AND gm.type != 'system'
+                   AND gm.created_at > m.last_read_at AND gm.player_id IS DISTINCT FROM $1)::int AS unread_count
        FROM public.player_groups g
        JOIN public.player_group_members m ON m.group_id = g.id AND m.player_id = $1
        ORDER BY g.created_at DESC`,
@@ -315,6 +319,7 @@ export class GroupRepository {
       digestEnabled: row.digest_enabled as boolean,
       groupTimezone: row.group_timezone ?? null,
       messageCount: row.message_count as number,
+      unreadCount: row.unread_count as number,
     }))
   }
 
@@ -381,6 +386,18 @@ export class GroupRepository {
     if (result.rowCount === 0) {
       throw Object.assign(new Error('Member not found'), { code: 'NOT_FOUND' })
     }
+  }
+
+  /**
+   * Stamp the caller's membership row as caught-up (ISSUE-56). Idempotent.
+   */
+  async markGroupRead(groupId: string, playerId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE public.player_group_members
+       SET last_read_at = now()
+       WHERE group_id = $1 AND player_id = $2`,
+      [groupId, playerId]
+    )
   }
 
   /**

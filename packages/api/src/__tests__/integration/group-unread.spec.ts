@@ -82,6 +82,23 @@ describe('ISSUE-56 (backend) — group unread + PATCH /:groupId/read', () => {
     )
   }
 
+  /**
+   * The whole suite runs inside one outer transaction (getTestPool's harness),
+   * and Postgres now() is frozen to that transaction's start — so a member
+   * inserted with DEFAULT now() and a message inserted moments "later" in
+   * wall-clock time actually get the IDENTICAL timestamp. Tests that need to
+   * simulate "a message arrived after I last read" must backdate last_read_at
+   * explicitly, relative to that same frozen now(), rather than relying on
+   * insert order.
+   */
+  async function backdateLastRead(groupId: string, playerId: string): Promise<void> {
+    await pool.query(
+      `UPDATE public.player_group_members SET last_read_at = now() - interval '1 hour'
+       WHERE group_id = $1 AND player_id = $2`,
+      [groupId, playerId]
+    )
+  }
+
   async function sendMessage(token: string, groupId: string, body: string): Promise<void> {
     const res = await request(app)
       .post(`/player/groups/${groupId}/messages`)
@@ -103,6 +120,7 @@ describe('ISSUE-56 (backend) — group unread + PATCH /:groupId/read', () => {
     const memberTok = await playerToken(member, tokenStore)
     const group = await createGroup(ownerTok)
     await addMember(group.id, member.id)
+    await backdateLastRead(group.id, member.id)
 
     await sendMessage(ownerTok, group.id, 'Hello from owner')
     await sendMessage(memberTok, group.id, 'Hello from member')
@@ -152,6 +170,7 @@ describe('ISSUE-56 (backend) — group unread + PATCH /:groupId/read', () => {
     const memberTok = await playerToken(member, tokenStore)
     const group = await createGroup(ownerTok)
     await addMember(group.id, member.id)
+    await backdateLastRead(group.id, member.id)
 
     await sendMessage(ownerTok, group.id, 'Unread until PATCH')
 
