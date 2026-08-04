@@ -89,7 +89,7 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-53](#issue-53) | 🔲 Open | 🟠 | `PUBLIC_DISCOVERY_ENABLED` differs per environment and is never set explicitly — local review validates an app that doesn't ship | config · dev-env |
 | [ISSUE-54](#issue-54) | ✅ Resolved | 🔴 | Creating a second group is impossible — "Create your first group" button only appears when groups are empty | frontend |
 | [ISSUE-55](#issue-55) | ✅ Resolved | 🔴 | Pending group invites are invisible in the app — users can only accept via email magic links | frontend |
-| [ISSUE-56](#issue-56) | 🔲 Open | 🟠 | Group unread is per-device and invisible per group — no way to tell *which* group has new messages | frontend · api |
+| [ISSUE-56](#issue-56) | ✅ Resolved | 🟠 | Group unread is per-device and invisible per group — no way to tell *which* group has new messages | frontend · api |
 | [ISSUE-57](#issue-57) | 🔲 Open | 🟡 | Accepting a group invite from Alerts doesn't navigate to the group | frontend · navigation |
 | [ISSUE-58](#issue-58) | 🔲 Open | 🟠 | Profile page missing Account section — can't view email or edit display name | frontend · api |
 | [ISSUE-59](#issue-59) | ✅ Resolved | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
@@ -1686,10 +1686,11 @@ the coverage the original never had.
 4. A signs in on a second browser → still clear (this is the case that fails today).
 5. A group with >99 unread shows `99+`.
 
-### Status — 2026-08-03, backend only (step 2 of the sequence)
+### Status — 2026-08-03
 
-**Backend ✅ done and merged to `main`. Frontend (Fix steps 5-10) is step 4 of the sequence — not
-started yet; do not mark this issue Resolved until that lands too.**
+**✅ Resolved — both halves done and merged to `main`.**
+
+#### Backend (step 2 of the sequence)
 
 - Branch: `fix/issue-56-backend-group-unread` (off `main`, merged back after this step).
 - Red: `test(groups): [RED] server-side per-group read state (ISSUE-56 backend)` (`c1daf98`) — new
@@ -1711,12 +1712,41 @@ started yet; do not mark this issue Resolved until that lands too.**
   regression-checked, unaffected; `--findRelatedTests` on the 4 touched files green apart from the
   pre-existing `notify-prefs.spec.ts` failure (unrelated `wip(profile)` commit, already flagged
   there).
-- Left open for step 4 (frontend): `useGroupList.ts` doesn't read `unreadCount` yet;
-  `group-unread-state.ts`'s `getLastSeenCount`/`markGroupSeen`/`group-last-seen:` keys are still
-  live (client-side shadow state, now redundant but not yet removed); `groupUnreadStore`'s
-  `Subscriber` signature hasn't changed; `useGroupUnread.ts` still diffs client-side;
-  `ResponsiveLayout.tsx`'s Groups badge is untouched; `MyGroups.tsx` has no per-row badge;
-  `useGroupMessages.ts`'s mark-read effect doesn't call the new PATCH.
+#### Frontend (step 4 of the sequence)
+
+- Branch: `fix/issue-56-frontend-group-unread` (off `main`, merged back after this step).
+- Red: `test(groups): [RED] server-truth unread badges + narrowed mark-read PATCH (ISSUE-56 frontend)`
+  — new `state/__tests__/group-unread-state.spec.ts`, `hooks/__tests__/useGroupUnread.spec.ts`,
+  `hooks/__tests__/useGroupMessages.markRead.spec.ts`; `MyGroups.spec.tsx` +
+  `ResponsiveLayout.badges.spec.tsx` extended.
+- Green: `feat(groups): [GREEN] server-truth unread badges + narrowed mark-read PATCH (ISSUE-56 frontend)`
+  — deleted `getLastSeenCount`/`markGroupSeen`/`group-last-seen:`; `Subscriber` is now `() => void`;
+  new `groupUnreadStore.groupsWithUnread()`; `useGroupUnread` renamed to `useGroupsWithUnread`
+  (reads `unreadCount` off `GET /player/groups` directly, no diffing); `useGroupList.ts`'s
+  `GroupSummary` gained `unreadCount`; `useGroupMessages.ts` split into two effects — the existing
+  per-message local `clearGroupUnread` (instant UI response) plus a **new** effect keyed on
+  `[active, groupId]` only that `PATCH`es `/:groupId/read` once on becoming active and once on
+  unmount/inactive; `MyGroups.tsx` per-row `group-unread-badge` (capped `99+`, omitted at 0);
+  `ResponsiveLayout.tsx`'s Groups badge now sourced from `useGroupsWithUnread`.
+- **Own-test bug found and fixed in the green commit**: my mark-read `afterEach` deleted
+  `global.fetch` before RTL's auto-`cleanup()` unmounted the hook, and unmounting fires the PATCH
+  effect's cleanup — `fetch` had already been deleted, throwing `ReferenceError`. Inner-scope
+  `afterEach` hooks run before outer/auto ones in Jest, so the delete always beat the unmount. Fixed
+  by not deleting `global.fetch` in that file (each `beforeEach` reassigns a fresh mock anyway).
+- Verified: 41/43 new/changed jest cases green (2 failures are the pre-existing, already-flagged
+  `wip(chat)` `GroupChatPanel` regression, unrelated); regression suite (other `useGroupMessages.*`
+  specs, `ResponsiveLayout.spec.tsx`, `.guestNav.spec.tsx`) green; wide `--findRelatedTests` on the
+  8 touched files: 202/204 green, same 2 pre-existing failures only.
+- e2e: `player-groups.spec.ts`'s existing "Unread badge…" test needed rewriting — it sent the
+  "unread" message from the *same* token as the viewer, which only worked under the old
+  client-side diffing. Server-side `unread_count` explicitly excludes the caller's own messages
+  (`player_id IS DISTINCT FROM`), so the test now uses a genuine second member (invite-accept),
+  matching this file's other multi-actor tests, and additionally asserts the per-row
+  `group-unread-badge` on `/groups`. `e2e-scenarios.md`'s Gherkin updated to match — no new test
+  added, so the "Player groups" row count is unchanged. Full `player-groups.spec.ts` run: 9/10 pass,
+  the 1 failure is the already-tracked **ISSUE-53** `/browse` 404 (unrelated).
+- docs/assistant-help.md updated for the unread-badge behavior, per §9.
+- Nothing left open.
 
 ### As originally filed
 
