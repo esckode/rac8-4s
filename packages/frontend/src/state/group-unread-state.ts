@@ -12,10 +12,12 @@
  *      client-side diffing anymore (that was the pre-ISSUE-56 mechanism,
  *      which was per-device and reset to "everything unread" on a fresh
  *      device/cache, since it had no server-side read state to compare
- *      against). Deliberately NOT a persistent app-wide SSE connection: that
- *      broke Playwright's `networkidle` wait on every authenticated route
- *      (see useNotificationUnread.ts, usePendingActions.ts — same
- *      constraint).
+ *      against).
+ *   3. usePersonalEventsStream (ISSUE-62), the app-wide persistent SSE
+ *      connection to GET /player/notifications/events — on a
+ *      'group.unread.changed' push it calls the same refetch as (2), so the
+ *      badge updates without waiting for refocus. The mount/focus poll in
+ *      (2) remains as the fallback for any gap around a reconnect.
  * Read by the My Groups nav tab badge (groupsWithUnread — count of groups
  * with unread, not total messages) and the per-row badges in the group list
  * (which read unreadCount directly off each row, not from this store).

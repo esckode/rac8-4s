@@ -2,12 +2,13 @@
  * useNotificationUnread — P2.3
  *
  * Returns the unread count for the player's personal notification thread.
- * Fetches on mount + window refocus (matching usePendingActions) — no
- * persistent SSE connection. Unlike the group/coach chat SSE hooks, which
- * only connect while their specific panel is open, this badge is mounted
- * app-wide (ResponsiveLayout), so a permanent connection here never idles:
- * it broke Playwright's `networkidle` wait on every authenticated route.
- * Cleared by Notifications.tsx once the player marks read.
+ * Fetches on mount + window refocus (matching usePendingActions) — this
+ * poll is the fallback that corrects any gap around a reconnect.
+ * usePersonalEventsStream (ISSUE-62) supplements it app-wide: on a
+ * 'message.created' push from GET /player/notifications/events it calls
+ * notificationUnreadStore.increment() directly, so the badge updates
+ * without waiting for refocus. Cleared by Notifications.tsx once the
+ * player marks read.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { notificationUnreadStore } from '../state/notification-unread-state'

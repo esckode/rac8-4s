@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useGroupsWithUnread } from '../../hooks/useGroupUnread'
 import { useNotificationUnread } from '../../hooks/useNotificationUnread'
 import { usePendingActions } from '../../hooks/usePendingActions'
+import { usePersonalEventsStream } from '../../hooks/usePersonalEventsStream'
 import { useAppConfig } from '../../context/AppConfigContext'
 import { MyGroupsUnreadBadge } from '../GroupChatPanel'
 import { ROUTES } from '../../constants/routes'
@@ -168,6 +169,7 @@ const BottomNav = () => {
   const { publicDiscoveryEnabled } = useAppConfig()
   const groupsUnread = useGroupsWithUnread()
   const notificationUnread = useNotificationUnread()
+  usePersonalEventsStream()
   const pendingActions = usePendingActions()
   const pendingGroupItems = pendingActions.openPolls.length + pendingActions.pendingCards.length
   const [isMoreOpen, setIsMoreOpen] = useState(false)

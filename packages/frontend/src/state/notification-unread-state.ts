@@ -2,10 +2,11 @@
  * NotificationUnreadStore — P2.4
  *
  * Tracks the unread count for the player's personal notification thread.
- * Written by useNotificationUnread when a message.created SSE event arrives
- * on /player/notifications/events, and cleared when the Notifications page
- * marks everything read. Mirrors group-unread-state.ts's pattern, simplified
- * to a single total (there is only ever one personal conversation).
+ * Written by usePersonalEventsStream (ISSUE-62) when a message.created SSE
+ * event arrives on /player/notifications/events, and cleared when the
+ * Notifications page marks everything read. Mirrors group-unread-state.ts's
+ * pattern, simplified to a single total (there is only ever one personal
+ * conversation).
  */
 
 type Subscriber = (count: number) => void
