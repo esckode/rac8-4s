@@ -1,5 +1,6 @@
 import { Pool } from 'pg'
 import { GroupMessageRepository } from '../repositories/group-message-repository'
+import type { IBroadcastBus } from '../broadcast-bus'
 import { getLogger } from '../logger'
 
 const log = getLogger('teams-formed-processor')
@@ -10,6 +11,7 @@ export interface TeamsFormedPayload {
 
 interface TeamsFormedProcessorDeps {
   pool: Pool
+  broadcastBus?: IBroadcastBus
 }
 
 /**
@@ -24,8 +26,8 @@ export async function processTeamsFormed(
   deps: TeamsFormedProcessorDeps
 ): Promise<void> {
   const { tournamentId } = payload
-  const { pool } = deps
-  const groupMsgRepo = new GroupMessageRepository(pool)
+  const { pool, broadcastBus } = deps
+  const groupMsgRepo = new GroupMessageRepository(pool, broadcastBus)
 
   const tournamentResult = await pool.query('SELECT name FROM public.tournaments WHERE id = $1', [tournamentId])
   const tournamentName = (tournamentResult.rows[0] as { name?: string } | undefined)?.name ?? 'your tournament'

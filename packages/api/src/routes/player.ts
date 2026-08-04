@@ -8,6 +8,7 @@ import { RatingsRepository } from '../repositories/ratings-repository'
 import { seedRatingForSport } from '../services/ratings-service'
 import { RATING_MIN, RATING_MAX, SEED_DEFAULT, PROVISIONAL_MATCHES } from '../services/ratings-constants'
 import { isReservedDisplayName } from '../assistant/trigger'
+import { createSseConnectionLimiter } from '../sse-connection-limiter'
 import { getLogger } from '../logger'
 
 const log = getLogger('player')
@@ -16,6 +17,9 @@ export default function playerRouter(deps: AppDependencies) {
   const router = Router()
   const playerRepo = new PlayerRepository(deps.db)
   const ratingsRepo = new RatingsRepository(deps.db)
+  // ISSUE-62: caps concurrent /notifications/events streams per user,
+  // mirroring the group-chat/coach routes (ISSUE-61/52).
+  const notificationEventsSseLimiter = createSseConnectionLimiter()
 
   // Resolve the acting player's id from either a magic-link player session or a
   // registered player's account JWT (role 'player', carries playerId). Used by
@@ -414,6 +418,53 @@ export default function playerRouter(deps: AppDependencies) {
       )
 
       res.json({ unread: Number(result.rows[0].n) })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // GET /player/notifications/events — ISSUE-62: a per-player SSE stream
+  // pushing badge-relevant events on the synthetic `player:<id>` channel
+  // (distinct from any real conversation_id): 'message.created' (a personal
+  // notification was posted — see GroupMessageRepository.postPersonalNotification)
+  // and 'group.unread.changed' (a new message landed in a group this player
+  // is a member of — see group-unread-broadcast.ts). Mirrors the
+  // group-chat/coach SSE routes' auth + cap pattern (ISSUE-61/52).
+  router.get('/notifications/events', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!deps.broadcastBus) {
+        return res.status(503).json({ code: 'SERVICE_UNAVAILABLE', message: 'SSE not available' })
+      }
+
+      // Support both Authorization header and query param token (EventSource compat).
+      let authHeader = req.headers.authorization
+      if (!authHeader && req.query.token) {
+        const token = Array.isArray(req.query.token) ? req.query.token[0] : req.query.token
+        authHeader = `Bearer ${token}`
+      }
+
+      const playerId = await resolvePlayerId(authHeader)
+
+      if (!notificationEventsSseLimiter.tryAcquire(playerId, deps.config.limits.sseMaxConnectionsPerUser)) {
+        log.warn('sse.rate.limited', { playerId })
+        return res.status(429).json({ code: 'TOO_MANY_REQUESTS', message: 'Too many active SSE connections' })
+      }
+
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+      res.flushHeaders()
+
+      const unsubscribe = deps.broadcastBus.subscribe(`player:${playerId}`, (event, data) => {
+        if (!res.writableEnded) {
+          res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+        }
+      })
+
+      req.on('close', () => {
+        unsubscribe()
+        notificationEventsSseLimiter.release(playerId)
+      })
     } catch (err) {
       next(err)
     }

@@ -253,7 +253,7 @@ async function main() {
       queueName: 'teams.formed',
       redisUrl: REDIS_URL!,
       processor: async (job) => {
-        await processTeamsFormed(job.data, { pool })
+        await processTeamsFormed(job.data, { pool, broadcastBus: assistantDeps.broadcastBus })
       },
     }),
   ]

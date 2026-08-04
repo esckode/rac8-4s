@@ -51,6 +51,7 @@ import {
   CREATE_POLL_ERROR_HTTP_STATUS,
   CAST_VOTE_ERROR_HTTP_STATUS,
 } from '../services/poll-service'
+import { broadcastGroupUnreadChanged } from '../group-unread-broadcast'
 
 const INVITE_TTL_SECONDS = 7 * 24 * 3600 // 7 days
 
@@ -89,7 +90,7 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
   const groupRepo = new GroupRepository(deps.db as any)
   const playerRepo = new PlayerRepository(deps.db as any)
   const playerSettingsRepo = new PlayerSettingsRepository(deps.db as any)
-  const groupMsgRepo = new GroupMessageRepository(deps.db as any)
+  const groupMsgRepo = new GroupMessageRepository(deps.db as any, deps.broadcastBus)
   const conversationRepo = new ConversationRepository(deps.db as any)
   const pollRepo = new PollRepository(deps.db as any)
   const leaderboardRepo = new LeaderboardRepository(deps.db as any)
@@ -695,6 +696,12 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
             createdAt: message.createdAt,
           })
         }
+
+        // ISSUE-62: nudge every other member's live Groups badge, independent
+        // of the jobQueue-gated push notifications below.
+        broadcastGroupUnreadChanged(groupRepo, deps.broadcastBus, groupId, session.playerId).catch((e: Error) => {
+          log.warn('group.unread.broadcast.failed', { groupId, error: e.message })
+        })
 
         // G2.4: enqueue messaging.notify jobs per-recipient according to notify_level.
         // Fetch members + their notify levels, run the selector, then enqueue one job

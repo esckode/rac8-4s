@@ -19,6 +19,7 @@ import { selectNotifyRecipients, type GroupMemberForNotify } from '../group-noti
 import { shouldEnqueueNotify } from '../notify-gate'
 import type { JobQueue } from '@worker/job-queue'
 import type { IBroadcastBus } from '../broadcast-bus'
+import { broadcastGroupUnreadChanged } from '../group-unread-broadcast'
 import { getLogger } from '../logger'
 
 const log = getLogger('poll-service')
@@ -106,6 +107,12 @@ export async function createPoll(deps: PollServiceDeps, input: CreatePollInput):
       createdAt: new Date().toISOString(),
     })
   }
+
+  // ISSUE-62: nudge every other member's live Groups badge, independent of
+  // the jobQueue-gated push notifications below.
+  broadcastGroupUnreadChanged(groupRepo, broadcastBus, groupId, playerId).catch((e: Error) => {
+    log.warn('group.unread.broadcast.failed', { groupId, error: e.message })
+  })
 
   // G2.4 notify-on-create: poll type → notify 'all' + 'mentions_polls'
   if (jobQueue) {

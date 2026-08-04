@@ -11,6 +11,7 @@
  * separate cache needed. This is the "cached at write" pattern described in §10.
  */
 import { Pool } from 'pg'
+import type { IBroadcastBus } from '../broadcast-bus'
 import { getLogger } from '../logger'
 
 const log = getLogger('group-message-repository')
@@ -98,7 +99,7 @@ function rowToGroupMessage(row: any): GroupMessageRow {
 }
 
 export class GroupMessageRepository {
-  constructor(private pool: Pool) {}
+  constructor(private pool: Pool, private broadcastBus?: IBroadcastBus) {}
 
   /**
    * Resolve (or create) the conversation_id for a player group.
@@ -361,6 +362,9 @@ export class GroupMessageRepository {
    * Writes a recipient row so the unread badge and digest processor can act on it.
    * `metadata` carries deep-link payloads (e.g. { groupId } — P3.5's JSONB column,
    * same convention as nudge messages); returns enough to broadcast over SSE.
+   * ISSUE-62: emits 'message.created' on the synthetic `player:<id>` channel
+   * when a broadcastBus is configured, so GET /player/notifications/events
+   * can push the Alerts badge live instead of waiting for refocus.
    */
   async postPersonalNotification(
     playerId: string,
@@ -411,6 +415,14 @@ export class GroupMessageRepository {
       await client.query('COMMIT')
 
       log.info('personal.notification.posted', { playerId, conversationId, body })
+
+      this.broadcastBus?.emit(`player:${playerId}`, 'message.created', {
+        id: messageId,
+        conversationId,
+        body,
+        createdAt,
+        metadata: metadata ?? null,
+      })
 
       return { id: messageId, conversationId, createdAt }
     } catch (err) {

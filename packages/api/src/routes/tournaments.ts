@@ -101,7 +101,7 @@ export default function tournamentsRouter(deps: AppDependencies) {
   const accountRepo = new AccountRepository(deps.db)
   const conversationRepo = new ConversationRepository(deps.db as any)
   const leaderboardRepo = new LeaderboardRepository(deps.db as any)
-  const groupMsgRepo = new GroupMessageRepository(deps.db as any)
+  const groupMsgRepo = new GroupMessageRepository(deps.db as any, deps.broadcastBus)
   const sseConnectionCount = new Map<string, number>()
 
   // ISSUE-15: notify an already-account-linked partner that they've been
