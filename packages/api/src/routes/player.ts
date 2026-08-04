@@ -339,6 +339,10 @@ export default function playerRouter(deps: AppDependencies) {
     try {
       const playerId = await resolvePlayerId(req.headers.authorization)
 
+      // ISSUE-63: actionable notifications (metadata carries an unresolved
+      // action — groupInviteToken today) stay unread until the action
+      // completes, so the badge means "you still owe someone a response,"
+      // not just "you've scrolled past this."
       await deps.db.query(
         `UPDATE messaging.group_message_recipients gmr
          SET read_at = now()
@@ -348,11 +352,43 @@ export default function playerRouter(deps: AppDependencies) {
            AND c.type = 'personal'
            AND c.player_id = $1
            AND gmr.player_id = $1
-           AND gmr.read_at IS NULL`,
+           AND gmr.read_at IS NULL
+           AND (gm.metadata->>'groupInviteToken') IS NULL`,
         [playerId]
       )
 
       log.info('notifications.read', { playerId })
+
+      res.json({ ok: true })
+    } catch (err) {
+      next(err)
+    }
+  })
+
+  // POST /player/notifications/:messageId/read - clear one specific row
+  // (ISSUE-63: used when an actionable notification's action completes,
+  // e.g. a group invite is accepted — mark-all-read above deliberately
+  // skips it until then). Idempotent; no-op if the row doesn't belong to
+  // the caller.
+  router.post('/notifications/:messageId/read', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const playerId = await resolvePlayerId(req.headers.authorization)
+      const messageId = req.params.messageId as string
+
+      await deps.db.query(
+        `UPDATE messaging.group_message_recipients gmr
+         SET read_at = now()
+         FROM messaging.group_messages gm
+         JOIN messaging.conversations c ON c.id = gm.conversation_id
+         WHERE gmr.message_id = gm.id
+           AND gm.id = $2
+           AND c.type = 'personal'
+           AND c.player_id = $1
+           AND gmr.player_id = $1`,
+        [playerId, messageId]
+      )
+
+      log.info('notification.read', { playerId, messageId })
 
       res.json({ ok: true })
     } catch (err) {

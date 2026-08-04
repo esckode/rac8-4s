@@ -175,6 +175,9 @@ they beat you head-to-head.
   check email. Accepting takes you straight into the group's chat. Accepting an already-used
   invite shows "This invite is no longer valid" instead of failing silently. Brand-new invitees
   (no account yet) still only get the email link.
+- **A pending invite keeps the Alerts badge lit even after you've opened the tab.** Just looking
+  at it doesn't count as handled — the badge means "you still owe someone a response," so it only
+  clears once you actually accept (or the invite expires after 7 days).
 - Groups have **owners and members**. A group can have several owners. Owners can invite people,
   remove members, delete messages, promote members to owner, and change group settings. Members
   can chat, vote in polls, and create polls.

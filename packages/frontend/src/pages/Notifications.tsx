@@ -27,13 +27,16 @@ export const Notifications: React.FC = () => {
       .then((data: { messages: NotificationMessage[] }) => {
         setMessages(data.messages)
         setLoading(false)
-        // Mark all as read (fire-and-forget)
+        // Mark all as read (fire-and-forget). The server deliberately leaves
+        // actionable rows (e.g. a pending group invite) unread — ISSUE-63 —
+        // so the badge must reflect that, not assume everything cleared.
+        const stillActionable = data.messages.filter(m => m.metadata?.groupInviteToken).length
         fetch('/player/notifications/read', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...headers },
         })
           .then(r => {
-            if (r.ok) notificationUnreadStore.clear()
+            if (r.ok) notificationUnreadStore.set(stillActionable)
           })
           .catch(() => {})
       })
@@ -65,7 +68,13 @@ export const Notifications: React.FC = () => {
             <NotificationCard
               key={m.id}
               message={m}
-              onAccepted={() => setMessages(prev => prev.filter(msg => msg.id !== m.id))}
+              onAccepted={() => {
+                setMessages(prev => prev.filter(msg => msg.id !== m.id))
+                // ISSUE-63: this card was one of the actionable rows the
+                // mark-all-read above left unread — its action is now
+                // resolved, so it no longer owes a response.
+                notificationUnreadStore.set(Math.max(0, notificationUnreadStore.get() - 1))
+              }}
             />
           ))}
         </div>

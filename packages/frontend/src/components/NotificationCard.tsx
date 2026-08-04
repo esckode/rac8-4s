@@ -79,6 +79,14 @@ export const NotificationCard: React.FC<{ message: NotificationMessage; onAccept
         )
         return
       }
+      // ISSUE-63: the invite is now resolved — clear its own unread row so
+      // the Alerts badge doesn't stay inflated by an already-actioned item
+      // (mark-all-read deliberately skips actionable rows until this).
+      fetch(`/player/notifications/${message.id}/read`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).catch(() => {})
+
       onAccepted?.()
       navigate(`/groups/${groupId}`)
     } finally {
