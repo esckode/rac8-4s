@@ -32,12 +32,17 @@ module.exports = {
   // --write. Keep explanations here, above the block, instead.
   coverageThreshold: {
     global: {
-      branches: 71,
-      functions: 74,
+      branches: 72,
+      functions: 75,
       lines: 84,
-      statements: 82,
+      statements: 83,
     },
     './src/workers/sw-lib/**/*.ts': {
+      // Held at 93 deliberately (2026-08-04). The ratchet offered 99, but this
+      // is the metric CLAUDE.md §13 names as nondeterministic — sync-queue.ts
+      // has been observed at both 93.75% and 100% branch coverage on an
+      // unchanged tree, and nothing in this branch touched sw-lib. Taking the
+      // raise would set a floor the next ordinary run fails.
       branches: 93,
       functions: 91,
       lines: 100,

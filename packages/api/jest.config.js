@@ -45,10 +45,10 @@ module.exports = {
   // flaky tests barely move coverage), but the flakiness is a real defect to fix.
   coverageThreshold: {
     global: {
-      branches: 76,
-      functions: 87,
-      lines: 87,
-      statements: 87,
+      branches: 77,
+      functions: 88,
+      lines: 88,
+      statements: 88,
     },
   },
   moduleNameMapper: {
