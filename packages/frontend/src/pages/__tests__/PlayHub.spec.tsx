@@ -5,6 +5,17 @@ import { MemoryRouter } from 'react-router-dom'
 import { PlayHub } from '../PlayHub'
 import { OfflineSnapshotProvider, notifyOfflineSnapshot } from '../../pwa/OfflineSnapshotContext'
 
+let mockPendingActions: {
+  unscoredMatches: unknown[]
+  openPolls: unknown[]
+  pendingCards: unknown[]
+  nearestDeadline: unknown
+} = { unscoredMatches: [], openPolls: [], pendingCards: [], nearestDeadline: null }
+
+jest.mock('../../hooks/usePendingActions', () => ({
+  usePendingActions: () => mockPendingActions,
+}))
+
 const mockNavigate = jest.fn()
 jest.mock('react-router-dom', () => ({
   ...jest.requireActual('react-router-dom'),
@@ -183,5 +194,77 @@ describe('PlayHub (ISSUE-28)', () => {
     act(() => notifyOfflineSnapshot('/player/tournaments', updatedAtIso))
 
     expect(await screen.findByTestId('snapshot-updated-at')).toHaveTextContent('Updated 10:30')
+  })
+})
+
+// ============================================================================
+// ISSUE-69 — the up-next strip (P6) lives here now. Its only mount used to be
+// BrowseTournaments, and /browse renders <NotFound /> under DiscoveryGate while
+// PUBLIC_DISCOVERY_ENABLED is false (ISSUE-29), so a finished feature had no
+// route that could display it.
+// ============================================================================
+
+describe('PlayHub — up-next strip (ISSUE-69)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    localStorage.clear()
+    localStorage.setItem('auth_token', 'player-token')
+    mockUseAuth.mockReturnValue({
+      user: { id: 'p1', email: 'p@x.com', role: 'player' },
+      isAuthenticated: true,
+      loading: false,
+    } as any)
+    mockUseGroupList.mockReturnValue({
+      groups: [],
+      loading: false,
+      error: null,
+      unauthorized: false,
+      refetch: jest.fn(),
+    } as any)
+    mockFetchTournaments.mockResolvedValue([] as any)
+    mockFetchSnapshot.mockResolvedValue(EMPTY_SNAPSHOT as any)
+    mockPendingActions = { unscoredMatches: [], openPolls: [], pendingCards: [], nearestDeadline: null }
+  })
+
+  it('renders the up-next strip when something is pending', async () => {
+    mockPendingActions = {
+      unscoredMatches: [{ tournamentId: 't1', tournamentName: 'Spring Open', matchId: 'm1', opponentName: 'Sam' }],
+      openPolls: [],
+      pendingCards: [],
+      nearestDeadline: null,
+    }
+
+    renderHub()
+
+    expect(await screen.findByTestId('up-next-strip')).toBeInTheDocument()
+    expect(screen.getByTestId('up-next-match')).toHaveAttribute('href', '/tournament/t1/details')
+  })
+
+  it('places the strip above the next-match card', async () => {
+    mockPendingActions = {
+      unscoredMatches: [{ tournamentId: 't1', tournamentName: 'Spring Open', matchId: 'm1', opponentName: 'Sam' }],
+      openPolls: [],
+      pendingCards: [],
+      nearestDeadline: null,
+    }
+    mockFetchSnapshot.mockResolvedValue({
+      nextMatch: { opponentName: 'Rita', tournamentName: 'Spring Open' },
+      standingsRows: [],
+      lastResults: [],
+    } as any)
+
+    renderHub()
+
+    const strip = await screen.findByTestId('up-next-strip')
+    const nextMatch = await screen.findByTestId('next-match-card')
+    // Node.compareDocumentPosition: FOLLOWING (4) means nextMatch comes after strip.
+    expect(strip.compareDocumentPosition(nextMatch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('renders nothing when there is nothing pending', async () => {
+    renderHub()
+
+    await waitFor(() => expect(mockFetchTournaments).toHaveBeenCalled())
+    expect(screen.queryByTestId('up-next-strip')).not.toBeInTheDocument()
   })
 })

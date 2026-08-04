@@ -101,7 +101,7 @@ test.describe('Player Personalization — quiet hours (P9, scenario 13)', () => 
     await setQuietHoursCoveringNow(quietAccountToken)
 
     const groupId = await createGroup(ownerToken, `Quiet Hours Group ${Date.now()}`)
-    await seedScheduledSession(groupId, [ownerPlayerId, quietPlayerId], 47)
+    const tournamentId = await seedScheduledSession(groupId, [ownerPlayerId, quietPlayerId], 47)
 
     await runNudgeSweep()
 
@@ -115,10 +115,11 @@ test.describe('Player Personalization — quiet hours (P9, scenario 13)', () => 
 
     await expect(page.locator(SELECTORS.NAV_BADGE_MATCHES)).toHaveText('1', { timeout: 8000 })
 
-    // ISSUE-69: the up-next strip is rendered only by BrowseTournaments.tsx, so
-    // it is unreachable while discovery is off (ISSUE-29) — there is no route
-    // that can show it. The badge above carries the pending-actions proof until
-    // the strip has a reachable home; asserting it here could only ever fail.
+    // ISSUE-69: the up-next strip now mounts on /play. Its only previous mount
+    // was BrowseTournaments, i.e. /browse — unreachable while discovery is off.
+    const matchLink = page.locator(SELECTORS.UP_NEXT_MATCH)
+    await expect(matchLink).toBeVisible()
+    await expect(matchLink).toHaveAttribute('href', `/tournament/${tournamentId}/details`)
   })
 
   // ISSUE-66: the control is inert by design, so the only thing that can break

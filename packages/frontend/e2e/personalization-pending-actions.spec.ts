@@ -77,7 +77,10 @@ test.describe('Player Personalization — pending-actions FE surfaces', () => {
     const { token: scopedOwnerToken } = await signupAndGetToken(owner, tournamentId)
 
     await loginFrontend(page, scopedOwnerToken)
-    await page.goto('/browse')
+    // ISSUE-62: /browse renders <NotFound /> under DiscoveryGate while
+    // PUBLIC_DISCOVERY_ENABLED is false, so the nav shell — and with it the
+    // badge — cannot exist. /play is auth-gated but outside DiscoveryGate.
+    await page.goto('/play')
 
     await expect(page.locator(SELECTORS.NAV_BADGE_MATCHES)).toHaveText('1', { timeout: 8000 })
 
@@ -97,7 +100,9 @@ test.describe('Player Personalization — pending-actions FE surfaces', () => {
     const { token: scopedOwnerToken } = await signupAndGetToken(owner, tournamentId)
 
     await loginFrontend(page, scopedOwnerToken)
-    await page.goto('/browse')
+    // ISSUE-69: the strip moved off /browse (unreachable under DiscoveryGate
+    // while discovery is off) to /play, the pending-actions hub.
+    await page.goto('/play')
 
     await expect(page.locator(SELECTORS.UP_NEXT_STRIP)).toBeVisible({ timeout: 8000 })
     const matchLink = page.locator(SELECTORS.UP_NEXT_MATCH)
