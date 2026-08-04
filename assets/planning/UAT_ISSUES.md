@@ -67,7 +67,7 @@ serious one and was found only because a *live* round-trip was attempted: the se
 never accepted any P9 field, so every notify toggle and quiet-hours edit has always returned 200 and
 saved nothing. ISSUE-69 and ISSUE-70 are pre-existing reds surfaced by the same run, both left by the
 2026-08-03 recovered-WIP pair (`bf62816`, `bcf043e`) and neither in the quiet-hours path.
-**Number the next one 71.**
+**Number the next one 72.**
 
 > **⚠️ Branch state for ISSUE-66–70 — read before picking any of these up.**
 > All five are **code-complete and committed on `fix/quiet-hours-noop`**. Both owner decisions that
@@ -139,6 +139,7 @@ saved nothing. ISSUE-69 and ISSUE-70 are pre-existing reds surfaced by the same 
 | [ISSUE-68](#issue-68) | ✅ Fixed (unmerged) | 🔴 | `PATCH /api/auth/me/settings` silently discards every P9 field — the whole notification-preferences UI has never saved | api |
 | [ISSUE-69](#issue-69) | ✅ Fixed (unmerged) | 🟡 | The up-next strip renders only on `/browse`, so it is unreachable while discovery is off — a shipped P6 feature with no route | frontend |
 | [ISSUE-70](#issue-70) | ✅ Fixed (unmerged) | 🟡 | Chat redesign dropped the avatar on your own messages, leaving `personalization-ui.spec.ts` red on main | frontend · test-debt |
+| [ISSUE-71](#issue-71) | 🔲 Open | 🟡 | The e2e rate-limit override raises only 1 of the 3 limiters on the register route, so a full sweep poisons its own registration specs | test-infra |
 
 ### Implementation sequence for ISSUE-56–64
 
@@ -3024,12 +3025,27 @@ change — it is the exact predicate the client-side implementation will need.
   did not mention — converting the window from number inputs to `<select>`s made `toHaveValue` read
   a string, so `Profile.spec.tsx`'s numeric assertion had been failing since 2026-08-03.
 
-**Pending before merge:**
+**Merge gates — all run 2026-08-04:**
 
-1. Full both-browser e2e sweep — the §11 merge gate, not run yet.
-2. `node scripts/ratchet-coverage.mjs` — not run; new branches in `auth.ts` and `Profile.tsx` may
-   move the floors.
-3. Merge to `main` (prefer fast-forward, §11).
+1. **Full both-browser e2e sweep: 439 passed, 16 skipped, 8 flaky, 12 failed (8.4m).** Of the 12,
+   **11 are the `[pwa]` project**, which needs the preview build on **4173** and cannot pass against
+   the dev server — run separately (`npm run preview:pwa`, then `--project=pwa`): **11/11 green.**
+   The 12th is [ISSUE-71](#issue-71), rate-limit contamination, which passes in isolation. The 8
+   flaky all pass on retry (the known parallel-load flakiness). **No spec touched by this branch
+   failed.**
+2. **`--findRelatedTests`:** `src/routes/auth.ts` → 109 suites / 1595 tests green; the frontend
+   diff → 25 suites / 237 tests green.
+3. **Coverage ratchet applied** (`29ae87c`): api functions/lines/statements 87 → 88; frontend
+   branches 71 → 72, functions 74 → 75, statements 82 → 83. The offered sw-lib branches 93 → 99 was
+   **declined** — §13's known-nondeterministic metric, untouched by this branch.
+   `npm run test:coverage` green in all four workspaces (4,595 tests).
+4. Merge to `main` (fast-forward, §11).
+
+⚠️ **`PUBLIC_DISCOVERY_ENABLED` must be `true` for a meaningful sweep.** The local
+`packages/api/.env` had it `false`, which is what `.env.example` explicitly warns against for
+dev/e2e. `POST /tournaments/:id/register` 404s while it is off, so `accessibility.spec.ts` and both
+bracket specs fail on registration — while `browse-tournaments.spec.ts` and friends *skip* cleanly,
+which makes the misconfiguration look harmless. It is not.
 
 ---
 
@@ -3364,3 +3380,57 @@ works only because it signs the invitee up first. Same order is now used here (`
   an uncommitted working tree on 2026-08-03 and committed as-is. Between them they left **four**
   red tests on `main`, and their messages disclosed only two. When something in this area fails
   unexpectedly, check those two commits before assuming your own change caused it.
+
+---
+
+## ISSUE-71 — The e2e rate-limit override covers only one of three limiters 🟡 {#issue-71}
+
+*Found 2026-08-04 during the merge-gate sweep for [ISSUE-66](#issue-66)–[70](#issue-70).*
+
+### Symptom
+
+`tournament-discovery-registration.spec.ts:562` — *"Completes signup via magic link for doubles
+tournament"* — fails at the end of a full both-browser sweep with:
+
+```
+Failed to register for doubles tournament: 429
+{"code":"RATE_LIMITED","message":"Too many attempts. Try again later.","retryAfterSeconds":900}
+```
+
+It is **not** a code defect and not flakiness in the usual sense: the same test passes in isolation
+in 9.4s immediately after an API restart. The sweep exhausts the budget, and Playwright's two
+retries re-spend it inside the same 15-minute window, so a contaminated test can never recover
+within its own run.
+
+### Root cause
+
+`POST /tournaments/:id/register` mounts **three** rate limiters (`routes/tournaments.ts:1421-1435`):
+
+| Limiter | Default max | Raised for e2e? |
+|---|---|---|
+| `registerPerEmail` | 3 | ❌ |
+| `registerPerIp` | 25 | ✅ → 10000 |
+| `partnerInvitePerEmail` | 3 | ❌ |
+
+The documented override — `APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS=10000`, which
+`scripts/e2e-setup.js` checks and reports as *"Rate-limit override: ✅"* — raises only the middle
+row. The two sharp anti-bombing limiters (3 attempts each) are untouched, so the setup script's ✅
+overstates what is actually protected.
+
+Counters are held in an in-memory store, so **restarting the API is what clears them**, not waiting
+for Redis keys to expire — there are none to find.
+
+### Suggested fix
+
+Add the two missing overrides to `.env.example` alongside the existing one, and widen the
+`e2e-setup.js` check to report all three rather than green-lighting on one. Whether the doubles spec
+should also use a unique partner email per attempt is worth a look while in there.
+
+### Status — 2026-08-04
+
+**🔲 Open — filed, not fixed.** Diagnosed during the ISSUE-66–70 merge gate and deliberately left
+out of that branch, which is about quiet hours, settings persistence and two frontend defects.
+
+**Impact on reading a sweep:** treat a lone `RATE_LIMITED` on a registration spec as contamination
+until proven otherwise. Restart the API, re-run the single test, and only then call it a
+regression. This one cost a full sweep to rule out.
