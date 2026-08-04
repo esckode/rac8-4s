@@ -92,7 +92,7 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-56](#issue-56) | 🔲 Open | 🟠 | Group unread is per-device and invisible per group — no way to tell *which* group has new messages | frontend · api |
 | [ISSUE-57](#issue-57) | 🔲 Open | 🟡 | Accepting a group invite from Alerts doesn't navigate to the group | frontend · navigation |
 | [ISSUE-58](#issue-58) | 🔲 Open | 🟠 | Profile page missing Account section — can't view email or edit display name | frontend · api |
-| [ISSUE-59](#issue-59) | 🔲 Open | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
+| [ISSUE-59](#issue-59) | ✅ Resolved | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
 | [ISSUE-60](#issue-60) | 🔲 Open | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
 | [ISSUE-61](#issue-61) | ✅ Resolved | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
 | [ISSUE-62](#issue-62) | 🔲 Open | 🟡 | Badges never update live — no SSE push for notification/group unread (blocked on 52 + 61) | frontend · api |
@@ -1954,6 +1954,41 @@ Per §9, update `docs/assistant-help.md` in the same change.
 3. Ratings tab loads current ratings and partners; a never-played account shows the seeded
    provisional rating rather than an empty page.
 4. Profile no longer shows ratings or partners.
+
+### Status — 2026-08-03 (step 3 of the sequence)
+
+**✅ Resolved.**
+
+- Branch: `fix/issue-59-ratings-page-nav-restructure` (off `main`, merged back after this step).
+- Red: `test(nav): [RED] Ratings page + bottom nav fixed at 5 tabs (ISSUE-59)` (`4eee310`) — new
+  `Ratings.spec.tsx` (ported from Profile's rating/partner cases); new `ResponsiveLayout.spec.tsx`
+  cases for the 5-tab count/order + `nav-ratings`; new `ResponsiveLayout.guestNav.spec.tsx` cases
+  for "authenticated, flag on → no Browse tab, Browse in the More sheet"; `Profile.spec.tsx`
+  updated to assert the sections are gone.
+- Green: `feat(nav): [GREEN] Ratings page + bottom nav fixed at 5 tabs (ISSUE-59)` (`63ffb5c`) — new
+  `pages/Ratings.tsx` + `/ratings` route (`ProtectedRoute`); new `StarIcon`; `ResponsiveLayout.tsx`'s
+  `BottomNav` authenticated path rebuilt as one 5-item array (`authItems`, optional `renderBadge`/
+  `ariaLabel` per entry) replacing the old conditional-tab + hardcoded-JSX mix; `MORE_ITEMS` gained
+  a `discoveryOnly` flag (mirrors `organizerOnly`) so Browse renders inside the More sheet instead
+  of a 6th tab. `Profile.tsx`'s ratings/partners state, fetches, and sections removed.
+- **Guest nav scope decision (not explicit in the original fix text, applied here):** guests have no
+  More sheet today (`nav-more` is `isAuthenticated`-gated), so relocating Browse into `MORE_ITEMS`
+  would make it unreachable for a guest with discovery on. Read "bottom nav must fix at 5 tabs" as
+  scoped to the *authenticated* nav (the one actually being fixed at 5) and left the guest path
+  (Browse-as-a-tab alongside sign-in) untouched. Flag if this reading is wrong.
+- Also updated (needed for the route move, not itself in the issue's fix list):
+  `e2e/ratings.spec.ts` (`/profile` → `/ratings`, testids unchanged), `e2e/layout.spec.ts`'s stale
+  "ISSUE-29 will land on four" comment (now fixed at five, not shrinking further).
+- docs/assistant-help.md: new "Ratings" section + nav-order bullet, per §9.
+- Verified: 44/45 new/changed jest cases green (the 1 failure is the pre-existing, already-flagged
+  `wip(profile)` quiet-hours bug — unrelated); wide `--findRelatedTests` on the 10 touched files:
+  224/227 green, the 3 failures are that same pre-existing bug plus the pre-existing, already-flagged
+  `wip(chat)` `GroupChatPanel` message-label regression — neither caused by this change.
+- e2e: `ratings` spec — 9/13 passed; **4 failed on `POST /tournaments/:id/register` → 404**, which is
+  already-tracked **ISSUE-53** (`PUBLIC_DISCOVERY_ENABLED=false` on the currently-running dev API),
+  not a regression from the route move (registration is unrelated to nav/routing). `layout` spec:
+  3/3 passed (geometry guard, count-agnostic by design).
+- Nothing left open for this issue.
 
 ---
 
