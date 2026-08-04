@@ -50,7 +50,12 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 **ISSUE-65 filed 2026-08-04** during independent verification of the ISSUE-56–64 arc, which also
 **reopened [ISSUE-62](#issue-62)**. Both concern `notifications.spec.ts`: 62's badge test proves
 nothing on a discovery-off environment, and 65's two failures are stale arithmetic left by
-[ISSUE-55](#issue-55). **Number the next one 66.**
+[ISSUE-55](#issue-55). Both since resolved.
+
+**ISSUE-66 filed 2026-08-04**, found while fixing [ISSUE-65](#issue-65)'s quiet-hours flake:
+`DEFAULT_PLAYER_SETTINGS`'s quiet-hours window contradicts its own migration's documented intent,
+and the timezone fallback for evaluating it defaults to UTC — silently dropping notifications for
+players who haven't set a timezone yet. **Number the next one 67.**
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -102,6 +107,7 @@ nothing on a discovery-off environment, and 65's two failures are stale arithmet
 | [ISSUE-65](#issue-65) | ✅ Resolved | 🟠 | Notification specs predate ISSUE-55's in-app invites — assert counts that no longer hold | e2e · test-debt |
 | [ISSUE-63](#issue-63) | ✅ Resolved | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
 | [ISSUE-64](#issue-64) | ✅ Resolved | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
+| [ISSUE-66](#issue-66) | 🔲 Open | 🟠 | Default quiet hours contradict their own migration's intent, and default to UTC for any player without a timezone — silently drops notifications | api |
 
 ### Implementation sequence for ISSUE-56–64
 
@@ -2799,3 +2805,104 @@ clearable. **Raise this with the owner rather than changing behaviour under this
   default's effect on jest tests (above), and [ISSUE-62](#issue-62) inherits `:99`'s badge failure
   plus whatever arithmetic it exposes once no longer parked on `/browse` (this issue's fix may have
   changed what that test needs to assert — not verified here, that's the next issue).
+
+---
+
+## ISSUE-66 — Default quiet hours contradict their own migration, and default to UTC 🟠 {#issue-66}
+
+*Found 2026-08-04 while diagnosing [ISSUE-65](#issue-65)'s quiet-hours flake. Two compounding
+defects in the same code path, not one — this issue covers both because neither fully explains the
+symptom without the other.*
+
+### Symptom
+
+A player who has never set a timezone (every brand-new player, until their first group message or
+Profile visit — see `player-groups.ts:670-675`, P1a auto-follow) silently gets **no** in-app
+notification or push for `@mentions`, polls, or deadline nudges between roughly 08:00 and 17:00
+UTC, even though `notifyMentions`/`notifyPolls`/`notifyNudges` all default to `true` and the player
+never touched a quiet-hours setting. Outside that window, the identical flow works. This was first
+observed as e2e/jest flakiness ([ISSUE-65](#issue-65)'s status block, `group-poll.spec.ts`,
+`group-notify.spec.ts`) but is not a test artifact — it reproduces against the live API for a real
+player with no test-only involvement (verified by hand, see below), so it affects production
+traffic during that window for anyone who hasn't yet set a timezone.
+
+### Root cause
+
+Two separate defects stack:
+
+1. **`DEFAULT_PLAYER_SETTINGS` contradicts its own migration's documented intent.**
+   `054_notify_prefs.sql:5-7`'s docblock states the new columns "**All default to the always-on,
+   no-quiet-hours state** so existing players see no behavior change until they opt into narrowing
+   notifications" — i.e. `quiet_hours_start`/`quiet_hours_end` should mean *no window* absent an
+   explicit player choice, which is exactly what `isWithinQuietHours(hour, null, null)` returns
+   (`quiet-hours.ts:11`: `if (start === null || end === null || start === end) return false`). The
+   migration itself adds the columns with no `DEFAULT` clause (nullable, so a real DB row without
+   explicit values gets `NULL`, matching that intent). But `player-settings-repository.ts:25-35`'s
+   `DEFAULT_PLAYER_SETTINGS` — served by `getOrDefaults()` for the common case of a player who has
+   **no settings row at all** (rows are lazily created on first `PATCH`, so this is every player
+   until their first settings change) — hardcodes `quietHoursStart: 8, quietHoursEnd: 17`. No
+   design doc justifies this value (`PERSONALIZATION_DESIGN.md`'s P9 section describes quiet hours
+   dropping the push, never a default window), and "8am–5pm" is an odd choice for a *quiet* window
+   regardless (it's the inverse of a typical do-not-disturb range). This looks like a copy/paste or
+   placeholder value that was never reconciled with the migration's own comment.
+2. **The timezone used to evaluate that window defaults to UTC when unset.** `notify-gate.ts:38`:
+   `hourInTimezone(now, settings.timezone ?? 'UTC')`. `settings.timezone` is `null` until a player
+   sends a group message from a browser or visits `/profile` (P1a). `?? 'UTC'` treats "I don't know
+   this player's timezone" as "assume UTC" — true for very few players. Compare
+   `resolveEffectiveGroupTimezone()` (`group-timezone.ts:11-25`), used by the nudge/digest paths:
+   it has a 3-tier fallback (owner-pinned `group_timezone` → member-majority vote → only then
+   `null`/UTC), so a single member without a timezone doesn't immediately flip the whole group to
+   UTC. Quiet hours has no equivalent rescue — it's evaluated per-player with nothing else to
+   consult.
+
+Defect 1 is what makes defect 2 reachable at all: if `DEFAULT_PLAYER_SETTINGS` matched the
+migration's stated intent (`null, null`), an unset timezone would never matter for quiet hours,
+because there'd be no window to evaluate in the first place.
+
+**Confirmed directly against the live API, not inferred**: created a fresh player via
+`/test/player-token`, sent an `@mention` to them at 08:20 UTC — no notification. Set that same
+player's `quiet_hours_start`/`quiet_hours_end` to `NULL` directly (bypassing the app default) and
+repeated the identical mention — notification created. Reverted, set `timezone` instead to a
+non-UTC IANA zone with `quiet_hours_start`/`end` left at the coded default — also confirms the
+window no longer covers the same UTC clock hours as `now()`. Both variables independently move the
+outcome.
+
+### Product questions to raise, not decide
+
+1. **Should `DEFAULT_PLAYER_SETTINGS.quietHoursStart`/`quietHoursEnd` be `null, null`?** This would
+   make the in-memory default match the DB column default and the migration's own stated intent.
+   If there's a reason a default *window* is wanted (as opposed to "off until the player opts in"),
+   that's a real product decision this issue shouldn't make unilaterally — but as written, the code
+   and its own migration comment disagree, and one of them is wrong.
+2. **What should `shouldEnqueueNotify` do when `settings.timezone` is `null` and quiet hours ARE
+   configured** (either because a player explicitly set them, or if question 1 keeps a default
+   window)? Options include: treat unknown-timezone as "not in quiet hours" (never suppress without
+   a known timezone — errs toward over-notifying), give quiet hours the same group-level rescue
+   nudge/digest already have (a player with no timezone inherits their group's effective tz), or
+   require a resolved timezone before quiet hours can suppress anything at all (skip the whole
+   check, not just default it). Each has different false-positive/false-negative tradeoffs; not
+   decided here.
+
+### Fix
+
+Not designed here — depends on the answers above. At minimum, whichever defaults are chosen should
+have a jest/API test asserting `shouldEnqueueNotify` and `GET /player/notifications/messages`
+behave as intended for a player with zero rows in `player_settings`, since that's the state every
+real player starts in and the current gap here.
+
+### Tests first (TDD — §4, §11)
+
+- API integration/unit — a player with no `player_settings` row (not just no timezone) is not
+  quiet-houred by default, for a mention sent at any UTC hour, matching the migration's stated
+  intent.
+- `notify-gate.spec.ts` (new or extended) — `shouldEnqueueNotify` with `quietHoursStart`/`End` set
+  but `timezone: null` behaves per whatever question 2 above resolves to, at multiple UTC hours
+  (not just one, so a fix can't accidentally hardcode the current hour).
+
+### Verify
+
+1. Sign up a brand-new player (no settings row, no timezone). Have someone `@mention` them, at any
+   time of day. Confirm the in-app notification and push both fire.
+2. Re-run `group-poll.spec.ts` and `group-notify.spec.ts` (flagged as pre-existing flakes in
+   [ISSUE-65](#issue-65)'s status block) at multiple times of day; both should be stable regardless
+   of when they run.
