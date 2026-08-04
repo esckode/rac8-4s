@@ -278,6 +278,54 @@ describe('GroupList', () => {
       expect(screen.getByText('Tennis Regulars')).toBeInTheDocument()
     })
   })
+
+  // ─── ISSUE-56: per-row unread badge ────────────────────────────────────────
+
+  it('renders a per-row unread badge when a group has unread messages', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ groups: [makeGroup({ unreadCount: 3 })] }),
+    })
+    render(
+      <MemoryRouter>
+        <GroupList />
+      </MemoryRouter>
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('group-unread-badge')).toHaveTextContent('3')
+    })
+  })
+
+  it('omits the unread badge for a group with 0 unread', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ groups: [makeGroup({ unreadCount: 0 })] }),
+    })
+    render(
+      <MemoryRouter>
+        <GroupList />
+      </MemoryRouter>
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('group-list-item')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('group-unread-badge')).not.toBeInTheDocument()
+  })
+
+  it('caps the unread badge at 99+', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ groups: [makeGroup({ unreadCount: 150 })] }),
+    })
+    render(
+      <MemoryRouter>
+        <GroupList />
+      </MemoryRouter>
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('group-unread-badge')).toHaveTextContent('99+')
+    })
+  })
 })
 
 // ============================================================================

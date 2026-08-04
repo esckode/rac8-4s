@@ -35,10 +35,18 @@ function pendingActionsResponse(overrides: Partial<{ unscoredMatches: unknown[];
   }
 }
 
-function mockFetchRouter(pending: Partial<{ unscoredMatches: unknown[]; openPolls: unknown[]; pendingCards: unknown[] }>) {
+function groupsResponse(groups: Array<{ id: string; unreadCount: number }> = []) {
+  return { ok: true, json: async () => ({ groups }) }
+}
+
+function mockFetchRouter(
+  pending: Partial<{ unscoredMatches: unknown[]; openPolls: unknown[]; pendingCards: unknown[] }>,
+  groups: Array<{ id: string; unreadCount: number }> = []
+) {
   mockFetch.mockImplementation((url: string) => {
     if (url.includes('/pending-actions')) return Promise.resolve(pendingActionsResponse(pending))
     if (url.includes('/api/auth/me')) return Promise.resolve(meResponse())
+    if (url.includes('/player/groups')) return Promise.resolve(groupsResponse(groups))
     return Promise.resolve({ ok: false, json: async () => ({}) })
   })
 }
@@ -91,6 +99,23 @@ describe('ResponsiveLayout — pending-actions nav badges', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('nav-badge-groups')).toHaveTextContent('9+')
+    })
+  })
+
+  // ISSUE-56: the Groups tab's unread badge (distinct from nav-badge-groups
+  // above, which is polls/cards) counts *groups with unread*, not total
+  // unread messages.
+  it('the groups-unread-badge counts groups with unread, not total messages', async () => {
+    localStorage.setItem('auth_token', 'test-token')
+    mockFetchRouter({}, [
+      { id: 'g1', unreadCount: 40 },
+      { id: 'g2', unreadCount: 40 },
+      { id: 'g3', unreadCount: 40 },
+    ])
+    renderWithProviders()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('groups-unread-badge')).toHaveTextContent('3')
     })
   })
 })
