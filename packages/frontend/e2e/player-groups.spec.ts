@@ -115,6 +115,31 @@ test.describe('G2.5 — Player Groups', () => {
     await expect(page.locator(`text=${groupName}`)).toBeVisible()
   })
 
+  test('A player who already owns a group can create a second one (ISSUE-54)', async ({ page }) => {
+    const user = createTestUser()
+    const { token } = await signupAndGetToken(user)
+
+    const firstGroupName = `First Group ${Date.now()}`
+    await createGroup(token, firstGroupName)
+
+    await loginFrontend(page, token)
+    await page.goto('http://localhost:5173/groups')
+
+    await expect(page.locator(`text=${firstGroupName}`)).toBeVisible({ timeout: 5000 })
+
+    // The create-group CTA must still be reachable now that the list is non-empty.
+    const cta = page.locator('[data-testid="create-group-cta"]')
+    await expect(cta).toBeVisible({ timeout: 5000 })
+    await cta.click()
+
+    const secondGroupName = `Second Group ${Date.now()}`
+    await page.locator('[data-testid="create-group-name-input"]').fill(secondGroupName)
+    await page.locator('[data-testid="create-group-submit"]').click()
+
+    await expect(page.locator(`text=${firstGroupName}`)).toBeVisible({ timeout: 5000 })
+    await expect(page.locator(`text=${secondGroupName}`)).toBeVisible({ timeout: 5000 })
+  })
+
   test('Tapping a group opens the Group page with Chat and Members tabs', async ({ page }) => {
     const user = createTestUser()
     const { token } = await signupAndGetToken(user)

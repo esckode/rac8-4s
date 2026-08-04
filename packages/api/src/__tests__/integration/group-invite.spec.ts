@@ -204,6 +204,90 @@ describe('G1.3 — Group invite flow', () => {
     })
   })
 
+  // ─── ISSUE-55: in-app notification on invite send ────────────────────────────
+
+  describe('POST /player/groups/:groupId/invites — personal notification side effect', () => {
+    it('invite to an email with an existing player writes a personal notification carrying groupInviteToken + inviteEmail', async () => {
+      const owner = await createPlayer(pool)
+      const existingInvitee = await createPlayer(pool)
+      const ownerTok = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerTok)
+
+      emailAdapter.clear()
+      await request(app)
+        .post(`/player/groups/${group.id}/invites`)
+        .set('Authorization', `Bearer ${ownerTok}`)
+        .send({ email: existingInvitee.email })
+
+      // Allow fire-and-forget postPersonalNotification to settle
+      await new Promise(r => setTimeout(r, 100))
+
+      const inviteeTok = await playerToken(existingInvitee, tokenStore)
+      const res = await request(app)
+        .get('/player/notifications/messages')
+        .set('Authorization', `Bearer ${inviteeTok}`)
+
+      expect(res.status).toBe(200)
+      const notif = res.body.messages.find((m: any) => m.metadata?.groupId === group.id)
+      expect(notif).toBeDefined()
+      expect(notif.metadata.groupInviteToken).toEqual(expect.any(String))
+      expect(notif.metadata.inviteEmail).toBe(existingInvitee.email.toLowerCase())
+      expect(notif.metadata.groupName).toEqual(expect.any(String))
+    })
+
+    it('invite to an unknown email writes no notification but still sends the email', async () => {
+      const owner = await createPlayer(pool)
+      const ownerTok = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerTok)
+      const unknownEmail = `unknown-${uid()}@test.local`
+
+      emailAdapter.clear()
+      const res = await request(app)
+        .post(`/player/groups/${group.id}/invites`)
+        .set('Authorization', `Bearer ${ownerTok}`)
+        .send({ email: unknownEmail })
+
+      expect(res.status).toBe(201)
+      // No player exists for this email, so there is no notification feed to
+      // check against — the email being sent without error is the signal
+      // that the missing-player branch is a no-op, not a crash.
+      const sent = emailAdapter.getSentTo(unknownEmail)
+      expect(sent).toHaveLength(1)
+    })
+
+    it('accepting via the notification metadata token adds membership', async () => {
+      const owner = await createPlayer(pool)
+      const existingInvitee = await createPlayer(pool)
+      const ownerTok = await playerToken(owner, tokenStore)
+      const group = await createGroup(ownerTok)
+
+      await request(app)
+        .post(`/player/groups/${group.id}/invites`)
+        .set('Authorization', `Bearer ${ownerTok}`)
+        .send({ email: existingInvitee.email })
+
+      // Allow fire-and-forget postPersonalNotification to settle
+      await new Promise(r => setTimeout(r, 100))
+
+      const inviteeTok = await playerToken(existingInvitee, tokenStore)
+      const notifRes = await request(app)
+        .get('/player/notifications/messages')
+        .set('Authorization', `Bearer ${inviteeTok}`)
+      const notif = notifRes.body.messages.find((m: any) => m.metadata?.groupId === group.id)
+
+      const acceptRes = await request(app)
+        .post(`/player/groups/${group.id}/invites/accept`)
+        .send({ token: notif.metadata.groupInviteToken, email: notif.metadata.inviteEmail })
+
+      expect(acceptRes.status).toBe(200)
+      const members = await pool.query(
+        `SELECT player_id FROM public.player_group_members WHERE group_id = $1 AND player_id = $2`,
+        [group.id, existingInvitee.id]
+      )
+      expect(members.rows).toHaveLength(1)
+    })
+  })
+
   // ─── Invite accept: age-gated, single-use ────────────────────────────────────
 
   describe('POST /player/groups/:groupId/invites/accept', () => {

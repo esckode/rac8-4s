@@ -228,6 +228,56 @@ describe('GroupList', () => {
       expect(screen.getByText('New Crew')).toBeInTheDocument()
     })
   })
+
+  it('keeps the create-group CTA visible when the list already has a group (ISSUE-54)', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ groups: [makeGroup()] }),
+    })
+
+    render(
+      <MemoryRouter>
+        <GroupList />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Pickleball Crew')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('create-group-cta')).toBeInTheDocument()
+  })
+
+  it('creates a second group from the header CTA and refetches the list (ISSUE-54)', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ groups: [makeGroup()] }) }) // initial list
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 'grp_2', name: 'Tennis Regulars' }) }) // create
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ groups: [makeGroup(), makeGroup({ id: 'grp_2', name: 'Tennis Regulars' })] }) }) // refetch
+
+    render(
+      <MemoryRouter>
+        <GroupList />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => expect(screen.getByTestId('create-group-cta')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('create-group-cta'))
+
+    const input = await screen.findByTestId('create-group-name-input')
+    fireEvent.change(input, { target: { value: 'Tennis Regulars' } })
+    fireEvent.click(screen.getByTestId('create-group-submit'))
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/player/groups',
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Pickleball Crew')).toBeInTheDocument()
+      expect(screen.getByText('Tennis Regulars')).toBeInTheDocument()
+    })
+  })
 })
 
 // ============================================================================

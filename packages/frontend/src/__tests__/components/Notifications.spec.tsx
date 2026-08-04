@@ -5,7 +5,7 @@
  * calls mark-read on mount, and handles loading/empty/error states.
  */
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { Notifications } from '../../pages/Notifications'
 
@@ -125,6 +125,41 @@ describe('P2.4 — Notifications page', () => {
     renderPage()
     await waitFor(() => {
       expect(screen.getByRole('log')).toBeInTheDocument()
+    })
+  })
+
+  it('removes a card from the feed after its invite is accepted (ISSUE-55)', async () => {
+    const inviteMessage = {
+      id: 'msg-invite',
+      body: "You've been invited to join Pickleball Fundays",
+      type: 'system',
+      createdAt: '2026-06-30T12:00:00Z',
+      metadata: {
+        groupId: 'group-789',
+        groupName: 'Pickleball Fundays',
+        groupInviteToken: 'invite-token-abc',
+        inviteEmail: 'invitee@test.local',
+      },
+    }
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url === '/player/notifications/messages') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ messages: [inviteMessage] }) })
+      }
+      if (url === '/player/notifications/read') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true }) })
+      }
+      if (url === '/player/groups/group-789/invites/accept') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, token: 'x' }) })
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+    renderPage()
+
+    const acceptButton = await screen.findByTestId('notification-invite-accept')
+    fireEvent.click(acceptButton)
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('notification-invite-accept')).not.toBeInTheDocument()
     })
   })
 })

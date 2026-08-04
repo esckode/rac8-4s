@@ -308,6 +308,7 @@ export const SELECTORS = {
   NOTIFICATION_UNREAD_BADGE: '[data-testid="notification-unread-badge"]',
   NOTIFICATIONS_PAGE: '[data-testid="notifications-page"]',
   NOTIFICATION_CARD: '[data-testid="notification-card"]',
+  NOTIFICATION_INVITE_ACCEPT: '[data-testid="notification-invite-accept"]',
 
   // Shared state components — P1.1
   EMPTY_STATE: '[data-testid="empty-state"]',

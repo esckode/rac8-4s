@@ -179,3 +179,46 @@ test.describe('P1.7 — Invite-accept landing page', () => {
     ).toBeVisible({ timeout: 10000 })
   })
 })
+
+// ─── ISSUE-55: in-app accept via the Alerts (Notifications) tab ───────────────
+
+async function loginFrontend(page: import('@playwright/test').Page, token: string) {
+  await page.goto('http://localhost:5173/')
+  await page.evaluate((t: string) => localStorage.setItem('auth_token', t), token)
+}
+
+test.describe('ISSUE-55 — Group invite accept from the Alerts tab', () => {
+  test.beforeEach(async () => {
+    if (!(await serversRunning())) test.skip()
+  })
+
+  test('Owner invites an existing account; invitee accepts in-app and lands as a member', async ({ page }) => {
+    const owner = createTestUser()
+    const { token: ownerToken } = await signupAndGetToken(owner)
+    const groupName = `Alerts Invite Group ${Date.now()}`
+    const groupId = await createGroup(ownerToken, groupName)
+
+    // The invitee already has an account — this is the in-app-notified branch (ISSUE-55).
+    const invitee = createTestUser()
+    const { token: inviteeToken } = await signupAndGetToken(invitee)
+
+    await sendInvite(ownerToken, groupId, invitee.email)
+
+    await loginFrontend(page, inviteeToken)
+    await page.goto('http://localhost:5173/notifications')
+
+    const acceptButton = page.locator(SELECTORS.NOTIFICATION_INVITE_ACCEPT)
+    await expect(acceptButton).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(groupName)).toBeVisible()
+
+    await acceptButton.click()
+    await expect(acceptButton).not.toBeVisible({ timeout: 10000 })
+
+    // gap 5: accepting in-app must NOT downgrade the account holder's own session.
+    const storedToken = await page.evaluate(() => localStorage.getItem('auth_token'))
+    expect(storedToken).toBe(inviteeToken)
+
+    await page.goto('http://localhost:5173/groups')
+    await expect(page.getByText(groupName)).toBeVisible({ timeout: 10000 })
+  })
+})
