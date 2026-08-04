@@ -91,7 +91,7 @@ defect out as **ISSUE-64**. Decisions are recorded inline in each issue under *O
 | [ISSUE-55](#issue-55) | ✅ Resolved | 🔴 | Pending group invites are invisible in the app — users can only accept via email magic links | frontend |
 | [ISSUE-56](#issue-56) | ✅ Resolved | 🟠 | Group unread is per-device and invisible per group — no way to tell *which* group has new messages | frontend · api |
 | [ISSUE-57](#issue-57) | 🔲 Open | 🟡 | Accepting a group invite from Alerts doesn't navigate to the group | frontend · navigation |
-| [ISSUE-58](#issue-58) | 🔲 Open | 🟠 | Profile page missing Account section — can't view email or edit display name | frontend · api |
+| [ISSUE-58](#issue-58) | ✅ Resolved | 🟠 | Profile page missing Account section — can't view email or edit display name | frontend · api |
 | [ISSUE-59](#issue-59) | ✅ Resolved | 🟡 | Create dedicated Ratings page; move ratings/partners out of Profile; fix bottom nav at 5 tabs | frontend · navigation |
 | [ISSUE-60](#issue-60) | 🔲 Open | 🟠 | Self-rating seed prompt never built — `PUT /player/ratings/seed` is unreachable from the UI | frontend · onboarding |
 | [ISSUE-61](#issue-61) | ✅ Resolved | 🟠 | Group-chat SSE route ignores `sseMaxConnectionsPerUser` — same hole as ISSUE-52 | api |
@@ -1891,6 +1891,33 @@ I change my name or password".
 3. The new name appears in group member lists; **older chat messages keep the old name** (snapshot —
    expected, not a bug).
 4. "Change password" sends the reset email and the emailed code works.
+
+### Status — 2026-08-03 (step 6 of the sequence)
+
+**✅ Resolved.**
+
+- Branch: `fix/issue-58-profile-account-section` (off `main`, merged back after this step).
+- Red: `test(profile): [RED] Account section — email, editable name, change password (ISSUE-58)`
+  — new `packages/api/src/__tests__/integration/player-name.spec.ts` (6 cases: renames + reflected
+  in `GET /api/auth/me` and group members list; rejects reserved/empty/>50-char names; requires
+  auth); `Profile.spec.tsx` extended (5 cases: email renders, name field seeds from current value,
+  submit PATCHes, inline error on rejection, change-password posts + confirms).
+- Green: `feat(profile): [GREEN] Account section — email, editable name, change password (ISSUE-58)`
+  — `PlayerRepository.updateName`; `PATCH /player/name` (player.ts); `GET /api/auth/me` (auth.ts)
+  extended with a `name` field (not explicitly speced at the wire level, but necessary — the
+  editable field has to seed from *something*, and `public.players.name` is the only place a
+  display name lives — `auth.accounts` has no name column). New Account section in `Profile.tsx`,
+  first, above Display.
+- Verified: 23/24 `Profile.spec.tsx` green + 6/6 `player-name.spec.ts` green (the 1 Profile.spec.tsx
+  failure is the pre-existing, already-flagged `wip(profile)` quiet-hours bug, unrelated);
+  `player-settings.spec.ts` + `dual-role.spec.ts` regression-checked (both touch `/api/auth/me`),
+  unaffected; wide `--findRelatedTests` — api: 1865/1866 green (same pre-existing failure only);
+  frontend: 49/50 green (same).
+- e2e: new `profile.spec.ts` case (email visible, rename persists across reload and reaches the
+  group Members panel via `@mention` name resolution) — all 3 cases in the file pass. Player
+  profile row bumped 3 → 4 in `e2e-scenarios.md`.
+- docs/assistant-help.md updated per §9.
+- Nothing left open.
 
 ---
 
