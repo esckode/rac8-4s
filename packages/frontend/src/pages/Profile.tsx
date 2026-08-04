@@ -61,6 +61,11 @@ function generateHourOptions(): { value: number; label: string }[] {
 export const Profile: React.FC = () => {
   const [settings, setSettings] = useState<ProfileSettings | null>(null)
   const [loading, setLoading] = useState(true)
+  // ISSUE-64: a magic-link guest session gets 401 from every /api/auth/me*
+  // endpoint (they're all account-gated). Profile is account-only — show an
+  // honest state instead of fake defaults the guest can't actually save.
+  const [unauthorized, setUnauthorized] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([])
   const [availabilityUpdatedAt, setAvailabilityUpdatedAt] = useState<string | null>(null)
   const [memories, setMemories] = useState<CoachMemory[]>([])
@@ -71,31 +76,43 @@ export const Profile: React.FC = () => {
     const token = localStorage.getItem('auth_token')
     const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
 
+    // Availability and coach memories are only meaningful for an account
+    // holder — wait for /api/auth/me to confirm one before fetching either,
+    // so a guest (401) session doesn't fire requests it can't use.
     fetch('/api/auth/me', { headers })
-      .then(res => res.json())
-      .then(data => setSettings(data.settings))
-      .finally(() => setLoading(false))
-
-    fetch('/api/auth/me/availability', { headers })
-      .then(res => (res.ok ? res.json() : null))
-      .then((data: { slots: AvailabilitySlot[]; updatedAt: string | null } | null) => {
+      .then(res => {
+        if (res.status === 401) {
+          setUnauthorized(true)
+          return null
+        }
+        return res.ok ? res.json() : null
+      })
+      .then(data => {
         if (!data) return
-        setAvailabilitySlots(data.slots)
-        setAvailabilityUpdatedAt(data.updatedAt)
-      })
-      .catch(() => {})
+        setSettings(data.settings)
 
-    fetch('/player/coach/memories', { headers })
-      .then(res => (res.ok ? res.json() : null))
-      .then((data: { memories: CoachMemory[] } | null) => {
-        if (data?.memories) setMemories(data.memories)
+        fetch('/api/auth/me/availability', { headers })
+          .then(res => (res.ok ? res.json() : null))
+          .then((avData: { slots: AvailabilitySlot[]; updatedAt: string | null } | null) => {
+            if (!avData) return
+            setAvailabilitySlots(avData.slots)
+            setAvailabilityUpdatedAt(avData.updatedAt)
+          })
+          .catch(() => {})
+
+        fetch('/player/coach/memories', { headers })
+          .then(res => (res.ok ? res.json() : null))
+          .then((memData: { memories: CoachMemory[] } | null) => {
+            if (memData?.memories) setMemories(memData.memories)
+          })
+          .catch(() => {})
       })
-      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   async function patchSettings(body: Record<string, unknown>) {
     const token = localStorage.getItem('auth_token')
-    await fetch('/api/auth/me/settings', {
+    const res = await fetch('/api/auth/me/settings', {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -103,6 +120,7 @@ export const Profile: React.FC = () => {
       },
       body: JSON.stringify(body),
     })
+    setSaveError(res.ok ? null : 'Could not save your changes. Please try again.')
   }
 
   async function handleDensityChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -193,9 +211,32 @@ export const Profile: React.FC = () => {
     return <div data-testid="profile-page" className="p-4">Loading…</div>
   }
 
+  if (unauthorized) {
+    return (
+      <div data-testid="profile-page" className="p-4 space-y-4">
+        <h1 className="text-2xl font-bold text-(--ink-900)">Profile</h1>
+        <p data-testid="profile-signup-prompt" className="text-sm text-(--ink-700)">
+          Sign up for an account to save your preferences.
+        </p>
+        <a
+          href="/signup"
+          className="inline-block text-sm font-medium text-(--court-600) hover:text-(--court-800)"
+        >
+          Sign up
+        </a>
+      </div>
+    )
+  }
+
   return (
     <div data-testid="profile-page" className="p-4 space-y-6">
       <h1 className="text-2xl font-bold text-(--ink-900)">Profile</h1>
+
+      {saveError && (
+        <p data-testid="profile-save-error" role="alert" className="text-sm text-(--rose-700)">
+          {saveError}
+        </p>
+      )}
 
       <section className="rounded-xl border border-(--border) p-4 bg-(--surface) space-y-3">
         <h2 className="text-base font-semibold text-(--ink-800)">Display</h2>

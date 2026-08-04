@@ -28,6 +28,10 @@ on* — no internals, no SQL, no dev framing.
 ## Your profile
 
 - Tap the **Profile** link in the header to open your personal settings.
+- Profile is **account-only**. If you're signed in as a guest (magic-link session, no password
+  yet), Profile shows a prompt to sign up instead of a settings form — there's no account to save
+  preferences against yet. Create a password first (see Signing up and logging in above), then
+  your settings live here.
 - **Table density** controls how compact standings and other tables render — "Comfortable" or
   "Compact".
 - **Notifications**: three toggles control whether you get pushed for @mentions, new polls, and
