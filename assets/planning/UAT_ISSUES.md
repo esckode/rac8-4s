@@ -70,13 +70,19 @@ saved nothing. ISSUE-69 and ISSUE-70 are pre-existing reds surfaced by the same 
 **Number the next one 71.**
 
 > **⚠️ Branch state for ISSUE-66–70 — read before picking any of these up.**
-> Work sits on **`fix/quiet-hours-noop`** (off `main`, **not merged**; `main` is untouched at
-> `f7f9423`). ISSUE-66 and ISSUE-67 are committed and verified across 4 commits. **ISSUE-68's fix is
-> written and verified but still uncommitted in the working tree** — commit it first, before
-> anything else on this branch. ISSUE-69 and ISSUE-70 are documented only, and both are blocked on
-> an owner decision that should not be guessed. Per-issue detail is in each *Status — 2026-08-04*
-> block. Migration `063` has already been applied to the dev database (1110 rows now
-> `enabled=false, 8, 17`); it is idempotent, so re-running is safe.
+> All five are **code-complete and committed on `fix/quiet-hours-noop`**. Both owner decisions that
+> blocked ISSUE-69 and ISSUE-70 were taken on 2026-08-04 and are recorded in their *Status* blocks.
+> Per-issue detail is in each *Status — 2026-08-04* block. Migration `063` has already been applied
+> to the dev database (1110 rows now `enabled=false, 8, 17`); it is idempotent, so re-running is safe.
+>
+> **Two environment traps cost a full e2e sweep each — check both before trusting a run.**
+> `scripts/e2e-setup.js` reported `Worker: ✅` while no worker process existed, so every assistant
+> and sweep spec failed; its PostgreSQL `❌` is the known false negative, but the worker `✅` is a
+> false *positive*, which is worse. Confirm with `ps -eo args | grep "[d]ev:worker"`. Separately,
+> the API dev server had been running for two hours **without picking up the ISSUE-68 fix** — `tsx
+> watch` had not reloaded it — so the quiet-hours persistence e2e failed against a server that
+> still discarded every P9 field. Probe the route directly (`PATCH /api/auth/me/settings`, check the
+> response echoes what you sent) rather than assuming a watch-mode server is current.
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -130,9 +136,9 @@ saved nothing. ISSUE-69 and ISSUE-70 are pre-existing reds surfaced by the same 
 | [ISSUE-64](#issue-64) | ✅ Resolved | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
 | [ISSUE-66](#issue-66) | ✅ Fixed (unmerged) | 🟠 | Default quiet hours contradict their own migration's intent, and default to UTC for any player without a timezone — silently drops notifications | api |
 | [ISSUE-67](#issue-67) | ✅ Fixed (unmerged) | 🟠 | Suppressed notifications lose their durable inbox row, not just the alert — the design's own compensating control | api |
-| [ISSUE-68](#issue-68) | ✅ Fixed (uncommitted) | 🔴 | `PATCH /api/auth/me/settings` silently discards every P9 field — the whole notification-preferences UI has never saved | api |
-| [ISSUE-69](#issue-69) | 🔲 Open | 🟡 | The up-next strip renders only on `/browse`, so it is unreachable while discovery is off — a shipped P6 feature with no route | frontend |
-| [ISSUE-70](#issue-70) | 🔲 Open | 🟡 | Chat redesign dropped the avatar on your own messages, leaving `personalization-ui.spec.ts` red on main | frontend · test-debt |
+| [ISSUE-68](#issue-68) | ✅ Fixed (unmerged) | 🔴 | `PATCH /api/auth/me/settings` silently discards every P9 field — the whole notification-preferences UI has never saved | api |
+| [ISSUE-69](#issue-69) | ✅ Fixed (unmerged) | 🟡 | The up-next strip renders only on `/browse`, so it is unreachable while discovery is off — a shipped P6 feature with no route | frontend |
+| [ISSUE-70](#issue-70) | ✅ Fixed (unmerged) | 🟡 | Chat redesign dropped the avatar on your own messages, leaving `personalization-ui.spec.ts` red on main | frontend · test-debt |
 
 ### Implementation sequence for ISSUE-56–64
 
@@ -3197,17 +3203,20 @@ This is the one piece of work not yet in a commit. Files currently dirty:
 - Written as two loops rather than six near-identical `if` blocks. The existing per-field style is
   exactly what let six fields go missing unnoticed; repeating it would preserve that failure mode.
 
-**Pending:**
+**Update 2026-08-04 (later):** committed as `aec1373`. `--findRelatedTests src/routes/auth.ts`
+has now run to completion — **109 suites, 1595 tests, all green**, confirming the wide selection §11
+predicts for a cross-cutting module.
 
-1. **Commit it.** Suggested split: the `auth.ts` fix and its tests as one commit — the tests here
-   are a regression net for an already-live bug, so the RED/GREEN split in §11 is less useful than
-   for new behavior. State in the message that the route was returning 200 while discarding input.
-2. **`npx jest --findRelatedTests src/routes/auth.ts` has NOT been run.** This was interrupted
-   mid-run. `auth.ts` is cross-cutting — expect a wide set (the `app.ts` equivalent pulled 112
-   suites). Per §11 the wide answer is the correct one; run it before merging.
-3. Consider whether `role: 'organizer'` accounts should reach these fields at all —
-   `requireOrganizerAuth` gates the route, and the settings are player-scoped. Out of scope here,
-   noted because it was visible while editing the handler.
+⚠️ **The running dev API had not picked the fix up.** `tsx watch` had been serving the pre-fix
+handler for two hours, so `personalization-quiet-hours.spec.ts`'s persistence test failed against a
+server that still discarded every P9 field — a real-looking red with no defect behind it. After a
+restart, a live `PATCH {quietHoursEnabled:true, quietHoursStart:22, quietHoursEnd:7,
+notifyMentions:false}` echoes all four back. **Probe the route before believing a watch-mode
+server is current.**
+
+**Still open (out of scope here):** whether `role: 'organizer'` accounts should reach these fields
+at all — `requireOrganizerAuth` gates the route, and the settings are player-scoped. Noted because
+it was visible while editing the handler.
 
 ---
 
@@ -3238,13 +3247,26 @@ layout decision, not a test fix. Whatever route it lands on, restore the e2e ass
 
 ### Status — 2026-08-04
 
-**🔲 Not started.** Only the blocking e2e assertion was removed, on `fix/quiet-hours-noop`
-(uncommitted, in `personalization-quiet-hours.spec.ts`) — no product change attempted.
+**✅ Fixed on `fix/quiet-hours-noop`** — `d93c65d` [RED] + `062d62f` [GREEN].
 
-**Blocked on an owner decision, and should not be implemented before it:** where does the strip
-live? This is a layout call about what `/play` shows above the fold, not something to infer.
+**Owner decision (2026-08-04):** the strip moves to **`/play`, directly under the "Play" heading and
+above the next-match card** — what needs doing leads, the passive next-match card follows. **Moved,
+not copied:** `/browse` keeps `usePendingActions` for its P8 personalized empty state, but a second
+mount would draw the strip twice on any discovery-**on** environment.
 
-**Context for whoever picks this up:**
+**A third instance of the ISSUE-62 trap surfaced while fixing this.** Both tests in
+`personalization-pending-actions.spec.ts` still navigated to `/browse` — one asserting the nav badge
+(impossible: no nav under `<NotFound />`), one asserting the strip itself. Both had therefore been
+failing since discovery was turned off, and neither `66ede49` nor this issue's original write-up
+recorded them. Both now run against `/play`. **When an environment flag makes a route unreachable,
+grep every spec for that route, not just the one that failed** — `grep -rn "'/browse'"
+packages/frontend/e2e/*.spec.ts`.
+
+Docs updated in the same change: the P6 scenario in `e2e-scenarios.md` (it named `/browse` as "the
+authenticated home") and `docs/assistant-help.md`, which described the strip without saying where to
+find it.
+
+**Original context, kept for reference:**
 
 - The component is `packages/frontend/src/components/shared/UpNextStrip.tsx` — complete, styled,
   and unit-tested (`__tests__/UpNextStrip.spec.tsx`). Nothing is wrong with it; it has no caller
@@ -3301,14 +3323,26 @@ and belong to the same decision.
 
 ### Status — 2026-08-04
 
-**🔲 Not started.** Diagnosed only — no code touched. Independent of `fix/quiet-hours-noop`;
-reproduces on `main`.
+**✅ Fixed on `fix/quiet-hours-noop`** — `7520407` [RED] + `ab7196a` [GREEN] + `25974f0`.
 
-**Blocked on an owner decision:** should your own chat messages show your avatar? Most messengers
-say no (the alignment already identifies you), which suggests the *spec* is what should change —
-but `bcf043e` was recovered WIP, so its intent was never stated, and this should not be guessed.
+**Owner decision (2026-08-04), one call covering all three red tests:**
 
-**Context for whoever picks this up:**
+1. **Own messages stay bare** — the alignment already identifies them, per messenger convention. So
+   the bubble branch was right and the *poll-card* branch was the defect: it drew an avatar for
+   every sender including you. Now gated on the `isCreator` flag that branch already computed.
+2. **Click-to-expand stays** — `bcf043e`'s hiding of sender name + timestamp behind a tap is
+   intended, so the two `MyGroups.spec.tsx` cases adapt to it rather than the UI reverting. Note
+   only **one** message expands at a time, so the two-sender test taps each in turn instead of
+   expecting both names at once.
+3. **`personalization-ui.spec.ts` posts from an invited second member** rather than the logged-in
+   player. The selector was **not** loosened: the test's point is colour stability for a *known*
+   player, and matching any on-screen avatar would have kept it green while proving nothing.
+
+⚠️ **Copying `inviteAndAccept` is not enough** — accepting an invite for an email with no player
+behind it *creates* one, which the age gate refuses without a `dob_attestation`. `notifications.spec.ts`
+works only because it signs the invitee up first. Same order is now used here (`25974f0`).
+
+**Original context, kept for reference:**
 
 - Reproduce: `npx playwright test personalization-ui.spec.ts --project=chromium --reporter=line -g
   "stable colors"`. Fails in isolation, so it is **not** the known parallel-load flakiness.
