@@ -29,6 +29,7 @@ import { processNudgeSweep } from './workers/nudge-processor'
 import { processDigestSweep } from './workers/digest-processor'
 import { generatePlayerSession } from './auth/magic-link'
 import { PlayerRepository, TournamentRepository, GroupRepository as TournamentGroupRepository } from './db'
+import { PlayerSettingsRepository } from './repositories/player-settings-repository'
 import type { Redis } from 'ioredis'
 import { RedisHealthState, probeRedisHealth, isRedisSelected } from './redis-health'
 import type { PartitionManager } from './services/partition-manager'
@@ -229,7 +230,12 @@ export function createApp(deps: AppDependencies): Express {
   if (process.env.NODE_ENV !== 'production') {
     app.post('/test/player-token', async (req: Request, res: Response) => {
       try {
-        const { email, name, tournamentId } = req.body as { email: string; name: string; tournamentId?: string }
+        const { email, name, tournamentId, disableQuietHours } = req.body as {
+          email: string
+          name: string
+          tournamentId?: string
+          disableQuietHours?: boolean
+        }
         if (!email || !name) return res.status(400).json({ error: 'email and name required' })
         const playerRepo = new PlayerRepository(appDeps.db as any)
         const player = await playerRepo.findOrCreatePlayerByEmail(
@@ -239,6 +245,17 @@ export function createApp(deps: AppDependencies): Express {
           undefined,
           { dateOfBirth: '2000-01-01', policyVersion: 'v1' }
         )
+        // Opt-in: DEFAULT_PLAYER_SETTINGS' quiet hours (8-17) silently drop
+        // any @mention/poll/nudge notification for a player who never set a
+        // preference — real players eventually do, but a freshly-seeded test
+        // player never does, so tests asserting a notification was created
+        // are otherwise time-of-day-dependent (fail 8am-5pm, pass outside it).
+        if (disableQuietHours) {
+          await new PlayerSettingsRepository(appDeps.db as any).upsert(player.id, {
+            quietHoursStart: null,
+            quietHoursEnd: null,
+          })
+        }
         const session = await generatePlayerSession(
           { playerId: player.id, tournamentId: tournamentId ?? 'test', email: player.email, createdAt: Date.now() },
           3600,

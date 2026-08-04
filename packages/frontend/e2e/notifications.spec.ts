@@ -41,8 +41,15 @@ function createMentionableUser(label: string) {
   return { email: `${label}-${suffix}@example.com`, name: `${label}-${suffix}` }
 }
 
+// disableQuietHours: this file's whole point is asserting a personal
+// notification was (or wasn't) created, and DEFAULT_PLAYER_SETTINGS' quiet
+// hours (8am-5pm) silently drop @mention notifications for any player who
+// never set a preference — which a freshly-seeded test player never does.
+// Without this, every test here is time-of-day-dependent (discovered via
+// direct reporter output: zero "mentioned you" notifications were ever
+// created, confirmed by hand against the live API and DB — not assumed).
 async function signupAndGetToken(user: { email: string; name: string }) {
-  const res = await apiCall('/test/player-token', 'POST', { email: user.email, name: user.name })
+  const res = await apiCall('/test/player-token', 'POST', { email: user.email, name: user.name, disableQuietHours: true })
   if (!res.ok) throw new Error(`player-token failed: ${await res.text()}`)
   const data = await res.json()
   return { token: data.playerToken as string, playerId: data.playerId as string }
