@@ -10,7 +10,9 @@ import { apiCall, createTestUser, defaultAgeAttestation } from './fixtures'
  * distinction is the whole reason ISSUE-26 shipped undetected.
  *
  * ISSUE-28 collapsed the bar from six items to five (Standings + Matches
- * merged into Play); ISSUE-29 will drop Browse next, landing on four.
+ * merged into Play); ISSUE-29 then dropped Browse; ISSUE-59 fixed the bar
+ * at five permanently (Groups/Play/Ratings/Alerts/More) by adding Ratings
+ * and moving Browse into the More sheet instead of a 6th slot.
  * This guard passes at whatever item count is live — it measures
  * geometry, not a fixed count.
  */

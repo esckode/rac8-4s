@@ -43,6 +43,17 @@ on* — no internals, no SQL, no dev framing.
   you (an unscored match, an open poll, a card to confirm) — it clears once you act. In a group
   chat, the message box may suggest a one-tap action (report a score, cast a vote) based on
   what's pending for you there.
+- The bottom nav is always **Groups, Play, Ratings, Alerts, More** — five tabs, in that order.
+  Browse (tournament discovery) isn't one of them; when it's turned on it lives inside **More**
+  instead.
+
+## Ratings
+
+- The **Ratings** tab shows your current skill rating per sport and format (singles/doubles), and
+  your most recent doubles partners. A rating below 10 played matches is marked **provisional** —
+  it's still converging and moves faster than an established one.
+- This is a separate page from **Profile** — Profile is account settings and preferences, Ratings
+  is your stats.
 
 ## Finding and joining tournaments
 

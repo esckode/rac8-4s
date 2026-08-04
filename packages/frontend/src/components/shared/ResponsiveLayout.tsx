@@ -18,6 +18,7 @@ import {
   SettingsIcon,
   InfoIcon,
   LogOutIcon,
+  StarIcon,
   type IconProps,
 } from './icons'
 import '../../styles/globals.css'
@@ -49,6 +50,7 @@ const MORE_ITEMS: Array<{
   Icon: React.FC<IconProps>
   path: string
   organizerOnly?: boolean
+  discoveryOnly?: boolean
 }> = [
   // ISSUE-36: Account/Settings/About had no matching route at all. Account
   // repoints at the existing /profile rather than building a second page.
@@ -56,10 +58,14 @@ const MORE_ITEMS: Array<{
   { label: 'Organizer Dashboard', Icon: BuildingIcon, path: ROUTES.ORGANIZER, organizerOnly: true },
   { label: 'Settings', Icon: SettingsIcon, path: ROUTES.SETTINGS },
   { label: 'About', Icon: InfoIcon, path: ROUTES.ABOUT },
+  // ISSUE-59: the bottom nav is fixed at 5 tabs — Browse moves in here
+  // instead of claiming a 6th slot when discovery is enabled.
+  { label: 'Browse', Icon: TrophyIcon, path: ROUTES.BROWSE, discoveryOnly: true },
 ]
 
 const MoreSheet: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const { user } = useAuth()
+  const { publicDiscoveryEnabled } = useAppConfig()
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -105,7 +111,10 @@ const MoreSheet: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen,
         </div>
 
         {/* Items */}
-        {MORE_ITEMS.filter(item => !item.organizerOnly || user?.role === 'organizer').map(item => (
+        {MORE_ITEMS.filter(item =>
+          (!item.organizerOnly || user?.role === 'organizer') &&
+          (!item.discoveryOnly || publicDiscoveryEnabled)
+        ).map(item => (
           <button
             key={item.path}
             data-testid={`more-item-${item.path.replace(/^\//, '')}`}
@@ -166,18 +175,64 @@ const BottomNav = () => {
 
   // ISSUE-29: Browse is dropped entirely while discovery is blocked (default) —
   // testid kept as 'nav-browse' so it's ready to reappear unchanged if the
-  // flag is ever flipped back on.
-  const tabs = publicDiscoveryEnabled
+  // flag is ever flipped back on. Guest-only: an authenticated user's nav is
+  // fixed at 5 tabs (ISSUE-59) and never shows Browse as a tab — it moves
+  // into the More sheet (MORE_ITEMS) instead.
+  const guestTabs = !isAuthenticated && publicDiscoveryEnabled
     ? [{ path: '/browse', label: 'Browse', Icon: TrophyIcon, testId: 'nav-browse' }]
     : []
-  const authOnlyTabs = [
-    { path: '/play', label: 'Play', Icon: TennisBallIcon, testId: 'nav-play' },
+
+  // ISSUE-59: bottom nav fixed at exactly 5 items for an authenticated user,
+  // in this order. Each entry optionally carries a badge (two of the five
+  // do) and/or a dynamic aria-label (Alerts does); the last entry is a
+  // button (opens the More sheet) rather than a link.
+  const authItems: Array<{
+    testId: string
+    label: string
+    Icon?: React.FC<IconProps>
+    path?: string
+    onClick?: () => void
+    ariaLabel?: string
+    renderBadge?: () => React.ReactNode
+  }> = [
+    {
+      testId: 'nav-groups', label: 'Groups', Icon: UsersIcon, path: '/groups',
+      renderBadge: () => (
+        <>
+          {groupsUnread > 0 && (
+            <span style={{ position: 'absolute', top: -6, right: -6 }}>
+              <MyGroupsUnreadBadge count={groupsUnread} />
+            </span>
+          )}
+          <NavCountBadge count={pendingGroupItems} testId="nav-badge-groups" corner="bottom" />
+        </>
+      ),
+    },
+    {
+      testId: 'nav-play', label: 'Play', Icon: TennisBallIcon, path: '/play',
+      renderBadge: () => <NavCountBadge count={pendingActions.unscoredMatches.length} testId="nav-badge-matches" />,
+    },
+    { testId: 'nav-ratings', label: 'Ratings', Icon: StarIcon, path: '/ratings' },
+    {
+      testId: 'nav-notifications', label: 'Alerts', Icon: BellIcon, path: '/notifications',
+      ariaLabel: notificationUnread > 0 ? `Alerts, ${notificationUnread} unread` : 'Alerts',
+      renderBadge: () => notificationUnread > 0 && (
+        <span
+          data-testid="notification-unread-badge"
+          style={{ position: 'absolute', top: -6, right: -6 }}
+          className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-(--gold-400) text-(--gold-900) rounded-full"
+        >
+          {notificationUnread > 99 ? '99+' : notificationUnread}
+        </span>
+      ),
+    },
+    { testId: 'nav-more', label: 'More', onClick: () => setIsMoreOpen(true) },
   ]
 
   return (
     <>
       <nav className="responsive-bottom-nav" aria-label="Mobile navigation">
-        {tabs.map((tab) => (
+        {guestTabs.map((tab) => (
           <a
             key={tab.path}
             href={tab.path}
@@ -187,23 +242,6 @@ const BottomNav = () => {
           >
             <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
               <tab.Icon size={20} />
-            </span>
-            <span>{tab.label}</span>
-          </a>
-        ))}
-        {isAuthenticated && authOnlyTabs.map((tab) => (
-          <a
-            key={tab.path}
-            href={tab.path}
-            data-testid={tab.testId}
-            className={`responsive-bottom-nav-item ${isActive(tab.path) ? 'active' : ''}`}
-            aria-current={isActive(tab.path) ? 'page' : undefined}
-          >
-            <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
-              <tab.Icon size={20} />
-              {tab.testId === 'nav-play' && (
-                <NavCountBadge count={pendingActions.unscoredMatches.length} testId="nav-badge-matches" />
-              )}
             </span>
             <span>{tab.label}</span>
           </a>
@@ -219,59 +257,35 @@ const BottomNav = () => {
             <span>Sign in / Register</span>
           </a>
         )}
-        {isAuthenticated && (
-          <a
-            href="/groups"
-            data-testid="nav-groups"
-            className={`responsive-bottom-nav-item ${isActive('/groups') ? 'active' : ''}`}
-            aria-current={isActive('/groups') ? 'page' : undefined}
-          >
-            <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
-              <UsersIcon size={20} />
-              {groupsUnread > 0 && (
-                <span style={{ position: 'absolute', top: -6, right: -6 }}>
-                  <MyGroupsUnreadBadge count={groupsUnread} />
-                </span>
-              )}
-              <NavCountBadge count={pendingGroupItems} testId="nav-badge-groups" corner="bottom" />
-            </span>
-            <span>Groups</span>
-          </a>
-        )}
-        {isAuthenticated && (
-          <a
-            href="/notifications"
-            data-testid="nav-notifications"
-            className={`responsive-bottom-nav-item ${isActive('/notifications') ? 'active' : ''}`}
-            aria-current={isActive('/notifications') ? 'page' : undefined}
-            aria-label={notificationUnread > 0 ? `Alerts, ${notificationUnread} unread` : 'Alerts'}
-          >
-            <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
-              <BellIcon size={20} />
-              {notificationUnread > 0 && (
-                <span
-                  data-testid="notification-unread-badge"
-                  style={{ position: 'absolute', top: -6, right: -6 }}
-                  className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold bg-(--gold-400) text-(--gold-900) rounded-full"
-                >
-                  {notificationUnread > 99 ? '99+' : notificationUnread}
-                </span>
-              )}
-            </span>
-            <span>Alerts</span>
-          </a>
-        )}
-        {isAuthenticated && (
-          <button
-            className="responsive-bottom-nav-item"
-            data-testid="nav-more"
-            onClick={() => setIsMoreOpen(true)}
-            aria-haspopup="dialog"
-          >
-            <span aria-hidden="true">⋯</span>
-            <span>More</span>
-          </button>
-        )}
+        {isAuthenticated && authItems.map((item) => (
+          item.path ? (
+            <a
+              key={item.testId}
+              href={item.path}
+              data-testid={item.testId}
+              className={`responsive-bottom-nav-item ${isActive(item.path) ? 'active' : ''}`}
+              aria-current={isActive(item.path) ? 'page' : undefined}
+              aria-label={item.ariaLabel}
+            >
+              <span aria-hidden="true" style={{ position: 'relative', display: 'inline-block' }}>
+                {item.Icon && <item.Icon size={20} />}
+                {item.renderBadge?.()}
+              </span>
+              <span>{item.label}</span>
+            </a>
+          ) : (
+            <button
+              key={item.testId}
+              className="responsive-bottom-nav-item"
+              data-testid={item.testId}
+              onClick={item.onClick}
+              aria-haspopup="dialog"
+            >
+              <span aria-hidden="true">⋯</span>
+              <span>{item.label}</span>
+            </button>
+          )
+        ))}
       </nav>
       <MoreSheet isOpen={isMoreOpen} onClose={() => setIsMoreOpen(false)} />
     </>

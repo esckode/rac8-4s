@@ -1,8 +1,11 @@
 /**
- * P13 — Skill Ratings: /profile panels (Your Rating + Recent Partners) E2E tests
+ * P13 — Skill Ratings: /ratings page (Your Rating + Recent Partners) E2E tests
+ *
+ * ISSUE-59 moved these panels off /profile onto their own /ratings page —
+ * testids are unchanged, only the route moved.
  *
  * See RATINGS_IMPLEMENTATION.md Step 10.1. Covers, in order of value:
- *  1. The /profile rating panel shows the (provisional) marker below
+ *  1. The /ratings rating panel shows the (provisional) marker below
  *     PROVISIONAL_MATCHES and drops it once a bucket settles.
  *  2. Privacy (R1) — GET /player/ratings never returns another player's
  *     numbers, proven through the real HTTP+DB stack, not a mocked handler.
@@ -80,7 +83,7 @@ async function submitScore(tournamentId: string, matchId: string, token: string)
   if (!res.ok) throw new Error(`score submit failed: ${res.status} ${await res.text()}`)
 }
 
-test.describe('Skill Ratings (P13) — /profile panels', () => {
+test.describe('Skill Ratings (P13) — /ratings page', () => {
   test.beforeEach(async () => {
     if (!(await serversRunning())) {
       test.skip()
@@ -96,7 +99,7 @@ test.describe('Skill Ratings (P13) — /profile panels', () => {
     await submitScore(tournamentId, bundle.matches.group[0].id, playerToken)
 
     await linkAccountAndLogin(page, playerEmail, playerName)
-    await page.goto('http://localhost:5173/profile', { waitUntil: 'networkidle' })
+    await page.goto('http://localhost:5173/ratings', { waitUntil: 'networkidle' })
 
     const row = page.locator('[data-testid="rating-pickleball-singles"]')
     await expect(row).toBeVisible({ timeout: 8000 })
@@ -120,7 +123,7 @@ test.describe('Skill Ratings (P13) — /profile panels', () => {
     }
 
     await linkAccountAndLogin(page, playerEmail, playerName)
-    await page.goto('http://localhost:5173/profile', { waitUntil: 'networkidle' })
+    await page.goto('http://localhost:5173/ratings', { waitUntil: 'networkidle' })
 
     const row = page.locator('[data-testid="rating-pickleball-singles"]')
     await expect(row).toBeVisible({ timeout: 8000 })
@@ -131,7 +134,7 @@ test.describe('Skill Ratings (P13) — /profile panels', () => {
     const user = createTestUser()
     await signupViaApi(user)
     await loginFrontend(page, user)
-    await page.goto('http://localhost:5173/profile', { waitUntil: 'networkidle' })
+    await page.goto('http://localhost:5173/ratings', { waitUntil: 'networkidle' })
 
     await expect(page.locator('[data-testid="rating-empty-state"]')).toBeVisible({ timeout: 8000 })
     await expect(page.locator('[data-testid="partners-empty-state"]')).toBeVisible()
@@ -146,7 +149,7 @@ test.describe('Skill Ratings (P13) — /profile panels', () => {
     await submitScore(tournamentId, bundle.matches.group[0].id, playerToken)
 
     await linkAccountAndLogin(page, playerEmail, playerName)
-    await page.goto('http://localhost:5173/profile', { waitUntil: 'networkidle' })
+    await page.goto('http://localhost:5173/ratings', { waitUntil: 'networkidle' })
 
     // The focus player's partner is whichever teammate isn't them — assert
     // some partner row rendered rather than pinning a specific id, since

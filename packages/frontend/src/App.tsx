@@ -19,6 +19,7 @@ import { PlayHub } from './pages/PlayHub'
 import { GroupList, GroupDetail, GroupSettings } from './pages/MyGroups'
 import { InviteAcceptPage } from './pages/InviteAcceptPage'
 import { Notifications } from './pages/Notifications'
+import { Ratings } from './pages/Ratings'
 import { Profile } from './pages/Profile'
 import { CoachChat } from './pages/CoachChat'
 import { PrivacyPolicy } from './pages/PrivacyPolicy'
@@ -211,6 +212,16 @@ export const App: React.FC = () => {
               <ProtectedRoute>
                 <ResponsiveLayout showHeader showNav>
                   <Notifications />
+                </ResponsiveLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.RATINGS}
+            element={
+              <ProtectedRoute>
+                <ResponsiveLayout showHeader showNav>
+                  <Ratings />
                 </ResponsiveLayout>
               </ProtectedRoute>
             }
