@@ -45,6 +45,20 @@ async function seedScheduledSession(groupId: string, playerIds: string[], hoursU
   return data.tournamentId as string
 }
 
+/** Invites `invitee` into `groupId` (owner's token) and accepts — returns the invitee's player token. */
+async function inviteAndAccept(ownerToken: string, groupId: string, invitee: { email: string; name: string }) {
+  const invRes = await apiCall(`/player/groups/${groupId}/invites`, 'POST', { email: invitee.email }, ownerToken)
+  if (!invRes.ok) throw new Error(`Invite failed: ${await invRes.text()}`)
+  const { rawToken } = await invRes.json()
+  const acceptRes = await apiCall(`/player/groups/${groupId}/invites/accept`, 'POST', {
+    token: rawToken,
+    email: invitee.email,
+  })
+  if (!acceptRes.ok) throw new Error(`Accept failed: ${await acceptRes.text()}`)
+  const data = await acceptRes.json()
+  return data.token as string
+}
+
 async function loginFrontend(page: any, token: string) {
   await page.addInitScript((t: string) => {
     localStorage.setItem('auth_token', t)
@@ -86,7 +100,13 @@ test.describe('Player Personalization — FE quick wins', () => {
     const { token: ownerToken } = await signupAndGetToken(owner)
     const groupId = await createGroup(ownerToken, `Avatar UI Group ${Date.now()}`)
 
-    await apiCall(`/player/groups/${groupId}/messages`, 'POST', { body: 'hello there' }, ownerToken)
+    // ISSUE-70: own messages carry no avatar by design — the alignment already
+    // identifies them. So the message under test must come from someone else,
+    // not from the player we log in as. Loosening the selector instead would
+    // keep this green while proving nothing about a *known* player's colour.
+    const other = createTestUser()
+    const otherToken = await inviteAndAccept(ownerToken, groupId, other)
+    await apiCall(`/player/groups/${groupId}/messages`, 'POST', { body: 'hello there' }, otherToken)
 
     await loginFrontend(page, ownerToken)
     await page.goto(`/groups/${groupId}`)

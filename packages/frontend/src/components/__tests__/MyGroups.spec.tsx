@@ -354,7 +354,10 @@ describe('GroupChatPanel', () => {
     })
   })
 
-  it('renders message card with "Name · time" format', async () => {
+  // bcf043e's redesign put sender name + timestamp behind click-to-expand, so
+  // neither is on screen until the bubble is tapped. Owner decision (ISSUE-70):
+  // keep the interaction, adapt the tests. Only one message expands at a time.
+  it('reveals "Name · time" on the message card when tapped', async () => {
     const msg = makeMessage()
     mockFetch.mockResolvedValue({
       ok: true,
@@ -363,12 +366,13 @@ describe('GroupChatPanel', () => {
 
     render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
 
-    await waitFor(() => {
-      expect(screen.getByTestId('group-message-item')).toBeInTheDocument()
-      expect(screen.getByText('Hey everyone!')).toBeInTheDocument()
-      // "Name · time" pattern
-      expect(screen.getByText(/Alice Smith\s*·/)).toBeInTheDocument()
-    })
+    await waitFor(() => expect(screen.getByText('Hey everyone!')).toBeInTheDocument())
+    expect(screen.queryByText(/Alice Smith\s*·/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Hey everyone!'))
+
+    // "Name · time" pattern
+    expect(screen.getByText(/Alice Smith\s*·/)).toBeInTheDocument()
   })
 
   it('renders two messages from different senders with distinguishable names', async () => {
@@ -383,10 +387,52 @@ describe('GroupChatPanel', () => {
 
     render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
 
-    await waitFor(() => {
-      expect(screen.getByText(/Alice Smith/)).toBeInTheDocument()
-      expect(screen.getByText(/Bob Jones/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Hello')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('Hello'))
+    expect(screen.getByText(/Alice Smith/)).toBeInTheDocument()
+    expect(screen.queryByText(/Bob Jones/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Hi back'))
+    expect(screen.getByText(/Bob Jones/)).toBeInTheDocument()
+    expect(screen.queryByText(/Alice Smith/)).not.toBeInTheDocument()
+  })
+
+  // ISSUE-70: your own messages carry no avatar — the alignment already says
+  // they are yours. The two branches disagreed: bubbles hid it, poll cards
+  // showed it unconditionally.
+  it('shows an avatar on another member\'s message but not on your own', async () => {
+    const msgs = [
+      makeMessage({ id: 'msg_a', body: 'From Alice', playerId: 'player_2', senderName: 'Alice Smith' }),
+      makeMessage({ id: 'msg_b', body: 'From me', playerId: 'player_1', senderName: 'Me Myself' }),
+    ]
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ messages: msgs }),
     })
+
+    render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
+
+    await waitFor(() => expect(screen.getByText('From me')).toBeInTheDocument())
+    expect(screen.getAllByTestId('avatar')).toHaveLength(1)
+  })
+
+  it('omits the avatar on your own poll card too', async () => {
+    const msgs = [
+      makeMessage({
+        id: 'poll_mine', type: 'poll', pollId: 'pl_1', body: 'Court night?',
+        playerId: 'player_1', senderName: 'Me Myself',
+      }),
+    ]
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ messages: msgs }),
+    })
+
+    render(<MemoryRouter><GroupChatPanel groupId="grp_1" /></MemoryRouter>)
+
+    await waitFor(() => expect(screen.getByText(/Me Myself\s*·/)).toBeInTheDocument())
+    expect(screen.queryByTestId('avatar')).not.toBeInTheDocument()
   })
 
   it('renders system events differently (italic style data-testid)', async () => {
