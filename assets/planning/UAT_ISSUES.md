@@ -55,7 +55,13 @@ nothing on a discovery-off environment, and 65's two failures are stale arithmet
 **ISSUE-66 filed 2026-08-04**, found while fixing [ISSUE-65](#issue-65)'s quiet-hours flake:
 `DEFAULT_PLAYER_SETTINGS`'s quiet-hours window contradicts its own migration's documented intent,
 and the timezone fallback for evaluating it defaults to UTC — silently dropping notifications for
-players who haven't set a timezone yet. **Number the next one 67.**
+players who haven't set a timezone yet.
+
+**ISSUE-67 filed 2026-08-04** during the owner grill of ISSUE-66, which also resolved 66's two open
+product questions (recorded under *Owner decisions* there). Verifying 66 surfaced a second, distinct
+defect in the same code path: suppression deletes the durable Notifications Center row rather than
+just the alert, contradicting the design's own justification for dropping instead of deferring.
+**Number the next one 68.**
 
 | # | Status | Severity | Title | Area |
 |---|---|---|---|---|
@@ -108,6 +114,7 @@ players who haven't set a timezone yet. **Number the next one 67.**
 | [ISSUE-63](#issue-63) | ✅ Resolved | 🟠 | Opening Alerts marks un-actioned group invites read — badge stops nudging while the invite is still pending | frontend · api |
 | [ISSUE-64](#issue-64) | ✅ Resolved | 🟠 | Profile shows fake defaults and silently discards saves for guest (magic-link) sessions | frontend |
 | [ISSUE-66](#issue-66) | 🔲 Open | 🟠 | Default quiet hours contradict their own migration's intent, and default to UTC for any player without a timezone — silently drops notifications | api |
+| [ISSUE-67](#issue-67) | 🔲 Open | 🟠 | Suppressed notifications lose their durable inbox row, not just the alert — the design's own compensating control | api |
 
 ### Implementation sequence for ISSUE-56–64
 
@@ -2883,26 +2890,166 @@ outcome.
    check, not just default it). Each has different false-positive/false-negative tradeoffs; not
    decided here.
 
+### Owner decisions (2026-08-04)
+
+Two facts found during the grill reframed both questions, so neither was answered as posed.
+
+**The `8, 17` value has no design behind it — git says so.** It was `null, null` until commit
+`bf62816` *"wip(profile): timezone select + quiet-hours dropdown UI"*, recovered from another
+session's uncommitted working tree. That commit's own message flags the change as `KNOWN BREAKAGE`,
+notes it breaks `notify-prefs.spec.ts`, and says the default needs reconsidering by its author. So
+question 1 was never a product question; the constant and the migration disagreed because nobody
+had decided yet.
+
+**The channel quiet hours gate is email, not push.** `messaging.notify` resolves to
+`processMessagingNotify` (`notify-processor.ts:36`), which takes an `emailAdapter` and sends a
+"You have N unread messages" digest to recipients with `read_at IS NULL AND notified_at IS NULL`.
+There is no web push anywhere in the repo — no `web-push`, no `PushSubscription`, no VAPID. Every
+"push" in `PERSONALIZATION_DESIGN.md` describes a channel that was never built. So quiet hours
+currently suppress an email that was already non-interruptive, and only reaches players who
+*hadn't* seen the message in-app — at the cost of destroying the inbox record ([ISSUE-67](#issue-67)).
+
+**Decisions:**
+
+1. **Tristate, not a sentinel.** Add `quiet_hours_enabled BOOLEAN NOT NULL DEFAULT false` alongside
+   `start`/`end`, which stay populated at `8`/`17`. "Off" becomes an explicit state instead of being
+   encoded as `null`, so *"player chose 8–5"* is distinguishable from *"player never touched this"*,
+   and the migration's no-quiet-hours-by-default intent holds without discarding 8am–5pm as the
+   suggested window.
+2. **Inert until push exists.** The setting is stored and exposed in the UI, but gates nothing.
+   `notify-gate.ts` drops its quiet-hours evaluation entirely. Rationale: suppressing a catch-up
+   email buys almost nothing, and until there is a device channel to silence, the feature spends a
+   real cost (a lost record) against a near-zero harm. Profile copy states that it applies to phone
+   notifications once those exist, so the control isn't silently inert.
+3. **Question 2 dissolves.** With nothing evaluated, there is no timezone to resolve and no
+   `?? 'UTC'` fallback to get wrong. When push lands, quiet hours should be enforced **client-side**
+   in the service worker, where the device knows its own local time with certainty — no capture
+   plumbing, no staleness when a player travels. Note for then: Web Push's `userVisibleOnly`
+   contract means the SW must still display something, so client-side quiet hours means
+   `silent: true` (no sound or vibration), not showing nothing.
+4. **No backfill.** The 67 affected rows are test data (the app is not live). The migration lands
+   them `enabled = false`, which resolves them without a data fix.
+5. **Timezone capture at signup/login/magic-link redemption is deferred** to its own change. It was
+   approved while unknown-timezone was still dropping notifications; that premise is gone, and its
+   remaining value is unrelated (digest/nudge timing, `resolveEffectiveGroupTimezone`'s majority
+   vote).
+
+`quiet-hours.ts` and its unit spec are **retained deliberately** despite having no caller after this
+change — it is the exact predicate the client-side implementation will need.
+
 ### Fix
 
-Not designed here — depends on the answers above. At minimum, whichever defaults are chosen should
-have a jest/API test asserting `shouldEnqueueNotify` and `GET /player/notifications/messages`
-behave as intended for a player with zero rows in `player_settings`, since that's the state every
-real player starts in and the current gap here.
+1. Migration `063` — add `quiet_hours_enabled BOOLEAN NOT NULL DEFAULT false`; backfill
+   `quiet_hours_start`/`end` to `COALESCE(…, 8)` / `COALESCE(…, 17)`.
+2. `DEFAULT_PLAYER_SETTINGS` — `quietHoursEnabled: false, quietHoursStart: 8, quietHoursEnd: 17`,
+   plus the interface / `rowToSettings` / `upsert` plumbing.
+3. `notify-gate.ts` — delete the quiet-hours evaluation and its now-orphaned `hourInTimezone`.
+4. `Profile.tsx` — enabled checkbox; drop the `?? 8` / `?? 17` display fallbacks (`:430`, `:445`),
+   which were the UI-side half of the same confusion; add the "applies once phone notifications
+   exist" copy. Update `docs/assistant-help.md` per §9.
+5. `app.ts:248` + `notifications.spec.ts` — delete the `disableQuietHours` test flag. It was a
+   workaround for the accidental default and is unnecessary once nothing is gated; opt-in was the
+   wrong shape anyway (18 specs create test players, 1 passed the flag).
 
 ### Tests first (TDD — §4, §11)
 
-- API integration/unit — a player with no `player_settings` row (not just no timezone) is not
-  quiet-houred by default, for a mention sent at any UTC hour, matching the migration's stated
-  intent.
-- `notify-gate.spec.ts` (new or extended) — `shouldEnqueueNotify` with `quietHoursStart`/`End` set
-  but `timezone: null` behaves per whatever question 2 above resolves to, at multiple UTC hours
-  (not just one, so a fix can't accidentally hardcode the current hour).
+- `notify-prefs.spec.ts:104` — defaults assert `quietHoursEnabled: false`, `quietHoursStart: 8`,
+  `quietHoursEnd: 17` for a player with no row. (Currently **red on `main`** against the old
+  `null` expectation — see `bf62816`.)
+- `notify-prefs.spec.ts:321` — **inverts**. A member inside their own configured window must now
+  *receive* the job. Rename the enclosing `describe` off "quiet hours drop the push entirely".
+- `personalization-quiet-hours.spec.ts` — rework from suppression to round-trip: the toggle and
+  window persist across a reload and no notification is withheld. Update its row in
+  `e2e-scenarios.md` (§"Test Organization") per §8.
 
 ### Verify
 
 1. Sign up a brand-new player (no settings row, no timezone). Have someone `@mention` them, at any
-   time of day. Confirm the in-app notification and push both fire.
+   time of day. Confirm the in-app notification fires.
 2. Re-run `group-poll.spec.ts` and `group-notify.spec.ts` (flagged as pre-existing flakes in
    [ISSUE-65](#issue-65)'s status block) at multiple times of day; both should be stable regardless
-   of when they run.
+   of when they run, without needing `disableQuietHours`.
+3. Toggle quiet hours on in Profile, reload, confirm the window persisted — and confirm a mention
+   inside that window still notifies (inert by design, decision 2).
+
+---
+
+## ISSUE-67 — Suppressed notifications lose their inbox row, not just the alert 🟠 {#issue-67}
+
+*Found 2026-08-04 while verifying [ISSUE-66](#issue-66). Same code path, distinct root cause: 66 is
+about **when** the gate fires, this is about **what it does** when it fires correctly.*
+
+### Symptom
+
+A player who has turned off "Notify me about mentions" (or, before ISSUE-66's fix, one inside their
+quiet-hours window) gets no Notifications Center entry for an `@mention` — not a delayed one, none
+at all. The group message itself still exists in the chat feed, so it is technically discoverable by
+scrolling, but there is no notification, no badge, and no inbox record ever created. For an
+`@mention`, whose entire purpose is to summon attention, the notification *is* the feature.
+
+### Root cause
+
+`player-groups.ts:732-752`:
+
+```js
+for (const recipientId of recipientIds) {
+  const eventType = mentionedPlayerIds.has(recipientId) ? 'mentions' : null
+  if (!(await shouldEnqueueNotify(deps.db, recipientId, eventType))) continue   // ← :734
+  await deps.jobQueue.add('messaging.notify', …)                                 // the email
+
+  if (eventType === 'mentions') {
+    notifyPlayer(recipientId, `${sender} mentioned you in a group message`, …)   // the durable row
+  }
+}
+```
+
+The `continue` skips the **rest of the loop body**, so it drops the email job *and* the
+`notifyPlayer` call beneath it. `notifyPlayer` (`:133`) is not an alert — it is
+`groupMsgRepo.postPersonalNotification(...)`, a DB write creating the Notifications Center row.
+
+This contradicts `PERSONALIZATION_DESIGN.md:183`, which is explicit that only the alert is dropped:
+
+> Quiet hours drop the push outright — **the item stays in badges/strip/inbox** (P5 makes every push
+> redundant), and no deferred-delivery mechanism gets built […] a morning batch of stale pushes was
+> rejected.
+
+The surviving inbox item is the *reason* "drop, don't defer" was judged acceptable — it is the
+compensating control for discarding the alert. Deleting it invalidates that argument.
+
+**ISSUE-66's fix does not resolve this.** `shouldEnqueueNotify` returns false for two independent
+reasons — quiet hours and the per-event toggles. Making quiet hours inert removes one; a player who
+unchecks `notifyMentions` still reaches the same `continue` and still loses the record.
+
+### Scope — the `@mention` path only
+
+The other two call sites are correct, and were checked rather than assumed:
+
+| Call site | Writes a durable record in the gated loop? | Backstop |
+|---|---|---|
+| `player-groups.ts:734` — @mention | **yes** — `notifyPlayer` | none; a bare mention is not a pending action |
+| `poll-service.ts:133` — poll created | no — job enqueue only | P5 pending-actions (a poll *is* one) |
+| `nudge-processor.ts:217` — deadline sweep | no — job enqueue only | P5 pending-actions (a pending match *is* one) |
+
+Only the mention path loses information, because it is the only one whose loop body also performs a
+DB write — and it is the only one P5 does not catch.
+
+### Fix
+
+Restructure the loop so the record is unconditional and only the alert channel is gated: write
+`notifyPlayer` for every `@mention` recipient, and apply `shouldEnqueueNotify` solely to the
+`jobQueue.add('messaging.notify', …)` call above it.
+
+### Tests first (TDD — §4, §11)
+
+- `notify-prefs.spec.ts` — a mentioned member with `notifyMentions: false` still gets a
+  Notifications Center row, and still gets **no** notify job. The existing test at `:165` asserts
+  only the second half, so it passes today while the record is being destroyed — the gap that hid
+  this.
+- Assert via `GET /player/notifications/messages` rather than the repo directly, so the test covers
+  what the player actually sees.
+
+### Verify
+
+1. Uncheck "Notify me about mentions" in Profile.
+2. Have someone `@mention` you in a group.
+3. Alerts shows the mention; no notify job is enqueued.
