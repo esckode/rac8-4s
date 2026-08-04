@@ -198,10 +198,10 @@ grep -rl "<route-or-testid>" packages/frontend/e2e/*.spec.ts
 | **Poll cards** | 10 | `poll-cards.spec.ts` | `npx playwright test poll-cards` |
 | **Messaging (group feed)** | 5 | `messaging.spec.ts` | `npx playwright test messaging.spec` |
 | **Messaging (threads)** | 5 | `messaging-threads.spec.ts` | `npx playwright test messaging-threads` |
-| **Player groups** | 10 | `player-groups.spec.ts` | `npx playwright test player-groups` |
+| **Player groups** | 11 | `player-groups.spec.ts` | `npx playwright test player-groups` |
 | **Group settings** | 7 | `group-settings.spec.ts` | `npx playwright test group-settings` |
 | **Group owner management** | 14 | `group-owner-management.spec.ts` | `npx playwright test group-owner-management` |
-| **Invite acceptance** | 6 | `invite-accept.spec.ts` | `npx playwright test invite-accept` |
+| **Invite acceptance** | 7 | `invite-accept.spec.ts` | `npx playwright test invite-accept` |
 | **@ref assistant (core)** | 9 | `assistant.spec.ts` | `npx playwright test assistant.spec` |
 | **@ref assistant (actions)** | 8 | `assistant-actions.spec.ts` | `npx playwright test assistant-actions` |
 | **@ref assistant (proactive: nudges/recap/digest)** | 16 | `assistant-proactive.spec.ts` | `npx playwright test assistant-proactive` |
@@ -1945,6 +1945,16 @@ Then POST /player/groups/:groupId/invites is called with { email: "newplayer@exa
   And a success confirmation is shown
 ```
 
+### Scenario: A player who already owns a group can create a second one (ISSUE-54)
+
+```gherkin
+Given a player already owns one group "First Group"
+When the player navigates to "/groups"
+Then the create-group CTA is still visible (data-testid="create-group-cta"), not just on the empty state
+When the player creates "Second Group" via the CTA
+Then both "First Group" and "Second Group" are listed
+```
+
 **Implementation (G2.5):**
 - Frontend unit (RTL): `packages/frontend/src/components/__tests__/MyGroups.spec.tsx`
   - GroupList renders; GroupChatPanel message cards "Name · time"; MembersPanel; MyGroupsUnreadBadge
@@ -2105,6 +2115,46 @@ Then an error message is shown: "group not found"
 - RTL unit: `packages/frontend/src/__tests__/components/InviteAcceptPage.spec.tsx`
 - Route: `/groups/:groupId/invite` (public, no auth required)
 - Playwright e2e: `packages/frontend/e2e/invite-accept.spec.ts` (best-effort)
+
+---
+
+## Feature: Player Groups — in-app invite accept from Alerts (ISSUE-55)
+
+> An invited email that already belongs to a player also gets an in-app
+> notification (not just the magic-link email) — see UAT_ISSUES.md#issue-55.
+
+**Scenario: Owner invites an existing account; invitee accepts from the Alerts tab**
+```gherkin
+Given a group owner sends an invite to an email that already has a player account
+When the invitee opens the Alerts tab (🔔, data-testid="nav-notifications")
+Then a notification card shows the group name and an Accept button
+  (data-testid="notification-invite-accept")
+When the invitee taps Accept
+Then POST /player/groups/:groupId/invites/accept is called with the token +
+  email carried in the notification metadata
+  And the response's session token is discarded, not stored (no downgrade of
+  the already-authenticated account holder)
+  And the card disappears from the feed
+  And the group now appears on My Groups
+```
+
+**Scenario: Re-accepting an already-consumed invite shows an inline error**
+```gherkin
+Given the invite token was already used once
+When the invitee taps Accept on a stale notification card
+Then the response is TOKEN_INVALID
+  And "This invite is no longer valid" is shown inline
+  And the card stays (dismissible), it does not fail silently
+```
+
+**Implementation (ISSUE-55):**
+- API: `player-groups.ts` invite-send handler posts a personal notification
+  (fire-and-forget) when the invited email resolves to an existing player —
+  see `group-invite.spec.ts` "personal notification side effect".
+- RTL unit: `NotificationCard.spec.tsx` (Accept button, POST, error state),
+  `Notifications.spec.tsx` (card removal on accept).
+- Playwright e2e: `packages/frontend/e2e/invite-accept.spec.ts` (added to the
+  existing P1.7 file — same feature area, different entry point).
 
 ---
 
@@ -2370,8 +2420,8 @@ Then Ref declines (the mock has no write route — mirroring the empty Phase A w
 ### Scenario: Score via Ref — card appears, proposer confirms, standings update live
 ```
 Given a member has a pending casual match against a named opponent
-When they send "@ref beat Sunil 6-4, 6-3"
-Then an ActionCard appears in the feed with the parsed score (asker-relative: "You 6-4, 6-3 Sunil")
+When they send "@ref beat Casey 6-4, 6-3"
+Then an ActionCard appears in the feed with the parsed score (asker-relative: "You 6-4, 6-3 Casey")
   And only the proposer sees an active Confirm button
 When the proposer taps Confirm
 Then the existing score-submission service runs as the confirming player
@@ -2423,8 +2473,8 @@ Then the card flips to "cancelled" and renders inert
 
 ### Scenario: NEGATIVE — ambiguous score match yields a clarifying question, never a guess
 ```
-Given the asker has two pending matches against players named "Sunil"
-When they send "@ref beat Sunil 6-4, 6-3"
+Given the asker has two pending matches against players named "Casey"
+When they send "@ref beat Casey 6-4, 6-3"
 Then Ref asks a clarifying question naming both candidates
   And no ActionCard is posted
 ```

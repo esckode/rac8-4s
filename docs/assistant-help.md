@@ -139,10 +139,16 @@ they beat you head-to-head.
 
 - **My Groups** (the 👥 tab) lists your groups. A group is a durable circle of players with its
   own chat — it outlives any single tournament.
+- To **start your own group**, tap **New group** at the top of My Groups and give it a name.
+  This button is always there, whether you have no groups yet or several already.
 - **Joining is invite-only.** A group owner enters your email, and you get a personal magic-link
   invite. Clicking it (and verifying your email) joins you to the group. There are no public or
   searchable groups, and invite links can't be shared — each is single-use and tied to the
   invited email.
+- **If you already have an account, the invite also shows up in-app.** Open **Alerts** (🔔) and
+  you'll see a card with the group's name and an **Accept** button — no need to leave the app or
+  check email. Accepting an already-used invite shows "This invite is no longer valid" instead of
+  failing silently. Brand-new invitees (no account yet) still only get the email link.
 - Groups have **owners and members**. A group can have several owners. Owners can invite people,
   remove members, delete messages, promote members to owner, and change group settings. Members
   can chat, vote in polls, and create polls.

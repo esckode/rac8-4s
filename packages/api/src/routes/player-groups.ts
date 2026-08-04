@@ -445,6 +445,28 @@ export default function playerGroupsRouter(deps: AppDependencies): Router {
 
         log.info('group.invite.sent', { groupId, actorPlayerId: session.playerId })
 
+        // ISSUE-55: if the invited email already belongs to a player, surface
+        // the invite in-app via the personal notification feed too — email is
+        // the only channel for an email the system has never seen (no player
+        // to attach a notification to).
+        const normalizedEmail = email.trim().toLowerCase()
+        const existingPlayer = await playerRepo.findByEmail(normalizedEmail)
+        if (existingPlayer) {
+          const groupRow = await (deps.db as any).query(
+            `SELECT name FROM public.player_groups WHERE id = $1`,
+            [groupId]
+          )
+          const groupName = groupRow.rows[0]?.name ?? ''
+          notifyPlayer(
+            existingPlayer.id,
+            `You've been invited to join ${groupName}`,
+            { groupId, groupName, groupInviteToken: token, inviteEmail: normalizedEmail }
+          ).catch((e: Error) => {
+            log.warn('personal.notification.failed', { groupId, playerId: existingPlayer.id, error: e.message })
+          })
+          log.info('group.invite.notified', { groupId, actorPlayerId: session.playerId, playerId: existingPlayer.id })
+        }
+
         // rawToken is included in non-production environments for e2e testing
         const body: { ok: boolean; rawToken?: string } = { ok: true }
         if (process.env.NODE_ENV !== 'production') body.rawToken = token

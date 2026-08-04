@@ -100,7 +100,7 @@ export const CreateGroupCta: React.FC<{ onCreated: () => void }> = ({ onCreated 
         onClick={() => setOpen(true)}
         className="w-full text-center text-sm font-medium text-(--court-600) hover:text-(--court-800) py-2 rounded-lg hover:bg-(--court-50) transition-colors"
       >
-        Create your first group
+        New group
       </button>
     )
   }
@@ -181,7 +181,12 @@ export const GroupList: React.FC = () => {
 
   return (
     <div className="space-y-(--s-3) p-4">
-      <h1 className="text-2xl font-bold text-(--ink-900)">My Groups</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-(--ink-900)">My Groups</h1>
+        <div className="shrink-0">
+          <CreateGroupCta onCreated={refetch} />
+        </div>
+      </div>
 
       <CoachEntryLink />
 
@@ -190,7 +195,6 @@ export const GroupList: React.FC = () => {
           <p data-testid="group-list-empty" className="text-(--ink-500)">
             No groups yet. Ask a group owner to invite you, or start your own.
           </p>
-          <CreateGroupCta onCreated={refetch} />
         </div>
       )}
 

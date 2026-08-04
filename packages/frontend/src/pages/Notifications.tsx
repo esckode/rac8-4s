@@ -62,7 +62,11 @@ export const Notifications: React.FC = () => {
           style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
         >
           {messages.map(m => (
-            <NotificationCard key={m.id} message={m} />
+            <NotificationCard
+              key={m.id}
+              message={m}
+              onAccepted={() => setMessages(prev => prev.filter(msg => msg.id !== m.id))}
+            />
           ))}
         </div>
       )}
