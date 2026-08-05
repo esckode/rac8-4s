@@ -9,6 +9,7 @@ import {
   getTokenFromPage,
   clearAuthState,
   createTestUser,
+  createTestPartnerEmail,
   createTestTournament,
   createTournamentWithOpenRegistration,
   defaultAgeAttestation,
@@ -588,7 +589,7 @@ test.describe('Tournament Discovery & Registration E2E', () => {
         {
           email: registrationUser.email,
           name: registrationUser.name,
-          partnerEmail: 'partner@example.com',
+          partnerEmail: createTestPartnerEmail(),
           dob_attestation: defaultAgeAttestation(),
         }
       )

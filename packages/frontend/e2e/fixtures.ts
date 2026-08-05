@@ -105,6 +105,25 @@ export function createTestUser() {
 }
 
 /**
+ * Create a unique doubles-partner email.
+ *
+ * partnerInvitePerEmail rate-limits registration by the partner's address
+ * (routes/tournaments.ts), so a hardcoded literal here shares one 3-attempt
+ * bucket across every spec that invites a partner. Same collision risk as
+ * createTestUser() above, so it carries the same random suffix.
+ *
+ * Usage:
+ *   await page.fill('#partnerEmail', createTestPartnerEmail())
+ */
+let partnerEmailCounter = 0
+export function createTestPartnerEmail(): string {
+  const timestamp = Date.now()
+  partnerEmailCounter++
+  const rand = Math.random().toString(36).slice(2, 8)
+  return `partner-${timestamp}-${partnerEmailCounter}-${rand}@example.com`
+}
+
+/**
  * The 18+ age gate (packages/api/src/db.ts PlayerRepository.findOrCreatePlayerByEmail)
  * requires this on the FIRST request that creates a durable player row for an email —
  * account signup (/api/auth/signup) and tournament registration (/tournaments/:id/register)

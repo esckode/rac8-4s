@@ -53,20 +53,47 @@ function checkWorkerProcess() {
   }
 }
 
-// UAT ISSUE-34: the e2e sweep self-DoSes on ISSUE-11's per-IP registration
-// cap (default 25/15min) unless this override is set in the file the API
-// server actually reads its env from (packages/api/.env, not the repo root).
-// Reads the file directly rather than process.env, since this script doesn't
-// load dotenv and the value only matters to the already-running API process.
-function checkRateLimitOverride() {
+// UAT ISSUE-34 / ISSUE-71: the e2e sweep self-DoSes on rate limiters that key
+// on per-registration or per-partner-email addresses unless these overrides
+// are set in the file the API server actually reads its env from
+// (packages/api/.env, not the repo root). Reads the file directly rather
+// than process.env, since this script doesn't load dotenv and the value
+// only matters to the already-running API process.
+//
+// `critical: true` means a missing override actually self-DoSes the sweep
+// (reads ❌). The other two are defence-in-depth on top of the real ISSUE-71
+// fix (a unique partner email per spec) and register-per-email never firing
+// at all (unique registrant emails) — missing reads ⚠️, not ❌.
+const RATE_LIMIT_OVERRIDES = [
+  {
+    name: 'APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS',
+    label: 'per-IP registration cap (ISSUE-34)',
+    critical: true,
+  },
+  {
+    name: 'APP_LIMITS_RATE_LIMIT_PARTNER_INVITE_PER_EMAIL_MAX_ATTEMPTS',
+    label: 'per-partner-email doubles-invite cap (ISSUE-71)',
+    critical: false,
+  },
+  {
+    name: 'APP_LIMITS_RATE_LIMIT_REGISTER_PER_EMAIL_MAX_ATTEMPTS',
+    label: 'per-registrant-email cap (precautionary — never fires)',
+    critical: false,
+  },
+]
+
+function checkRateLimitOverrides() {
+  let contents = ''
   try {
-    const contents = readFileSync('packages/api/.env', 'utf8')
-    const match = contents.match(/^APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS=(\d+)/m)
-    if (!match) return { set: false, value: null }
-    return { set: true, value: parseInt(match[1], 10) }
+    contents = readFileSync('packages/api/.env', 'utf8')
   } catch {
-    return { set: false, value: null }
+    contents = ''
   }
+  return RATE_LIMIT_OVERRIDES.map((override) => {
+    const match = contents.match(new RegExp(`^${override.name}=(\\d+)`, 'm'))
+    if (!match) return { ...override, set: false, value: null }
+    return { ...override, set: true, value: parseInt(match[1], 10) }
+  })
 }
 
 async function startServer(workspaceName, port, displayName) {
@@ -230,17 +257,22 @@ async function main() {
     }
   }
 
-  // Check the e2e rate-limit override (UAT ISSUE-34)
-  log('\n5️⃣  Checking e2e registration rate-limit override...', 'blue')
-  const rateLimitOverride = checkRateLimitOverride()
-  if (rateLimitOverride.set && rateLimitOverride.value >= 1000) {
-    log(`✅ Override in effect: APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS=${rateLimitOverride.value}`, 'green')
-  } else if (rateLimitOverride.set) {
-    log(`⚠️  Override set but low (${rateLimitOverride.value}) — the e2e sweep may still hit RATE_LIMITED`, 'yellow')
-  } else {
-    log('❌ Override not set in packages/api/.env — the e2e sweep will self-DoS on its own', 'red')
-    log('   fixtures (ISSUE-11\'s 25/15min per-IP cap). Add:', 'red')
-    log('   APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS=10000', 'red')
+  // Check the e2e rate-limit overrides (UAT ISSUE-34, ISSUE-71)
+  log('\n5️⃣  Checking e2e registration rate-limit overrides...', 'blue')
+  const rateLimitOverrides = checkRateLimitOverrides()
+  for (const override of rateLimitOverrides) {
+    if (override.set && override.value >= 1000) {
+      log(`✅ ${override.name}=${override.value} — ${override.label}`, 'green')
+    } else if (override.set) {
+      log(`⚠️  ${override.name} set but low (${override.value}) — ${override.label} may still hit RATE_LIMITED`, 'yellow')
+    } else if (override.critical) {
+      log(`❌ ${override.name} not set in packages/api/.env — the e2e sweep will self-DoS on its own`, 'red')
+      log(`   fixtures (${override.label}). Add:`, 'red')
+      log(`   ${override.name}=10000`, 'red')
+    } else {
+      log(`⚠️  ${override.name} not set in packages/api/.env — ${override.label}. Add:`, 'yellow')
+      log(`   ${override.name}=10000`, 'yellow')
+    }
   }
   if (apiRunning) {
     log('   ⚠️  API server was already running — restart it if you just added this,', 'yellow')
@@ -267,7 +299,11 @@ async function main() {
   log(`  API Server (3001): ${apiRunning ? '✅' : '❌'}`, 'blue')
   log(`  Frontend Server (5173): ${frontendRunning ? '✅' : '❌'}`, 'blue')
   log(`  Worker: ${workerRunning ? '✅' : '❌ (only needed for assistant/coach/sweep/doubles-groups specs)'}`, 'blue')
-  log(`  Rate-limit override: ${rateLimitOverride.set && rateLimitOverride.value >= 1000 ? '✅' : '❌ (full test:e2e sweep will hit RATE_LIMITED)'}`, 'blue')
+  for (const override of rateLimitOverrides) {
+    const ok = override.set && override.value >= 1000
+    const status = ok ? '✅' : override.critical ? '❌ (full test:e2e sweep will hit RATE_LIMITED)' : '⚠️  (defence-in-depth only)'
+    log(`  Rate-limit override — ${override.label}: ${status}`, 'blue')
+  }
 
   if (apiRunning && frontendRunning) {
     log('\n✅ Core prerequisites met! Ready to run E2E tests.', 'green')
