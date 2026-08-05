@@ -119,10 +119,12 @@ export function useGroupMessages(groupId: string, active = false): UseGroupMessa
           try {
             const payload: GroupMessageRecord = JSON.parse(event.data)
             store.append(payload)
-            // Increment global unread for nav badge (SSE = new unseen message)
-            if (payload.type !== 'system') {
-              groupUnreadStore.setGroupUnread(groupId, store.all().filter(m => m.type !== 'system').length)
-            }
+            // ISSUE-73 R3: no groupUnreadStore write here. This used to set
+            // the *total loaded message count for this open panel* — not an
+            // unread count — which only looked right by accident (the only
+            // reader thresholded at >0). usePersonalEventsStream's app-wide
+            // 'group.unread.changed' -> refetchGroupUnread() already keeps
+            // the store's per-group counts server-computed and correct.
           } catch {
             // malformed — ignore
           }
