@@ -139,7 +139,7 @@ saved nothing. ISSUE-69 and ISSUE-70 are pre-existing reds surfaced by the same 
 | [ISSUE-68](#issue-68) | ✅ Fixed (unmerged) | 🔴 | `PATCH /api/auth/me/settings` silently discards every P9 field — the whole notification-preferences UI has never saved | api |
 | [ISSUE-69](#issue-69) | ✅ Fixed (unmerged) | 🟡 | The up-next strip renders only on `/browse`, so it is unreachable while discovery is off — a shipped P6 feature with no route | frontend |
 | [ISSUE-70](#issue-70) | ✅ Fixed (unmerged) | 🟡 | Chat redesign dropped the avatar on your own messages, leaving `personalization-ui.spec.ts` red on main | frontend · test-debt |
-| [ISSUE-71](#issue-71) | 🔲 Open | 🟡 | The e2e rate-limit override raises only 1 of the 3 limiters on the register route, so a full sweep poisons its own registration specs | test-infra |
+| [ISSUE-71](#issue-71) | ✅ Fixed (unmerged) | 🟡 | One hardcoded partner email in the doubles spec shares a 3-attempt `partnerInvitePerEmail` bucket across the whole suite, and the e2e override doesn't raise it | test-infra |
 
 ### Implementation sequence for ISSUE-56–64
 
@@ -3383,7 +3383,7 @@ works only because it signs the invitee up first. Same order is now used here (`
 
 ---
 
-## ISSUE-71 — The e2e rate-limit override covers only one of three limiters 🟡 {#issue-71}
+## ISSUE-71 — A hardcoded partner email makes one rate-limit bucket suite-wide 🟡 {#issue-71}
 
 *Found 2026-08-04 during the merge-gate sweep for [ISSUE-66](#issue-66)–[70](#issue-70).*
 
@@ -3398,39 +3398,153 @@ Failed to register for doubles tournament: 429
 ```
 
 It is **not** a code defect and not flakiness in the usual sense: the same test passes in isolation
-in 9.4s immediately after an API restart. The sweep exhausts the budget, and Playwright's two
-retries re-spend it inside the same 15-minute window, so a contaminated test can never recover
-within its own run.
+in 9.4s immediately after an API restart. One shared 3-attempt budget is spent down across runs, and
+Playwright's two retries re-spend it inside the same 15-minute window, so a contaminated test can
+never recover within its own run.
 
-### Root cause
+### Root cause — *corrected 2026-08-05 (verification pass)*
 
 `POST /tournaments/:id/register` mounts **three** rate limiters (`routes/tournaments.ts:1421-1435`):
 
-| Limiter | Default max | Raised for e2e? |
-|---|---|---|
-| `registerPerEmail` | 3 | ❌ |
-| `registerPerIp` | 25 | ✅ → 10000 |
-| `partnerInvitePerEmail` | 3 | ❌ |
+| Limiter | Key | Default max | Raised for e2e? | Actually bites? |
+|---|---|---|---|---|
+| `registerPerEmail` | `register:email:<registrant email>` | 3 | ❌ | **No** |
+| `registerPerIp` | `register:ip:<ip>` | 25 | ✅ → 10000 | No (raised) |
+| `partnerInvitePerEmail` | `partner-invite:email:<partner email>` | 3 | ❌ | **Yes — this one** |
 
-The documented override — `APP_LIMITS_RATE_LIMIT_REGISTER_PER_IP_MAX_ATTEMPTS=10000`, which
-`scripts/e2e-setup.js` checks and reports as *"Rate-limit override: ✅"* — raises only the middle
-row. The two sharp anti-bombing limiters (3 attempts each) are untouched, so the setup script's ✅
-overstates what is actually protected.
+The original filing blamed "the two untouched limiters". Only one of them can fire:
 
-Counters are held in an in-memory store, so **restarting the API is what clears them**, not waiting
-for Redis keys to expire — there are none to find.
+- **`registerPerEmail` is untouched but harmless.** It keys on the *registrant's* email
+  (`tournaments.ts:1389-1392`), and every spec registers via `createTestUser()`, which returns
+  `test-${timestamp}-${counter}-${rand}@example.com` (`packages/frontend/e2e/fixtures.ts:94-102`).
+  Each registration lands in its own bucket, which never reaches 2. Leaving it at 3 costs nothing.
+- **`partnerInvitePerEmail` is the actual cause.** It keys on the *partner's* address
+  (`tournaments.ts:1401-1406`), and the only hardcoded partner email in the entire e2e tree is
+  `partnerEmail: 'partner@example.com'` at
+  `packages/frontend/e2e/tournament-discovery-registration.spec.ts:591`. That literal is one
+  globally shared bucket of 3 attempts / 15 minutes for the whole suite. (Line 297 of the same file
+  already does it correctly: `partner-${Date.now()}@example.com`.)
 
-### Suggested fix
+**The arithmetic, precisely.** `countMode: 'all'` counts successes too, and the guard is
+`count >= maxAttempts` (`middleware/rate-limit.ts:124,140`) — so the **3rd** request in the window
+429s, not the 4th. The doubles spec runs on `chromium` + `firefox` only (`pwa` is
+`testMatch: '**/pwa-*.spec.ts'`, `playwright.config.ts:43-47`), so **one clean sweep spends 2 of 3
+and does not exhaust itself.** The third spend comes from either a retry (`retries: 2`) or any
+earlier run of that spec within 15 minutes against an API that was not restarted — both near-certain
+while iterating, which is what happened here. Once the counter is at 3, both retries also 429, so
+the test cannot recover in-run.
 
-Add the two missing overrides to `.env.example` alongside the existing one, and widen the
-`e2e-setup.js` check to report all three rather than green-lighting on one. Whether the doubles spec
-should also use a unique partner email per attempt is worth a look while in there.
+Counters are held in an in-memory store (`middleware/rate-limit-store.ts:64`), so **restarting the
+API is what clears them**, not waiting for Redis keys to expire — there are none to find.
 
-### Status — 2026-08-04
+**Side effect worth knowing:** the limiter wraps `res.json` *after* the handler has run
+(`rate-limit.ts:120-150`). The 429'd attempt has already created the registration row and its magic
+link token; only the response body is replaced. Contamination leaves DB rows behind, not just a red
+test.
 
-**🔲 Open — filed, not fixed.** Diagnosed during the ISSUE-66–70 merge gate and deliberately left
-out of that branch, which is about quiet hours, settings persistence and two frontend defects.
+### Requirements for the fix
 
-**Impact on reading a sweep:** treat a lone `RATE_LIMITED` on a registration spec as contamination
-until proven otherwise. Restart the API, re-run the single test, and only then call it a
-regression. This one cost a full sweep to rule out.
+Three changes, in this order. **This is test-infra only — do not touch the production defaults in
+`config.ts:532-537`.** The 3/25/3 values are the deliberate anti-bombing posture from ISSUE-11 and
+ISSUE-15; the e2e loosening belongs in env overrides and the spec, nowhere else.
+
+**R1 — Make the doubles spec use a unique partner email (the real fix).**
+`packages/frontend/e2e/tournament-discovery-registration.spec.ts:591`: replace the literal
+`'partner@example.com'` with a per-attempt unique address, matching the idiom already used at line
+297 of the same file. Prefer routing it through `fixtures.ts` (e.g. reuse `createTestUser().email`
+or add a sibling helper) so the uniqueness guarantee lives in one place — `Date.now()` alone can
+collide across the two browser projects, which is exactly why `createTestUser` carries a random
+suffix (see the comment at `fixtures.ts:97-99`). Nothing else in the e2e tree sends `partnerEmail`,
+so this is a one-line-of-behaviour change.
+
+**R2 — Add the missing override to the env files (defence in depth).**
+`packages/api/.env.example` (and the repo-root `.env.example`, which carries the same block at
+`:38-42`): add `APP_LIMITS_RATE_LIMIT_PARTNER_INVITE_PER_EMAIL_MAX_ATTEMPTS=10000` next to the
+existing per-IP override, with a comment that it is test-environment-only. The parsing already
+exists — `config.ts:695-699` reads that exact variable name, so no config code changes.
+`APP_LIMITS_RATE_LIMIT_REGISTER_PER_EMAIL_MAX_ATTEMPTS` may be added for symmetry, but say in the
+comment that it is precautionary: unique registrant emails mean it has never fired.
+
+**R3 — Widen the setup-script check so its ✅ stops overstating.**
+`scripts/e2e-setup.js:62-70` (`checkRateLimitOverride`) matches exactly one variable and
+`:233-247` green-lights on it. Generalise it to check each override it expects and report
+per-variable status, so a missing partner-invite override reads as ⚠️ rather than ✅. Keep the
+existing behaviour that it reads `packages/api/.env` directly rather than `process.env` — the
+comment at `:56-60` explains why, and that reasoning is unchanged.
+
+**Verification (§4 — make it fail first).**
+
+1. **Red:** with the API freshly restarted, run the doubles spec three times in a row without
+   restarting in between:
+   `npx playwright test tournament-discovery-registration.spec.ts --project=chromium --reporter=line -g "doubles tournament"`
+   Run 3 must fail with `RATE_LIMITED` on the *current* tree. That is the reproduction — confirm it
+   before changing anything.
+2. **Green:** apply R1 and repeat the same three runs with no API restart. All three must pass.
+3. **Regression:** one full run of that spec on both browser projects
+   (`--project=chromium --project=firefox --reporter=line`), still without restarting the API.
+4. **Setup script:** `node scripts/e2e-setup.js` reports the new per-variable status correctly both
+   with and without the R2 line present in `packages/api/.env`.
+5. No jest suite covers any of this (it is e2e fixtures + a node script), but run
+   `npx jest --findRelatedTests $(git diff --name-only main...HEAD) --bail` per §11 anyway — if R2's
+   comment edits pull in `config.ts`-adjacent specs, they must stay green. Do **not** change
+   `config.ts` values to make anything pass.
+
+**Out of scope.** Do not re-key `partnerInviteEmailKey`, do not add a test-only bypass to
+`createRateLimitMiddleware`, and do not add a `/test/reset-rate-limits` endpoint — the limiter
+behaviour under test is correct, and the fix is to stop the suite from sharing one bucket.
+
+### Status — ✅ Fixed 2026-08-05 (unmerged)
+
+Diagnosed during the ISSUE-66–70 merge gate and deliberately left out of that branch, which is
+about quiet hours, settings persistence and two frontend defects. Re-verified 2026-08-05 against
+the source: the failure is real, but the mechanism was one limiter (`partnerInvitePerEmail` on a
+hardcoded partner address), not the two the original filing named — root cause section corrected
+above, and the fix built against the corrected mechanism.
+
+**What changed** (branch `fix/issue-71-partner-email-rate-limit`, commit `fc44ecd`):
+
+- **R1** — `tournament-discovery-registration.spec.ts:591` no longer sends the literal
+  `partner@example.com`. It now calls a new `createTestPartnerEmail()` fixture
+  (`fixtures.ts`), which carries the same timestamp+counter+random-suffix uniqueness idiom as
+  `createTestUser()`.
+- **R2** — added `APP_LIMITS_RATE_LIMIT_PARTNER_INVITE_PER_EMAIL_MAX_ATTEMPTS=10000` (and, for
+  symmetry, `..._REGISTER_PER_EMAIL_MAX_ATTEMPTS=10000`) to the repo-root `.env.example` and to
+  the live `packages/api/.env`. (`packages/api/.env.example` does not exist in this repo — only
+  one tracked template, at the repo root — so both overrides landed there instead; `packages/api/.env`
+  is the untracked file the running server and `e2e-setup.js` actually read, per R3 below, so it
+  needed the same lines to take effect locally.) Production defaults in `config.ts:532-537` are
+  untouched.
+- **R3** — `scripts/e2e-setup.js`'s `checkRateLimitOverride` is now `checkRateLimitOverrides`,
+  checking all three variables above and reporting per-variable ✅/⚠️/❌ instead of only ever
+  checking the per-IP one. A missing partner-invite or register-per-email override now reads ⚠️
+  (defence-in-depth, non-critical post-R1) rather than the old blanket ✅; a missing per-IP
+  override still reads ❌ (that one genuinely self-DoSes the sweep, per ISSUE-34).
+
+**Verification results** (API restarted before Red, never restarted between runs after):
+
+1. **Red (unmodified tree):** run 1 of the doubles spec passed (with one unrelated pre-existing
+   flake — an email-prefill race on retry, not `RATE_LIMITED`, present on every run before and
+   after this fix and out of scope here); run 2 and run 3 both failed with
+   `Failed to register for doubles tournament: 429 {"code":"RATE_LIMITED",...}` at
+   `tournament-discovery-registration.spec.ts:598` — reproduced one run earlier than the recipe's
+   worst case because run 1's retry spent the bucket's 2nd slot. Confirms the shared-bucket
+   contamination on the current tree.
+2. **Green (R1 applied):** three consecutive runs, no API restart between them, all three
+   `1 passed` with zero `RATE_LIMITED`.
+3. **Regression:** full spec, `--project=chromium --project=firefox`, no restart — `28 tests`,
+   `23 passed` + `5 flaky` (all the same pre-existing email-prefill race, confirmed via
+   `grep -c RATE_LIMITED` = 0 across the run), exit code 0.
+4. **Setup script:** `node scripts/e2e-setup.js` — with all three overrides present in
+   `packages/api/.env`, all three report ✅. With the two new lines removed, per-IP still reports
+   ✅, and partner-invite / register-per-email correctly drop to ⚠️ (not the old silent ✅).
+5. **Jest:** `--findRelatedTests` on all four changed files (`.env.example`,
+   `packages/frontend/e2e/fixtures.ts`, `tournament-discovery-registration.spec.ts`,
+   `scripts/e2e-setup.js`) returns "No tests found" in both the frontend workspace and the root —
+   expected, per §13: e2e fixtures and a node script aren't under any jest `rootDir`. No
+   `config.ts` values were touched.
+
+**Impact on reading a sweep (historical, kept for context):** a lone `RATE_LIMITED` on a
+registration spec used to require treating it as contamination until proven otherwise — restart
+the API, re-run the single test, then call it a regression. That workaround is no longer needed
+for this spec now that the bucket isn't shared.
+
