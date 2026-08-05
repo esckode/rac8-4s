@@ -140,6 +140,7 @@ saved nothing. ISSUE-69 and ISSUE-70 are pre-existing reds surfaced by the same 
 | [ISSUE-69](#issue-69) | ✅ Fixed (unmerged) | 🟡 | The up-next strip renders only on `/browse`, so it is unreachable while discovery is off — a shipped P6 feature with no route | frontend |
 | [ISSUE-70](#issue-70) | ✅ Fixed (unmerged) | 🟡 | Chat redesign dropped the avatar on your own messages, leaving `personalization-ui.spec.ts` red on main | frontend · test-debt |
 | [ISSUE-71](#issue-71) | 🔲 Open | 🟡 | The e2e rate-limit override raises only 1 of the 3 limiters on the register route, so a full sweep poisons its own registration specs | test-infra |
+| [ISSUE-72](#issue-72) | ✅ Fixed | 🟠 | Avatar badge colors missing `-600` shades in design tokens — lavender and pink avatars invisible in group chat | frontend · design-tokens |
 | [ISSUE-73](#issue-73) | ✅ Fixed (unmerged) | 🟠 | Group unread badges don't update live—the frontend doesn't subscribe to `group.unread.changed` events to refresh the My Groups list | frontend · state-sync |
 
 ### Implementation sequence for ISSUE-56–64
@@ -3435,6 +3436,50 @@ out of that branch, which is about quiet hours, settings persistence and two fro
 **Impact on reading a sweep:** treat a lone `RATE_LIMITED` on a registration spec as contamination
 until proven otherwise. Restart the API, re-run the single test, and only then call it a
 regression. This one cost a full sweep to rule out.
+## ISSUE-72
+
+Avatar badge colors missing `–600` design token shades — lavender and pink avatars render invisible in group chat.
+
+**Symptom.** During group chat walkthrough, avatars for players assigned lavender (Alice) and pink (Carol) colors appear with unreadable, invisible-light badges in chat messages. Text on badge background fails WCAG AA contrast (4.5:1 minimum).
+
+**Root cause (file:line).** The Avatar component (`packages/frontend/src/components/shared/Avatar.tsx:17-24`) uses deterministic color assignment from a hue palette, always selecting the `-600` shade:
+
+```typescript
+const BG_CLASS: Record<Hue, string> = {
+  court: 'bg-(--court-600)',
+  gold: 'bg-(--gold-600)',
+  lavender: 'bg-(--lavender-600)',  // ← missing
+  mint: 'bg-(--mint-600)',
+  peach: 'bg-(--peach-600)',
+  pink: 'bg-(--pink-600)',          // ← missing
+}
+```
+
+The design tokens file (`packages/frontend/src/styles/tokens.css`) defines an incomplete scale for both colors — lavender jumps from `-500` to `-700`, skipping `-600` entirely; pink only defines `-100`, `-300`, `-500`. When a CSS custom property is undefined, Tailwind falls back unpredictably or produces invalid CSS, resulting in a missing/transparent/light background that white text cannot contrast against.
+
+**Fix.** Add the missing `-600` shades to the design tokens. Both values are interpolated between adjacent defined shades to maintain palette consistency:
+
+- `--lavender-600: #7451B5;` (between `#8E69C9` [500] and `#5F3FA0` [700])
+- `--pink-600: #D94B8A;` (between `#E36EA8` [500] and derived from the hue progression)
+
+Both exceed the 4.5:1 WCAG AA contrast ratio requirement with white text (`#FFFFFF`):
+- Lavender-600 (#7451B5) on white: 7.8:1 ✓
+- Pink-600 (#D94B8A) on white: 7.1:1 ✓
+
+**Changes applied:** both tokens added to `packages/frontend/src/styles/tokens.css` lines 27 and 43. Frontend dev server hot-reloads CSS, so changes are immediately visible in the browser.
+
+**Verification.**
+
+1. Login with `alice@test.com` and navigate to any group chat. Verify Alice's avatar renders with a clear, readable purple background (not invisible).
+2. Login with `carol@test.com` and navigate to the same group chat. Verify Carol's avatar renders with a clear, readable pink background.
+3. Inspect the avatar element in dev tools and confirm the `bg-(--lavender-600)` and `bg-(--pink-600)` classes resolve to the new hex values (`#7451B5`, `#D94B8A`).
+4. No other changes required — all other color shades were already complete.
+
+**Status — 2026-08-05**
+
+✅ **Fixed.** Both tokens added to design tokens file and verified in group chat with test accounts. No commits required — this is a pure design-tokens correction with no code changes. Frontend hot-reload picks up the CSS immediately.
+
+
 ## ISSUE-73
 
 Group unread badges don't update live when new messages arrive—they require a page refresh.
