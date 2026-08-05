@@ -57,4 +57,16 @@ describe('GroupUnreadStore (ISSUE-56)', () => {
     expect(groupUnreadStore.groupsWithUnread()).toBe(0)
     expect(groupUnreadStore.total()).toBe(0)
   })
+
+  // ─── ISSUE-73: getGroupUnread(groupId) ─────────────────────────────────────
+
+  it('getGroupUnread(groupId) returns that group\'s count', () => {
+    groupUnreadStore.setGroupUnread('g1', 5)
+
+    expect(groupUnreadStore.getGroupUnread('g1')).toBe(5)
+  })
+
+  it('getGroupUnread(groupId) returns 0 for a group the store has never seen', () => {
+    expect(groupUnreadStore.getGroupUnread('never-seen')).toBe(0)
+  })
 })
