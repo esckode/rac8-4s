@@ -335,4 +335,60 @@ test.describe('G2.5 — Player Groups', () => {
     await page.goto('http://localhost:5173/groups')
     await expect(page.locator('[data-testid="group-unread-badge"]')).not.toBeVisible()
   })
+
+  test('Sitting on My Groups, the row badge appears live from an SSE push — no reload (ISSUE-73)', async ({ page, browser }) => {
+    // ISSUE-73: useGroupList used to fetch /player/groups once on mount and
+    // never look at groupUnreadStore again, so a group.unread.changed push —
+    // which the store already reflected correctly (proven by the nav badge
+    // test above) — never reached this per-row badge without a reload. This
+    // test never navigates page A after the initial load, which is exactly
+    // what the previous "list row also shows its own unread count" assertion
+    // (above) didn't prove: that test re-navigates to /groups, which forces
+    // a fresh mount fetch and would pass even on the old, broken code.
+    //
+    // Two real browser contexts (not one page + a raw API send) so the
+    // sender genuinely goes through the send button/SSE pipeline while the
+    // receiver's page stays parked on the list the whole time.
+    const owner = createTestUser()
+    const member = createTestUser()
+    const { token: ownerToken } = await signupAndGetToken(owner)
+    // Pre-create the member so they exist for invite-accept (existing players skip age gate)
+    await signupAndGetToken(member)
+
+    const groupId = await createGroup(ownerToken, `Live Row Badge Group ${Date.now()}`)
+    const invRes = await apiCall(`/player/groups/${groupId}/invites`, 'POST', { email: member.email }, ownerToken)
+    const { rawToken: invToken } = await invRes.json()
+    const acceptRes = await apiCall(`/player/groups/${groupId}/invites/accept`, 'POST', {
+      token: invToken, email: member.email,
+    })
+    const { token: memberToken } = await acceptRes.json()
+
+    // Owner (A) lands on My Groups and stays there — no further navigation.
+    await loginFrontend(page, ownerToken)
+    await page.goto('http://localhost:5173/groups')
+    await expect(page.locator('[data-testid="group-list-item"]')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('[data-testid="group-unread-badge"]')).not.toBeVisible()
+
+    // Member (B), in a separate browser context, opens the group and sends
+    // through the real chat UI.
+    const memberContext = await browser.newContext()
+    try {
+      const memberPage = await memberContext.newPage()
+      await loginFrontend(memberPage, memberToken)
+      await memberPage.goto(`http://localhost:5173/groups/${groupId}`)
+      await expect(memberPage.locator('[data-testid="group-chat-panel"]')).toBeVisible({ timeout: 5000 })
+
+      const liveMsg = `live-badge-${Date.now()}`
+      await memberPage.fill('[data-testid="group-message-input"]', liveMsg)
+      await memberPage.click('[data-testid="group-message-send-button"]')
+      await expect(
+        memberPage.locator(`[data-testid="group-message-item"]:has-text("${liveMsg}")`)
+      ).toBeVisible({ timeout: 5000 })
+    } finally {
+      await memberContext.close()
+    }
+
+    // A's row badge must appear without any navigation/reload of A's page.
+    await expect(page.locator('[data-testid="group-unread-badge"]')).toHaveText('1', { timeout: 8000 })
+  })
 })
