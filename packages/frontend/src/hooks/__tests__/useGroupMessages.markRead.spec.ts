@@ -6,6 +6,7 @@
  */
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useGroupMessages, clearGroupMessageStores } from '../useGroupMessages'
+import { groupUnreadStore } from '../../state/group-unread-state'
 
 const GROUP_ID = 'grp-markread-test'
 
@@ -88,5 +89,26 @@ describe('useGroupMessages mark-read PATCH (ISSUE-56)', () => {
     // must still be exactly 1 — this is the trap: a naive effect keyed on
     // `messages` sends one request per message.
     expect(patchCalls()).toHaveLength(1)
+  })
+
+  // ─── ISSUE-73 R3 ────────────────────────────────────────────────────────
+
+  it('does NOT write a message-total into groupUnreadStore on message.created', async () => {
+    groupUnreadStore.reset()
+    renderHook(() => useGroupMessages(GROUP_ID))
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+
+    act(() => {
+      mockMessageCreatedHandler?.(
+        new MessageEvent('message.created', {
+          data: JSON.stringify({
+            id: 'm-3', conversationId: 'c-1', playerId: 'p-2', senderName: 'Bob',
+            body: 'hi', type: 'text', createdAt: new Date().toISOString(), removedAt: null,
+          }),
+        })
+      )
+    })
+
+    await waitFor(() => expect(groupUnreadStore.total()).toBe(0))
   })
 })

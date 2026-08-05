@@ -140,6 +140,8 @@ saved nothing. ISSUE-69 and ISSUE-70 are pre-existing reds surfaced by the same 
 | [ISSUE-69](#issue-69) | ✅ Fixed (unmerged) | 🟡 | The up-next strip renders only on `/browse`, so it is unreachable while discovery is off — a shipped P6 feature with no route | frontend |
 | [ISSUE-70](#issue-70) | ✅ Fixed (unmerged) | 🟡 | Chat redesign dropped the avatar on your own messages, leaving `personalization-ui.spec.ts` red on main | frontend · test-debt |
 | [ISSUE-71](#issue-71) | ✅ Fixed (unmerged) | 🟡 | One hardcoded partner email in the doubles spec shares a 3-attempt `partnerInvitePerEmail` bucket across the whole suite, and the e2e override doesn't raise it | test-infra |
+| [ISSUE-72](#issue-72) | ✅ Fixed (unmerged) | 🟠 | Avatar badge colors missing `-600` shades in design tokens — lavender and pink avatars invisible in group chat | frontend · design-tokens |
+| [ISSUE-73](#issue-73) | ✅ Fixed (unmerged) | 🟠 | Group unread badges don't update live—the frontend doesn't subscribe to `group.unread.changed` events to refresh the My Groups list | frontend · state-sync |
 
 ### Implementation sequence for ISSUE-56–64
 
@@ -3548,3 +3550,258 @@ registration spec used to require treating it as contamination until proven othe
 the API, re-run the single test, then call it a regression. That workaround is no longer needed
 for this spec now that the bucket isn't shared.
 
+## ISSUE-72
+
+Avatar badge colors missing `–600` design token shades — lavender and pink avatars render invisible in group chat.
+
+**Symptom.** During group chat walkthrough, avatars for players assigned lavender (Alice) and pink (Carol) colors appear with unreadable, invisible-light badges in chat messages. Text on badge background fails WCAG AA contrast (4.5:1 minimum).
+
+**Root cause (file:line).** The Avatar component (`packages/frontend/src/components/shared/Avatar.tsx:17-24`) uses deterministic color assignment from a hue palette, always selecting the `-600` shade:
+
+```typescript
+const BG_CLASS: Record<Hue, string> = {
+  court: 'bg-(--court-600)',
+  gold: 'bg-(--gold-600)',
+  lavender: 'bg-(--lavender-600)',  // ← missing
+  mint: 'bg-(--mint-600)',
+  peach: 'bg-(--peach-600)',
+  pink: 'bg-(--pink-600)',          // ← missing
+}
+```
+
+The design tokens file (`packages/frontend/src/styles/tokens.css`) defines an incomplete scale for both colors — lavender jumps from `-500` to `-700`, skipping `-600` entirely; pink only defines `-100`, `-300`, `-500`. When a CSS custom property is undefined, Tailwind falls back unpredictably or produces invalid CSS, resulting in a missing/transparent/light background that white text cannot contrast against.
+
+**Fix.** Add the missing `-600` shades to the design tokens. Both values are interpolated between adjacent defined shades to maintain palette consistency:
+
+- `--lavender-600: #7451B5;` (between `#8E69C9` [500] and `#5F3FA0` [700])
+- `--pink-600: #D94B8A;` (between `#E36EA8` [500] and derived from the hue progression)
+
+Both exceed the 4.5:1 WCAG AA contrast ratio requirement with white text (`#FFFFFF`):
+- Lavender-600 (#7451B5) on white: 7.8:1 ✓
+- Pink-600 (#D94B8A) on white: 7.1:1 ✓
+
+**Changes applied:** both tokens added to `packages/frontend/src/styles/tokens.css` lines 27 and 43. Frontend dev server hot-reloads CSS, so changes are immediately visible in the browser.
+
+**Verification.**
+
+1. Login with `alice@test.com` and navigate to any group chat. Verify Alice's avatar renders with a clear, readable purple background (not invisible).
+2. Login with `carol@test.com` and navigate to the same group chat. Verify Carol's avatar renders with a clear, readable pink background.
+3. Inspect the avatar element in dev tools and confirm the `bg-(--lavender-600)` and `bg-(--pink-600)` classes resolve to the new hex values (`#7451B5`, `#D94B8A`).
+4. No other changes required — all other color shades were already complete.
+
+**Status — 2026-08-05**
+
+✅ **Fixed.** Both tokens added to design tokens file and verified in group chat with test accounts. No commits required — this is a pure design-tokens correction with no code changes. Frontend hot-reload picks up the CSS immediately.
+
+
+## ISSUE-73
+
+Group unread badges don't update live when new messages arrive—they require a page refresh.
+
+**Symptom.** Send a message to a group while another player is viewing the My Groups list. The receiving player doesn't see an unread badge appear; they only see it after manually refreshing the page.
+
+**Root cause (file:line).** The unread badge system has two disconnected pieces:
+
+1. **Server-side (working):** `player-groups.ts:702-704` broadcasts `group.unread.changed` to all group members when a message arrives.
+
+2. **Frontend-side (incomplete):** 
+   - `usePersonalEventsStream.ts:39-41` listens for `group.unread.changed` and calls `refetchGroupUnread()`
+   - `refetchGroupUnread()` fetches `/player/groups` and updates `groupUnreadStore` (`useGroupUnread.ts:43-60`)
+   - **BUT** `MyGroups.tsx` renders the group list using `useGroupList` hook, which reads `unreadCount` directly from its own state
+   - `useGroupList` only fetches once on mount (`useGroupList.ts:39-86`) and has **no connection to `groupUnreadStore`**
+
+Result: the store updates correctly, but MyGroups never reads it. The component shows stale `unreadCount` values until a manual page refresh (or navigation) triggers a new `useGroupList` fetch.
+
+### Requirements for the fix
+
+**Option B is the decision** — make `groupUnreadStore` the single source of per-group counts and have
+the list subscribe to it. Option A (a lookup inside `MyGroups`) is rejected: the store already has a
+second reader in the nav badge (`useGroupsWithUnread`, `useGroupUnread.ts:62-81`), so a per-component
+workaround leaves two divergent ways to answer the same question. The A/B sketch that previously sat
+here is superseded by R1–R4 below.
+
+**R1 — Add the per-group getter the store is missing.**
+`state/group-unread-state.ts` exposes `total()`, `groupsWithUnread()`, `setGroupUnread()`,
+`clearGroupUnread()`, `reset()`, `subscribe()` (`:39-70`) and nothing that reads one group. Add
+`getGroupUnread(groupId: string): number` returning `this.counts.get(groupId) ?? 0`. Also update the
+module doc comment at `:21-23`, which currently documents the broken split as if it were the design
+("*the per-row badges in the group list, which read unreadCount directly off each row, not from this
+store*") — that sentence is what this issue is fixing, and leaving it there will mislead the next
+reader.
+
+**R2 — Make `useGroupList` store-backed.** In `hooks/useGroupList.ts`:
+
+- After the fetch resolves (`:70-74`), seed the store with each row's server-computed count
+  (`setGroupUnread(g.id, g.unreadCount)`) so store and list cannot disagree at t=0. This makes the
+  list fetch a fourth writer — add it to the store's doc-comment source list from R1.
+- Subscribe to the store (`groupUnreadStore.subscribe`) and re-render on change, the same shape
+  `useGroupsWithUnread` uses at `useGroupUnread.ts:65-68`.
+- **Precedence rule, state it in a comment:** the store wins whenever it holds an entry for a group;
+  the fetched row's `unreadCount` is the seed and the fallback for groups the store has never seen.
+  Without this stated, a later mount fetch racing an SSE push will silently reintroduce staleness.
+- `MyGroups.tsx:213-218` should not need to change — it already renders `g.unreadCount`.
+
+**R3 — Fix the wrong-magnitude write in `useGroupMessages.ts:124`.** That line does:
+
+```ts
+groupUnreadStore.setGroupUnread(groupId, store.all().filter(m => m.type !== 'system').length)
+```
+
+which is the **total loaded message count for the open panel**, not an unread count. It is
+correct-by-accident today, for three reasons that R2 disturbs: the only reader thresholds at `> 0`
+(`groupsWithUnread()`), the only production call site passes `active` (`MyGroups.tsx:306-311`), and
+the `active`-gated clear at `:187-191` depends on `messages` so it re-zeros the value on the same
+change. Note the SSE effect itself is **not** gated on `active` — `active` defaults to `false`
+(`:44`) and is only consulted at `:188` and `:198` — so any future panel mounted without `active`
+writes a message total into the badge with nothing to clear it. Under R2 that number becomes what
+the user reads.
+
+Fix it to stop writing a total. Preferred: delete the write — ISSUE-62's app-wide personal stream
+already calls `refetchGroupUnread()` on every `group.unread.changed` push, which covers the same
+case with server-computed numbers. If a spec turns out to depend on the local increment (check
+`hooks/__tests__/useGroupMessages.card.spec.ts` and `useGroupUnread.spec.ts` first), add an
+`incrementGroupUnread(groupId)` to the store and use that instead. **Do not** touch the
+`active`-gated clear (`:187-191`) or the read PATCH (`:196-208`) — both are correct.
+
+**R4 — Leave the duplicate `/player/groups` fetch alone, deliberately.** `useGroupList` and
+`refetchGroupUnread` both GET the same endpoint. Under R2 that is intended: a `group.unread.changed`
+push triggers `refetchGroupUnread()` only, and the list's rows stay put while their counts update
+through the store. Do **not** add a `refetch()` call on that event — it would double the request per
+push and re-render the whole list to change one number. Say so in a comment so it is not "fixed"
+later.
+
+**Tests — write them first and confirm red (§4).**
+
+| Target | Why |
+|---|---|
+| `src/hooks/__tests__/useGroupList.spec.ts` — **create, none exists** | The hook at the centre of the fix is currently untested: store overlay, subscription, unsubscribe on unmount, precedence rule from R2 |
+| `src/state/__tests__/group-unread-state.spec.ts` — extend | R1's getter, including the unseen-group `?? 0` path |
+| `src/pages/__tests__/MyGroups.spec.tsx` — extend | The regression itself: a store write re-renders the row badge with **no** refetch |
+| `src/hooks/__tests__/useGroupMessages.*.spec.ts` — extend | R3: assert the panel no longer writes a message total |
+| `e2e/player-groups.spec.ts` — extend | Already uses the `group-unread-badge` testid. Needs a two-browser-context scenario: A sends, B sitting on the list sees the badge without reloading. Add the row to the selection map in `e2e-scenarios.md` §"Test Organization" in the same change (§8) |
+
+Commands per §11/§12 — redirect to `$SCRATCH` and grep, read the full failure text only in the red
+phase:
+
+```bash
+npx jest --findRelatedTests $(git diff --name-only main...HEAD) --bail   # per workspace
+npx playwright test player-groups.spec.ts --project=chromium --reporter=line --max-failures=1
+```
+
+Run `node scripts/ratchet-coverage.mjs` afterwards (§13) — `useGroupList.ts` gains its first spec, so
+the frontend floors will move.
+
+**Manual acceptance (the original two-player check, still required):**
+
+1. Alice sends a message to a group while Bob is viewing My Groups.
+2. Bob's badge appears within ~1s of SSE latency, **with no refresh**.
+3. The badge clears when Bob opens the group and behaves correctly as further messages arrive.
+4. The number itself is right — not a total message count (R3's regression case).
+
+**Out of scope.** Do not change the SQL in `group-repository.ts:304-307`, the `last_read_at`
+semantics from migration 062, or the `unreadCount` wire shape. Do not gate the group-chat SSE on
+`active` — that is a real behaviour change and belongs in its own issue if wanted. Do not add
+polling; the push path works and is proven by the nav badge.
+
+**Validation — 2026-08-05 (independent code review, no fix applied)**
+
+Every claim in "Root cause" above checks out against the source:
+
+| Claim | Verified at | Result |
+|---|---|---|
+| Server broadcasts `group.unread.changed` | `routes/player-groups.ts:700-704` (`broadcastGroupUnreadChanged`) | ✅ |
+| Stream listens and calls `refetchGroupUnread()` | `hooks/usePersonalEventsStream.ts:39-41` | ✅ |
+| `refetchGroupUnread()` writes each group into the store | `hooks/useGroupUnread.ts:43-60` | ✅ |
+| `useGroupList` has no connection to `groupUnreadStore` | `hooks/useGroupList.ts:31-96` — fetches `/player/groups` in one `useEffect` keyed on a manual `tick`, sets `data.groups` verbatim, imports nothing from `state/` | ✅ |
+| `MyGroups` renders the badge from `useGroupList` only | `pages/MyGroups.tsx:14` (only group import), `:137`, `:213-218` | ✅ |
+
+Two additions that sharpen it:
+
+- **The store really is updating underneath the stale list.** `usePersonalEventsStream()` is mounted in
+  `components/shared/ResponsiveLayout.tsx:172`, which wraps My Groups — so the SSE push arrives, the
+  refetch runs, and `groupUnreadStore` holds the correct per-group counts the entire time the user is
+  staring at a badge-less row. The nav badge (`useGroupsWithUnread`, subscribed at
+  `useGroupUnread.ts:65-68`) updates live from that same store while the row beside it does not. The
+  data is already in the browser; only this one component can't see it.
+- **The badge is not missing outright — it is stale.** The server-side path is sound end to end:
+  `group-repository.ts:304-307` computes `unread_count` in SQL, `:322` maps it to `unreadCount`, and
+  `routes/player-groups.ts:143-147` returns `{ groups }` unmodified, so a page load *does* paint
+  correct badges. The reported "no badges on the groups screen" is this defect observed without a
+  refresh, not a second one. (Ruled out while checking: `last_read_at` is
+  `TIMESTAMPTZ NOT NULL DEFAULT now()` — `db/migrations/062_group_last_read.sql:10` — so the
+  `gm.created_at > m.last_read_at` comparison is never NULL-poisoned; and nothing on the list view
+  marks groups read — the only `PATCH /:groupId/read` caller is `hooks/useGroupMessages.ts:201`,
+  which runs when a group's chat panel is open.)
+
+**Three gaps this validation closed** — each is now folded into "Requirements for the fix" above, and
+the original A/B sketch has been replaced by it:
+
+1. The proposed `groupUnreadStore.getCount(g.id)` does not exist (R1), and reading the store without
+   `subscribe()` would just relocate the staleness (R2).
+2. `useGroupMessages.ts:124` writes a message *total* into the same store — latent today, user-visible
+   the moment the list reads per-group numbers (R3).
+3. `useGroupList` and `refetchGroupUnread` already fetch the same endpoint independently, which needed
+   a stated decision rather than an accidental one (R4).
+
+**Status — ✅ Fixed 2026-08-05 (unmerged)**
+
+Identified through manual testing (Haiku session), then confirmed by code inspection with no
+changes made, then fixed same-day following the corrected root cause and R1–R4 above.
+
+**What changed** (branch `fix/issue-73-my-groups-live-unread`, commits `708f786` [red],
+`a976e82` [green], `4be007f` [e2e]):
+
+- **R1** — `state/group-unread-state.ts`: added `getGroupUnread(groupId): number` (`this.counts.get(groupId) ?? 0`).
+  Rewrote the module doc comment — it used to describe the per-row badges reading `unreadCount`
+  straight off each fetched row as the design; that sentence was the bug, not a description of one.
+- **R2** — `hooks/useGroupList.ts` now subscribes to `groupUnreadStore` and always renders each
+  row's live count from it. The fetch effect only *seeds* a group the store currently shows `0`
+  for — a group already nonzero elsewhere (an SSE-driven `refetchGroupUnread`, or an open chat
+  panel's `clearGroupUnread`) is never overwritten by this fetch's own response, which could be
+  racing a fresher write. Stated in a comment in the module doc block and again at the seed site,
+  per the requirement that this live in a comment, not just the diff. `MyGroups.tsx` needed no
+  change, as predicted — it already rendered `g.unreadCount`.
+- **R3** — `hooks/useGroupMessages.ts`: deleted the `message.created` write that set
+  `groupUnreadStore` to the open panel's *loaded message total*. Checked
+  `useGroupMessages.card.spec.ts`, `useGroupMessages.markRead.spec.ts`, `.send.spec.ts`,
+  `.reconnect.spec.ts` and `useGroupUnread.spec.ts` first — nothing asserted on that value, so
+  the write was deleted outright rather than replaced with an `incrementGroupUnread()`. Left the
+  `active`-gated clear and the read PATCH untouched, as required.
+- **R4** — no code change. Added a comment on `useGroupList`'s `refetch` explaining that the list
+  fetch and `refetchGroupUnread` staying independent under a `group.unread.changed` push is
+  deliberate (R2's design), not a duplicate to consolidate later.
+
+**Automated verification:**
+
+1. **Red:** `src/hooks/__tests__/useGroupList.spec.ts` created (store seeding, subscription-driven
+   re-render with no second fetch, unsubscribe on unmount, the R2 precedence rule); extended
+   `group-unread-state.spec.ts` (R1's getter), `components/__tests__/MyGroups.spec.tsx` (the
+   regression itself — a store write alone updates the row badge, no refetch), and
+   `useGroupMessages.markRead.spec.ts` (R3). All 8 new/extended assertions failed on the
+   unmodified tree for the stated reasons (`getGroupUnread is not a function`; badge not found;
+   stale `0`/`1` totals) — committed as `708f786` before any implementation change.
+   (Note: the issue's test table names `src/pages/__tests__/MyGroups.spec.tsx` — that path
+   doesn't exist in this repo; the actual file is `src/components/__tests__/MyGroups.spec.tsx`,
+   used instead.)
+2. **Green:** same 4 files, 47/47 pass after R1–R4.
+3. **Regression:** `npx jest --findRelatedTests src/hooks/useGroupList.ts
+   src/hooks/useGroupMessages.ts src/state/group-unread-state.ts` — 28 suites, 222 tests, all
+   green.
+4. **Coverage:** `scripts/ratchet-coverage.mjs` raised `packages/frontend`'s global `lines` floor
+   84 → 85 (`useGroupList.ts`'s first spec). Declined its other offer (`sw-lib` branches 93 → 99)
+   — that's the exact metric CLAUDE.md §13 names as nondeterministic (`sync-queue.ts` observed at
+   both 93.75 and 100 on an unchanged tree), and nothing in this work touches `sw-lib`; reverted
+   that one line back to 93 before committing.
+5. **E2E:** added a two-browser-context scenario to `player-groups.spec.ts` — an owner's page
+   stays parked on `/groups` (no navigation) while a member sends through the real chat UI in a
+   separate context; the row badge must appear from the store push alone. Distinct from the
+   pre-existing nav-badge test, which re-navigates to `/groups` after sending and so would have
+   passed even on the broken tree. Added to `e2e-scenarios.md`'s selection map in the same
+   change; also corrected that table's `player-groups.spec.ts` count, which was already one off
+   on `main` before this change. 11/11 pass on chromium.
+
+**Outstanding — manual acceptance, human-only.** The four-step two-player check at the top of
+"Requirements for the fix" (Alice/Bob, real-time badge, clears on open, correct number not a
+total) has not been run. The automated e2e scenario above exercises the same mechanism
+end-to-end, but the original manual check is still explicitly required and is not something this
+session can perform.

@@ -18,9 +18,15 @@
  *      'group.unread.changed' push it calls the same refetch as (2), so the
  *      badge updates without waiting for refocus. The mount/focus poll in
  *      (2) remains as the fallback for any gap around a reconnect.
+ *   4. useGroupList (ISSUE-73), which seeds a group's count the first time
+ *      it fetches that group — not on every re-fetch, so a slower-resolving
+ *      re-fetch can't clobber a fresher value one of the writers above
+ *      already wrote (see useGroupList.ts for the precedence rule).
  * Read by the My Groups nav tab badge (groupsWithUnread — count of groups
- * with unread, not total messages) and the per-row badges in the group list
- * (which read unreadCount directly off each row, not from this store).
+ * with unread, not total messages) and, since ISSUE-73, the per-row badges
+ * in the group list (useGroupList subscribes and reads getGroupUnread(id)
+ * per row instead of the one-time fetched value, which is what used to go
+ * stale until a manual refresh).
  *
  * A message is "unread" if the group chat page is not currently open, or if
  * it was posted after the caller's last visit (server last_read_at). When
@@ -40,6 +46,11 @@ class GroupUnreadStore {
     let sum = 0
     this.counts.forEach(v => { sum += v })
     return sum
+  }
+
+  /** A single group's unread count, or 0 if the store has never seen it. */
+  getGroupUnread(groupId: string): number {
+    return this.counts.get(groupId) ?? 0
   }
 
   /** Count of groups with at least one unread message (the nav badge's unit). */

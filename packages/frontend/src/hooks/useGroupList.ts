@@ -1,10 +1,21 @@
 /**
- * useGroupList — G2.5
+ * useGroupList — G2.5 / ISSUE-73
  *
- * Fetches the player's groups from GET /player/groups.
+ * Fetches the player's groups from GET /player/groups, then keeps each row's
+ * unreadCount live from groupUnreadStore instead of the one-time fetch
+ * response — group.unread.changed pushes (via usePersonalEventsStream ->
+ * refetchGroupUnread) update the store, and this hook re-renders from it.
+ *
+ * Precedence: the store wins whenever it already holds a nonzero entry for
+ * a group — this fetch's own unreadCount is only used to seed a group the
+ * store has 0 (or has never seen) for. A group already showing unread
+ * elsewhere (an SSE push, an open chat panel) is never clobbered by this
+ * fetch's own response, which could be racing a fresher write — see
+ * group-unread-state.ts for the full writer list.
  */
 
 import { useEffect, useState } from 'react'
+import { groupUnreadStore } from '../state/group-unread-state'
 
 export interface GroupSummary {
   id: string
@@ -35,6 +46,17 @@ export function useGroupList(): UseGroupListResult {
   const [unauthorized, setUnauthorized] = useState(false)
   const [playerNotLinked, setPlayerNotLinked] = useState(false)
   const [tick, setTick] = useState(0)
+  // Bumped by the store subscription below to force a re-render when a
+  // group's live count changes without a new fetch.
+  const [, setStoreVersion] = useState(0)
+
+  // Re-render on any groupUnreadStore change — this is what makes a
+  // group.unread.changed push (already written to the store elsewhere)
+  // reach the row badge without a refetch.
+  useEffect(() => {
+    const unsub = groupUnreadStore.subscribe(() => setStoreVersion(v => v + 1))
+    return unsub
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -70,6 +92,13 @@ export function useGroupList(): UseGroupListResult {
       .then((data: { groups: GroupSummary[] }) => {
         if (!cancelled) {
           setGroups(data.groups)
+          // Seed only where the store has nothing (0) for this group yet —
+          // see the precedence rule in the module doc comment above.
+          for (const g of data.groups) {
+            if (groupUnreadStore.getGroupUnread(g.id) === 0) {
+              groupUnreadStore.setGroupUnread(g.id, g.unreadCount)
+            }
+          }
         }
       })
       .catch((err: Error) => {
@@ -85,12 +114,22 @@ export function useGroupList(): UseGroupListResult {
     }
   }, [tick])
 
+  // Always read the live count from the store — this is the read side of
+  // the precedence rule (the seed above only ever fills in a 0).
+  const liveGroups = groups.map(g => ({ ...g, unreadCount: groupUnreadStore.getGroupUnread(g.id) }))
+
   return {
-    groups,
+    groups: liveGroups,
     loading,
     error,
     unauthorized,
     playerNotLinked,
+    // R4: this is a *list* refetch — it re-fetches names/roles/membership,
+    // not unread counts. Do NOT wire this to group.unread.changed; that
+    // event already has its own path (refetchGroupUnread -> the store ->
+    // the subscription above), and calling refetch() there too would
+    // double the request per push and re-render the whole list to change
+    // one number.
     refetch: () => setTick(t => t + 1),
   }
 }

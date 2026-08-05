@@ -1940,6 +1940,21 @@ When the player opens that group
 Then both badges clear — the server-side last_read_at is now current
 ```
 
+### Scenario: Row badge updates live while already sitting on My Groups (ISSUE-73)
+
+```gherkin
+Given the player is already on "/groups" (no navigation since page load)
+When a second group member sends a message via the real chat UI, in a separate browser context
+Then a group.unread.changed push resyncs groupUnreadStore
+  And the group's row badge on /groups appears (data-testid="group-unread-badge")
+  — without the My Groups page ever re-navigating or re-fetching the list
+```
+
+*Distinct from the scenario above: that one re-navigates to /groups after the message is sent,
+which forces a fresh mount fetch and would pass even before ISSUE-73 was fixed (useGroupList's
+one-time fetch happened to be fresh because the navigation retriggered it). This one proves the
+row subscribes to the live store instead of only reading its own stale fetch.*
+
 ### Scenario: Invite-by-email from Members panel
 
 ```gherkin

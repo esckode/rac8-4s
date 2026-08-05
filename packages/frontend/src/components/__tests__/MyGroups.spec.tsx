@@ -13,13 +13,14 @@
  */
 
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { GroupList } from '../../pages/MyGroups'
 import { GroupChatPanel } from '../../components/GroupChatPanel'
 import { MembersPanel } from '../../components/GroupChatPanel'
 import { MyGroupsUnreadBadge } from '../../components/GroupChatPanel'
 import { clearGroupMessageStores } from '../../hooks/useGroupMessages'
+import { groupUnreadStore } from '../../state/group-unread-state'
 
 // ── Fetch mock ───────────────────────────────────────────────────────────────
 const mockFetch = jest.fn()
@@ -83,6 +84,7 @@ const makeMember = (overrides: Record<string, unknown> = {}) => ({
 describe('GroupList', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    groupUnreadStore.reset()
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ groups: [] }),
@@ -325,6 +327,38 @@ describe('GroupList', () => {
     await waitFor(() => {
       expect(screen.getByTestId('group-unread-badge')).toHaveTextContent('99+')
     })
+  })
+
+  // ─── ISSUE-73: the row badge must track groupUnreadStore live ─────────────
+
+  it('updates the row badge from a groupUnreadStore write alone — no refetch, no reload (ISSUE-73)', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ groups: [makeGroup({ unreadCount: 0 })] }),
+    })
+
+    render(
+      <MemoryRouter>
+        <GroupList />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('group-list-item')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('group-unread-badge')).not.toBeInTheDocument()
+
+    // Simulates the live path: usePersonalEventsStream -> refetchGroupUnread
+    // -> groupUnreadStore.setGroupUnread, entirely outside this component.
+    act(() => {
+      groupUnreadStore.setGroupUnread('grp_1', 2)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('group-unread-badge')).toHaveTextContent('2')
+    })
+    // R4: the store write must not have triggered a second /player/groups fetch.
+    expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 })
 
